@@ -13,9 +13,9 @@ app.use(express.json({ limit: '50mb' }));
 // Rate limiting
 const rateLimit = require('express-rate-limit');
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: 'Too many requests, please try again later.'
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Increased from 20 to 100 requests per 15 minutes
+  message: 'Too many requests, please try again in a few minutes.'
 });
 
 // CUSTOM DESIGN SYSTEM PROMPTS
