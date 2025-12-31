@@ -7,7 +7,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://frontend-five-eta-38.vercel.app',
+    'https://frontend-five-eta-39.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
 
 // Rate limiting
