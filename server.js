@@ -1,4 +1,4 @@
-// server.js - Updated Backend API
+// server.js - Updated Backend API with Custom Design Styles
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -8,15 +8,85 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Increase JSON payload limit
+app.use(express.json({ limit: '50mb' }));
 
 // Rate limiting
 const rateLimit = require('express-rate-limit');
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20, // Increased from 10
+  max: 20,
   message: 'Too many requests, please try again later.'
 });
+
+// CUSTOM DESIGN SYSTEM PROMPTS
+const DESIGN_STYLES = {
+  modern: `You are an expert web designer specializing in modern, clean designs.
+Design Guidelines:
+- Use modern color schemes (gradients, bold accents)
+- Implement smooth animations and transitions
+- Use contemporary fonts (Inter, Plus Jakarta Sans, or similar)
+- Include glass-morphism effects where appropriate
+- Add subtle shadows and rounded corners
+- Use flexbox/grid for responsive layouts
+- Include hover effects and micro-interactions
+- Optimize for mobile-first design`,
+
+  luxury: `You are an expert web designer specializing in luxury, premium designs.
+Design Guidelines:
+- Use elegant color palettes (gold, navy, white, black)
+- Implement serif fonts for headings (Playfair Display, Cormorant)
+- Add subtle animations and parallax effects
+- Use high-quality imagery placeholders
+- Include generous white space
+- Add premium textures and patterns
+- Use sophisticated transitions
+- Implement dark mode with gold accents`,
+
+  minimal: `You are an expert web designer specializing in minimalist designs.
+Design Guidelines:
+- Use simple color schemes (black, white, one accent color)
+- Implement clean typography (Helvetica, Arial, system fonts)
+- Maximum white space for breathing room
+- Remove all unnecessary elements
+- Use simple geometric shapes
+- No gradients or heavy shadows
+- Focus on content hierarchy
+- Clean, crisp layouts`,
+
+  playful: `You are an expert web designer specializing in playful, creative designs.
+Design Guidelines:
+- Use vibrant, bold color combinations
+- Implement fun, rounded fonts (Poppins, Nunito, Comic Neue)
+- Add playful animations and bouncy effects
+- Use illustrations and icons
+- Include fun hover states and interactions
+- Add colorful gradients and patterns
+- Use asymmetric layouts where appropriate
+- Make it feel energetic and fun`,
+
+  professional: `You are an expert web designer specializing in corporate, professional designs.
+Design Guidelines:
+- Use corporate color schemes (blues, grays, white)
+- Implement professional fonts (Roboto, Open Sans, Lato)
+- Clean, structured layouts with clear hierarchy
+- Include trust indicators (testimonials, stats)
+- Use professional imagery
+- Add subtle shadows and borders
+- Ensure readability and accessibility
+- Corporate-appropriate animations`,
+
+  ecommerce: `You are an expert web designer specializing in e-commerce designs.
+Design Guidelines:
+- Use conversion-optimized layouts
+- Implement clear call-to-action buttons
+- Add product grid/card layouts
+- Include pricing tables and comparison features
+- Use trust badges and security indicators
+- Add shopping cart and checkout elements
+- Implement filters and search functionality
+- Use high-quality product image placeholders
+- Add reviews and ratings sections`,
+};
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -26,7 +96,7 @@ app.get('/api/health', (req, res) => {
 // Website generation endpoint
 app.post('/api/generate', limiter, async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, style = 'modern' } = req.body;
 
     if (!prompt || typeof prompt !== 'string' || prompt.length < 10) {
       return res.status(400).json({ 
@@ -34,16 +104,38 @@ app.post('/api/generate', limiter, async (req, res) => {
       });
     }
 
-    // INCREASED LIMIT: Changed from 2000 to 10000
     if (prompt.length > 10000) {
       return res.status(400).json({ 
         error: 'Prompt too long. Please keep it under 10000 characters.' 
       });
     }
 
-    console.log('Generating website with prompt length:', prompt.length);
+    // Get the design style system prompt
+    const designSystemPrompt = DESIGN_STYLES[style] || DESIGN_STYLES.modern;
 
-    // Call Claude API
+    // Construct the full prompt with design guidance
+    const fullPrompt = `${designSystemPrompt}
+
+USER REQUEST:
+${prompt}
+
+REQUIREMENTS:
+- Generate a complete, single-file HTML website
+- Include all CSS in a <style> tag in the <head>
+- Include all JavaScript in a <script> tag before </body>
+- Use Tailwind CSS CDN: <script src="https://cdn.tailwindcss.com"></script>
+- Make it fully responsive (mobile, tablet, desktop)
+- Include placeholder images using https://images.unsplash.com/photo-[relevant-id]?w=800
+- Add smooth animations and transitions
+- Ensure all interactive elements work
+- Include meta tags for SEO
+- Make the design ${style} style
+
+Return ONLY the complete HTML code, no explanations.`;
+
+    console.log('Generating website with style:', style, 'prompt length:', prompt.length);
+
+    // Call Claude API with system message
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -53,10 +145,11 @@ app.post('/api/generate', limiter, async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 16000, // INCREASED: Changed from 4000 to 16000
+        max_tokens: 16000,
+        system: designSystemPrompt, // Add system prompt for consistent styling
         messages: [{
           role: 'user',
-          content: prompt
+          content: fullPrompt
         }]
       })
     });
@@ -76,10 +169,11 @@ app.post('/api/generate', limiter, async (req, res) => {
       .map(block => block.text)
       .join('');
 
-    console.log('Successfully generated website');
+    console.log('Successfully generated website with', style, 'style');
 
     res.json({ 
       html: htmlContent,
+      style: style,
       timestamp: new Date().toISOString()
     });
 
@@ -92,6 +186,14 @@ app.post('/api/generate', limiter, async (req, res) => {
   }
 });
 
+// Get available design styles
+app.get('/api/styles', (req, res) => {
+  res.json({
+    styles: Object.keys(DESIGN_STYLES),
+    default: 'modern'
+  });
+});
+
 // Error handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -102,4 +204,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🔑 API Key loaded:`, process.env.ANTHROPIC_API_KEY ? 'YES ✓' : 'NO ✗');
+  console.log(`🎨 Available styles:`, Object.keys(DESIGN_STYLES).join(', '));
 });
