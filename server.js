@@ -200,6 +200,119 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
+// Chat endpoint for AI agent
+app.post('/api/chat', limiter, async (req, res) => {
+  try {
+    const { prompt, conversationHistory = [] } = req.body;
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: 'Invalid prompt' });
+    }
+
+    console.log('Processing chat message');
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 500, // Shorter responses for chat
+        messages: [{
+          role: 'user',
+          content: prompt
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to get chat response');
+    }
+
+    const data = await response.json();
+    const chatResponse = data.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('');
+
+    res.json({ 
+      response: chatResponse,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Chat error:', error);
+    res.status(500).json({ 
+      error: 'Failed to process chat message',
+      message: error.message
+    });
+  }
+});
+
+// Booking endpoint
+app.post('/api/bookings', async (req, res) => {
+  try {
+    const { name, email, phone, service, date, time, notes, businessName, businessType } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !phone || !service || !date || !time) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    console.log('New booking:', { name, email, date, time, businessName });
+
+    // Here you would typically:
+    // 1. Save to database
+    // 2. Send confirmation email to customer
+    // 3. Send notification to business owner
+    // 4. Integrate with calendar (Google Calendar API, etc.)
+
+    // For now, we'll just log it and return success
+    // In production, integrate with your email service (SendGrid, Mailgun, etc.)
+
+    const bookingData = {
+      id: generateBookingId(),
+      name,
+      email,
+      phone,
+      service,
+      date,
+      time,
+      notes,
+      businessName,
+      businessType,
+      status: 'confirmed',
+      createdAt: new Date().toISOString()
+    };
+
+    // TODO: Send confirmation email
+    // await sendConfirmationEmail(bookingData);
+
+    // TODO: Send notification to business
+    // await sendBusinessNotification(bookingData);
+
+    res.json({
+      success: true,
+      booking: bookingData,
+      message: 'Booking confirmed successfully'
+    });
+
+  } catch (error) {
+    console.error('Booking error:', error);
+    res.status(500).json({ 
+      error: 'Failed to process booking',
+      message: error.message
+    });
+  }
+});
+
+function generateBookingId() {
+  return 'BK' + Date.now() + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
