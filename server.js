@@ -179,7 +179,7 @@ Return ONLY the complete HTML code, no explanations.`;
         model: 'claude-sonnet-4-5-20250929', // Sonnet 4.5 - Good balance: $0.03 per generation
         // Haiku struggles with complex HTML, Sonnet is much better!
         // For production premium quality: 'claude-opus-4-20250514' ($0.15)
-        max_tokens: 12000, // More tokens for complete website
+        max_tokens: 16384, // Maximum allowed for Sonnet - ensures complete website
         system: designSystemPrompt, // Add system prompt for consistent styling
         messages: [{
           role: 'user',
@@ -198,12 +198,18 @@ Return ONLY the complete HTML code, no explanations.`;
     }
 
     const data = await response.json();
+    
+    // Log response details for debugging
+    console.log('Response received. Content blocks:', data.content.length);
+    console.log('Stop reason:', data.stop_reason);
+    
     const htmlContent = data.content
       .filter(block => block.type === 'text')
       .map(block => block.text)
       .join('');
 
-    console.log('Successfully generated website with', style, 'style');
+    console.log('Successfully generated website. HTML length:', htmlContent.length, 'chars');
+    console.log('Stop reason:', data.stop_reason); // Should be "end_turn", not "max_tokens"
 
     res.json({ 
       html: htmlContent,
