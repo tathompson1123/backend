@@ -1263,6 +1263,92 @@ app.post('/api/bookings/create', async (req, res) => {
     res.status(500).json({ error: 'Failed to create booking' });
   }
 });
+// Add this to your server.js file on Railway
+// Place it BEFORE the app.listen() call
+
+// ============================================
+// AI WEBSITE GENERATION ENDPOINT
+// ============================================
+app.post('/api/generate', async (req, res) => {
+  try {
+    const { businessName, businessType, services, description } = req.body;
+
+    console.log('🎨 Generating website for:', businessName);
+
+    // Validate input
+    if (!businessName || !businessType) {
+      return res.status(400).json({ 
+        error: 'Business name and type are required' 
+      });
+    }
+
+    // Call Anthropic API to generate website
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages: [{
+          role: 'user',
+          content: `Create a professional, modern single-page website for a ${businessType} business called "${businessName}".
+
+${description ? `Business description: ${description}` : ''}
+${services ? `Services offered: ${services}` : ''}
+
+Requirements:
+- Modern, clean design with gradient backgrounds
+- Responsive layout
+- Hero section with call-to-action
+- Services/features section
+- About section
+- Contact section with email/phone
+- Smooth animations
+- Mobile-friendly
+- Use Tailwind CSS via CDN
+- Include Font Awesome icons via CDN
+- Professional color scheme appropriate for ${businessType}
+
+Return ONLY the complete HTML code with inline CSS and JavaScript. No explanations, just the code.`
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('❌ Anthropic API error:', error);
+      return res.status(500).json({ 
+        error: 'Failed to generate website',
+        details: error 
+      });
+    }
+
+    const data = await response.json();
+    const htmlContent = data.content[0].text;
+
+    console.log('✅ Website generated successfully');
+
+    res.json({ 
+      success: true, 
+      html: htmlContent,
+      businessName,
+      cost: 0.03 // Sonnet 4 pricing
+    });
+
+  } catch (error) {
+    console.error('❌ Error generating website:', error);
+    res.status(500).json({ 
+      error: 'Server error', 
+      message: error.message 
+    });
+  }
+});
+
+console.log('✅ Generate endpoint loaded');
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
@@ -1271,6 +1357,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
