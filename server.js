@@ -11,12 +11,31 @@ app.set('trust proxy', 1);
 
 // Middleware
 app.use(cors({
-  origin: [
-    'https://frontend-five-eta-38.vercel.app',
-    'https://frontend-five-eta-39.vercel.app',
-    'http://localhost:5173',
-    'http://localhost:3000'
-  ],
+  origin: function(origin, callback) {
+    // Allow all Vercel deployments + localhost
+    const allowedOrigins = [
+      /\.vercel\.app$/,  // All Vercel domains
+      'http://localhost:5173',
+      'http://localhost:3000'
+    ];
+    
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin matches
+    const isAllowed = allowedOrigins.some(pattern => {
+      if (pattern instanceof RegExp) {
+        return pattern.test(origin);
+      }
+      return pattern === origin;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -157,7 +176,7 @@ Return ONLY the complete HTML code, no explanations.`;
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4.5-20251001', // Haiku 4.5 - Cheap testing: $0.008 per generation
+        model: 'claude-haiku-4-5-20251001', // Haiku 4.5 - Cheap testing: $0.008 per generation
         // For production, switch to: 'claude-opus-4-20250514' ($0.15)
         max_tokens: 8000, // Reduced for Haiku (it's faster with less tokens)
         system: designSystemPrompt, // Add system prompt for consistent styling
