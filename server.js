@@ -157,7 +157,7 @@ Return ONLY the complete HTML code, no explanations.`;
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-20241022', // Cheap testing: $0.008 per generation
+        model: 'claude-haiku-4.5-20251001', // Haiku 4.5 - Cheap testing: $0.008 per generation
         // For production, switch to: 'claude-opus-4-20250514' ($0.15)
         max_tokens: 8000, // Reduced for Haiku (it's faster with less tokens)
         system: designSystemPrompt, // Add system prompt for consistent styling
