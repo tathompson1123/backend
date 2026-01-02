@@ -329,6 +329,38 @@ app.post('/api/auth/logout', async (req, res) => {
 });
 
 console.log('✅ Logout endpoint loaded');
+
+app.post('/api/auth/verify', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    // For now, if token exists in request, consider it valid
+    // In production, you'd verify JWT signature here
+    // For now, we'll just check if user exists
+    
+    // Since we're not using JWT yet, we'll just return a basic user
+    // You can enhance this later with proper JWT verification
+    
+    res.json({ 
+      success: true,
+      user: {
+        name: 'User', // You'd decode this from JWT in production
+        email: 'user@email.com',
+        plan: 'free'
+      }
+    });
+
+  } catch (error) {
+    console.error('Verify error:', error);
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+console.log('✅ Auth verify endpoint loaded');
 // ============================================
 // REVIEW REQUEST SYSTEM
 // ============================================
@@ -1239,5 +1271,6 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
