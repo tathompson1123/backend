@@ -51,8 +51,8 @@ app.post('/api/generate', limiter, async (req, res) => {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 16000,
+        model: 'claude-opus-4-20250514', // Opus 4 for highest quality designs
+        max_tokens: 12000, // Higher limit for more complex/polished code
         messages: [{
           role: 'user',
           content: prompt
