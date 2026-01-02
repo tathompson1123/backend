@@ -14,5 +14,12 @@
     "twilio": "^4.19.0",
     "@sendgrid/mail": "^7.7.0",
     "express-rate-limit": "^7.1.5"
+    "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",    // <-- ADD THIS LINE
+    "lucide-react": "^0.292.0"
+    // ... keep all your other dependencies
   }
 }
+
