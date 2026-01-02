@@ -311,7 +311,24 @@ app.post('/api/jobs/:id/complete', async (req, res) => {
     res.status(500).json({ error: 'Failed to complete job' });
   }
 });
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    // Logout is handled client-side (localStorage.removeItem)
+    // You can add token invalidation logic here if needed in future
+    res.json({ 
+      success: true, 
+      message: 'Logged out successfully' 
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ 
+      error: 'Logout failed',
+      message: error.message 
+    });
+  }
+});
 
+console.log('✅ Logout endpoint loaded');
 // ============================================
 // REVIEW REQUEST SYSTEM
 // ============================================
@@ -1222,4 +1239,5 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
