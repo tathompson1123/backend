@@ -1,4 +1,4 @@
-// server.js - Backend API with Authentication
+// server.js - Updated Backend API with Custom Design Styles
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -6,321 +6,110 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust proxy for Railway/production environments
+app.set('trust proxy', 1);
+
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://frontend-five-eta-38.vercel.app',
+    'https://frontend-five-eta-39.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
 
 // Rate limiting
 const rateLimit = require('express-rate-limit');
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
-  message: 'Too many requests, please try again later.'
+  max: 100, // Increased from 20 to 100 requests per 15 minutes
+  message: 'Too many requests, please try again in a few minutes.'
 });
 
-// ===================================
-// IN-MEMORY USER STORAGE (TEMPORARY)
-// ===================================
-// NOTE: In production, use a real database (MongoDB, PostgreSQL, etc.)
-let users = []; // { id, name, email, password, plan, createdAt, websites: [] }
-let sessions = []; // { userId, token, createdAt }
+// CUSTOM DESIGN SYSTEM PROMPTS
+const DESIGN_STYLES = {
+  modern: `You are an expert web designer specializing in modern, clean designs.
+Design Guidelines:
+- Use modern color schemes (gradients, bold accents)
+- Implement smooth animations and transitions
+- Use contemporary fonts (Inter, Plus Jakarta Sans, or similar)
+- Include glass-morphism effects where appropriate
+- Add subtle shadows and rounded corners
+- Use flexbox/grid for responsive layouts
+- Include hover effects and micro-interactions
+- Optimize for mobile-first design`,
 
-// Helper function to generate simple token
-function generateToken() {
-  return Math.random().toString(36).substr(2) + Date.now().toString(36);
-}
+  luxury: `You are an expert web designer specializing in luxury, premium designs.
+Design Guidelines:
+- Use elegant color palettes (gold, navy, white, black)
+- Implement serif fonts for headings (Playfair Display, Cormorant)
+- Add subtle animations and parallax effects
+- Use high-quality imagery placeholders
+- Include generous white space
+- Add premium textures and patterns
+- Use sophisticated transitions
+- Implement dark mode with gold accents`,
 
-// Helper function to hash password (VERY SIMPLE - use bcrypt in production!)
-function hashPassword(password) {
-  // WARNING: This is NOT secure! Use bcrypt in production
-  return Buffer.from(password).toString('base64');
-}
+  minimal: `You are an expert web designer specializing in minimalist designs.
+Design Guidelines:
+- Use simple color schemes (black, white, one accent color)
+- Implement clean typography (Helvetica, Arial, system fonts)
+- Maximum white space for breathing room
+- Remove all unnecessary elements
+- Use simple geometric shapes
+- No gradients or heavy shadows
+- Focus on content hierarchy
+- Clean, crisp layouts`,
 
-// Helper function to verify password
-function verifyPassword(password, hashedPassword) {
-  return hashPassword(password) === hashedPassword;
-}
+  playful: `You are an expert web designer specializing in playful, creative designs.
+Design Guidelines:
+- Use vibrant, bold color combinations
+- Implement fun, rounded fonts (Poppins, Nunito, Comic Neue)
+- Add playful animations and bouncy effects
+- Use illustrations and icons
+- Include fun hover states and interactions
+- Add colorful gradients and patterns
+- Use asymmetric layouts where appropriate
+- Make it feel energetic and fun`,
 
-// ===================================
-// AUTHENTICATION ENDPOINTS
-// ===================================
+  professional: `You are an expert web designer specializing in corporate, professional designs.
+Design Guidelines:
+- Use corporate color schemes (blues, grays, white)
+- Implement professional fonts (Roboto, Open Sans, Lato)
+- Clean, structured layouts with clear hierarchy
+- Include trust indicators (testimonials, stats)
+- Use professional imagery
+- Add subtle shadows and borders
+- Ensure readability and accessibility
+- Corporate-appropriate animations`,
 
-// Signup endpoint
-app.post('/api/auth/signup', async (req, res) => {
-  try {
-    const { name, email, password, plan } = req.body;
-
-    // Validate input
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required' });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    }
-
-    // Check if user already exists
-    const existingUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (existingUser) {
-      return res.status(400).json({ error: 'User with this email already exists' });
-    }
-
-    // Create new user
-    const newUser = {
-      id: Date.now().toString(),
-      name,
-      email: email.toLowerCase(),
-      password: hashPassword(password),
-      plan: plan || 'pro-plan',
-      createdAt: new Date().toISOString(),
-      websites: []
-    };
-
-    users.push(newUser);
-
-    // Create session token
-    const token = generateToken();
-    sessions.push({
-      userId: newUser.id,
-      token,
-      createdAt: new Date().toISOString()
-    });
-
-    console.log('New user signed up:', email);
-
-    // Return user data (without password) and token
-    res.json({
-      success: true,
-      user: {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        plan: newUser.plan,
-        createdAt: newUser.createdAt
-      },
-      token
-    });
-
-  } catch (error) {
-    console.error('Signup error:', error);
-    res.status(500).json({ error: 'Failed to create account' });
-  }
-});
-
-// Login endpoint
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    // Validate input
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
-
-    // Find user
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    // Verify password
-    if (!verifyPassword(password, user.password)) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    // Create session token
-    const token = generateToken();
-    sessions.push({
-      userId: user.id,
-      token,
-      createdAt: new Date().toISOString()
-    });
-
-    console.log('User logged in:', email);
-
-    // Return user data (without password) and token
-    res.json({
-      success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        plan: user.plan,
-        createdAt: user.createdAt
-      },
-      token
-    });
-
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Failed to login' });
-  }
-});
-
-// Logout endpoint
-app.post('/api/auth/logout', async (req, res) => {
-  try {
-    const { token } = req.body;
-
-    if (!token) {
-      return res.status(400).json({ error: 'Token is required' });
-    }
-
-    // Remove session
-    sessions = sessions.filter(s => s.token !== token);
-
-    console.log('User logged out');
-
-    res.json({
-      success: true,
-      message: 'Logged out successfully'
-    });
-
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({ error: 'Failed to logout' });
-  }
-});
-
-// Get current user (verify token)
-app.get('/api/auth/me', async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-
-    if (!token) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    // Find session
-    const session = sessions.find(s => s.token === token);
-    if (!session) {
-      return res.status(401).json({ error: 'Invalid or expired session' });
-    }
-
-    // Find user
-    const user = users.find(u => u.id === session.userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Return user data (without password)
-    res.json({
-      success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        plan: user.plan,
-        createdAt: user.createdAt,
-        websites: user.websites
-      }
-    });
-
-  } catch (error) {
-    console.error('Auth verification error:', error);
-    res.status(500).json({ error: 'Failed to verify authentication' });
-  }
-});
-
-// ===================================
-// WEBSITE MANAGEMENT ENDPOINTS
-// ===================================
-
-// Save website for user
-app.post('/api/websites/save', async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    const { html, businessName, businessType } = req.body;
-
-    if (!token) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    // Find session and user
-    const session = sessions.find(s => s.token === token);
-    if (!session) {
-      return res.status(401).json({ error: 'Invalid session' });
-    }
-
-    const user = users.find(u => u.id === session.userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Save website
-    const website = {
-      id: Date.now().toString(),
-      html,
-      businessName,
-      businessType,
-      createdAt: new Date().toISOString(),
-      published: false
-    };
-
-    user.websites = user.websites || [];
-    user.websites.push(website);
-
-    console.log('Website saved for user:', user.email);
-
-    res.json({
-      success: true,
-      website
-    });
-
-  } catch (error) {
-    console.error('Save website error:', error);
-    res.status(500).json({ error: 'Failed to save website' });
-  }
-});
-
-// Get user's websites
-app.get('/api/websites', async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-
-    if (!token) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    const session = sessions.find(s => s.token === token);
-    if (!session) {
-      return res.status(401).json({ error: 'Invalid session' });
-    }
-
-    const user = users.find(u => u.id === session.userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    res.json({
-      success: true,
-      websites: user.websites || []
-    });
-
-  } catch (error) {
-    console.error('Get websites error:', error);
-    res.status(500).json({ error: 'Failed to get websites' });
-  }
-});
-
-// ===================================
-// EXISTING ENDPOINTS
-// ===================================
+  ecommerce: `You are an expert web designer specializing in e-commerce designs.
+Design Guidelines:
+- Use conversion-optimized layouts
+- Implement clear call-to-action buttons
+- Add product grid/card layouts
+- Include pricing tables and comparison features
+- Use trust badges and security indicators
+- Add shopping cart and checkout elements
+- Implement filters and search functionality
+- Use high-quality product image placeholders
+- Add reviews and ratings sections`,
+};
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    users: users.length,
-    sessions: sessions.length
-  });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Website generation endpoint
 app.post('/api/generate', limiter, async (req, res) => {
   try {
-    const { prompt, style = 'professional' } = req.body;
+    const { prompt, style = 'modern' } = req.body;
 
     if (!prompt || typeof prompt !== 'string' || prompt.length < 10) {
       return res.status(400).json({ 
@@ -334,9 +123,32 @@ app.post('/api/generate', limiter, async (req, res) => {
       });
     }
 
-    console.log('Generating website with prompt length:', prompt.length);
+    // Get the design style system prompt
+    const designSystemPrompt = DESIGN_STYLES[style] || DESIGN_STYLES.modern;
 
-    // Call Claude API
+    // Construct the full prompt with design guidance
+    const fullPrompt = `${designSystemPrompt}
+
+USER REQUEST:
+${prompt}
+
+REQUIREMENTS:
+- Generate a complete, single-file HTML website
+- Include all CSS in a <style> tag in the <head>
+- Include all JavaScript in a <script> tag before </body>
+- Use Tailwind CSS CDN: <script src="https://cdn.tailwindcss.com"></script>
+- Make it fully responsive (mobile, tablet, desktop)
+- Include placeholder images using https://images.unsplash.com/photo-[relevant-id]?w=800
+- Add smooth animations and transitions
+- Ensure all interactive elements work
+- Include meta tags for SEO
+- Make the design ${style} style
+
+Return ONLY the complete HTML code, no explanations.`;
+
+    console.log('Generating website with style:', style, 'prompt length:', prompt.length);
+
+    // Call Claude API with system message
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -345,11 +157,13 @@ app.post('/api/generate', limiter, async (req, res) => {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-20250514', // Opus 4 for highest quality designs
-        max_tokens: 8000, // Higher limit for more complex/polished code
+        model: 'claude-haiku-4-20241022', // Cheap testing: $0.008 per generation
+        // For production, switch to: 'claude-opus-4-20250514' ($0.15)
+        max_tokens: 8000, // Reduced for Haiku (it's faster with less tokens)
+        system: designSystemPrompt, // Add system prompt for consistent styling
         messages: [{
           role: 'user',
-          content: prompt
+          content: fullPrompt
         }]
       })
     });
@@ -369,10 +183,11 @@ app.post('/api/generate', limiter, async (req, res) => {
       .map(block => block.text)
       .join('');
 
-    console.log('Successfully generated website');
+    console.log('Successfully generated website with', style, 'style');
 
     res.json({ 
       html: htmlContent,
+      style: style,
       timestamp: new Date().toISOString()
     });
 
@@ -385,10 +200,24 @@ app.post('/api/generate', limiter, async (req, res) => {
   }
 });
 
+// Get available design styles
+app.get('/api/styles', (req, res) => {
+  res.json({
+    styles: Object.keys(DESIGN_STYLES),
+    default: 'modern'
+  });
+});
+
+// Error handling
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
+});
+
 // Chat endpoint for AI agent
 app.post('/api/chat', limiter, async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, conversationHistory = [] } = req.body;
 
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'Invalid prompt' });
@@ -405,7 +234,7 @@ app.post('/api/chat', limiter, async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
+        max_tokens: 500, // Shorter responses for chat
         messages: [{
           role: 'user',
           content: prompt
@@ -442,14 +271,24 @@ app.post('/api/bookings', async (req, res) => {
   try {
     const { name, email, phone, service, date, time, notes, businessName, businessType } = req.body;
 
+    // Validate required fields
     if (!name || !email || !phone || !service || !date || !time) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
     console.log('New booking:', { name, email, date, time, businessName });
 
+    // Here you would typically:
+    // 1. Save to database
+    // 2. Send confirmation email to customer
+    // 3. Send notification to business owner
+    // 4. Integrate with calendar (Google Calendar API, etc.)
+
+    // For now, we'll just log it and return success
+    // In production, integrate with your email service (SendGrid, Mailgun, etc.)
+
     const bookingData = {
-      id: 'BK' + Date.now() + Math.random().toString(36).substr(2, 9).toUpperCase(),
+      id: generateBookingId(),
       name,
       email,
       phone,
@@ -462,6 +301,12 @@ app.post('/api/bookings', async (req, res) => {
       status: 'confirmed',
       createdAt: new Date().toISOString()
     };
+
+    // TODO: Send confirmation email
+    // await sendConfirmationEmail(bookingData);
+
+    // TODO: Send notification to business
+    // await sendBusinessNotification(bookingData);
 
     res.json({
       success: true,
@@ -478,16 +323,13 @@ app.post('/api/bookings', async (req, res) => {
   }
 });
 
-// Error handling
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
-});
+function generateBookingId() {
+  return 'BK' + Date.now() + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🔑 API Key loaded:`, process.env.ANTHROPIC_API_KEY ? 'YES ✓' : 'NO ✗');
-  console.log(`👤 Auth endpoints ready`);
+  console.log(`🎨 Available styles:`, Object.keys(DESIGN_STYLES).join(', '));
 });
-
