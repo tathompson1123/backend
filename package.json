@@ -1,19 +1,26 @@
 {
-  "name": "ai-website-builder-backend",
+  "name": "sorce-review-automation-backend",
   "version": "1.0.0",
-  "description": "Backend API for AI Website Builder",
-  "main": "server.js",
+  "description": "SORCE Backend with Review Automation System",
+  "main": "server-review-automation.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server-review-automation.js",
+    "dev": "nodemon server-review-automation.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "pg": "^8.11.3",
+    "node-cron": "^3.0.3",
+    "twilio": "^4.19.0",
+    "@sendgrid/mail": "^7.7.0",
     "express-rate-limit": "^7.1.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
