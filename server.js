@@ -345,8 +345,8 @@ app.post('/api/generate', limiter, async (req, res) => {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-opus-4-20250514', // Opus 4 for highest quality designs
-        max_tokens: 12000, // Higher limit for more complex/polished code
+        model: 'claude-haiku-4-20250514', // Opus 4 for highest quality designs
+        max_tokens: 8000, // Higher limit for more complex/polished code
         messages: [{
           role: 'user',
           content: prompt
@@ -490,3 +490,4 @@ app.listen(PORT, () => {
   console.log(`🔑 API Key loaded:`, process.env.ANTHROPIC_API_KEY ? 'YES ✓' : 'NO ✗');
   console.log(`👤 Auth endpoints ready`);
 });
+
