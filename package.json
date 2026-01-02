@@ -1,11 +1,9 @@
 {
   "name": "sorce-review-automation-backend",
   "version": "1.0.0",
-  "description": "SORCE Backend with Review Automation System",
-  "main": "server-review-automation.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node server-review-automation.js",
-    "dev": "nodemon server-review-automation.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -16,11 +14,5 @@
     "twilio": "^4.19.0",
     "@sendgrid/mail": "^7.7.0",
     "express-rate-limit": "^7.1.5"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   }
 }
