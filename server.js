@@ -1392,18 +1392,17 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Find user
+    // Find user - CHECK THIS SECTION
     const result = await pool.query(
-      SELECT id, email, password_hash, business_name, plan FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, business_name, plan FROM users WHERE email = $1',
       [email.toLowerCase()]
-    );
+    );  // ← Make sure this closing ) and ; are here!
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const user = result.rows[0];
-
     // Verify password
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
@@ -1488,4 +1487,5 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
