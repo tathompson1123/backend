@@ -1352,11 +1352,11 @@ app.post('/api/auth/signup', async (req, res) => {
 
     // Create user
     const result = await pool.query(
-      `INSERT INTO users (email, password_hash, business_name, plan, created_at)
- VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
- RETURNING id, email, business_name, plan`,
-[email.toLowerCase(), hashedPassword, businessName || 'My Business', 'free']
-    );
+  `INSERT INTO users (email, password_hash, business_name, plan, created_at)
+   VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+   RETURNING id, email, business_name, plan`,
+  [email.toLowerCase(), hashedPassword, businessName || 'My Business', 'free']
+);
 
     const user = result.rows[0];
 
@@ -1487,5 +1487,6 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
