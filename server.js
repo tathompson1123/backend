@@ -1329,13 +1329,6 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 
 // Signup endpoint
-The error is still happening, which means the code change hasn't been deployed yet. Let me check - did you update the signup endpoint code in Railway and redeploy?
-The error shows name is still null in the database insert, which means the fix isn't active yet.
-
-🔍 Double Check Your Code:
-Go to your Railway server.js and find the signup endpoint around line 1354.
-It should look EXACTLY like this:
-javascript// Signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { email, password, businessName, fullName } = req.body;
@@ -1344,7 +1337,6 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Check if user exists
     const existing = await pool.query(
       'SELECT id FROM users WHERE email = $1',
       [email.toLowerCase()]
@@ -1354,10 +1346,8 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user - WITH NAME COLUMN
     const result = await pool.query(
       `INSERT INTO users (email, password_hash, name, business_name, plan, created_at)
        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
@@ -1365,15 +1355,13 @@ app.post('/api/auth/signup', async (req, res) => {
       [
         email.toLowerCase(), 
         hashedPassword, 
-        fullName || businessName || 'User',  // ← THIS LINE IS CRUCIAL
+        fullName || businessName || 'User',
         businessName || 'My Business', 
         'free'
       ]
     );
 
     const user = result.rows[0];
-
-    // Generate token
     const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
 
     console.log('✅ New user:', email);
@@ -1499,6 +1487,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
