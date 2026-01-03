@@ -1177,7 +1177,6 @@ Every website MUST include these sections in order:
 ### SECTION SPECIFICATIONS
 
 #### 1. NAVIGATION HEADER
-```
 Requirements:
 - Sticky/fixed position with backdrop blur
 - Logo on left
@@ -1195,7 +1194,6 @@ Links to include:
 ```
 
 #### 2. HERO SECTION
-```
 Requirements:
 - Full viewport height (100vh) or near-full (90vh)
 - High-quality background image with overlay OR video background
@@ -1219,10 +1217,8 @@ Example structure:
     <a href="#book" class="btn-primary">Book Your Service</a>
   </div>
 </section>
-```
 
 #### 3. TRUST INDICATORS
-```
 Requirements:
 - Immediately after hero
 - Display 3-5 key stats or trust badges
@@ -1230,10 +1226,8 @@ Requirements:
 - Examples: "500+ Happy Customers", "5-Star Rated", "Licensed & Insured", "Same Day Service"
 
 Layout: Horizontal row with equal spacing, icon above text
-```
 
 #### 4. SERVICES SECTION
-```
 Requirements:
 - Clear section heading
 - Grid of service cards (2-4 columns)
@@ -1249,10 +1243,8 @@ Image Guidelines:
 - Consistent aspect ratios across all cards
 - Show the actual service being performed
 - Use object-fit: cover for consistent sizing
-```
 
 #### 5. WHY CHOOSE US / FEATURES
-```
 Requirements:
 - 3-6 key differentiators
 - Icon + Headline + Description format
@@ -1268,10 +1260,8 @@ Common features for service businesses:
 - 24/7 Availability
 - Local & Trusted
 - Eco-Friendly Options
-```
 
 #### 6. REVIEWS / TESTIMONIALS
-```
 Requirements:
 - Minimum 3 reviews displayed
 - Include: Customer name, review text, star rating
@@ -1289,10 +1279,8 @@ Styling:
 - Star ratings visually prominent
 - Subtle card backgrounds
 - Customer names in bold
-```
 
 #### 7. BOOK ONLINE / CTA SECTION
-```
 Requirements:
 - High-contrast background (dark or accent color)
 - Compelling headline ("Ready to Get Started?")
@@ -1313,10 +1301,8 @@ If using external booking:
 - Large CTA button linking to booking platform
 - Display phone number prominently
 - Include business hours
-```
 
 #### 8. FOOTER
-```
 Requirements:
 - Company logo and brief description
 - Navigation links
@@ -1327,14 +1313,12 @@ Requirements:
 - Privacy Policy / Terms links (optional)
 
 Layout: Multi-column grid
-```
 
 ---
 
 ### DESIGN SPECIFICATIONS
 
-#### Typography
-```css
+#### Typographycss
 /* Use Google Fonts - pair display + body fonts */
 Display fonts (headings): 
 - Bebas Neue, Oswald, Montserrat, Poppins (700), Anton
@@ -1352,10 +1336,8 @@ Hierarchy:
 Line heights:
 - Headings: 1.1-1.2
 - Body: 1.5-1.7
-```
 
-#### Color System
-```css
+#### Color Systemcss
 /* Define CSS variables for consistency */
 :root {
   --color-primary: /* Brand's main color */;
@@ -1374,10 +1356,9 @@ Line heights:
 - Low contrast text
 - More than 3-4 colors total
 */
-```
 
 #### Spacing System
-```css
+css
 /* Use consistent spacing scale */
 --space-xs: 0.25rem;  /* 4px */
 --space-sm: 0.5rem;   /* 8px */
@@ -1389,10 +1370,9 @@ Line heights:
 /* Section padding: space-xl to space-2xl */
 /* Card padding: space-md to space-lg */
 /* Button padding: space-sm vertical, space-md horizontal */
-```
 
 #### Buttons
-```css
+css
 /* Primary CTA */
 .btn-primary {
   background: var(--color-accent);
@@ -1418,10 +1398,10 @@ Line heights:
   border: 2px solid currentColor;
   /* ... similar padding/sizing */
 }
-```
+
 
 #### Cards
-```css
+css
 .card {
   background: white;
   border-radius: 12px;
@@ -1434,24 +1414,21 @@ Line heights:
   transform: translateY(-4px);
   box-shadow: 0 12px 24px rgba(0,0,0,0.1);
 }
-```
 
 ---
 
 ### IMAGE REQUIREMENTS
 
 #### Sources (use placeholder URLs that work)
-```
 Unsplash: https://images.unsplash.com/photo-[ID]?w=800&q=80
 Pexels: https://images.pexels.com/photos/[ID]/pexels-photo-[ID].jpeg?w=800
 
 Always include:
 - width parameter (w=800, w=1200, etc.)
 - quality parameter (q=80)
-```
 
 #### Image Optimization Attributes
-```html
+html
 <img 
   src="image-url" 
   alt="Descriptive alt text for accessibility"
@@ -1460,22 +1437,21 @@ Always include:
   height="600"
   style="object-fit: cover;"
 >
-```
 
 #### Recommended Image Sizes
-```
+
 Hero background: 1920x1080 minimum
 Service cards: 800x600 (4:3) or 800x800 (1:1)
 Testimonial avatars: 100x100
 Gallery images: 800x600
 Logo: SVG preferred, or 200x60 PNG
-```
+
 
 ---
 
 ### RESPONSIVE BREAKPOINTS
 
-```css
+css
 /* Mobile first approach */
 /* Base styles: Mobile (< 640px) */
 
@@ -1490,7 +1466,7 @@ Logo: SVG preferred, or 200x60 PNG
 @media (min-width: 1280px) {
   /* Large desktop */
 }
-```
+
 
 #### Mobile Considerations
 - Stack all grid columns
@@ -1505,7 +1481,7 @@ Logo: SVG preferred, or 200x60 PNG
 
 ### ANIMATIONS & INTERACTIONS
 
-```css
+css
 /* Smooth scroll */
 html { scroll-behavior: smooth; }
 
@@ -1528,7 +1504,7 @@ transition: all 0.3s ease;
 
 ### ACCESSIBILITY REQUIREMENTS
 
-```
+
 1. Color contrast: Minimum 4.5:1 for body text, 3:1 for large text
 2. Alt text on all images
 3. Semantic HTML (header, nav, main, section, footer)
@@ -1537,13 +1513,13 @@ transition: all 0.3s ease;
 6. Form labels associated with inputs
 7. Skip to content link (optional but recommended)
 8. ARIA labels where needed
-```
+
 
 ---
 
 ### SEO ESSENTIALS
 
-```html
+html
 <head>
   <title>Business Name | Primary Service | Location</title>
   <meta name="description" content="150-160 character description with keywords">
@@ -1559,7 +1535,7 @@ transition: all 0.3s ease;
 
 <!-- Use semantic headings: One H1, logical H2/H3 hierarchy -->
 <!-- Descriptive link text (not "click here") -->
-```
+
 
 ---
 
@@ -2128,6 +2104,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
