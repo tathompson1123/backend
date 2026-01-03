@@ -1475,7 +1475,138 @@ app.post('/api/auth/verify', async (req, res) => {
 });
 
 console.log('✅ Auth endpoints loaded (signup, login, verify)');
+// ============================================
+// WEBSITE ENDPOINTS
+// ============================================
 
+// Get user's website
+app.get('/api/website', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM websites WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+
+    res.json({ 
+      website: result.rows[0] || null 
+    });
+  } catch (error) {
+    console.error('Error fetching website:', error);
+    res.status(500).json({ error: 'Failed to fetch website' });
+  }
+});
+
+// Save/Update website
+app.post('/api/website', async (req, res) => {
+  try {
+    const { userId, htmlContent } = req.body;
+
+    if (!userId || !htmlContent) {
+      return res.status(400).json({ error: 'userId and htmlContent required' });
+    }
+
+    const existing = await pool.query(
+      'SELECT id FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    let result;
+    if (existing.rows.length > 0) {
+      result = await pool.query(
+        `UPDATE websites 
+         SET html_content = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $2
+         RETURNING *`,
+        [htmlContent, userId]
+      );
+    } else {
+      result = await pool.query(
+        `INSERT INTO websites (user_id, html_content, is_published, created_at, updated_at)
+         VALUES ($1, $2, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         RETURNING *`,
+        [userId, htmlContent]
+      );
+    }
+
+    res.json({ 
+      success: true,
+      website: result.rows[0] 
+    });
+  } catch (error) {
+    console.error('Error saving website:', error);
+    res.status(500).json({ error: 'Failed to save website' });
+  }
+});
+
+// Toggle publish
+app.post('/api/website/publish', async (req, res) => {
+  try {
+    const { userId, isPublished } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE websites 
+       SET is_published = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $2
+       RETURNING *`,
+      [isPublished, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    res.json({ 
+      success: true,
+      website: result.rows[0] 
+    });
+  } catch (error) {
+    console.error('Error toggling publish:', error);
+    res.status(500).json({ error: 'Failed to toggle publish' });
+  }
+});
+
+// Save custom domain
+app.post('/api/website/domain', async (req, res) => {
+  try {
+    const { userId, customDomain } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE websites 
+       SET custom_domain = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $2
+       RETURNING *`,
+      [customDomain, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    res.json({ 
+      success: true,
+      website: result.rows[0] 
+    });
+  } catch (error) {
+    console.error('Error saving domain:', error);
+    res.status(500).json({ error: 'Failed to save domain' });
+  }
+});
+
+console.log('✅ Website endpoints loaded');
 // ============================================
 // START SERVER
 // ============================================
@@ -1487,6 +1618,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
