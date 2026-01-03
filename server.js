@@ -1549,11 +1549,30 @@ Return ONLY the complete HTML code. No markdown, no explanations, just the HTML 
       return res.status(500).json({ error: 'No content generated', details: 'API returned empty response' });
     }
 
-    console.log('✅ HTML generated, length:', htmlContent.length);
+    // Clean up any markdown formatting that Claude might add
+    let cleanHtml = htmlContent.trim();
+
+    // Remove markdown code blocks if present
+    if (cleanHtml.includes('```html')) {
+      cleanHtml = cleanHtml.replace(/```html\n?/g, '').replace(/```\n?$/g, '');
+      console.log('🧹 Removed markdown code blocks');
+    }
+
+    // Remove any remaining triple backticks
+    cleanHtml = cleanHtml.replace(/```/g, '');
+
+    // Verify HTML starts correctly
+    if (!cleanHtml.startsWith('<!DOCTYPE')) {
+      console.warn('⚠️ HTML does not start with DOCTYPE');
+      console.log('First 100 chars:', cleanHtml.substring(0, 100));
+    }
+
+    console.log('✅ HTML generated, length:', cleanHtml.length);
+    console.log('✅ Preview (first 200 chars):', cleanHtml.substring(0, 200));
 
     res.json({ 
       success: true, 
-      html: htmlContent,
+      html: cleanHtml,
       businessName
     });
 
