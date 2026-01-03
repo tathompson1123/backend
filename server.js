@@ -1551,7 +1551,122 @@ app.post('/api/website/domain', async (req, res) => {
     res.status(500).json({ error: 'Failed to save domain' });
   }
 });
+app.post('/api/website/edit', async (req, res) => {
+  try {
+    const { userId, currentHtml, editRequest } = req.body;
 
+    if (!userId || !currentHtml || !editRequest) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'API key not configured' });
+    }
+
+    console.log(`🎨 AI Edit Request from user ${userId}: "${editRequest}"`);
+
+    // Call Claude API to edit the website
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        messages: [{
+          role: 'user',
+          content: `You are a professional web developer helping a user edit their website.
+
+USER'S CURRENT WEBSITE HTML:
+${currentHtml}
+
+USER'S EDIT REQUEST:
+"${editRequest}"
+
+INSTRUCTIONS:
+1. Analyze the user's request carefully
+2. Make ONLY the changes they requested - don't rewrite the entire website
+3. Preserve all existing styling, scripts, and functionality
+4. Return the COMPLETE updated HTML (the entire website with the changes applied)
+5. Make sure all HTML tags are properly closed
+6. Keep all CDN links (Tailwind, Font Awesome, etc.)
+
+IMPORTANT: 
+- If they ask to change text/content, only change that specific text
+- If they ask to change colors, only update the color values
+- If they ask to add a section, insert it in the appropriate place
+- If they ask to remove something, remove only that element
+- DO NOT add markdown formatting or code blocks
+- Return ONLY the complete HTML starting with <!DOCTYPE html>
+
+Return the updated HTML now:`
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('❌ Claude API error:', error);
+      return res.status(500).json({ error: 'Failed to process edit request' });
+    }
+
+    const data = await response.json();
+    const updatedHtml = data.content?.[0]?.text;
+
+    if (!updatedHtml) {
+      console.error('❌ No HTML in response');
+      return res.status(500).json({ error: 'No content generated' });
+    }
+
+    console.log(`✅ Website updated successfully, length: ${updatedHtml.length}`);
+
+    // Generate a friendly explanation of what was changed
+    const explanationResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 150,
+        messages: [{
+          role: 'user',
+          content: `The user asked to: "${editRequest}"
+
+Write a brief, friendly response (1-2 sentences) confirming what you changed. Be specific and encouraging.
+
+Example responses:
+- "I've updated the hero headline to your new text. It looks great!"
+- "Changed the color scheme to more professional blues and grays. Much more polished!"
+- "Added a testimonials section with 3 customer reviews. This will build trust with visitors!"
+
+Your response:`
+        }]
+      })
+    });
+
+    let explanation = "I've updated your website! Check the preview.";
+    if (explanationResponse.ok) {
+      const explanationData = await explanationResponse.json();
+      explanation = explanationData.content?.[0]?.text || explanation;
+    }
+
+    res.json({
+      success: true,
+      updatedHtml,
+      explanation: explanation.trim()
+    });
+
+  } catch (error) {
+    console.error('❌ Error editing website:', error);
+    res.status(500).json({ error: 'Server error', message: error.message });
+  }
+});
 console.log('✅ Website endpoints loaded');
 
 // ============================================
@@ -1606,3 +1721,4 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
