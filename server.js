@@ -1264,14 +1264,7 @@ app.post('/api/generate', async (req, res) => {
         max_tokens: 4096,
         messages: [{
           role: 'user',
-          // ============================================
-// OPTIMIZED WEBSITE GENERATION PROMPT
-// Replace the prompt in your /api/generate endpoint with this
-// ============================================
-
-// In your server.js, find the /api/generate endpoint and replace the prompt with:
-
-const optimizedPrompt = `You are an expert web designer specializing in high-converting service business websites. Create a professional, modern single-page website for "${businessName}", a ${businessType} business.
+content: `You are an expert web designer specializing in high-converting service business websites. Create a professional, modern single-page website for "${businessName}", a ${businessType} business.
 
 ${description ? `Business Background: ${description}` : ''}
 ${services ? `Services Offered: ${services}` : ''}
@@ -1869,6 +1862,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
