@@ -1387,7 +1387,10 @@ ANIMATIONS (using vanilla JavaScript):
 - Hover effects on buttons
 - Parallax on hero section (subtle)
 
-IMPORTANT: Return ONLY the complete, production-ready HTML code. No markdown formatting, no explanations, no code blocks - just pure HTML starting with <!DOCTYPE html>. The HTML should be complete and work perfectly when saved as a .html file.`;
+IMPORTANT: Return ONLY the complete HTML code. No markdown, no explanations, just pure HTML starting with <!DOCTYPE html>.`
+        }]
+      })
+    });
 
 // ============================================
 // USAGE IN YOUR ENDPOINT:
@@ -1862,6 +1865,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
