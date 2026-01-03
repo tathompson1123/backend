@@ -1448,9 +1448,9 @@ app.post('/api/auth/verify', async (req, res) => {
 
     // Get user
     const result = await pool.query(
-      'SELECT id, email, business_name, plan FROM users WHERE id = $1',
-      [decoded.userId]
-    );
+  'SELECT id, email, password_hash, business_name, plan FROM users WHERE email = $1',
+  [email.toLowerCase()]
+);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'User not found' });
@@ -1488,3 +1488,4 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
