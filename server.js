@@ -1191,12 +1191,11 @@ Links to include:
 - Reviews
 - Book Online (as button)
 - Contact
-```
 
 #### 2. HERO SECTION
 Requirements:
 - Full viewport height (100vh) or near-full (90vh)
-- High-quality background image with overlay OR video background
+- High-quality background image with overlay
 - Bold headline using display font (max 8 words)
 - Supporting subheadline (1-2 sentences)
 - Primary CTA button (large, high contrast)
@@ -1206,17 +1205,6 @@ Image Guidelines:
 - Use professional stock from Unsplash/Pexels
 - Show service in action or happy customers
 - Apply dark gradient overlay (rgba(0,0,0,0.5)) for text readability
-- Optimize: suggest WebP format, lazy loading
-
-Example structure:
-<section class="hero">
-  <div class="hero-overlay"></div>
-  <div class="hero-content">
-    <h1>HEADLINE HERE</h1>
-    <p>Supporting text that explains the value proposition</p>
-    <a href="#book" class="btn-primary">Book Your Service</a>
-  </div>
-</section>
 
 #### 3. TRUST INDICATORS
 Requirements:
@@ -1267,12 +1255,8 @@ Requirements:
 - Include: Customer name, review text, star rating
 - Optional: Customer photo, date, service used
 - Link to external reviews (Google, Yelp)
-- Consider carousel for 5+ reviews
 
-Layout options:
-- Card grid (3 columns)
-- Horizontal carousel/slider
-- Staggered/masonry layout
+Layout: Card grid (3 columns)
 
 Styling:
 - Quote marks or icons
@@ -1289,18 +1273,11 @@ Requirements:
 - Phone number as alternative
 
 Form fields (if inline form):
-- Name
-- Email
-- Phone
+- Name, Email, Phone
 - Service type (dropdown)
 - Preferred date/time
 - Message (optional)
 - Submit button
-
-If using external booking:
-- Large CTA button linking to booking platform
-- Display phone number prominently
-- Include business hours
 
 #### 8. FOOTER
 Requirements:
@@ -1310,7 +1287,6 @@ Requirements:
 - Business hours
 - Social media icons
 - Copyright notice
-- Privacy Policy / Terms links (optional)
 
 Layout: Multi-column grid
 
@@ -1318,8 +1294,9 @@ Layout: Multi-column grid
 
 ### DESIGN SPECIFICATIONS
 
-#### Typographycss
-/* Use Google Fonts - pair display + body fonts */
+#### Typography
+Use Google Fonts - pair display + body fonts
+
 Display fonts (headings): 
 - Bebas Neue, Oswald, Montserrat, Poppins (700), Anton
 
@@ -1331,14 +1308,14 @@ Hierarchy:
 - H2: 36-48px (mobile: 28-36px)
 - H3: 24-32px (mobile: 20-24px)
 - Body: 16-18px
-- Small: 14px
 
 Line heights:
 - Headings: 1.1-1.2
 - Body: 1.5-1.7
 
-#### Color Systemcss
-/* Define CSS variables for consistency */
+#### Color System
+Define CSS variables for consistency:
+
 :root {
   --color-primary: /* Brand's main color */;
   --color-secondary: /* Supporting color */;
@@ -1346,20 +1323,18 @@ Line heights:
   --color-dark: /* Near black for text */;
   --color-light: /* Off-white for backgrounds */;
   --color-gray: /* For secondary text */;
-  --color-success: #10b981; /* For positive indicators */
-  --color-warning: #f59e0b; /* For stars/ratings */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
 }
 
-/* Avoid:
+Avoid:
 - Pure black (#000000) - use #0a0a0a or similar
-- Pure white for large backgrounds - use #f8f9fa or similar
+- Pure white backgrounds - use #f8f9fa or similar
 - Low contrast text
 - More than 3-4 colors total
-*/
 
 #### Spacing System
-css
-/* Use consistent spacing scale */
+Use consistent spacing scale:
 --space-xs: 0.25rem;  /* 4px */
 --space-sm: 0.5rem;   /* 8px */
 --space-md: 1rem;     /* 16px */
@@ -1367,108 +1342,71 @@ css
 --space-xl: 4rem;     /* 64px */
 --space-2xl: 6rem;    /* 96px */
 
-/* Section padding: space-xl to space-2xl */
-/* Card padding: space-md to space-lg */
-/* Button padding: space-sm vertical, space-md horizontal */
-
 #### Buttons
-css
-/* Primary CTA */
-.btn-primary {
-  background: var(--color-accent);
-  color: white;
-  padding: 1rem 2rem;
-  border-radius: 8px; /* or 50px for pill shape */
-  font-weight: 600;
-  font-size: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 14px rgba(accent-color, 0.3);
-}
+Primary CTA:
+- background: var(--color-accent)
+- color: white
+- padding: 1rem 2rem
+- border-radius: 8px
+- font-weight: 600
+- text-transform: uppercase
+- letter-spacing: 0.05em
+- transition: all 0.3s ease
+- box-shadow: 0 4px 14px rgba(accent-color, 0.3)
 
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(accent-color, 0.4);
-}
-
-/* Secondary/Ghost button */
-.btn-secondary {
-  background: transparent;
-  border: 2px solid currentColor;
-  /* ... similar padding/sizing */
-}
-
+Hover:
+- transform: translateY(-2px)
+- Enhanced shadow
 
 #### Cards
-css
-.card {
-  background: white;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-  transition: all 0.3s ease;
-}
+- background: white
+- border-radius: 12px
+- box-shadow: 0 4px 6px rgba(0,0,0,0.05)
+- transition: all 0.3s ease
 
-.card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0,0,0,0.1);
-}
+Hover:
+- transform: translateY(-4px)
+- box-shadow: 0 12px 24px rgba(0,0,0,0.1)
 
 ---
 
 ### IMAGE REQUIREMENTS
 
-#### Sources (use placeholder URLs that work)
+Sources (use placeholder URLs):
 Unsplash: https://images.unsplash.com/photo-[ID]?w=800&q=80
-Pexels: https://images.pexels.com/photos/[ID]/pexels-photo-[ID].jpeg?w=800
 
 Always include:
 - width parameter (w=800, w=1200, etc.)
 - quality parameter (q=80)
 
-#### Image Optimization Attributes
-html
+Image Optimization:
 <img 
   src="image-url" 
-  alt="Descriptive alt text for accessibility"
+  alt="Descriptive alt text"
   loading="lazy"
   width="800"
   height="600"
   style="object-fit: cover;"
 >
 
-#### Recommended Image Sizes
-
-Hero background: 1920x1080 minimum
-Service cards: 800x600 (4:3) or 800x800 (1:1)
-Testimonial avatars: 100x100
-Gallery images: 800x600
-Logo: SVG preferred, or 200x60 PNG
-
+Recommended sizes:
+- Hero background: 1920x1080 minimum
+- Service cards: 800x600 (4:3) or 800x800 (1:1)
+- Testimonial avatars: 100x100
 
 ---
 
-### RESPONSIVE BREAKPOINTS
+### RESPONSIVE DESIGN
 
-css
-/* Mobile first approach */
-/* Base styles: Mobile (< 640px) */
+Mobile first approach:
 
-@media (min-width: 640px) {
-  /* Tablet */
-}
+Base styles: Mobile (< 640px)
 
-@media (min-width: 1024px) {
-  /* Desktop */
-}
+@media (min-width: 640px) { /* Tablet */ }
+@media (min-width: 1024px) { /* Desktop */ }
+@media (min-width: 1280px) { /* Large desktop */ }
 
-@media (min-width: 1280px) {
-  /* Large desktop */
-}
-
-
-#### Mobile Considerations
+Mobile considerations:
 - Stack all grid columns
 - Reduce font sizes by 20-30%
 - Full-width buttons
@@ -1481,107 +1419,83 @@ css
 
 ### ANIMATIONS & INTERACTIONS
 
-css
-/* Smooth scroll */
+Smooth scroll:
 html { scroll-behavior: smooth; }
 
-/* Base transition for interactive elements */
+Base transition:
 transition: all 0.3s ease;
 
-/* Hover effects */
+Hover effects:
 - Buttons: translateY(-2px) + enhanced shadow
 - Cards: translateY(-4px) + enhanced shadow
 - Links: color change + optional underline
-- Images: subtle scale(1.05) with overflow:hidden on container
-
-/* Scroll animations (use CSS or JS) */
-- Fade in from bottom for sections
-- Stagger delays for grid items
-- Use IntersectionObserver for performance
-```
 
 ---
 
 ### ACCESSIBILITY REQUIREMENTS
 
-
-1. Color contrast: Minimum 4.5:1 for body text, 3:1 for large text
+1. Color contrast: Minimum 4.5:1 for body text
 2. Alt text on all images
 3. Semantic HTML (header, nav, main, section, footer)
 4. Keyboard navigation support
 5. Focus states visible on all interactive elements
 6. Form labels associated with inputs
-7. Skip to content link (optional but recommended)
-8. ARIA labels where needed
-
 
 ---
 
 ### SEO ESSENTIALS
 
-html
 <head>
   <title>Business Name | Primary Service | Location</title>
-  <meta name="description" content="150-160 character description with keywords">
+  <meta name="description" content="150-160 character description">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  
-  <!-- Open Graph -->
-  <meta property="og:title" content="...">
-  <meta property="og:description" content="...">
-  <meta property="og:image" content="...">
-  
-  <!-- Structured data for local business (JSON-LD) -->
 </head>
 
-<!-- Use semantic headings: One H1, logical H2/H3 hierarchy -->
-<!-- Descriptive link text (not "click here") -->
-
+Use semantic headings: One H1, logical H2/H3 hierarchy
 
 ---
 
 ### OUTPUT FORMAT
 
-When generating a website, output a single HTML file with:
-1. Embedded CSS in `<style>` tags (no external stylesheets)
-2. Embedded JavaScript in `<script>` tags at end of body
+Output a single HTML file with:
+1. Embedded CSS in <style> tags
+2. Embedded JavaScript in <script> tags at end of body
 3. Google Fonts linked in head
 4. All sections complete and functional
-5. Real placeholder images from Unsplash/Pexels
-6. Placeholder text that matches the business type (not lorem ipsum)
-7. Working navigation links (anchor links to sections)
+5. Real placeholder images from Unsplash
+6. Placeholder text matching business type (not lorem ipsum)
+7. Working navigation links (anchor links)
 8. Mobile responsive design
 
 ---
 
 ### BUSINESS TYPE CUSTOMIZATION
 
-Adapt imagery, copy, and features based on business type:
-
-**Home Services** (cleaning, landscaping, HVAC, plumbing):
+Home Services (cleaning, landscaping, HVAC, plumbing):
 - Before/after imagery
 - "Licensed & Insured" badges
 - Emergency service availability
 - Service area map
 
-**Health & Wellness** (spa, salon, massage, fitness):
+Health & Wellness (spa, salon, massage, fitness):
 - Calming, luxurious imagery
 - Online booking prominent
 - Service menu with pricing
 - Team/practitioner profiles
 
-**Professional Services** (consulting, legal, financial):
+Professional Services (consulting, legal, financial):
 - Professional headshots
 - Credentials/certifications
 - Case studies or results
 - Consultation booking
 
-**Automotive** (detailing, repair, towing):
+Automotive (detailing, repair, towing):
 - Action shots of services
 - Pricing packages
 - Fleet/commercial services
 - Location/hours prominent
 
-**Food & Hospitality** (catering, restaurants):
+Food & Hospitality (catering, restaurants):
 - High-quality food photography
 - Menus/packages
 - Event booking
@@ -1591,27 +1505,27 @@ Adapt imagery, copy, and features based on business type:
 
 ### QUALITY CHECKLIST
 
-Before finalizing, verify:
+Verify:
+- All navigation links work
+- CTA buttons are prominent and high-contrast
+- Mobile responsive (test at 375px width)
+- Images have alt text
+- Contact information is visible
+- Booking/CTA is easy to find
+- Typography is readable
+- Consistent spacing throughout
+- No horizontal scroll on mobile
+- Forms have proper labels
+- Professional, cohesive visual design
 
-- [ ] All navigation links work
-- [ ] CTA buttons are prominent and high-contrast
-- [ ] Mobile responsive (test at 375px width)
-- [ ] Images have alt text
-- [ ] Contact information is visible
-- [ ] Booking/CTA is easy to find
-- [ ] Typography is readable (size, contrast, spacing)
-- [ ] Consistent spacing throughout
-- [ ] No horizontal scroll on mobile
-- [ ] Forms have proper labels
-- [ ] Page loads without errors
-- [ ] Professional, cohesive visual design
-                   
-   Now generate a website for: ${businessName}
+---
+
+Now generate a website for: ${businessName}
 Business Type: ${businessType}
 Services: ${services}
 Description: ${description}
 
-Return ONLY the complete HTML code. No markdown, no explanations, just the HTML starting with <!DOCTYPE html>.`  // ← Close the prompt string here
+Return ONLY the complete HTML code. No markdown, no explanations, just the HTML starting with <!DOCTYPE html>.`
         }]
       })
     });
@@ -1934,6 +1848,7 @@ app.post('/api/website/domain', async (req, res) => {
     res.status(500).json({ error: 'Failed to save domain' });
   }
 });
+
 app.post('/api/website/edit', async (req, res) => {
   try {
     const { userId, currentHtml, editRequest } = req.body;
@@ -1948,7 +1863,6 @@ app.post('/api/website/edit', async (req, res) => {
 
     console.log(`🎨 AI Edit Request from user ${userId}: "${editRequest}"`);
 
-    // Call Claude API to edit the website
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -2006,7 +1920,6 @@ Return the updated HTML now:`
 
     console.log(`✅ Website updated successfully, length: ${updatedHtml.length}`);
 
-    // Generate a friendly explanation of what was changed
     const explanationResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -2050,6 +1963,7 @@ Your response:`
     res.status(500).json({ error: 'Server error', message: error.message });
   }
 });
+
 console.log('✅ Website endpoints loaded');
 
 // ============================================
@@ -2104,10 +2018,3 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
-
-
-
-
-
-
-
