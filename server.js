@@ -1157,7 +1157,7 @@ app.post('/api/generate', async (req, res) => {
         max_tokens: 4096,
         messages: [{
           role: 'user',
-          content: 'You are an expert web designer creating high-converting, visually stunning websites for service-based businesses. Every website you generate must be production-ready, mobile-responsive, and optimized for conversions.
+          content: `You are an expert web designer creating high-converting, visually stunning websites for service-based businesses. Every website you generate must be production-ready, mobile-responsive, and optimized for conversions.`
 
 ### CORE REQUIREMENTS
 
@@ -2128,6 +2128,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
