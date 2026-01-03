@@ -1157,82 +1157,489 @@ app.post('/api/generate', async (req, res) => {
         max_tokens: 4096,
         messages: [{
           role: 'user',
-          content: `You are an expert web designer specializing in high-converting service business websites. Create a professional, modern single-page website for "${businessName}", a ${businessType} business.
+          content: You are an expert web designer creating high-converting, visually stunning websites for service-based businesses. Every website you generate must be production-ready, mobile-responsive, and optimized for conversions.
 
-${description ? `Business Background: ${description}` : ''}
-${services ? `Services Offered: ${services}` : ''}
+### CORE REQUIREMENTS
 
-DESIGN REQUIREMENTS:
+Every website MUST include these sections in order:
 
-1. HERO SECTION (Above the fold - most important!)
-   - Eye-catching gradient background (use colors appropriate for ${businessType})
-   - Clear, benefit-driven headline (not just business name)
-   - Compelling subheadline explaining the main value proposition
-   - Prominent CTA button (e.g., "Get Free Quote", "Book Now", "Call Today")
-   - Trust indicator (e.g., "5-star rated", "Licensed & Insured", "Same-Day Service")
+1. **Navigation Header** (sticky)
+2. **Hero Section** with primary CTA
+3. **Trust Indicators** (badges, stats, or social proof)
+4. **Services Section**
+5. **Why Choose Us / Features**
+6. **Reviews / Testimonials**
+7. **Book Online / CTA Section**
+8. **Footer**
 
-2. SOCIAL PROOF SECTION
-   - Star rating display (5 stars)
-   - Number of satisfied customers
-   - Years in business
-   - Key certifications or awards
+---
 
-3. SERVICES SECTION
-   - Grid layout (3 columns on desktop, 1 on mobile)
-   - Each service card with icon, name, description, price range
+### SECTION SPECIFICATIONS
 
-4. WHY CHOOSE US SECTION
-   - 4-6 key differentiators: Licensed & Insured, 24/7 Service, Satisfaction Guaranteed, etc.
+#### 1. NAVIGATION HEADER
+```
+Requirements:
+- Sticky/fixed position with backdrop blur
+- Logo on left
+- Navigation links centered or right-aligned
+- Primary CTA button (e.g., "Book Now") with accent color
+- Mobile hamburger menu for responsive
+- Subtle shadow or border on scroll
 
-5. TESTIMONIALS or PROCESS SECTION
-   - 3-step process or customer reviews
+Links to include:
+- Home
+- Services
+- Reviews
+- Book Online (as button)
+- Contact
+```
 
-6. URGENCY/OFFER SECTION
-   - Limited-time offer with bold CTA
+#### 2. HERO SECTION
+```
+Requirements:
+- Full viewport height (100vh) or near-full (90vh)
+- High-quality background image with overlay OR video background
+- Bold headline using display font (max 8 words)
+- Supporting subheadline (1-2 sentences)
+- Primary CTA button (large, high contrast)
+- Optional: Secondary CTA or scroll indicator
 
-7. CONTACT SECTION
-   - Phone (clickable), email, contact form, service area
+Image Guidelines:
+- Use professional stock from Unsplash/Pexels
+- Show service in action or happy customers
+- Apply dark gradient overlay (rgba(0,0,0,0.5)) for text readability
+- Optimize: suggest WebP format, lazy loading
 
-8. FOOTER
-   - Copyright, links, social icons
+Example structure:
+<section class="hero">
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <h1>HEADLINE HERE</h1>
+    <p>Supporting text that explains the value proposition</p>
+    <a href="#book" class="btn-primary">Book Your Service</a>
+  </div>
+</section>
+```
 
-TECHNICAL REQUIREMENTS:
-- Tailwind CSS via CDN
-- Font Awesome icons via CDN
-- Mobile-first responsive
-- Smooth scroll animations
-- Click-to-call/email links
-- Sticky header
+#### 3. TRUST INDICATORS
+```
+Requirements:
+- Immediately after hero
+- Display 3-5 key stats or trust badges
+- Use icons or numbers prominently
+- Examples: "500+ Happy Customers", "5-Star Rated", "Licensed & Insured", "Same Day Service"
 
-COLOR PSYCHOLOGY FOR ${businessType}:
-${businessType === 'plumbing' ? 'Blue (trust), orange (urgency)' : 
-  businessType === 'hvac' ? 'Blue (cool), red (heat)' : 
-  businessType === 'landscaping' ? 'Green (nature), brown (earth)' : 
-  businessType === 'cleaning' ? 'Blue (trust), white (clean)' : 
-  businessType === 'electrical' ? 'Yellow (electricity), blue (professional)' : 
-  'Professional color scheme appropriate for the industry'}
+Layout: Horizontal row with equal spacing, icon above text
+```
 
-CONVERSION OPTIMIZATION:
-- Multiple CTAs throughout
-- Phone number always visible
-- Trust signals (reviews, certifications)
-- Clear value proposition
-- Address objections (pricing, quality)
-- Create urgency
-- Social proof
+#### 4. SERVICES SECTION
+```
+Requirements:
+- Clear section heading
+- Grid of service cards (2-4 columns)
+- Each card includes:
+  - High-quality image (4:3 or 1:1 ratio)
+  - Service name
+  - Brief description (2-3 sentences max)
+  - Price or "Starting at $X" (optional)
+  - "Learn More" or "Book Now" link
+- Hover effects on cards (subtle lift/shadow)
 
-COPY GUIDELINES:
-- Benefit-driven language
-- Address pain points
-- Power words: Guaranteed, Certified, Professional, Expert
-- Include numbers and stats
-- Use second person ("You get...")
+Image Guidelines:
+- Consistent aspect ratios across all cards
+- Show the actual service being performed
+- Use object-fit: cover for consistent sizing
+```
 
-Return ONLY the complete HTML code. No markdown, no explanations, just pure HTML starting with <!DOCTYPE html>.`
+#### 5. WHY CHOOSE US / FEATURES
+```
+Requirements:
+- 3-6 key differentiators
+- Icon + Headline + Description format
+- Use meaningful icons (not generic)
+- Keep descriptions under 30 words each
+
+Common features for service businesses:
+- Fast/Same-Day Service
+- Licensed & Insured
+- Satisfaction Guaranteed
+- Transparent Pricing
+- Professional Team
+- 24/7 Availability
+- Local & Trusted
+- Eco-Friendly Options
+```
+
+#### 6. REVIEWS / TESTIMONIALS
+```
+Requirements:
+- Minimum 3 reviews displayed
+- Include: Customer name, review text, star rating
+- Optional: Customer photo, date, service used
+- Link to external reviews (Google, Yelp)
+- Consider carousel for 5+ reviews
+
+Layout options:
+- Card grid (3 columns)
+- Horizontal carousel/slider
+- Staggered/masonry layout
+
+Styling:
+- Quote marks or icons
+- Star ratings visually prominent
+- Subtle card backgrounds
+- Customer names in bold
+```
+
+#### 7. BOOK ONLINE / CTA SECTION
+```
+Requirements:
+- High-contrast background (dark or accent color)
+- Compelling headline ("Ready to Get Started?")
+- Brief value reminder
+- Prominent booking form OR booking button
+- Phone number as alternative
+
+Form fields (if inline form):
+- Name
+- Email
+- Phone
+- Service type (dropdown)
+- Preferred date/time
+- Message (optional)
+- Submit button
+
+If using external booking:
+- Large CTA button linking to booking platform
+- Display phone number prominently
+- Include business hours
+```
+
+#### 8. FOOTER
+```
+Requirements:
+- Company logo and brief description
+- Navigation links
+- Contact information (address, phone, email)
+- Business hours
+- Social media icons
+- Copyright notice
+- Privacy Policy / Terms links (optional)
+
+Layout: Multi-column grid
+```
+
+---
+
+### DESIGN SPECIFICATIONS
+
+#### Typography
+```css
+/* Use Google Fonts - pair display + body fonts */
+Display fonts (headings): 
+- Bebas Neue, Oswald, Montserrat, Poppins (700), Anton
+
+Body fonts:
+- DM Sans, Source Sans Pro, Open Sans, Lato, Nunito
+
+Hierarchy:
+- H1: 48-72px (mobile: 32-48px)
+- H2: 36-48px (mobile: 28-36px)
+- H3: 24-32px (mobile: 20-24px)
+- Body: 16-18px
+- Small: 14px
+
+Line heights:
+- Headings: 1.1-1.2
+- Body: 1.5-1.7
+```
+
+#### Color System
+```css
+/* Define CSS variables for consistency */
+:root {
+  --color-primary: /* Brand's main color */;
+  --color-secondary: /* Supporting color */;
+  --color-accent: /* CTA/highlight color - high contrast */;
+  --color-dark: /* Near black for text */;
+  --color-light: /* Off-white for backgrounds */;
+  --color-gray: /* For secondary text */;
+  --color-success: #10b981; /* For positive indicators */
+  --color-warning: #f59e0b; /* For stars/ratings */
+}
+
+/* Avoid:
+- Pure black (#000000) - use #0a0a0a or similar
+- Pure white for large backgrounds - use #f8f9fa or similar
+- Low contrast text
+- More than 3-4 colors total
+*/
+```
+
+#### Spacing System
+```css
+/* Use consistent spacing scale */
+--space-xs: 0.25rem;  /* 4px */
+--space-sm: 0.5rem;   /* 8px */
+--space-md: 1rem;     /* 16px */
+--space-lg: 2rem;     /* 32px */
+--space-xl: 4rem;     /* 64px */
+--space-2xl: 6rem;    /* 96px */
+
+/* Section padding: space-xl to space-2xl */
+/* Card padding: space-md to space-lg */
+/* Button padding: space-sm vertical, space-md horizontal */
+```
+
+#### Buttons
+```css
+/* Primary CTA */
+.btn-primary {
+  background: var(--color-accent);
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 8px; /* or 50px for pill shape */
+  font-weight: 600;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 14px rgba(accent-color, 0.3);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(accent-color, 0.4);
+}
+
+/* Secondary/Ghost button */
+.btn-secondary {
+  background: transparent;
+  border: 2px solid currentColor;
+  /* ... similar padding/sizing */
+}
+```
+
+#### Cards
+```css
+.card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+}
+```
+
+---
+
+### IMAGE REQUIREMENTS
+
+#### Sources (use placeholder URLs that work)
+```
+Unsplash: https://images.unsplash.com/photo-[ID]?w=800&q=80
+Pexels: https://images.pexels.com/photos/[ID]/pexels-photo-[ID].jpeg?w=800
+
+Always include:
+- width parameter (w=800, w=1200, etc.)
+- quality parameter (q=80)
+```
+
+#### Image Optimization Attributes
+```html
+<img 
+  src="image-url" 
+  alt="Descriptive alt text for accessibility"
+  loading="lazy"
+  width="800"
+  height="600"
+  style="object-fit: cover;"
+>
+```
+
+#### Recommended Image Sizes
+```
+Hero background: 1920x1080 minimum
+Service cards: 800x600 (4:3) or 800x800 (1:1)
+Testimonial avatars: 100x100
+Gallery images: 800x600
+Logo: SVG preferred, or 200x60 PNG
+```
+
+---
+
+### RESPONSIVE BREAKPOINTS
+
+```css
+/* Mobile first approach */
+/* Base styles: Mobile (< 640px) */
+
+@media (min-width: 640px) {
+  /* Tablet */
+}
+
+@media (min-width: 1024px) {
+  /* Desktop */
+}
+
+@media (min-width: 1280px) {
+  /* Large desktop */
+}
+```
+
+#### Mobile Considerations
+- Stack all grid columns
+- Reduce font sizes by 20-30%
+- Full-width buttons
+- Hamburger menu navigation
+- Reduce padding/margins
+- Single column testimonials
+- Touch-friendly tap targets (min 44px)
+
+---
+
+### ANIMATIONS & INTERACTIONS
+
+```css
+/* Smooth scroll */
+html { scroll-behavior: smooth; }
+
+/* Base transition for interactive elements */
+transition: all 0.3s ease;
+
+/* Hover effects */
+- Buttons: translateY(-2px) + enhanced shadow
+- Cards: translateY(-4px) + enhanced shadow
+- Links: color change + optional underline
+- Images: subtle scale(1.05) with overflow:hidden on container
+
+/* Scroll animations (use CSS or JS) */
+- Fade in from bottom for sections
+- Stagger delays for grid items
+- Use IntersectionObserver for performance
+```
+
+---
+
+### ACCESSIBILITY REQUIREMENTS
+
+```
+1. Color contrast: Minimum 4.5:1 for body text, 3:1 for large text
+2. Alt text on all images
+3. Semantic HTML (header, nav, main, section, footer)
+4. Keyboard navigation support
+5. Focus states visible on all interactive elements
+6. Form labels associated with inputs
+7. Skip to content link (optional but recommended)
+8. ARIA labels where needed
+```
+
+---
+
+### SEO ESSENTIALS
+
+```html
+<head>
+  <title>Business Name | Primary Service | Location</title>
+  <meta name="description" content="150-160 character description with keywords">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <!-- Open Graph -->
+  <meta property="og:title" content="...">
+  <meta property="og:description" content="...">
+  <meta property="og:image" content="...">
+  
+  <!-- Structured data for local business (JSON-LD) -->
+</head>
+
+<!-- Use semantic headings: One H1, logical H2/H3 hierarchy -->
+<!-- Descriptive link text (not "click here") -->
+```
+
+---
+
+### OUTPUT FORMAT
+
+When generating a website, output a single HTML file with:
+1. Embedded CSS in `<style>` tags (no external stylesheets)
+2. Embedded JavaScript in `<script>` tags at end of body
+3. Google Fonts linked in head
+4. All sections complete and functional
+5. Real placeholder images from Unsplash/Pexels
+6. Placeholder text that matches the business type (not lorem ipsum)
+7. Working navigation links (anchor links to sections)
+8. Mobile responsive design
+
+---
+
+### BUSINESS TYPE CUSTOMIZATION
+
+Adapt imagery, copy, and features based on business type:
+
+**Home Services** (cleaning, landscaping, HVAC, plumbing):
+- Before/after imagery
+- "Licensed & Insured" badges
+- Emergency service availability
+- Service area map
+
+**Health & Wellness** (spa, salon, massage, fitness):
+- Calming, luxurious imagery
+- Online booking prominent
+- Service menu with pricing
+- Team/practitioner profiles
+
+**Professional Services** (consulting, legal, financial):
+- Professional headshots
+- Credentials/certifications
+- Case studies or results
+- Consultation booking
+
+**Automotive** (detailing, repair, towing):
+- Action shots of services
+- Pricing packages
+- Fleet/commercial services
+- Location/hours prominent
+
+**Food & Hospitality** (catering, restaurants):
+- High-quality food photography
+- Menus/packages
+- Event booking
+- Dietary accommodations
+
+---
+
+### QUALITY CHECKLIST
+
+Before finalizing, verify:
+
+- [ ] All navigation links work
+- [ ] CTA buttons are prominent and high-contrast
+- [ ] Mobile responsive (test at 375px width)
+- [ ] Images have alt text
+- [ ] Contact information is visible
+- [ ] Booking/CTA is easy to find
+- [ ] Typography is readable (size, contrast, spacing)
+- [ ] Consistent spacing throughout
+- [ ] No horizontal scroll on mobile
+- [ ] Forms have proper labels
+- [ ] Page loads without errors
+- [ ] Professional, cohesive visual design
+                   
+   Now generate a website for: ${businessName}
+Business Type: ${businessType}
+Services: ${services}
+Description: ${description}
+
+Return ONLY the complete HTML code. No markdown, no explanations, just the HTML starting with <!DOCTYPE html>.`  // ← Close the prompt string here
         }]
       })
     });
-
+    
     console.log('📥 API Response Status:', response.status);
 
     if (!response.ok) {
@@ -1574,7 +1981,7 @@ app.post('/api/website/edit', async (req, res) => {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-opus-4-20250514',
         max_tokens: 4096,
         messages: [{
           role: 'user',
@@ -1721,4 +2128,5 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
