@@ -5,6 +5,8 @@ const { Pool } = require('pg');
 const cron = require('node-cron');
 const twilio = require('twilio');
 const sgMail = require('@sendgrid/mail');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
@@ -34,6 +36,9 @@ const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_T
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 }
+
+// JWT Secret
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 
 // Middleware
 app.set('trust proxy', 1);
@@ -65,281 +70,65 @@ app.use(express.json({ limit: '50mb' }));
 // HELPER FUNCTIONS
 // ============================================
 
-// Generate unique incentive code
 function generateIncentiveCode() {
   return 'REVIEW' + Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-// Create short review link (you can use bit.ly API later)
 function createReviewLink(placeId, incentiveCode) {
   const googleReviewUrl = `https://search.google.com/local/writereview?placeid=${placeId}`;
-  // For now, return Google URL directly. Later: integrate bit.ly for tracking
   return googleReviewUrl;
 }
 
-// ============================================
-// SERVICES ENDPOINTS
-// ============================================
+function generateTimeSlots(openTime, closeTime, serviceDuration, interval, buffer) {
+  const slots = [];
+  const [openHour, openMin] = openTime.split(':').map(Number);
+  const [closeHour, closeMin] = closeTime.split(':').map(Number);
 
-// Get all services for a user
-app.get('/api/services', async (req, res) => {
-  try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+  const openMinutes = openHour * 60 + openMin;
+  const closeMinutes = closeHour * 60 + closeMin;
+  const durationMinutes = serviceDuration * 60;
 
-    const result = await pool.query(
-      'SELECT * FROM services WHERE user_id = $1 AND active = true ORDER BY name',
-      [userId]
-    );
+  for (let minutes = openMinutes; minutes + durationMinutes <= closeMinutes; minutes += interval) {
+    const startHour = Math.floor(minutes / 60);
+    const startMin = minutes % 60;
+    const endMinutes = minutes + durationMinutes;
+    const endHour = Math.floor(endMinutes / 60);
+    const endMin = endMinutes % 60;
 
-    res.json({ services: result.rows });
-  } catch (error) {
-    console.error('Error fetching services:', error);
-    res.status(500).json({ error: 'Failed to fetch services' });
-  }
-});
-
-// Create new service
-app.post('/api/services', async (req, res) => {
-  try {
-    const { userId, name, description, durationHours, price } = req.body;
-
-    if (!userId || !name || !durationHours || !price) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    const result = await pool.query(
-      `INSERT INTO services (user_id, name, description, duration_hours, price)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [userId, name, description, durationHours, price]
-    );
-
-    res.json({ service: result.rows[0] });
-  } catch (error) {
-    console.error('Error creating service:', error);
-    res.status(500).json({ error: 'Failed to create service' });
-  }
-});
-
-// Update service
-app.put('/api/services/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, description, durationHours, price, active } = req.body;
-
-    const result = await pool.query(
-      `UPDATE services 
-       SET name = COALESCE($1, name),
-           description = COALESCE($2, description),
-           duration_hours = COALESCE($3, duration_hours),
-           price = COALESCE($4, price),
-           active = COALESCE($5, active)
-       WHERE id = $6
-       RETURNING *`,
-      [name, description, durationHours, price, active, id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Service not found' });
-    }
-
-    res.json({ service: result.rows[0] });
-  } catch (error) {
-    console.error('Error updating service:', error);
-    res.status(500).json({ error: 'Failed to update service' });
-  }
-});
-
-// ============================================
-// CUSTOMERS ENDPOINTS
-// ============================================
-
-// Get all customers for a user
-app.get('/api/customers', async (req, res) => {
-  try {
-    const { userId } = req.query;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
-
-    const result = await pool.query(
-      'SELECT * FROM customers WHERE user_id = $1 ORDER BY name',
-      [userId]
-    );
-
-    res.json({ customers: result.rows });
-  } catch (error) {
-    console.error('Error fetching customers:', error);
-    res.status(500).json({ error: 'Failed to fetch customers' });
-  }
-});
-
-// Create new customer
-app.post('/api/customers', async (req, res) => {
-  try {
-    const { userId, name, email, phone, notes } = req.body;
-
-    if (!userId || !name) {
-      return res.status(400).json({ error: 'userId and name required' });
-    }
-
-    const result = await pool.query(
-      `INSERT INTO customers (user_id, name, email, phone, notes)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [userId, name, email, phone, notes]
-    );
-
-    res.json({ customer: result.rows[0] });
-  } catch (error) {
-    console.error('Error creating customer:', error);
-    res.status(500).json({ error: 'Failed to create customer' });
-  }
-});
-
-// ============================================
-// JOBS ENDPOINTS
-// ============================================
-
-// Get all jobs for a user
-app.get('/api/jobs', async (req, res) => {
-  try {
-    const { userId, status } = req.query;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
-
-    let query = `
-      SELECT j.*, c.name as customer_name, c.email, c.phone, s.name as service_name
-      FROM jobs j
-      LEFT JOIN customers c ON j.customer_id = c.id
-      LEFT JOIN services s ON j.service_id = s.id
-      WHERE j.user_id = $1
-    `;
-    
-    const params = [userId];
-
-    if (status) {
-      query += ' AND j.status = $2';
-      params.push(status);
-    }
-
-    query += ' ORDER BY j.scheduled_start DESC';
-
-    const result = await pool.query(query, params);
-
-    res.json({ jobs: result.rows });
-  } catch (error) {
-    console.error('Error fetching jobs:', error);
-    res.status(500).json({ error: 'Failed to fetch jobs' });
-  }
-});
-
-// Create new job
-app.post('/api/jobs', async (req, res) => {
-  try {
-    const { userId, customerId, serviceId, scheduledStart, notes } = req.body;
-
-    if (!userId || !customerId || !serviceId || !scheduledStart) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    // Get service details
-    const serviceResult = await pool.query(
-      'SELECT name, duration_hours, price FROM services WHERE id = $1',
-      [serviceId]
-    );
-
-    if (serviceResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Service not found' });
-    }
-
-    const service = serviceResult.rows[0];
-    const scheduledStartDate = new Date(scheduledStart);
-    const calculatedEnd = new Date(scheduledStartDate.getTime() + (service.duration_hours * 60 * 60 * 1000));
-
-    // Create job
-    const result = await pool.query(
-      `INSERT INTO jobs (user_id, customer_id, service_id, service_name, scheduled_start, duration_hours, calculated_end, price, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING *`,
-      [userId, customerId, serviceId, service.name, scheduledStart, service.duration_hours, calculatedEnd, service.price, notes]
-    );
-
-    // Create review request (scheduled)
-    await createReviewRequest(result.rows[0]);
-
-    res.json({ job: result.rows[0] });
-  } catch (error) {
-    console.error('Error creating job:', error);
-    res.status(500).json({ error: 'Failed to create job' });
-  }
-});
-
-// Mark job as complete
-app.post('/api/jobs/:id/complete', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await pool.query(
-      `UPDATE jobs 
-       SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-       WHERE id = $1
-       RETURNING *`,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Job not found' });
-    }
-
-    // Update customer stats
-    await pool.query(
-      'UPDATE customers SET total_jobs = total_jobs + 1 WHERE id = $1',
-      [result.rows[0].customer_id]
-    );
-
-    res.json({ job: result.rows[0] });
-  } catch (error) {
-    console.error('Error completing job:', error);
-    res.status(500).json({ error: 'Failed to complete job' });
-  }
-});
-
-// Logout endpoint
-app.post('/api/auth/logout', async (req, res) => {
-  try {
-    // Logout is handled client-side (localStorage.removeItem)
-    // You can add token invalidation logic here if needed in future
-    res.json({ 
-      success: true, 
-      message: 'Logged out successfully' 
-    });
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({ 
-      error: 'Logout failed',
-      message: error.message 
+    slots.push({
+      start: `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}`,
+      end: `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`,
+      duration: serviceDuration
     });
   }
-});
 
-console.log('✅ Logout endpoint loaded');
+  return slots;
+}
 
-// ============================================
-// REVIEW REQUEST SYSTEM
-// ============================================
+function hasConflict(slot, existingBookings, buffer) {
+  const [slotStartHour, slotStartMin] = slot.start.split(':').map(Number);
+  const [slotEndHour, slotEndMin] = slot.end.split(':').map(Number);
+  
+  const slotStart = slotStartHour * 60 + slotStartMin;
+  const slotEnd = slotEndHour * 60 + slotEndMin;
 
-// Create review request when job is created
+  for (const booking of existingBookings) {
+    const [bookStartHour, bookStartMin] = booking.start_time.split(':').map(Number);
+    const [bookEndHour, bookEndMin] = booking.end_time.split(':').map(Number);
+    
+    const bookStart = bookStartHour * 60 + bookStartMin - buffer;
+    const bookEnd = bookEndHour * 60 + bookEndMin + buffer;
+
+    if (slotStart < bookEnd && slotEnd > bookStart) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function createReviewRequest(job) {
   try {
-    // Get user settings
     const userResult = await pool.query(
       'SELECT review_buffer_hours, google_place_id FROM users WHERE id = $1',
       [job.user_id]
@@ -349,10 +138,7 @@ async function createReviewRequest(job) {
 
     const user = userResult.rows[0];
     const bufferHours = user.review_buffer_hours || 1;
-
-    // Calculate send time: job end + buffer
     const scheduledSendTime = new Date(job.calculated_end.getTime() + (bufferHours * 60 * 60 * 1000));
-
     const incentiveCode = generateIncentiveCode();
 
     await pool.query(
@@ -367,10 +153,8 @@ async function createReviewRequest(job) {
   }
 }
 
-// Send review request (SMS + Email)
 async function sendReviewRequest(reviewRequest) {
   try {
-    // Get job, customer, and user details
     const result = await pool.query(
       `SELECT 
         rr.*, 
@@ -398,7 +182,6 @@ async function sendReviewRequest(reviewRequest) {
     let smsError = null;
     let emailError = null;
 
-    // Send SMS
     if (data.sms_enabled && data.phone && twilioClient) {
       try {
         const smsMessage = `Hi ${data.customer_name}! Thanks for choosing ${data.business_name} for ${data.service_name}!\n\nLove our work? Leave a Google review & get ${data.review_incentive}:\n${reviewLink}`;
@@ -417,7 +200,6 @@ async function sendReviewRequest(reviewRequest) {
       }
     }
 
-    // Send Email
     if (data.email_enabled && data.email && sgMail) {
       try {
         const emailHtml = `
@@ -459,7 +241,6 @@ async function sendReviewRequest(reviewRequest) {
       }
     }
 
-    // Update review request status
     await pool.query(
       `UPDATE review_requests
        SET actual_send_time = CURRENT_TIMESTAMP,
@@ -474,7 +255,6 @@ async function sendReviewRequest(reviewRequest) {
       [smsSent, smsError, emailSent, emailError, reviewRequest.id]
     );
 
-    // Update analytics
     const today = new Date().toISOString().split('T')[0];
     await pool.query(
       `INSERT INTO review_analytics (user_id, date, requests_sent, sms_sent, emails_sent)
@@ -492,25 +272,226 @@ async function sendReviewRequest(reviewRequest) {
   }
 }
 
-// Cron job: Check for pending review requests every minute
-cron.schedule('* * * * *', async () => {
+// ============================================
+// SERVICES ENDPOINTS
+// ============================================
+
+app.get('/api/services', async (req, res) => {
   try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
     const result = await pool.query(
-      `SELECT * FROM review_requests
-       WHERE status = 'pending'
-       AND scheduled_send_time <= CURRENT_TIMESTAMP
-       LIMIT 10`
+      'SELECT * FROM services WHERE user_id = $1 AND active = true ORDER BY name',
+      [userId]
     );
 
-    for (const reviewRequest of result.rows) {
-      await sendReviewRequest(reviewRequest);
+    res.json({ services: result.rows });
+  } catch (error) {
+    console.error('Error fetching services:', error);
+    res.status(500).json({ error: 'Failed to fetch services' });
+  }
+});
+
+app.post('/api/services', async (req, res) => {
+  try {
+    const { userId, name, description, durationHours, price } = req.body;
+
+    if (!userId || !name || !durationHours || !price) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    if (result.rows.length > 0) {
-      console.log(`✅ Processed ${result.rows.length} review requests`);
-    }
+    const result = await pool.query(
+      `INSERT INTO services (user_id, name, description, duration_hours, price)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [userId, name, description, durationHours, price]
+    );
+
+    res.json({ service: result.rows[0] });
   } catch (error) {
-    console.error('Cron job error:', error);
+    console.error('Error creating service:', error);
+    res.status(500).json({ error: 'Failed to create service' });
+  }
+});
+
+app.put('/api/services/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, durationHours, price, active } = req.body;
+
+    const result = await pool.query(
+      `UPDATE services 
+       SET name = COALESCE($1, name),
+           description = COALESCE($2, description),
+           duration_hours = COALESCE($3, duration_hours),
+           price = COALESCE($4, price),
+           active = COALESCE($5, active)
+       WHERE id = $6
+       RETURNING *`,
+      [name, description, durationHours, price, active, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    res.json({ service: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating service:', error);
+    res.status(500).json({ error: 'Failed to update service' });
+  }
+});
+
+// ============================================
+// CUSTOMERS ENDPOINTS
+// ============================================
+
+app.get('/api/customers', async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM customers WHERE user_id = $1 ORDER BY name',
+      [userId]
+    );
+
+    res.json({ customers: result.rows });
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    res.status(500).json({ error: 'Failed to fetch customers' });
+  }
+});
+
+app.post('/api/customers', async (req, res) => {
+  try {
+    const { userId, name, email, phone, notes } = req.body;
+
+    if (!userId || !name) {
+      return res.status(400).json({ error: 'userId and name required' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO customers (user_id, name, email, phone, notes)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [userId, name, email, phone, notes]
+    );
+
+    res.json({ customer: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating customer:', error);
+    res.status(500).json({ error: 'Failed to create customer' });
+  }
+});
+
+// ============================================
+// JOBS ENDPOINTS
+// ============================================
+
+app.get('/api/jobs', async (req, res) => {
+  try {
+    const { userId, status } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    let query = `
+      SELECT j.*, c.name as customer_name, c.email, c.phone, s.name as service_name
+      FROM jobs j
+      LEFT JOIN customers c ON j.customer_id = c.id
+      LEFT JOIN services s ON j.service_id = s.id
+      WHERE j.user_id = $1
+    `;
+    
+    const params = [userId];
+
+    if (status) {
+      query += ' AND j.status = $2';
+      params.push(status);
+    }
+
+    query += ' ORDER BY j.scheduled_start DESC';
+
+    const result = await pool.query(query, params);
+
+    res.json({ jobs: result.rows });
+  } catch (error) {
+    console.error('Error fetching jobs:', error);
+    res.status(500).json({ error: 'Failed to fetch jobs' });
+  }
+});
+
+app.post('/api/jobs', async (req, res) => {
+  try {
+    const { userId, customerId, serviceId, scheduledStart, notes } = req.body;
+
+    if (!userId || !customerId || !serviceId || !scheduledStart) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const serviceResult = await pool.query(
+      'SELECT name, duration_hours, price FROM services WHERE id = $1',
+      [serviceId]
+    );
+
+    if (serviceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    const service = serviceResult.rows[0];
+    const scheduledStartDate = new Date(scheduledStart);
+    const calculatedEnd = new Date(scheduledStartDate.getTime() + (service.duration_hours * 60 * 60 * 1000));
+
+    const result = await pool.query(
+      `INSERT INTO jobs (user_id, customer_id, service_id, service_name, scheduled_start, duration_hours, calculated_end, price, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [userId, customerId, serviceId, service.name, scheduledStart, service.duration_hours, calculatedEnd, service.price, notes]
+    );
+
+    await createReviewRequest(result.rows[0]);
+
+    res.json({ job: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating job:', error);
+    res.status(500).json({ error: 'Failed to create job' });
+  }
+});
+
+app.post('/api/jobs/:id/complete', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE jobs 
+       SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    await pool.query(
+      'UPDATE customers SET total_jobs = total_jobs + 1 WHERE id = $1',
+      [result.rows[0].customer_id]
+    );
+
+    res.json({ job: result.rows[0] });
+  } catch (error) {
+    console.error('Error completing job:', error);
+    res.status(500).json({ error: 'Failed to complete job' });
   }
 });
 
@@ -518,7 +499,6 @@ cron.schedule('* * * * *', async () => {
 // ANALYTICS ENDPOINTS
 // ============================================
 
-// Get review analytics for a user
 app.get('/api/analytics/reviews', async (req, res) => {
   try {
     const { userId, startDate, endDate } = req.query;
@@ -527,7 +507,6 @@ app.get('/api/analytics/reviews', async (req, res) => {
       return res.status(400).json({ error: 'userId required' });
     }
 
-    // Get aggregated stats
     const statsResult = await pool.query(
       `SELECT 
         COALESCE(SUM(requests_sent), 0) as total_sent,
@@ -544,7 +523,6 @@ app.get('/api/analytics/reviews', async (req, res) => {
       [userId, startDate, endDate].filter(Boolean)
     );
 
-    // Get daily breakdown
     const dailyResult = await pool.query(
       `SELECT * FROM review_analytics
        WHERE user_id = $1
@@ -564,26 +542,9 @@ app.get('/api/analytics/reviews', async (req, res) => {
 });
 
 // ============================================
-// HEALTH CHECK
+// BUSINESS HOURS ENDPOINTS
 // ============================================
 
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    services: {
-      database: pool ? 'connected' : 'disconnected',
-      twilio: twilioClient ? 'configured' : 'not configured',
-      sendgrid: process.env.SENDGRID_API_KEY ? 'configured' : 'not configured'
-    }
-  });
-});
-
-// ============================================
-// BOOKING SYSTEM ENDPOINTS
-// ============================================
-
-// Get business hours for a user
 app.get('/api/business-hours', async (req, res) => {
   try {
     const { userId } = req.query;
@@ -622,7 +583,6 @@ app.get('/api/business-hours', async (req, res) => {
   }
 });
 
-// Update business hours
 app.post('/api/business-hours', async (req, res) => {
   try {
     const { userId, hours } = req.body;
@@ -647,7 +607,10 @@ app.post('/api/business-hours', async (req, res) => {
   }
 });
 
-// Get booking settings
+// ============================================
+// BOOKING SETTINGS ENDPOINTS
+// ============================================
+
 app.get('/api/booking-settings', async (req, res) => {
   try {
     const { userId } = req.query;
@@ -682,7 +645,6 @@ app.get('/api/booking-settings', async (req, res) => {
   }
 });
 
-// Update booking settings
 app.post('/api/booking-settings', async (req, res) => {
   try {
     const { userId, ...settings } = req.body;
@@ -728,7 +690,10 @@ app.post('/api/booking-settings', async (req, res) => {
   }
 });
 
-// Get bookings for a user
+// ============================================
+// BOOKINGS ENDPOINTS
+// ============================================
+
 app.get('/api/bookings', async (req, res) => {
   try {
     const { userId, startDate, endDate, status } = req.query;
@@ -782,11 +747,120 @@ app.get('/api/bookings', async (req, res) => {
   }
 });
 
+app.post('/api/bookings/create', async (req, res) => {
+  try {
+    const { userId, serviceId, bookingDate, startTime, customerInfo, customerNotes, employeeId } = req.body;
+
+    if (!userId || !serviceId || !bookingDate || !startTime || !customerInfo) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const serviceResult = await pool.query(
+      'SELECT duration_hours, price, name FROM services WHERE id = $1',
+      [serviceId]
+    );
+
+    if (serviceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    const service = serviceResult.rows[0];
+    
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = startMinutes + (service.duration_hours * 60);
+    const endHour = Math.floor(endMinutes / 60);
+    const endMin = endMinutes % 60;
+    const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
+
+    let assignedEmployeeId = employeeId;
+    
+    if (!assignedEmployeeId) {
+      const availableEmpResult = await pool.query(
+        `SELECT e.id 
+         FROM employees e
+         LEFT JOIN service_employees se ON e.id = se.employee_id
+         WHERE e.user_id = $1 
+         AND e.active = true
+         AND (se.service_id = $2 OR NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id))
+         AND NOT EXISTS (
+           SELECT 1 FROM bookings b
+           WHERE b.employee_id = e.id
+           AND b.booking_date = $3
+           AND b.status NOT IN ('cancelled', 'no_show')
+           AND (
+             (b.start_time <= $4 AND b.end_time > $4) OR
+             (b.start_time < $5 AND b.end_time >= $5) OR
+             (b.start_time >= $4 AND b.end_time <= $5)
+           )
+         )
+         LIMIT 1`,
+        [userId, serviceId, bookingDate, startTime, endTime]
+      );
+
+      if (availableEmpResult.rows.length === 0) {
+        return res.status(409).json({ error: 'No employees available for this time slot' });
+      }
+
+      assignedEmployeeId = availableEmpResult.rows[0].id;
+    }
+
+    const bookingNumberResult = await pool.query('SELECT generate_booking_number() as number');
+    const bookingNumber = bookingNumberResult.rows[0].number;
+
+    const customerResult = await pool.query(
+      `INSERT INTO customers (user_id, name, email, phone)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [userId, customerInfo.name, customerInfo.email, customerInfo.phone]
+    );
+    const customerIdToUse = customerResult.rows[0].id;
+
+    const bookingResult = await pool.query(
+      `INSERT INTO bookings (
+        user_id, customer_id, booking_number, booking_date, start_time, end_time,
+        subtotal, total_amount, customer_name, customer_email, 
+        customer_phone, customer_notes, status, employee_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING *`,
+      [
+        userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
+        service.price, service.price, customerInfo.name, customerInfo.email,
+        customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId
+      ]
+    );
+
+    const booking = bookingResult.rows[0];
+
+    await pool.query(
+      `INSERT INTO booking_items (
+        booking_id, service_id, service_name, service_duration, 
+        service_price, quantity, subtotal
+      )
+      VALUES ($1, $2, $3, $4, $5, 1, $6)`,
+      [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
+    );
+
+    const empResult = await pool.query('SELECT name FROM employees WHERE id = $1', [assignedEmployeeId]);
+
+    res.json({ 
+      success: true, 
+      booking,
+      assignedEmployee: empResult.rows[0].name,
+      message: 'Booking confirmed!'
+    });
+
+  } catch (error) {
+    console.error('Error creating booking:', error);
+    res.status(500).json({ error: 'Failed to create booking' });
+  }
+});
+
 // ============================================
-// EMPLOYEE MANAGEMENT ENDPOINTS
+// EMPLOYEE ENDPOINTS
 // ============================================
 
-// Get all employees for a user
 app.get('/api/employees', async (req, res) => {
   try {
     const { userId } = req.query;
@@ -810,7 +884,6 @@ app.get('/api/employees', async (req, res) => {
   }
 });
 
-// Create employee
 app.post('/api/employees', async (req, res) => {
   try {
     const { userId, name, email, phone, color, serviceIds } = req.body;
@@ -845,7 +918,6 @@ app.post('/api/employees', async (req, res) => {
   }
 });
 
-// Update employee
 app.put('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -889,7 +961,6 @@ app.put('/api/employees/:id', async (req, res) => {
   }
 });
 
-// Delete employee
 app.delete('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -918,7 +989,7 @@ app.delete('/api/employees/:id', async (req, res) => {
 });
 
 // ============================================
-// MULTI-EMPLOYEE AVAILABILITY CALCULATOR
+// AVAILABILITY CALCULATOR
 // ============================================
 
 app.get('/api/availability', async (req, res) => {
@@ -1053,205 +1124,27 @@ app.get('/api/availability', async (req, res) => {
   }
 });
 
-function generateTimeSlots(openTime, closeTime, serviceDuration, interval, buffer) {
-  const slots = [];
-  const [openHour, openMin] = openTime.split(':').map(Number);
-  const [closeHour, closeMin] = closeTime.split(':').map(Number);
-
-  const openMinutes = openHour * 60 + openMin;
-  const closeMinutes = closeHour * 60 + closeMin;
-  const durationMinutes = serviceDuration * 60;
-
-  for (let minutes = openMinutes; minutes + durationMinutes <= closeMinutes; minutes += interval) {
-    const startHour = Math.floor(minutes / 60);
-    const startMin = minutes % 60;
-    const endMinutes = minutes + durationMinutes;
-    const endHour = Math.floor(endMinutes / 60);
-    const endMin = endMinutes % 60;
-
-    slots.push({
-      start: `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}`,
-      end: `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`,
-      duration: serviceDuration
-    });
-  }
-
-  return slots;
-}
-
-function hasConflict(slot, existingBookings, buffer) {
-  const [slotStartHour, slotStartMin] = slot.start.split(':').map(Number);
-  const [slotEndHour, slotEndMin] = slot.end.split(':').map(Number);
-  
-  const slotStart = slotStartHour * 60 + slotStartMin;
-  const slotEnd = slotEndHour * 60 + slotEndMin;
-
-  for (const booking of existingBookings) {
-    const [bookStartHour, bookStartMin] = booking.start_time.split(':').map(Number);
-    const [bookEndHour, bookEndMin] = booking.end_time.split(':').map(Number);
-    
-    const bookStart = bookStartHour * 60 + bookStartMin - buffer;
-    const bookEnd = bookEndHour * 60 + bookEndMin + buffer;
-
-    if (slotStart < bookEnd && slotEnd > bookStart) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-// ============================================
-// BOOKING CREATION WITH EMPLOYEE AUTO-ASSIGN
-// ============================================
-
-app.post('/api/bookings/create', async (req, res) => {
-  try {
-    const {
-      userId,
-      serviceId,
-      bookingDate,
-      startTime,
-      customerInfo,
-      customerNotes,
-      employeeId
-    } = req.body;
-
-    if (!userId || !serviceId || !bookingDate || !startTime || !customerInfo) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    const serviceResult = await pool.query(
-      'SELECT duration_hours, price, name FROM services WHERE id = $1',
-      [serviceId]
-    );
-
-    if (serviceResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Service not found' });
-    }
-
-    const service = serviceResult.rows[0];
-    
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const startMinutes = startHour * 60 + startMin;
-    const endMinutes = startMinutes + (service.duration_hours * 60);
-    const endHour = Math.floor(endMinutes / 60);
-    const endMin = endMinutes % 60;
-    const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
-
-    let assignedEmployeeId = employeeId;
-    
-    if (!assignedEmployeeId) {
-      const availableEmpResult = await pool.query(
-        `SELECT e.id 
-         FROM employees e
-         LEFT JOIN service_employees se ON e.id = se.employee_id
-         WHERE e.user_id = $1 
-         AND e.active = true
-         AND (se.service_id = $2 OR NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id))
-         AND NOT EXISTS (
-           SELECT 1 FROM bookings b
-           WHERE b.employee_id = e.id
-           AND b.booking_date = $3
-           AND b.status NOT IN ('cancelled', 'no_show')
-           AND (
-             (b.start_time <= $4 AND b.end_time > $4) OR
-             (b.start_time < $5 AND b.end_time >= $5) OR
-             (b.start_time >= $4 AND b.end_time <= $5)
-           )
-         )
-         LIMIT 1`,
-        [userId, serviceId, bookingDate, startTime, endTime]
-      );
-
-      if (availableEmpResult.rows.length === 0) {
-        return res.status(409).json({ error: 'No employees available for this time slot' });
-      }
-
-      assignedEmployeeId = availableEmpResult.rows[0].id;
-    }
-
-    const bookingNumberResult = await pool.query('SELECT generate_booking_number() as number');
-    const bookingNumber = bookingNumberResult.rows[0].number;
-
-    let customerIdToUse = null;
-    const customerResult = await pool.query(
-      `INSERT INTO customers (user_id, name, email, phone)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id`,
-      [userId, customerInfo.name, customerInfo.email, customerInfo.phone]
-    );
-    customerIdToUse = customerResult.rows[0].id;
-
-    const bookingResult = await pool.query(
-      `INSERT INTO bookings (
-        user_id, customer_id, booking_number, booking_date, start_time, end_time,
-        subtotal, total_amount, customer_name, customer_email, 
-        customer_phone, customer_notes, status, employee_id
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-      RETURNING *`,
-      [
-        userId,
-        customerIdToUse,
-        bookingNumber,
-        bookingDate,
-        startTime,
-        endTime,
-        service.price,
-        service.price,
-        customerInfo.name,
-        customerInfo.email,
-        customerInfo.phone,
-        customerNotes || null,
-        'confirmed',
-        assignedEmployeeId
-      ]
-    );
-
-    const booking = bookingResult.rows[0];
-
-    await pool.query(
-      `INSERT INTO booking_items (
-        booking_id, service_id, service_name, service_duration, 
-        service_price, quantity, subtotal
-      )
-      VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-      [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
-    );
-
-    const empResult = await pool.query('SELECT name FROM employees WHERE id = $1', [assignedEmployeeId]);
-
-    res.json({ 
-      success: true, 
-      booking,
-      assignedEmployee: empResult.rows[0].name,
-      message: 'Booking confirmed!'
-    });
-
-  } catch (error) {
-    console.error('Error creating booking:', error);
-    res.status(500).json({ error: 'Failed to create booking' });
-  }
-});
-
 // ============================================
 // AI WEBSITE GENERATION ENDPOINT
 // ============================================
+
 app.post('/api/generate', async (req, res) => {
   try {
     const { businessName, businessType, services, description } = req.body;
 
     console.log('🎨 Generating website for:', businessName);
 
-    // Validate input
     if (!businessName || !businessType) {
-      return res.status(400).json({ 
-        error: 'Business name and type are required' 
-      });
+      return res.status(400).json({ error: 'Business name and type are required' });
     }
 
-    // Call Anthropic API to generate website
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error('❌ ANTHROPIC_API_KEY not set!');
+      return res.status(500).json({ error: 'API key not configured' });
+    }
+
+    console.log('📡 Calling Anthropic API...');
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -1264,154 +1157,7 @@ app.post('/api/generate', async (req, res) => {
         max_tokens: 4096,
         messages: [{
           role: 'user',
-content: `You are an expert web designer specializing in high-converting service business websites. Create a professional, modern single-page website for "${businessName}", a ${businessType} business.
-
-${description ? `Business Background: ${description}` : ''}
-${services ? `Services Offered: ${services}` : ''}
-
-DESIGN REQUIREMENTS:
-
-1. HERO SECTION (Above the fold - most important!)
-   - Eye-catching gradient background (use colors appropriate for ${businessType})
-   - Clear, benefit-driven headline (not just business name)
-   - Compelling subheadline explaining the main value proposition
-   - Prominent CTA button (e.g., "Get Free Quote", "Book Now", "Call Today")
-   - Trust indicator (e.g., "5-star rated", "Licensed & Insured", "Same-Day Service")
-   - Background image or illustration relevant to ${businessType}
-
-2. SOCIAL PROOF SECTION
-   - Star rating display (5 stars)
-   - Number of satisfied customers
-   - Years in business
-   - Key certifications or awards
-   - Use icons from Font Awesome
-
-3. SERVICES SECTION
-   - Grid layout (3 columns on desktop, 1 on mobile)
-   - Each service card with:
-     * Icon
-     * Service name
-     * Brief description
-     * Price range or "Starting at $X"
-   - Professional imagery or icons
-
-4. WHY CHOOSE US SECTION
-   - 4-6 key differentiators with icons:
-     * Licensed & Insured
-     * 24/7 Emergency Service
-     * Satisfaction Guaranteed
-     * Free Estimates
-     * Same-Day Service
-     * 10+ Years Experience
-   - Use checkmarks or shield icons
-
-5. BEFORE/AFTER or PROCESS SECTION
-   - For ${businessType}, show either:
-     * 3-step process (how it works)
-     * OR testimonials with photos
-     * OR project showcase
-
-6. URGENCY/OFFER SECTION
-   - Limited-time offer or seasonal promotion
-   - Countdown timer or "Limited slots available"
-   - Bold CTA button
-
-7. CONTACT SECTION
-   - Phone number (large, clickable on mobile)
-   - Email
-   - Service area
-   - Hours of operation
-   - Contact form with:
-     * Name
-     * Phone
-     * Email
-     * Service needed (dropdown)
-     * Message
-     * Submit button
-   - Optional: Embedded Google Maps
-
-8. FOOTER
-   - Business name
-   - Copyright
-   - Quick links
-   - Social media icons
-   - License numbers
-
-TECHNICAL REQUIREMENTS:
-
-- Use Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
-- Font Awesome icons via CDN: <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-- Mobile-first responsive design
-- Smooth scroll animations (use Intersection Observer)
-- Click-to-call phone links: <a href="tel:+1234567890">
-- Click-to-email links: <a href="mailto:email@business.com">
-- Fast loading (no external images, use gradients and CSS)
-- Sticky header on scroll
-- Floating CTA button on mobile
-
-COLOR PSYCHOLOGY:
-${businessType === 'plumbing' ? '- Blue (trust, water), orange (urgency)' : ''}
-${businessType === 'hvac' ? '- Blue (cool), red (heat), white (clean air)' : ''}
-${businessType === 'landscaping' ? '- Green (nature), brown (earth), blue (sky)' : ''}
-${businessType === 'cleaning' ? '- Blue (trust), white (cleanliness), green (fresh)' : ''}
-${businessType === 'electrical' ? '- Yellow (electricity), blue (professional), orange (caution)' : ''}
-${businessType === 'roofing' ? '- Red/brown (roofs), blue (sky), gray (professional)' : ''}
-${businessType === 'auto-repair' ? '- Red (speed), black (sleek), blue (trust)' : ''}
-- Use gradient backgrounds (not flat colors)
-- High contrast for readability
-
-CONVERSION OPTIMIZATION:
-
-1. Multiple CTAs (top, middle, bottom of page)
-2. Phone number visible at all times (sticky header)
-3. Trust signals throughout (reviews, certifications, guarantees)
-4. Clear value proposition in first 3 seconds
-5. Address common objections (pricing, quality, reliability)
-6. Create urgency (limited slots, seasonal offers)
-7. Social proof (customer count, ratings, testimonials)
-8. Easy contact options (click-to-call, forms, email)
-
-COPY GUIDELINES:
-
-- Use benefit-driven language ("Save $500" not "We offer discounts")
-- Address pain points ("Tired of leaky faucets?" not "We fix faucets")
-- Use power words: Guaranteed, Certified, Professional, Expert, Fast, Reliable
-- Include numbers: "Over 1,000 satisfied customers", "10+ years experience"
-- Use second person ("You get...", "Your home deserves...")
-
-ANIMATIONS (using vanilla JavaScript):
-
-- Fade in elements on scroll
-- Number counters for stats
-- Smooth scroll to sections
-- Hover effects on buttons
-- Parallax on hero section (subtle)
-
-IMPORTANT: Return ONLY the complete HTML code. No markdown, no explanations, just pure HTML starting with <!DOCTYPE html>.`
-        }]
-      })
-    });
-
-// ============================================
-// USAGE IN YOUR ENDPOINT:
-// ============================================
-
-app.post('/api/generate', async (req, res) => {
-  try {
-    const { businessName, businessType, services, description } = req.body;
-
-    console.log('🎨 Generating high-converting website for:', businessName);
-
-    if (!businessName || !businessType) {
-      return res.status(400).json({ error: 'Business name and type are required' });
-    }
-
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return res.status(500).json({ error: 'API key not configured' });
-    }
-
-    // Build the optimized prompt
-    const prompt = `You are an expert web designer specializing in high-converting service business websites. Create a professional, modern single-page website for "${businessName}", a ${businessType} business.
+          content: `You are an expert web designer specializing in high-converting service business websites. Create a professional, modern single-page website for "${businessName}", a ${businessType} business.
 
 ${description ? `Business Background: ${description}` : ''}
 ${services ? `Services Offered: ${services}` : ''}
@@ -1482,24 +1228,12 @@ COPY GUIDELINES:
 - Include numbers and stats
 - Use second person ("You get...")
 
-Return ONLY the complete HTML code. No markdown, no explanations, just pure HTML starting with <!DOCTYPE html>.`;
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096, // Increased for more detailed sites
-        messages: [{
-          role: 'user',
-          content: prompt
+Return ONLY the complete HTML code. No markdown, no explanations, just pure HTML starting with <!DOCTYPE html>.`
         }]
       })
     });
+
+    console.log('📥 API Response Status:', response.status);
 
     if (!response.ok) {
       const error = await response.text();
@@ -1508,14 +1242,17 @@ Return ONLY the complete HTML code. No markdown, no explanations, just pure HTML
     }
 
     const data = await response.json();
+    console.log('✅ API Response received');
+    console.log('Content blocks:', data.content?.length);
+
     const htmlContent = data.content?.[0]?.text;
 
     if (!htmlContent) {
-      console.error('❌ No HTML content in response');
-      return res.status(500).json({ error: 'No content generated' });
+      console.error('❌ No HTML content in response:', data);
+      return res.status(500).json({ error: 'No content generated', details: 'API returned empty response' });
     }
 
-    console.log('✅ High-converting website generated, length:', htmlContent.length);
+    console.log('✅ HTML generated, length:', htmlContent.length);
 
     res.json({ 
       success: true, 
@@ -1524,43 +1261,8 @@ Return ONLY the complete HTML code. No markdown, no explanations, just pure HTML
     });
 
   } catch (error) {
-    console.error('❌ Error:', error);
-    res.status(500).json({ error: 'Server error', message: error.message });
-  }
-});
-
-Return ONLY the complete HTML code with inline CSS and JavaScript. No explanations, just the code.`
-        }]
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('❌ Anthropic API error:', error);
-      return res.status(500).json({ 
-        error: 'Failed to generate website',
-        details: error 
-      });
-    }
-
-    const data = await response.json();
-    const htmlContent = data.content[0].text;
-
-    console.log('✅ Website generated successfully');
-
-    res.json({ 
-      success: true, 
-      html: htmlContent,
-      businessName,
-      cost: 0.03 // Sonnet 4 pricing
-    });
-
-  } catch (error) {
     console.error('❌ Error generating website:', error);
-    res.status(500).json({ 
-      error: 'Server error', 
-      message: error.message 
-    });
+    res.status(500).json({ error: 'Server error', message: error.message });
   }
 });
 
@@ -1570,12 +1272,6 @@ console.log('✅ Generate endpoint loaded');
 // AUTHENTICATION ENDPOINTS
 // ============================================
 
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
-
-// Signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { email, password, businessName, fullName } = req.body;
@@ -1630,7 +1326,6 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
-// Login endpoint
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -1639,25 +1334,22 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Find user - CHECK THIS SECTION
     const result = await pool.query(
       'SELECT id, email, password_hash, business_name, plan FROM users WHERE email = $1',
       [email.toLowerCase()]
-    );  // ← Make sure this closing ) and ; are here!
+    );
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const user = result.rows[0];
-    // Verify password
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    // Generate token
     const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
 
     console.log('✅ User logged in:', email);
@@ -1669,7 +1361,6 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         email: user.email,
         businessName: user.business_name,
-        fullName: user.full_name,
         plan: user.plan
       }
     });
@@ -1680,7 +1371,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Verify endpoint (JWT-based)
 app.post('/api/auth/verify', async (req, res) => {
   try {
     const { token } = req.body;
@@ -1689,14 +1379,12 @@ app.post('/api/auth/verify', async (req, res) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    // Verify JWT
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    // Get user
     const result = await pool.query(
-  'SELECT id, email, password_hash, business_name, plan FROM users WHERE email = $1',
-  [email.toLowerCase()]
-);
+      'SELECT id, email, business_name, plan FROM users WHERE id = $1',
+      [decoded.userId]
+    );
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'User not found' });
@@ -1710,7 +1398,6 @@ app.post('/api/auth/verify', async (req, res) => {
         id: user.id,
         email: user.email,
         businessName: user.business_name,
-        fullName: user.full_name,
         plan: user.plan
       }
     });
@@ -1721,12 +1408,27 @@ app.post('/api/auth/verify', async (req, res) => {
   }
 });
 
-console.log('✅ Auth endpoints loaded (signup, login, verify)');
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    res.json({ 
+      success: true, 
+      message: 'Logged out successfully' 
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ 
+      error: 'Logout failed',
+      message: error.message 
+    });
+  }
+});
+
+console.log('✅ Auth endpoints loaded (signup, login, verify, logout)');
+
 // ============================================
 // WEBSITE ENDPOINTS
 // ============================================
 
-// Get user's website
 app.get('/api/website', async (req, res) => {
   try {
     const { userId } = req.query;
@@ -1749,7 +1451,6 @@ app.get('/api/website', async (req, res) => {
   }
 });
 
-// Save/Update website
 app.post('/api/website', async (req, res) => {
   try {
     const { userId, htmlContent } = req.body;
@@ -1791,7 +1492,6 @@ app.post('/api/website', async (req, res) => {
   }
 });
 
-// Toggle publish
 app.post('/api/website/publish', async (req, res) => {
   try {
     const { userId, isPublished } = req.body;
@@ -1822,7 +1522,6 @@ app.post('/api/website/publish', async (req, res) => {
   }
 });
 
-// Save custom domain
 app.post('/api/website/domain', async (req, res) => {
   try {
     const { userId, customDomain } = req.body;
@@ -1854,6 +1553,48 @@ app.post('/api/website/domain', async (req, res) => {
 });
 
 console.log('✅ Website endpoints loaded');
+
+// ============================================
+// HEALTH CHECK
+// ============================================
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    services: {
+      database: pool ? 'connected' : 'disconnected',
+      twilio: twilioClient ? 'configured' : 'not configured',
+      sendgrid: process.env.SENDGRID_API_KEY ? 'configured' : 'not configured'
+    }
+  });
+});
+
+// ============================================
+// CRON JOB
+// ============================================
+
+cron.schedule('* * * * *', async () => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM review_requests
+       WHERE status = 'pending'
+       AND scheduled_send_time <= CURRENT_TIMESTAMP
+       LIMIT 10`
+    );
+
+    for (const reviewRequest of result.rows) {
+      await sendReviewRequest(reviewRequest);
+    }
+
+    if (result.rows.length > 0) {
+      console.log(`✅ Processed ${result.rows.length} review requests`);
+    }
+  } catch (error) {
+    console.error('Cron job error:', error);
+  }
+});
+
 // ============================================
 // START SERVER
 // ============================================
@@ -1865,13 +1606,3 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
-
-
-
-
-
-
-
-
-
-
