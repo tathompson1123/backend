@@ -311,6 +311,8 @@ app.post('/api/jobs/:id/complete', async (req, res) => {
     res.status(500).json({ error: 'Failed to complete job' });
   }
 });
+
+// Logout endpoint
 app.post('/api/auth/logout', async (req, res) => {
   try {
     // Logout is handled client-side (localStorage.removeItem)
@@ -330,37 +332,6 @@ app.post('/api/auth/logout', async (req, res) => {
 
 console.log('✅ Logout endpoint loaded');
 
-app.post('/api/auth/verify', async (req, res) => {
-  try {
-    const { token } = req.body;
-
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-
-    // For now, if token exists in request, consider it valid
-    // In production, you'd verify JWT signature here
-    // For now, we'll just check if user exists
-    
-    // Since we're not using JWT yet, we'll just return a basic user
-    // You can enhance this later with proper JWT verification
-    
-    res.json({ 
-      success: true,
-      user: {
-        name: 'User', // You'd decode this from JWT in production
-        email: 'user@email.com',
-        plan: 'free'
-      }
-    });
-
-  } catch (error) {
-    console.error('Verify error:', error);
-    res.status(401).json({ error: 'Invalid token' });
-  }
-});
-
-console.log('✅ Auth verify endpoint loaded');
 // ============================================
 // REVIEW REQUEST SYSTEM
 // ============================================
@@ -607,9 +578,9 @@ app.get('/api/health', (req, res) => {
     }
   });
 });
+
 // ============================================
 // BOOKING SYSTEM ENDPOINTS
-// Add this BEFORE app.listen() in your server-review-automation.js
 // ============================================
 
 // Get business hours for a user
@@ -1263,8 +1234,6 @@ app.post('/api/bookings/create', async (req, res) => {
     res.status(500).json({ error: 'Failed to create booking' });
   }
 });
-// Add this to your server.js file on Railway
-// Place it BEFORE the app.listen() call
 
 // ============================================
 // AI WEBSITE GENERATION ENDPOINT
@@ -1349,7 +1318,169 @@ Return ONLY the complete HTML code with inline CSS and JavaScript. No explanatio
 });
 
 console.log('✅ Generate endpoint loaded');
-// Start server
+
+// ============================================
+// AUTHENTICATION ENDPOINTS
+// ============================================
+
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
+
+// Signup endpoint
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { email, password, businessName, fullName } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Check if user exists
+    const existing = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const result = await pool.query(
+      `INSERT INTO users (email, password_hash, business_name, full_name, plan, created_at)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+       RETURNING id, email, business_name, full_name, plan`,
+      [email.toLowerCase(), hashedPassword, businessName || 'My Business', fullName || '', 'free']
+    );
+
+    const user = result.rows[0];
+
+    // Generate token
+    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+
+    console.log('✅ New user:', email);
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        businessName: user.business_name,
+        fullName: user.full_name,
+        plan: user.plan
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Signup error:', error);
+    res.status(500).json({ error: 'Registration failed', message: error.message });
+  }
+});
+
+// Login endpoint
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Find user
+    const result = await pool.query(
+      'SELECT id, email, password_hash, business_name, full_name, plan FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const user = result.rows[0];
+
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Generate token
+    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+
+    console.log('✅ User logged in:', email);
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        businessName: user.business_name,
+        fullName: user.full_name,
+        plan: user.plan
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Login error:', error);
+    res.status(500).json({ error: 'Login failed', message: error.message });
+  }
+});
+
+// Verify endpoint (JWT-based)
+app.post('/api/auth/verify', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    // Verify JWT
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    // Get user
+    const result = await pool.query(
+      'SELECT id, email, business_name, full_name, plan FROM users WHERE id = $1',
+      [decoded.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        businessName: user.business_name,
+        fullName: user.full_name,
+        plan: user.plan
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Verify error:', error);
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+console.log('✅ Auth endpoints loaded (signup, login, verify)');
+
+// ============================================
+// START SERVER
+// ============================================
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected'}`);
@@ -1357,7 +1488,3 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
-
-
-
-
