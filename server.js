@@ -1261,26 +1261,277 @@ app.post('/api/generate', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
+        max_tokens: 4096,
         messages: [{
           role: 'user',
-          content: `Create a professional, modern single-page website for a ${businessType} business called "${businessName}".
+          // ============================================
+// OPTIMIZED WEBSITE GENERATION PROMPT
+// Replace the prompt in your /api/generate endpoint with this
+// ============================================
 
-${description ? `Business description: ${description}` : ''}
-${services ? `Services offered: ${services}` : ''}
+// In your server.js, find the /api/generate endpoint and replace the prompt with:
 
-Requirements:
-- Modern, clean design with gradient backgrounds
-- Responsive layout
-- Hero section with call-to-action
-- Services/features section
-- About section
-- Contact section with email/phone
-- Smooth animations
-- Mobile-friendly
-- Use Tailwind CSS via CDN
-- Include Font Awesome icons via CDN
-- Professional color scheme appropriate for ${businessType}
+const optimizedPrompt = `You are an expert web designer specializing in high-converting service business websites. Create a professional, modern single-page website for "${businessName}", a ${businessType} business.
+
+${description ? `Business Background: ${description}` : ''}
+${services ? `Services Offered: ${services}` : ''}
+
+DESIGN REQUIREMENTS:
+
+1. HERO SECTION (Above the fold - most important!)
+   - Eye-catching gradient background (use colors appropriate for ${businessType})
+   - Clear, benefit-driven headline (not just business name)
+   - Compelling subheadline explaining the main value proposition
+   - Prominent CTA button (e.g., "Get Free Quote", "Book Now", "Call Today")
+   - Trust indicator (e.g., "5-star rated", "Licensed & Insured", "Same-Day Service")
+   - Background image or illustration relevant to ${businessType}
+
+2. SOCIAL PROOF SECTION
+   - Star rating display (5 stars)
+   - Number of satisfied customers
+   - Years in business
+   - Key certifications or awards
+   - Use icons from Font Awesome
+
+3. SERVICES SECTION
+   - Grid layout (3 columns on desktop, 1 on mobile)
+   - Each service card with:
+     * Icon
+     * Service name
+     * Brief description
+     * Price range or "Starting at $X"
+   - Professional imagery or icons
+
+4. WHY CHOOSE US SECTION
+   - 4-6 key differentiators with icons:
+     * Licensed & Insured
+     * 24/7 Emergency Service
+     * Satisfaction Guaranteed
+     * Free Estimates
+     * Same-Day Service
+     * 10+ Years Experience
+   - Use checkmarks or shield icons
+
+5. BEFORE/AFTER or PROCESS SECTION
+   - For ${businessType}, show either:
+     * 3-step process (how it works)
+     * OR testimonials with photos
+     * OR project showcase
+
+6. URGENCY/OFFER SECTION
+   - Limited-time offer or seasonal promotion
+   - Countdown timer or "Limited slots available"
+   - Bold CTA button
+
+7. CONTACT SECTION
+   - Phone number (large, clickable on mobile)
+   - Email
+   - Service area
+   - Hours of operation
+   - Contact form with:
+     * Name
+     * Phone
+     * Email
+     * Service needed (dropdown)
+     * Message
+     * Submit button
+   - Optional: Embedded Google Maps
+
+8. FOOTER
+   - Business name
+   - Copyright
+   - Quick links
+   - Social media icons
+   - License numbers
+
+TECHNICAL REQUIREMENTS:
+
+- Use Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
+- Font Awesome icons via CDN: <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+- Mobile-first responsive design
+- Smooth scroll animations (use Intersection Observer)
+- Click-to-call phone links: <a href="tel:+1234567890">
+- Click-to-email links: <a href="mailto:email@business.com">
+- Fast loading (no external images, use gradients and CSS)
+- Sticky header on scroll
+- Floating CTA button on mobile
+
+COLOR PSYCHOLOGY:
+${businessType === 'plumbing' ? '- Blue (trust, water), orange (urgency)' : ''}
+${businessType === 'hvac' ? '- Blue (cool), red (heat), white (clean air)' : ''}
+${businessType === 'landscaping' ? '- Green (nature), brown (earth), blue (sky)' : ''}
+${businessType === 'cleaning' ? '- Blue (trust), white (cleanliness), green (fresh)' : ''}
+${businessType === 'electrical' ? '- Yellow (electricity), blue (professional), orange (caution)' : ''}
+${businessType === 'roofing' ? '- Red/brown (roofs), blue (sky), gray (professional)' : ''}
+${businessType === 'auto-repair' ? '- Red (speed), black (sleek), blue (trust)' : ''}
+- Use gradient backgrounds (not flat colors)
+- High contrast for readability
+
+CONVERSION OPTIMIZATION:
+
+1. Multiple CTAs (top, middle, bottom of page)
+2. Phone number visible at all times (sticky header)
+3. Trust signals throughout (reviews, certifications, guarantees)
+4. Clear value proposition in first 3 seconds
+5. Address common objections (pricing, quality, reliability)
+6. Create urgency (limited slots, seasonal offers)
+7. Social proof (customer count, ratings, testimonials)
+8. Easy contact options (click-to-call, forms, email)
+
+COPY GUIDELINES:
+
+- Use benefit-driven language ("Save $500" not "We offer discounts")
+- Address pain points ("Tired of leaky faucets?" not "We fix faucets")
+- Use power words: Guaranteed, Certified, Professional, Expert, Fast, Reliable
+- Include numbers: "Over 1,000 satisfied customers", "10+ years experience"
+- Use second person ("You get...", "Your home deserves...")
+
+ANIMATIONS (using vanilla JavaScript):
+
+- Fade in elements on scroll
+- Number counters for stats
+- Smooth scroll to sections
+- Hover effects on buttons
+- Parallax on hero section (subtle)
+
+IMPORTANT: Return ONLY the complete, production-ready HTML code. No markdown formatting, no explanations, no code blocks - just pure HTML starting with <!DOCTYPE html>. The HTML should be complete and work perfectly when saved as a .html file.`;
+
+// ============================================
+// USAGE IN YOUR ENDPOINT:
+// ============================================
+
+app.post('/api/generate', async (req, res) => {
+  try {
+    const { businessName, businessType, services, description } = req.body;
+
+    console.log('🎨 Generating high-converting website for:', businessName);
+
+    if (!businessName || !businessType) {
+      return res.status(400).json({ error: 'Business name and type are required' });
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'API key not configured' });
+    }
+
+    // Build the optimized prompt
+    const prompt = `You are an expert web designer specializing in high-converting service business websites. Create a professional, modern single-page website for "${businessName}", a ${businessType} business.
+
+${description ? `Business Background: ${description}` : ''}
+${services ? `Services Offered: ${services}` : ''}
+
+DESIGN REQUIREMENTS:
+
+1. HERO SECTION (Above the fold - most important!)
+   - Eye-catching gradient background (use colors appropriate for ${businessType})
+   - Clear, benefit-driven headline (not just business name)
+   - Compelling subheadline explaining the main value proposition
+   - Prominent CTA button (e.g., "Get Free Quote", "Book Now", "Call Today")
+   - Trust indicator (e.g., "5-star rated", "Licensed & Insured", "Same-Day Service")
+
+2. SOCIAL PROOF SECTION
+   - Star rating display (5 stars)
+   - Number of satisfied customers
+   - Years in business
+   - Key certifications or awards
+
+3. SERVICES SECTION
+   - Grid layout (3 columns on desktop, 1 on mobile)
+   - Each service card with icon, name, description, price range
+
+4. WHY CHOOSE US SECTION
+   - 4-6 key differentiators: Licensed & Insured, 24/7 Service, Satisfaction Guaranteed, etc.
+
+5. TESTIMONIALS or PROCESS SECTION
+   - 3-step process or customer reviews
+
+6. URGENCY/OFFER SECTION
+   - Limited-time offer with bold CTA
+
+7. CONTACT SECTION
+   - Phone (clickable), email, contact form, service area
+
+8. FOOTER
+   - Copyright, links, social icons
+
+TECHNICAL REQUIREMENTS:
+- Tailwind CSS via CDN
+- Font Awesome icons via CDN
+- Mobile-first responsive
+- Smooth scroll animations
+- Click-to-call/email links
+- Sticky header
+
+COLOR PSYCHOLOGY FOR ${businessType}:
+${businessType === 'plumbing' ? 'Blue (trust), orange (urgency)' : 
+  businessType === 'hvac' ? 'Blue (cool), red (heat)' : 
+  businessType === 'landscaping' ? 'Green (nature), brown (earth)' : 
+  businessType === 'cleaning' ? 'Blue (trust), white (clean)' : 
+  businessType === 'electrical' ? 'Yellow (electricity), blue (professional)' : 
+  'Professional color scheme appropriate for the industry'}
+
+CONVERSION OPTIMIZATION:
+- Multiple CTAs throughout
+- Phone number always visible
+- Trust signals (reviews, certifications)
+- Clear value proposition
+- Address objections (pricing, quality)
+- Create urgency
+- Social proof
+
+COPY GUIDELINES:
+- Benefit-driven language
+- Address pain points
+- Power words: Guaranteed, Certified, Professional, Expert
+- Include numbers and stats
+- Use second person ("You get...")
+
+Return ONLY the complete HTML code. No markdown, no explanations, just pure HTML starting with <!DOCTYPE html>.`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096, // Increased for more detailed sites
+        messages: [{
+          role: 'user',
+          content: prompt
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('❌ Anthropic API error:', error);
+      return res.status(500).json({ error: 'Failed to generate website', details: error });
+    }
+
+    const data = await response.json();
+    const htmlContent = data.content?.[0]?.text;
+
+    if (!htmlContent) {
+      console.error('❌ No HTML content in response');
+      return res.status(500).json({ error: 'No content generated' });
+    }
+
+    console.log('✅ High-converting website generated, length:', htmlContent.length);
+
+    res.json({ 
+      success: true, 
+      html: htmlContent,
+      businessName
+    });
+
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({ error: 'Server error', message: error.message });
+  }
+});
 
 Return ONLY the complete HTML code with inline CSS and JavaScript. No explanations, just the code.`
         }]
@@ -1618,6 +1869,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
