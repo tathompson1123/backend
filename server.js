@@ -2043,8 +2043,73 @@ Return ONLY the updated HTML with no explanation or markdown formatting.`;
 
 console.log('✅ Super optimized AI editor endpoint loaded');
 // 1. GET AUTH URL - Start OAuth flow
-app.get('/api/google-business/auth-url', (req, res) => {
+app.get('/api/google-business/reviews', async (req, res) => {
   const { userId } = req.query;
+  
+  try {
+    const tokens = userTokens.get(userId);
+    if (!tokens) {
+      return res.json({ reviews: [] });
+    }
+    
+    oauth2Client.setCredentials(tokens);
+    const mybusinessaccountmanagement = google.mybusinessaccountmanagement({ 
+      version: 'v1', 
+      auth: oauth2Client 
+    });
+    
+    // Get accounts
+    const accountsResponse = await mybusinessaccountmanagement.accounts.list();
+    if (!accountsResponse.data.accounts || accountsResponse.data.accounts.length === 0) {
+      return res.json({ reviews: [] });
+    }
+    
+    const accountName = accountsResponse.data.accounts[0].name;
+    
+    // Get locations
+    const mybusinessbusinessinformation = google.mybusinessbusinessinformation({
+      version: 'v1',
+      auth: oauth2Client
+    });
+    
+    const locationsResponse = await mybusinessbusinessinformation.accounts.locations.list({
+      parent: accountName,
+      readMask: 'name,title'
+    });
+    
+    if (!locationsResponse.data.locations || locationsResponse.data.locations.length === 0) {
+      return res.json({ reviews: [] });
+    }
+    
+    const locationName = locationsResponse.data.locations[0].name;
+    
+    // Get reviews using My Business API v4
+    const mybusiness = google.mybusiness({ version: 'v4', auth: oauth2Client });
+    
+    const reviewsResponse = await mybusiness.accounts.locations.reviews.list({
+      parent: locationName
+    });
+    
+    const reviews = (reviewsResponse.data.reviews || []).map(r => ({
+      id: r.name,
+      customerName: r.reviewer?.displayName || 'Anonymous',
+      rating: r.starRating === 'FIVE' ? 5 : 
+              r.starRating === 'FOUR' ? 4 : 
+              r.starRating === 'THREE' ? 3 : 
+              r.starRating === 'TWO' ? 2 : 1,
+      text: r.comment || '',
+      date: r.createTime,
+      replied: !!r.reviewReply,
+      reply: r.reviewReply?.comment || null
+    }));
+    
+    res.json({ reviews });
+    
+  } catch (error) {
+    console.error('Reviews fetch error:', error.message);
+    res.json({ reviews: [] });
+  }
+});
   
   const scopes = [
     'https://www.googleapis.com/auth/business.manage',
@@ -2170,9 +2235,101 @@ Return ONLY the reply text, no quotes or formatting.`
   }
 });
 
+app.post('/api/google-business/post-reply', async (req, res) => {
+  const { userId, reviewId, reply } = req.body;
+  
+  try {
+    const tokens = userTokens.get(userId);
+    if (!tokens) {
+      return res.status(401).json({ error: 'Not connected' });
+    }
+    
+    oauth2Client.setCredentials(tokens);
+    const mybusiness = google.mybusiness({ version: 'v4', auth: oauth2Client });
+    
+    // Post the reply
+    await mybusiness.accounts.locations.reviews.updateReply({
+      name: reviewId,
+      requestBody: {
+        comment: reply
+      }
+    });
+    
+    console.log('✅ Reply posted to review:', reviewId);
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('Post reply error:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to post reply',
+      message: error.message 
+    });
+  }
+});
+
 // 5. GET IMAGES (placeholder)
 app.get('/api/google-business/images', async (req, res) => {
-  res.json({ images: [] });
+  const { userId } = req.query;
+  
+  try {
+    const tokens = userTokens.get(userId);
+    if (!tokens) {
+      return res.json({ images: [] });
+    }
+    
+    oauth2Client.setCredentials(tokens);
+    const mybusinessaccountmanagement = google.mybusinessaccountmanagement({ 
+      version: 'v1', 
+      auth: oauth2Client 
+    });
+    
+    // Get accounts
+    const accountsResponse = await mybusinessaccountmanagement.accounts.list();
+    if (!accountsResponse.data.accounts || accountsResponse.data.accounts.length === 0) {
+      return res.json({ images: [] });
+    }
+    
+    const accountName = accountsResponse.data.accounts[0].name;
+    
+    // Get locations
+    const mybusinessbusinessinformation = google.mybusinessbusinessinformation({
+      version: 'v1',
+      auth: oauth2Client
+    });
+    
+    const locationsResponse = await mybusinessbusinessinformation.accounts.locations.list({
+      parent: accountName,
+      readMask: 'name,title'
+    });
+    
+    if (!locationsResponse.data.locations || locationsResponse.data.locations.length === 0) {
+      return res.json({ images: [] });
+    }
+    
+    const locationName = locationsResponse.data.locations[0].name;
+    
+    // Get media using My Business API v4
+    const mybusiness = google.mybusiness({ version: 'v4', auth: oauth2Client });
+    
+    const mediaResponse = await mybusiness.accounts.locations.media.list({
+      parent: locationName
+    });
+    
+    const images = (mediaResponse.data.mediaItems || []).map(item => ({
+      url: item.googleUrl || item.sourceUrl,
+      geotagged: !!item.locationAssociation,
+      uploadedToGBP: true,
+      mediaFormat: item.mediaFormat,
+      createTime: item.createTime
+    }));
+    
+    res.json({ images });
+    
+  } catch (error) {
+    console.error('Images fetch error:', error.message);
+    res.json({ images: [] });
+  }
 });
 
 // 6. GET REVIEW REQUESTS (placeholder)
@@ -2233,6 +2390,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
