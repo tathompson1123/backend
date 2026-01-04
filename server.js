@@ -1,4 +1,4 @@
- // server-review-automation.js - Complete Review Automation System
+// server-review-automation.js - Complete Review Automation System
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -8,10 +8,6 @@ const sgMail = require('@sendgrid/mail');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-
-const { google } = require('googleapis');
-   const multer = require('multer');
-   const upload = multer({ dest: 'uploads/' });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -69,16 +65,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/api/google-business/callback'
-);
 
-// Store tokens per user (in production, use database)
-const userTokens = new Map();
-
-console.log('✅ Google OAuth client initialized');
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -1563,10 +1550,10 @@ Return ONLY the complete HTML code. No markdown, no explanations, just the HTML 
 
     const htmlContent = data.content?.[0]?.text;
     
-console.log('📏 Raw HTML length:', htmlContent?.length);
-console.log('🔍 Starts with DOCTYPE?', htmlContent?.startsWith('<!DOCTYPE'));
-console.log('🔍 Contains ```html?', htmlContent?.includes('```html'));
-console.log('🔍 First 300 chars:', htmlContent?.substring(0, 300));
+    console.log('📏 Raw HTML length:', htmlContent?.length);
+    console.log('🔍 Starts with DOCTYPE?', htmlContent?.startsWith('<!DOCTYPE'));
+    console.log('🔍 Contains ```html?', htmlContent?.includes('```html'));
+    console.log('🔍 First 300 chars:', htmlContent?.substring(0, 300));
     
     if (!htmlContent) {
       console.error('❌ No HTML content in response:', data);
@@ -1891,19 +1878,15 @@ app.post('/api/website/domain', async (req, res) => {
     res.status(500).json({ error: 'Failed to save domain' });
   }
 });
-// ============================================
-// WEBSITE EDITOR ENDPOINTS
-// ============================================
 
 // ============================================
-// WEBSITE EDITOR ENDPOINTS (FULLY CORRECTED)
+// WEBSITE EDITOR ENDPOINT (OPTIMIZED)
 // ============================================
 
 app.post('/api/website/ai-edit', async (req, res) => {
   try {
     const { userId, currentHTML, userRequest } = req.body;
 
-    // Validation
     if (!userId || !currentHTML || !userRequest) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -1912,17 +1895,14 @@ app.post('/api/website/ai-edit', async (req, res) => {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
-    // Metrics
     const startTime = Date.now();
     const htmlSize = (currentHTML.length / 1024).toFixed(1);
     
     console.log(`🎨 AI Edit: "${userRequest.substring(0, 60)}..." (${htmlSize}KB)`);
 
-    // OPTIMIZATION 1: Dynamic max_tokens based on HTML size
     const estimatedTokens = Math.ceil(currentHTML.length / 3);
     const maxTokens = Math.min(estimatedTokens + 500, 4000);
 
-    // OPTIMIZATION 2: Smart, concise prompt that produces better results
     const prompt = `You are an expert web developer. Modify this HTML based on the user's request.
 
 USER REQUEST: ${userRequest}
@@ -1940,7 +1920,6 @@ INSTRUCTIONS:
 
 Return ONLY the updated HTML with no explanation or markdown formatting.`;
 
-    // API Call
     const apiStartTime = Date.now();
     
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1953,7 +1932,7 @@ Return ONLY the updated HTML with no explanation or markdown formatting.`;
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: maxTokens,
-        temperature: 0.3,  // Slightly higher for better creativity while staying fast
+        temperature: 0.3,
         messages: [{ 
           role: 'user', 
           content: prompt 
@@ -1973,16 +1952,13 @@ Return ONLY the updated HTML with no explanation or markdown formatting.`;
       });
     }
 
-    // Parse response
     const data = await response.json();
     
-    // Clean up response (remove any markdown formatting)
     let updatedHTML = data.content[0].text
       .replace(/```html\n?/gi, '')
       .replace(/```\n?/g, '')
       .trim();
 
-    // Ensure we got valid HTML
     if (!updatedHTML.includes('<!DOCTYPE') && !updatedHTML.includes('<html')) {
       console.error('❌ Invalid HTML returned');
       return res.json({
@@ -1994,7 +1970,6 @@ Return ONLY the updated HTML with no explanation or markdown formatting.`;
 
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
-    // Success message based on what was changed
     let message = "Done! ✨";
     const lowerRequest = userRequest.toLowerCase();
     
@@ -2013,11 +1988,6 @@ Return ONLY the updated HTML with no explanation or markdown formatting.`;
     }
 
     console.log(`✅ Complete: ${totalTime}s (API: ${apiTime}s)`);
-    
-    // Warn if slow
-    if (parseFloat(apiTime) > 10) {
-      console.warn(`⚠️  Slow response (${apiTime}s) - HTML size: ${htmlSize}KB`);
-    }
 
     res.json({
       success: true,
@@ -2041,156 +2011,14 @@ Return ONLY the updated HTML with no explanation or markdown formatting.`;
   }
 });
 
-console.log('✅ Super optimized AI editor endpoint loaded');
-// 1. GET AUTH URL - Start OAuth flow
-app.get('/api/google-business/reviews', async (req, res) => {
-  const { userId } = req.query;
-  
-  try {
-    const tokens = userTokens.get(userId);
-    if (!tokens) {
-      return res.json({ reviews: [] });
-    }
-    
-    oauth2Client.setCredentials(tokens);
-    const mybusinessaccountmanagement = google.mybusinessaccountmanagement({ 
-      version: 'v1', 
-      auth: oauth2Client 
-    });
-    
-    // Get accounts
-    const accountsResponse = await mybusinessaccountmanagement.accounts.list();
-    if (!accountsResponse.data.accounts || accountsResponse.data.accounts.length === 0) {
-      return res.json({ reviews: [] });
-    }
-    
-    const accountName = accountsResponse.data.accounts[0].name;
-    
-    // Get locations
-    const mybusinessbusinessinformation = google.mybusinessbusinessinformation({
-      version: 'v1',
-      auth: oauth2Client
-    });
-    
-    const locationsResponse = await mybusinessbusinessinformation.accounts.locations.list({
-      parent: accountName,
-      readMask: 'name,title'
-    });
-    
-    if (!locationsResponse.data.locations || locationsResponse.data.locations.length === 0) {
-      return res.json({ reviews: [] });
-    }
-    
-    const locationName = locationsResponse.data.locations[0].name;
-    
-    // Get reviews using My Business API v4
-    const mybusiness = google.mybusiness({ version: 'v4', auth: oauth2Client });
-    
-    const reviewsResponse = await mybusiness.accounts.locations.reviews.list({
-      parent: locationName
-    });
-    
-    const reviews = (reviewsResponse.data.reviews || []).map(r => ({
-      id: r.name,
-      customerName: r.reviewer?.displayName || 'Anonymous',
-      rating: r.starRating === 'FIVE' ? 5 : 
-              r.starRating === 'FOUR' ? 4 : 
-              r.starRating === 'THREE' ? 3 : 
-              r.starRating === 'TWO' ? 2 : 1,
-      text: r.comment || '',
-      date: r.createTime,
-      replied: !!r.reviewReply,
-      reply: r.reviewReply?.comment || null
-    }));
-    
-    res.json({ reviews });
-    
-  } catch (error) {
-    console.error('Reviews fetch error:', error.message);
-    res.json({ reviews: [] });
-  }
-});
-  
-  const scopes = [
-    'https://www.googleapis.com/auth/business.manage',
-    'https://www.googleapis.com/auth/plus.business.manage',
-  ];
-  
-  const authUrl = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: scopes,
-    state: userId,
-    prompt: 'consent'
-  });
-  
-  res.json({ authUrl });
-});
+console.log('✅ AI editor endpoint loaded');
 
-// 2. OAUTH CALLBACK - Handle Google redirect
-app.get('/api/google-business/callback', async (req, res) => {
-  const { code, state: userId } = req.query;
-  
-  try {
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
-    
-    userTokens.set(userId, tokens);
-    
-    // Redirect back to dashboard
-   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-res.redirect(`${frontendUrl}/dashboard?gbp=connected`);
-} catch (error) {
-console.error('OAuth callback error:', error);
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-res.redirect(`${frontendUrl}/dashboard?gbp=error`);
-  }
-});
+// ============================================
+// GOOGLE BUSINESS PROFILE - AI REPLY GENERATOR ONLY
+// ============================================
 
-// 3. GET PROFILE - Check connection status
-app.get('/api/google-business/profile', async (req, res) => {
-  const { userId } = req.query;
-  
-  try {
-    const tokens = userTokens.get(userId);
-    
-    if (!tokens) {
-      return res.json({ connected: false });
-    }
-    
-    oauth2Client.setCredentials(tokens);
-    const mybusiness = google.mybusiness({ version: 'v4', auth: oauth2Client });
-    
-    const accounts = await mybusiness.accounts.list();
-    const account = accounts.data.accounts[0];
-    
-    if (account) {
-      const locations = await mybusiness.accounts.locations.list({
-        parent: account.name
-      });
-      
-      const location = locations.data.locations[0];
-      
-      res.json({
-        connected: true,
-        profile: {
-          name: location.locationName,
-          address: location.address,
-          accountId: account.name,
-          locationId: location.name
-        }
-      });
-    } else {
-      res.json({ connected: false });
-    }
-  } catch (error) {
-    console.error('Profile fetch error:', error);
-    res.json({ connected: false });
-  }
-});
-
-// 4. GENERATE AI REPLY - AI review response
 app.post('/api/google-business/generate-reply', async (req, res) => {
-  const { reviewText, rating, businessName } = req.body;
+  const { reviewText, rating, businessName, customerName } = req.body;
   
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -2209,11 +2037,13 @@ app.post('/api/google-business/generate-reply', async (req, res) => {
           content: `You are replying to a Google Business review for ${businessName}.
 
 Review (${rating}/5 stars): "${reviewText}"
+${customerName ? `Customer: ${customerName}` : ''}
 
 Write a professional, warm, personalized response (2-3 sentences). 
 - If 4-5 stars: Thank them and encourage return visit
 - If 1-3 stars: Apologize, show empathy, offer to make it right
 - Use the business name naturally
+${customerName ? `- Address ${customerName} by name if appropriate` : ''}
 - Be authentic, not corporate
 
 Return ONLY the reply text, no quotes or formatting.`
@@ -2235,109 +2065,8 @@ Return ONLY the reply text, no quotes or formatting.`
   }
 });
 
-app.post('/api/google-business/post-reply', async (req, res) => {
-  const { userId, reviewId, reply } = req.body;
-  
-  try {
-    const tokens = userTokens.get(userId);
-    if (!tokens) {
-      return res.status(401).json({ error: 'Not connected' });
-    }
-    
-    oauth2Client.setCredentials(tokens);
-    const mybusiness = google.mybusiness({ version: 'v4', auth: oauth2Client });
-    
-    // Post the reply
-    await mybusiness.accounts.locations.reviews.updateReply({
-      name: reviewId,
-      requestBody: {
-        comment: reply
-      }
-    });
-    
-    console.log('✅ Reply posted to review:', reviewId);
-    
-    res.json({ success: true });
-    
-  } catch (error) {
-    console.error('Post reply error:', error.message);
-    res.status(500).json({ 
-      error: 'Failed to post reply',
-      message: error.message 
-    });
-  }
-});
+console.log('✅ Google Business Profile AI reply generator loaded');
 
-// 5. GET IMAGES (placeholder)
-app.get('/api/google-business/images', async (req, res) => {
-  const { userId } = req.query;
-  
-  try {
-    const tokens = userTokens.get(userId);
-    if (!tokens) {
-      return res.json({ images: [] });
-    }
-    
-    oauth2Client.setCredentials(tokens);
-    const mybusinessaccountmanagement = google.mybusinessaccountmanagement({ 
-      version: 'v1', 
-      auth: oauth2Client 
-    });
-    
-    // Get accounts
-    const accountsResponse = await mybusinessaccountmanagement.accounts.list();
-    if (!accountsResponse.data.accounts || accountsResponse.data.accounts.length === 0) {
-      return res.json({ images: [] });
-    }
-    
-    const accountName = accountsResponse.data.accounts[0].name;
-    
-    // Get locations
-    const mybusinessbusinessinformation = google.mybusinessbusinessinformation({
-      version: 'v1',
-      auth: oauth2Client
-    });
-    
-    const locationsResponse = await mybusinessbusinessinformation.accounts.locations.list({
-      parent: accountName,
-      readMask: 'name,title'
-    });
-    
-    if (!locationsResponse.data.locations || locationsResponse.data.locations.length === 0) {
-      return res.json({ images: [] });
-    }
-    
-    const locationName = locationsResponse.data.locations[0].name;
-    
-    // Get media using My Business API v4
-    const mybusiness = google.mybusiness({ version: 'v4', auth: oauth2Client });
-    
-    const mediaResponse = await mybusiness.accounts.locations.media.list({
-      parent: locationName
-    });
-    
-    const images = (mediaResponse.data.mediaItems || []).map(item => ({
-      url: item.googleUrl || item.sourceUrl,
-      geotagged: !!item.locationAssociation,
-      uploadedToGBP: true,
-      mediaFormat: item.mediaFormat,
-      createTime: item.createTime
-    }));
-    
-    res.json({ images });
-    
-  } catch (error) {
-    console.error('Images fetch error:', error.message);
-    res.json({ images: [] });
-  }
-});
-
-// 6. GET REVIEW REQUESTS (placeholder)
-app.get('/api/google-business/review-requests', async (req, res) => {
-  res.json({ requests: [] });
-});
-
-console.log('✅ Google Business Profile endpoints loaded');
 // ============================================
 // HEALTH CHECK
 // ============================================
@@ -2390,17 +2119,3 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
