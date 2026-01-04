@@ -1899,25 +1899,36 @@ app.post('/api/website/ai-edit', async (req, res) => {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
-    // Timing & metrics
-    const metrics = {
-      start: Date.now(),
-      htmlSize: (currentHTML.length / 1024).toFixed(1),
-      requestLength: userRequest.length
-    };
+    // Metrics
+    const startTime = Date.now();
+    const htmlSize = (currentHTML.length / 1024).toFixed(1);
+    
+    console.log(`🎨 AI Edit: "${userRequest.substring(0, 60)}..." (${htmlSize}KB)`);
 
-    // FIXED: console.log() not console.log``
-    console.log(`🎨 "${userRequest.substring(0, 50)}..." (${metrics.htmlSize}KB)`);
-
-    // Dynamic max_tokens based on HTML size
+    // OPTIMIZATION 1: Dynamic max_tokens based on HTML size
     const estimatedTokens = Math.ceil(currentHTML.length / 3);
-    const maxTokens = Math.min(estimatedTokens + 300, 3500);
+    const maxTokens = Math.min(estimatedTokens + 500, 4000);
 
-    // Ultra-short prompt
-    const prompt = `${userRequest}\n\n${currentHTML}\n\nReturn updated HTML only.`;
+    // OPTIMIZATION 2: Smart, concise prompt that produces better results
+    const prompt = `You are an expert web developer. Modify this HTML based on the user's request.
+
+USER REQUEST: ${userRequest}
+
+CURRENT HTML:
+${currentHTML}
+
+INSTRUCTIONS:
+1. Make ONLY the changes requested - don't redesign the entire page
+2. Preserve all existing functionality, classes, and structure
+3. If changing text, update ONLY the specific text mentioned
+4. If changing colors/styles, update ONLY those specific elements
+5. Return the COMPLETE modified HTML (not just snippets)
+6. Ensure the HTML is valid and properly formatted
+
+Return ONLY the updated HTML with no explanation or markdown formatting.`;
 
     // API Call
-    metrics.apiStart = Date.now();
+    const apiStartTime = Date.now();
     
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -1929,7 +1940,7 @@ app.post('/api/website/ai-edit', async (req, res) => {
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: maxTokens,
-        temperature: 0.2,
+        temperature: 0.3,  // Slightly higher for better creativity while staying fast
         messages: [{ 
           role: 'user', 
           content: prompt 
@@ -1937,44 +1948,74 @@ app.post('/api/website/ai-edit', async (req, res) => {
       })
     });
 
-    metrics.apiEnd = Date.now();
+    const apiTime = ((Date.now() - apiStartTime) / 1000).toFixed(1);
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ API Error:', response.status, errorText.substring(0, 200));
       return res.status(500).json({ 
         success: false,
-        error: 'API request failed' 
+        error: 'API request failed',
+        message: 'Claude API returned an error. Please try again.'
       });
     }
 
     // Parse response
     const data = await response.json();
     
-    // Fast cleanup
-    let html = data.content[0].text
-      .replace(/```html\n?/g, '')
-      .replace(/```/g, '')
+    // Clean up response (remove any markdown formatting)
+    let updatedHTML = data.content[0].text
+      .replace(/```html\n?/gi, '')
+      .replace(/```\n?/g, '')
       .trim();
 
-    metrics.end = Date.now();
+    // Ensure we got valid HTML
+    if (!updatedHTML.includes('<!DOCTYPE') && !updatedHTML.includes('<html')) {
+      console.error('❌ Invalid HTML returned');
+      return res.json({
+        success: false,
+        error: 'Invalid HTML',
+        message: "I couldn't make that change properly. Could you try rephrasing your request?"
+      });
+    }
 
-    // Calculate timings
-    const apiTime = ((metrics.apiEnd - metrics.apiStart) / 1000).toFixed(1);
-    const totalTime = ((metrics.end - metrics.start) / 1000).toFixed(1);
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
-    // FIXED: console.log() not console.log``
-    console.log(`✅ Complete: API=${apiTime}s, Total=${totalTime}s`);
+    // Success message based on what was changed
+    let message = "Done! ✨";
+    const lowerRequest = userRequest.toLowerCase();
     
-    // Warn if slow - FIXED: console.warn() not console.warn``
-    if (parseFloat(apiTime) > 8) {
-      console.warn(`⚠️  Slow response (${apiTime}s)! Check HTML size or network.`);
+    if (lowerRequest.includes('color') || lowerRequest.includes('colour')) {
+      message = "Updated the colors! 🎨";
+    } else if (lowerRequest.includes('text') || lowerRequest.includes('headline') || lowerRequest.includes('title')) {
+      message = "Changed the text! ✏️";
+    } else if (lowerRequest.includes('button')) {
+      message = "Updated the button! 🔘";
+    } else if (lowerRequest.includes('add') || lowerRequest.includes('new')) {
+      message = "Added the new content! ➕";
+    } else if (lowerRequest.includes('remove') || lowerRequest.includes('delete')) {
+      message = "Removed it! 🗑️";
+    } else if (lowerRequest.includes('image') || lowerRequest.includes('photo') || lowerRequest.includes('picture')) {
+      message = "Updated the image! 🖼️";
+    }
+
+    console.log(`✅ Complete: ${totalTime}s (API: ${apiTime}s)`);
+    
+    // Warn if slow
+    if (parseFloat(apiTime) > 10) {
+      console.warn(`⚠️  Slow response (${apiTime}s) - HTML size: ${htmlSize}KB`);
     }
 
     res.json({
       success: true,
-      updatedHTML: html,
-      message: `Done in ${totalTime}s`
+      updatedHTML: updatedHTML,
+      message: message,
+      _debug: process.env.NODE_ENV === 'development' ? {
+        apiTime: `${apiTime}s`,
+        totalTime: `${totalTime}s`,
+        htmlSizeKB: htmlSize,
+        maxTokens: maxTokens
+      } : undefined
     });
 
   } catch (error) {
@@ -1982,12 +2023,12 @@ app.post('/api/website/ai-edit', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Request failed',
-      message: error.message
+      message: 'Something went wrong. Please try again.'
     });
   }
 });
 
-console.log('✅ AI Website Editor endpoint loaded');
+console.log('✅ Super optimized AI editor endpoint loaded');
 // ============================================
 // HEALTH CHECK
 // ============================================
@@ -2040,6 +2081,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
