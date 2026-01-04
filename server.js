@@ -1372,6 +1372,12 @@ Hover:
 
 ### IMAGE REQUIREMENTS
 
+- Use ONLY images that directly relate to the business type
+- For auto detailing: cars being detailed, paint protection, ceramic coating application
+- For ${businessType}: show the actual service being performed
+- NEVER use generic stock photos of people or offices
+- Search Unsplash for: "${businessType} service professional work"
+- All images must show the SERVICE, not just people or buildings
 Sources (use placeholder URLs):
 Unsplash: https://images.unsplash.com/photo-[ID]?w=800&q=80
 
@@ -2042,5 +2048,6 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
