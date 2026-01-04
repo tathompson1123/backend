@@ -1882,7 +1882,10 @@ app.post('/api/website/domain', async (req, res) => {
 // WEBSITE EDITOR ENDPOINTS
 // ============================================
 
-// Simple AI-powered website editor
+// ============================================
+// WEBSITE EDITOR ENDPOINTS (FULLY CORRECTED)
+// ============================================
+
 app.post('/api/website/ai-edit', async (req, res) => {
   try {
     const { userId, currentHTML, userRequest } = req.body;
@@ -1903,13 +1906,14 @@ app.post('/api/website/ai-edit', async (req, res) => {
       requestLength: userRequest.length
     };
 
+    // FIXED: console.log() not console.log``
     console.log(`🎨 "${userRequest.substring(0, 50)}..." (${metrics.htmlSize}KB)`);
 
-    // OPTIMIZATION 1: Dynamic max_tokens based on HTML size
+    // Dynamic max_tokens based on HTML size
     const estimatedTokens = Math.ceil(currentHTML.length / 3);
     const maxTokens = Math.min(estimatedTokens + 300, 3500);
 
-    // OPTIMIZATION 2: Ultra-short prompt (less tokens to process)
+    // Ultra-short prompt
     const prompt = `${userRequest}\n\n${currentHTML}\n\nReturn updated HTML only.`;
 
     // API Call
@@ -1925,7 +1929,7 @@ app.post('/api/website/ai-edit', async (req, res) => {
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: maxTokens,
-        temperature: 0.2,  // OPTIMIZATION 3: Lower temp = faster, more deterministic
+        temperature: 0.2,
         messages: [{ 
           role: 'user', 
           content: prompt 
@@ -1947,7 +1951,7 @@ app.post('/api/website/ai-edit', async (req, res) => {
     // Parse response
     const data = await response.json();
     
-    // OPTIMIZATION 4: Fast cleanup (single pass)
+    // Fast cleanup
     let html = data.content[0].text
       .replace(/```html\n?/g, '')
       .replace(/```/g, '')
@@ -1958,27 +1962,19 @@ app.post('/api/website/ai-edit', async (req, res) => {
     // Calculate timings
     const apiTime = ((metrics.apiEnd - metrics.apiStart) / 1000).toFixed(1);
     const totalTime = ((metrics.end - metrics.start) / 1000).toFixed(1);
-    const overhead = ((metrics.end - metrics.apiEnd) / 1000).toFixed(1);
 
-    // Log performance metrics
-    console.log(`✅ Complete: API=${apiTime}s + overhead=${overhead}s = ${totalTime}s total`);
+    // FIXED: console.log() not console.log``
+    console.log(`✅ Complete: API=${apiTime}s, Total=${totalTime}s`);
     
-    // OPTIMIZATION 5: Warn if slow (for debugging)
+    // Warn if slow - FIXED: console.warn() not console.warn``
     if (parseFloat(apiTime) > 8) {
-      console.warn(`⚠️  Slow response! Check: HTML size, network, or API status`);
+      console.warn(`⚠️  Slow response (${apiTime}s)! Check HTML size or network.`);
     }
 
     res.json({
       success: true,
       updatedHTML: html,
-      message: `Done in ${totalTime}s`,
-      // Optional: Return metrics for frontend debugging
-      _debug: process.env.NODE_ENV === 'development' ? {
-        apiTime,
-        totalTime,
-        htmlSizeKB: metrics.htmlSize,
-        tokens: maxTokens
-      } : undefined
+      message: `Done in ${totalTime}s`
     });
 
   } catch (error) {
@@ -1991,32 +1987,7 @@ app.post('/api/website/ai-edit', async (req, res) => {
   }
 });
 
-console.log('✅ Ultimate optimized AI editor loaded');
-
-// ============================================
-// PERFORMANCE MONITORING (Optional)
-// ============================================
-
-// Add this helper to track average response times
-const performanceStats = {
-  requests: 0,
-  totalTime: 0,
-  slowRequests: 0
-};
-
-// In your endpoint, after calculating totalTime:
-performanceStats.requests++;
-performanceStats.totalTime += parseFloat(totalTime);
-if (parseFloat(totalTime) > 8) {
-  performanceStats.slowRequests++;
-}
-
-// Log stats every 10 requests
-if (performanceStats.requests % 10 === 0) {
-  const avgTime = (performanceStats.totalTime / performanceStats.requests).toFixed(1);
-  const slowPercent = ((performanceStats.slowRequests / performanceStats.requests) * 100).toFixed(0);
-  console.log(`📊 Stats: ${performanceStats.requests} requests, avg=${avgTime}s, ${slowPercent}% slow`);
-}
+console.log('✅ AI Website Editor endpoint loaded');
 // ============================================
 // HEALTH CHECK
 // ============================================
@@ -2069,6 +2040,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
