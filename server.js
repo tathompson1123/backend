@@ -2072,12 +2072,12 @@ app.get('/api/google-business/callback', async (req, res) => {
     userTokens.set(userId, tokens);
     
     // Redirect back to dashboard
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/dashboard?gbp=connected`);
-  } catch (error) {
-    console.error('OAuth callback error:', error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/dashboard?gbp=error`);
+   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+res.redirect(`${frontendUrl}/dashboard?gbp=connected`);
+} catch (error) {
+console.error('OAuth callback error:', error);
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+res.redirect(`${frontendUrl}/dashboard?gbp=error`);
   }
 });
 
@@ -2233,6 +2233,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
