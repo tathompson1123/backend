@@ -2016,8 +2016,6 @@ console.log('✅ AI Website Editor endpoint loaded');
 });
 
 console.log('✅ AI Website Editor endpoint loaded');
-
-USER'S CURRENT WEBSITE HTML:
 ${currentHtml}
 
 USER'S EDIT REQUEST:
@@ -2158,6 +2156,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
