@@ -1154,7 +1154,7 @@ app.post('/api/generate', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-opus-4-20250514',
-        max_tokens: 4096,
+        max_tokens: 8192,
         messages: [{
           role: 'user',
           content: `You are an expert web designer creating high-converting, visually stunning websites for service-based businesses. Every website you generate must be production-ready, mobile-responsive, and optimized for conversions.
@@ -1896,7 +1896,7 @@ app.post('/api/website/edit', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-opus-4-20250514',
-        max_tokens: 4096,
+        max_tokens: 8192,
         messages: [{
           role: 'user',
           content: `You are a professional web developer helping a user edit their website.
@@ -2042,4 +2042,5 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
