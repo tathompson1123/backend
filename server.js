@@ -1887,6 +1887,7 @@ app.post('/api/website/ai-edit', async (req, res) => {
   try {
     const { userId, currentHTML, userRequest } = req.body;
 
+    // Validation
     if (!userId || !currentHTML || !userRequest) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -1895,9 +1896,25 @@ app.post('/api/website/ai-edit', async (req, res) => {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
-    console.log(`🎨 AI Editor Request from user ${userId}: "${userRequest}"`);
+    // Timing & metrics
+    const metrics = {
+      start: Date.now(),
+      htmlSize: (currentHTML.length / 1024).toFixed(1),
+      requestLength: userRequest.length
+    };
 
-    // Call Claude API to modify the website
+    console.log(`🎨 "${userRequest.substring(0, 50)}..." (${metrics.htmlSize}KB)`);
+
+    // OPTIMIZATION 1: Dynamic max_tokens based on HTML size
+    const estimatedTokens = Math.ceil(currentHTML.length / 3);
+    const maxTokens = Math.min(estimatedTokens + 300, 3500);
+
+    // OPTIMIZATION 2: Ultra-short prompt (less tokens to process)
+    const prompt = `${userRequest}\n\n${currentHTML}\n\nReturn updated HTML only.`;
+
+    // API Call
+    metrics.apiStart = Date.now();
+    
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -1907,71 +1924,99 @@ app.post('/api/website/ai-edit', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        messages: [{
-          role: 'user',
-          content: `You are a website editor AI. The user wants to modify their website HTML.
-
-Current HTML:
-${currentHTML}
-
-User's Request: ${userRequest}
-
-Please modify the HTML according to the user's request and return ONLY the complete updated HTML.
-
-INSTRUCTIONS:
-1. Make ONLY the changes requested
-2. Keep all existing styling, scripts, and functionality
-3. Return the COMPLETE updated HTML
-4. Make sure all HTML tags are properly closed
-5. DO NOT add markdown formatting or code blocks
-6. Return ONLY the HTML starting with <!DOCTYPE html>
-
-Return the updated HTML now.`
+        max_tokens: maxTokens,
+        temperature: 0.2,  // OPTIMIZATION 3: Lower temp = faster, more deterministic
+        messages: [{ 
+          role: 'user', 
+          content: prompt 
         }]
       })
     });
 
+    metrics.apiEnd = Date.now();
+
     if (!response.ok) {
-      const error = await response.text();
-      console.error('❌ Claude API error:', error);
+      const errorText = await response.text();
+      console.error('❌ API Error:', response.status, errorText.substring(0, 200));
       return res.status(500).json({ 
         success: false,
-        error: 'Failed to process edit request' 
+        error: 'API request failed' 
       });
     }
 
+    // Parse response
     const data = await response.json();
-    let updatedHTML = data.content[0].text;
+    
+    // OPTIMIZATION 4: Fast cleanup (single pass)
+    let html = data.content[0].text
+      .replace(/```html\n?/g, '')
+      .replace(/```/g, '')
+      .trim();
 
-    // Clean up any markdown formatting
-    if (updatedHTML.includes('```html')) {
-      updatedHTML = updatedHTML.replace(/```html\n?/g, '').replace(/```\n?$/g, '');
+    metrics.end = Date.now();
+
+    // Calculate timings
+    const apiTime = ((metrics.apiEnd - metrics.apiStart) / 1000).toFixed(1);
+    const totalTime = ((metrics.end - metrics.start) / 1000).toFixed(1);
+    const overhead = ((metrics.end - metrics.apiEnd) / 1000).toFixed(1);
+
+    // Log performance metrics
+    console.log(`✅ Complete: API=${apiTime}s + overhead=${overhead}s = ${totalTime}s total`);
+    
+    // OPTIMIZATION 5: Warn if slow (for debugging)
+    if (parseFloat(apiTime) > 8) {
+      console.warn(`⚠️  Slow response! Check: HTML size, network, or API status`);
     }
-    updatedHTML = updatedHTML.replace(/```/g, '').trim();
-
-    console.log(`✅ Website edited successfully, length: ${updatedHTML.length}`);
-
-    // Generate a simple explanation message
-    const message = `I've updated your website as requested. Check the preview to see the changes!`;
 
     res.json({
       success: true,
-      updatedHTML: updatedHTML,
-      message: message
+      updatedHTML: html,
+      message: `Done in ${totalTime}s`,
+      // Optional: Return metrics for frontend debugging
+      _debug: process.env.NODE_ENV === 'development' ? {
+        apiTime,
+        totalTime,
+        htmlSizeKB: metrics.htmlSize,
+        tokens: maxTokens
+      } : undefined
     });
 
   } catch (error) {
-    console.error('❌ AI edit error:', error);
+    console.error('❌ Error:', error.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to process AI edit request',
+      error: 'Request failed',
       message: error.message
     });
   }
 });
 
-console.log('✅ Website endpoints loaded');
+console.log('✅ Ultimate optimized AI editor loaded');
+
+// ============================================
+// PERFORMANCE MONITORING (Optional)
+// ============================================
+
+// Add this helper to track average response times
+const performanceStats = {
+  requests: 0,
+  totalTime: 0,
+  slowRequests: 0
+};
+
+// In your endpoint, after calculating totalTime:
+performanceStats.requests++;
+performanceStats.totalTime += parseFloat(totalTime);
+if (parseFloat(totalTime) > 8) {
+  performanceStats.slowRequests++;
+}
+
+// Log stats every 10 requests
+if (performanceStats.requests % 10 === 0) {
+  const avgTime = (performanceStats.totalTime / performanceStats.requests).toFixed(1);
+  const slowPercent = ((performanceStats.slowRequests / performanceStats.requests) * 100).toFixed(0);
+  console.log(`📊 Stats: ${performanceStats.requests} requests, avg=${avgTime}s, ${slowPercent}% slow`);
+}
 // ============================================
 // HEALTH CHECK
 // ============================================
@@ -2024,6 +2069,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
