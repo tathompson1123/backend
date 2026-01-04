@@ -1878,18 +1878,11 @@ app.post('/api/website/domain', async (req, res) => {
     res.status(500).json({ error: 'Failed to save domain' });
   }
 });
+// ============================================
+// WEBSITE EDITOR ENDPOINTS
+// ============================================
 
-app.post('/api/website/edit', async (req, res) => {
-  try {
-    const { userId, currentHtml, editRequest } = req.body;
-
-    if (!userId || !currentHtml || !editRequest) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return res.status(500).json({ error: 'API key not configured' });
-    }
+// Simple AI-powered website editor
 app.post('/api/website/ai-edit', async (req, res) => {
   try {
     const { userId, currentHTML, userRequest } = req.body;
@@ -1902,7 +1895,6 @@ app.post('/api/website/ai-edit', async (req, res) => {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
-    // FIXED: Changed from console.log`` to console.log()
     console.log(`🎨 AI Editor Request from user ${userId}: "${userRequest}"`);
 
     // Call Claude API to modify the website
@@ -1921,24 +1913,21 @@ app.post('/api/website/ai-edit', async (req, res) => {
           content: `You are a website editor AI. The user wants to modify their website HTML.
 
 Current HTML:
+${currentHTML}
 
 User's Request: ${userRequest}
 
-Please modify the HTML according to the user's request and return:
-1. The complete updated HTML
-2. A brief message explaining what you changed
+Please modify the HTML according to the user's request and return ONLY the complete updated HTML.
 
-Return your response in this exact JSON format:
-{
-  "updatedHTML": "<!-- full HTML here -->",
-  "message": "I've updated the headline to say 'Welcome!' and changed the button color to blue."
-}
+INSTRUCTIONS:
+1. Make ONLY the changes requested
+2. Keep all existing styling, scripts, and functionality
+3. Return the COMPLETE updated HTML
+4. Make sure all HTML tags are properly closed
+5. DO NOT add markdown formatting or code blocks
+6. Return ONLY the HTML starting with <!DOCTYPE html>
 
-IMPORTANT: 
-- Return ONLY valid JSON, no other text
-- Include the COMPLETE HTML, not just the changed parts
-- Make sure the HTML is valid and properly formatted
-- Keep all existing functionality and styling intact unless specifically asked to change it`
+Return the updated HTML now.`
         }]
       })
     });
@@ -1953,37 +1942,23 @@ IMPORTANT:
     }
 
     const data = await response.json();
-    
-    // Extract JSON from Claude's response
-    const assistantMessage = data.content[0].text;
-    
-    // Try to parse the JSON response
-    let result;
-    try {
-      // Remove markdown code blocks if present
-      const cleanJSON = assistantMessage
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
-        .trim();
-      
-      result = JSON.parse(cleanJSON);
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError);
-      console.error('Raw response:', assistantMessage.substring(0, 500));
-      return res.json({
-        success: false,
-        error: 'Failed to parse AI response'
-      });
+    let updatedHTML = data.content[0].text;
+
+    // Clean up any markdown formatting
+    if (updatedHTML.includes('```html')) {
+      updatedHTML = updatedHTML.replace(/```html\n?/g, '').replace(/```\n?$/g, '');
     }
+    updatedHTML = updatedHTML.replace(/```/g, '').trim();
 
-    // FIXED: Changed from console.log`` to console.log()
-    console.log(`✅ Website edited successfully, length: ${result.updatedHTML?.length}`);
+    console.log(`✅ Website edited successfully, length: ${updatedHTML.length}`);
 
-    // Return the updated HTML and message
+    // Generate a simple explanation message
+    const message = `I've updated your website as requested. Check the preview to see the changes!`;
+
     res.json({
       success: true,
-      updatedHTML: result.updatedHTML,
-      message: result.message
+      updatedHTML: updatedHTML,
+      message: message
     });
 
   } catch (error) {
@@ -1993,115 +1968,10 @@ IMPORTANT:
       error: 'Failed to process AI edit request',
       message: error.message
     });
-  }
-});
-
-console.log('✅ AI Website Editor endpoint loaded');
-    // Return the updated HTML and message
-    res.json({
-      success: true,
-      updatedHTML: result.updatedHTML,
-      message: result.message
-    });
-
-  } catch (error) {
-    console.error('❌ AI edit error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to process AI edit request',
-      message: error.message
-    });
-  }
-});
-
-console.log('✅ AI Website Editor endpoint loaded');
-
-USER'S EDIT REQUEST:
-"${editRequest}"
-
-INSTRUCTIONS:
-1. Analyze the user's request carefully
-2. Make ONLY the changes they requested - don't rewrite the entire website
-3. Preserve all existing styling, scripts, and functionality
-4. Return the COMPLETE updated HTML (the entire website with the changes applied)
-5. Make sure all HTML tags are properly closed
-6. Keep all CDN links (Tailwind, Font Awesome, etc.)
-
-IMPORTANT: 
-- If they ask to change text/content, only change that specific text
-- If they ask to change colors, only update the color values
-- If they ask to add a section, insert it in the appropriate place
-- If they ask to remove something, remove only that element
-- DO NOT add markdown formatting or code blocks
-- Return ONLY the complete HTML starting with <!DOCTYPE html>
-
-Return the updated HTML now:`
-        }]
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('❌ Claude API error:', error);
-      return res.status(500).json({ error: 'Failed to process edit request' });
-    }
-
-    const data = await response.json();
-    const updatedHtml = data.content?.[0]?.text;
-
-    if (!updatedHtml) {
-      console.error('❌ No HTML in response');
-      return res.status(500).json({ error: 'No content generated' });
-    }
-
-    console.log(`✅ Website updated successfully, length: ${updatedHtml.length}`);
-
-    const explanationResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 150,
-        messages: [{
-          role: 'user',
-          content: `The user asked to: "${editRequest}"
-
-Write a brief, friendly response (1-2 sentences) confirming what you changed. Be specific and encouraging.
-
-Example responses:
-- "I've updated the hero headline to your new text. It looks great!"
-- "Changed the color scheme to more professional blues and grays. Much more polished!"
-- "Added a testimonials section with 3 customer reviews. This will build trust with visitors!"
-
-Your response:`
-        }]
-      })
-    });
-
-    let explanation = "I've updated your website! Check the preview.";
-    if (explanationResponse.ok) {
-      const explanationData = await explanationResponse.json();
-      explanation = explanationData.content?.[0]?.text || explanation;
-    }
-
-    res.json({
-      success: true,
-      updatedHtml,
-      explanation: explanation.trim()
-    });
-
-  } catch (error) {
-    console.error('❌ Error editing website:', error);
-    res.status(500).json({ error: 'Server error', message: error.message });
   }
 });
 
 console.log('✅ Website endpoints loaded');
-
 // ============================================
 // HEALTH CHECK
 // ============================================
@@ -2154,6 +2024,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
