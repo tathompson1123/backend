@@ -1890,9 +1890,22 @@ app.post('/api/website/edit', async (req, res) => {
     if (!process.env.ANTHROPIC_API_KEY) {
       return res.status(500).json({ error: 'API key not configured' });
     }
+app.post('/api/website/ai-edit', async (req, res) => {
+  try {
+    const { userId, currentHTML, userRequest } = req.body;
 
-    console.log(`🎨 AI Edit Request from user ${userId}: "${editRequest}"`);
+    if (!userId || !currentHTML || !userRequest) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
 
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'API key not configured' });
+    }
+
+    // FIXED: Changed from console.log`` to console.log()
+    console.log(`🎨 AI Editor Request from user ${userId}: "${userRequest}"`);
+
+    // Call Claude API to modify the website
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -1901,11 +1914,108 @@ app.post('/api/website/edit', async (req, res) => {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-opus-4-20250514',
-        max_tokens: 8192,
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
         messages: [{
           role: 'user',
-          content: `You are a professional web developer helping a user edit their website.
+          content: `You are a website editor AI. The user wants to modify their website HTML.
+
+Current HTML:
+${currentHTML}
+
+User's Request: ${userRequest}
+
+Please modify the HTML according to the user's request and return:
+1. The complete updated HTML
+2. A brief message explaining what you changed
+
+Return your response in this exact JSON format:
+{
+  "updatedHTML": "<!-- full HTML here -->",
+  "message": "I've updated the headline to say 'Welcome!' and changed the button color to blue."
+}
+
+IMPORTANT: 
+- Return ONLY valid JSON, no other text
+- Include the COMPLETE HTML, not just the changed parts
+- Make sure the HTML is valid and properly formatted
+- Keep all existing functionality and styling intact unless specifically asked to change it`
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('❌ Claude API error:', error);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to process edit request' 
+      });
+    }
+
+    const data = await response.json();
+    
+    // Extract JSON from Claude's response
+    const assistantMessage = data.content[0].text;
+    
+    // Try to parse the JSON response
+    let result;
+    try {
+      // Remove markdown code blocks if present
+      const cleanJSON = assistantMessage
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim();
+      
+      result = JSON.parse(cleanJSON);
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', parseError);
+      console.error('Raw response:', assistantMessage.substring(0, 500));
+      return res.json({
+        success: false,
+        error: 'Failed to parse AI response'
+      });
+    }
+
+    // FIXED: Changed from console.log`` to console.log()
+    console.log(`✅ Website edited successfully, length: ${result.updatedHTML?.length}`);
+
+    // Return the updated HTML and message
+    res.json({
+      success: true,
+      updatedHTML: result.updatedHTML,
+      message: result.message
+    });
+
+  } catch (error) {
+    console.error('❌ AI edit error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process AI edit request',
+      message: error.message
+    });
+  }
+});
+
+console.log('✅ AI Website Editor endpoint loaded');
+    // Return the updated HTML and message
+    res.json({
+      success: true,
+      updatedHTML: result.updatedHTML,
+      message: result.message
+    });
+
+  } catch (error) {
+    console.error('❌ AI edit error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process AI edit request',
+      message: error.message
+    });
+  }
+});
+
+console.log('✅ AI Website Editor endpoint loaded');
 
 USER'S CURRENT WEBSITE HTML:
 ${currentHtml}
@@ -2048,6 +2158,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
