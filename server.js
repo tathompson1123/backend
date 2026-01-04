@@ -1543,7 +1543,12 @@ Return ONLY the complete HTML code. No markdown, no explanations, just the HTML 
     console.log('Content blocks:', data.content?.length);
 
     const htmlContent = data.content?.[0]?.text;
-
+    
+console.log('📏 Raw HTML length:', htmlContent?.length);
+console.log('🔍 Starts with DOCTYPE?', htmlContent?.startsWith('<!DOCTYPE'));
+console.log('🔍 Contains ```html?', htmlContent?.includes('```html'));
+console.log('🔍 First 300 chars:', htmlContent?.substring(0, 300));
+    
     if (!htmlContent) {
       console.error('❌ No HTML content in response:', data);
       return res.status(500).json({ error: 'No content generated', details: 'API returned empty response' });
@@ -2037,3 +2042,4 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
