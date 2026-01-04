@@ -1921,7 +1921,6 @@ app.post('/api/website/ai-edit', async (req, res) => {
           content: `You are a website editor AI. The user wants to modify their website HTML.
 
 Current HTML:
-${currentHTML}
 
 User's Request: ${userRequest}
 
@@ -2156,6 +2155,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
