@@ -318,6 +318,38 @@ app.post('/api/services', async (req, res) => {
   }
 });
 
+// Update booking notes
+app.put('/api/bookings/:id/notes', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, notes } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE bookings 
+       SET job_notes = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND user_id = $3
+       RETURNING *`,
+      [notes, id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    res.json({ 
+      success: true,
+      booking: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating booking notes:', error);
+    res.status(500).json({ error: 'Failed to update notes' });
+  }
+});
+
 app.put('/api/services/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -2119,3 +2151,4 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
