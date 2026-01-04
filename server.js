@@ -1,4 +1,4 @@
-// server-review-automation.js - Complete Review Automation System
+ // server-review-automation.js - Complete Review Automation System
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -8,6 +8,10 @@ const sgMail = require('@sendgrid/mail');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+
+const { google } = require('googleapis');
+   const multer = require('multer');
+   const upload = multer({ dest: 'uploads/' });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -65,7 +69,16 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/api/google-business/callback'
+);
 
+// Store tokens per user (in production, use database)
+const userTokens = new Map();
+
+console.log('✅ Google OAuth client initialized');
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -2029,6 +2042,145 @@ Return ONLY the updated HTML with no explanation or markdown formatting.`;
 });
 
 console.log('✅ Super optimized AI editor endpoint loaded');
+// 1. GET AUTH URL - Start OAuth flow
+app.get('/api/google-business/auth-url', (req, res) => {
+  const { userId } = req.query;
+  
+  const scopes = [
+    'https://www.googleapis.com/auth/business.manage',
+    'https://www.googleapis.com/auth/plus.business.manage',
+  ];
+  
+  const authUrl = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: scopes,
+    state: userId,
+    prompt: 'consent'
+  });
+  
+  res.json({ authUrl });
+});
+
+// 2. OAUTH CALLBACK - Handle Google redirect
+app.get('/api/google-business/callback', async (req, res) => {
+  const { code, state: userId } = req.query;
+  
+  try {
+    const { tokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(tokens);
+    
+    userTokens.set(userId, tokens);
+    
+    // Redirect back to dashboard
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/dashboard?gbp=connected`);
+  } catch (error) {
+    console.error('OAuth callback error:', error);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/dashboard?gbp=error`);
+  }
+});
+
+// 3. GET PROFILE - Check connection status
+app.get('/api/google-business/profile', async (req, res) => {
+  const { userId } = req.query;
+  
+  try {
+    const tokens = userTokens.get(userId);
+    
+    if (!tokens) {
+      return res.json({ connected: false });
+    }
+    
+    oauth2Client.setCredentials(tokens);
+    const mybusiness = google.mybusiness({ version: 'v4', auth: oauth2Client });
+    
+    const accounts = await mybusiness.accounts.list();
+    const account = accounts.data.accounts[0];
+    
+    if (account) {
+      const locations = await mybusiness.accounts.locations.list({
+        parent: account.name
+      });
+      
+      const location = locations.data.locations[0];
+      
+      res.json({
+        connected: true,
+        profile: {
+          name: location.locationName,
+          address: location.address,
+          accountId: account.name,
+          locationId: location.name
+        }
+      });
+    } else {
+      res.json({ connected: false });
+    }
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.json({ connected: false });
+  }
+});
+
+// 4. GENERATE AI REPLY - AI review response
+app.post('/api/google-business/generate-reply', async (req, res) => {
+  const { reviewText, rating, businessName } = req.body;
+  
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 200,
+        temperature: 0.7,
+        messages: [{
+          role: 'user',
+          content: `You are replying to a Google Business review for ${businessName}.
+
+Review (${rating}/5 stars): "${reviewText}"
+
+Write a professional, warm, personalized response (2-3 sentences). 
+- If 4-5 stars: Thank them and encourage return visit
+- If 1-3 stars: Apologize, show empathy, offer to make it right
+- Use the business name naturally
+- Be authentic, not corporate
+
+Return ONLY the reply text, no quotes or formatting.`
+        }]
+      })
+    });
+    
+    const data = await response.json();
+    const reply = data.content[0].text.trim();
+    
+    res.json({
+      success: true,
+      reply
+    });
+    
+  } catch (error) {
+    console.error('AI reply generation error:', error);
+    res.status(500).json({ error: 'Failed to generate reply' });
+  }
+});
+
+// 5. GET IMAGES (placeholder)
+app.get('/api/google-business/images', async (req, res) => {
+  res.json({ images: [] });
+});
+
+// 6. GET REVIEW REQUESTS (placeholder)
+app.get('/api/google-business/review-requests', async (req, res) => {
+  res.json({ requests: [] });
+});
+
+console.log('✅ Google Business Profile endpoints loaded');
 // ============================================
 // HEALTH CHECK
 // ============================================
@@ -2081,6 +2233,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
