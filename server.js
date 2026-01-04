@@ -272,6 +272,219 @@ async function sendReviewRequest(reviewRequest) {
   }
 }
 
+// Google Business Profile API Endpoints
+
+// GET - Fetch Google Business Profile for a user
+app.get('/api/google-business/profile', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM google_business_profiles WHERE user_id = $1',
+      [userId]
+    );
+
+    res.json({ 
+      success: true,
+      profile: result.rows[0] || null 
+    });
+  } catch (error) {
+    console.error('Error fetching Google Business profile:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
+// POST - Create or update Google Business Profile
+app.post('/api/google-business/profile', async (req, res) => {
+  try {
+    const { 
+      userId, 
+      businessName, 
+      placeId, 
+      connected, 
+      rating, 
+      totalReviews,
+      address,
+      phone,
+      websiteUrl
+    } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    // Check if profile exists
+    const existing = await pool.query(
+      'SELECT id FROM google_business_profiles WHERE user_id = $1',
+      [userId]
+    );
+
+    let result;
+    if (existing.rows.length > 0) {
+      // Update existing profile
+      result = await pool.query(
+        `UPDATE google_business_profiles 
+         SET business_name = $1, place_id = $2, connected = $3, 
+             rating = $4, total_reviews = $5, address = $6, 
+             phone = $7, website_url = $8, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $9
+         RETURNING *`,
+        [businessName, placeId, connected, rating, totalReviews, address, phone, websiteUrl, userId]
+      );
+    } else {
+      // Create new profile
+      result = await pool.query(
+        `INSERT INTO google_business_profiles 
+         (user_id, business_name, place_id, connected, rating, total_reviews, 
+          address, phone, website_url, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         RETURNING *`,
+        [userId, businessName, placeId, connected, rating, totalReviews, address, phone, websiteUrl]
+      );
+    }
+
+    res.json({ 
+      success: true,
+      profile: result.rows[0] 
+    });
+  } catch (error) {
+    console.error('Error saving Google Business profile:', error);
+    res.status(500).json({ error: 'Failed to save profile' });
+  }
+});
+
+// POST - Generate AI review reply
+app.post('/api/google-business/generate-reply', async (req, res) => {
+  try {
+    const { userId, reviewText, rating, businessName, customerName } = req.body;
+
+    if (!userId || !reviewText || !rating) {
+      return res.status(400).json({ error: 'userId, reviewText, and rating required' });
+    }
+
+    // Generate AI reply using Claude or your AI service
+    const prompt = `You are responding to a ${rating}-star Google Business review for ${businessName || 'a business'}. 
+    
+${customerName ? `Customer name: ${customerName}` : ''}
+Review: "${reviewText}"
+
+Generate a professional, empathetic response that:
+- Thanks the customer ${customerName ? `(use their name: ${customerName})` : ''}
+- ${rating >= 4 ? 'Expresses gratitude for the positive feedback' : 'Acknowledges their concerns and offers to make things right'}
+- ${rating >= 4 ? 'Encourages them to return' : 'Provides a solution or way to contact you directly'}
+- Is warm, professional, and concise (2-4 sentences)
+- Does not use generic AI phrases
+
+Response:`;
+
+    // Call your AI service here (OpenAI, Anthropic, etc.)
+    // For now, I'll create a placeholder response
+    const aiReply = await generateAIReply(prompt); // You need to implement this function
+
+    // Update statistics
+    await pool.query(
+      `UPDATE google_business_profiles 
+       SET replies_generated_today = replies_generated_today + 1,
+           replies_generated_week = replies_generated_week + 1,
+           replies_generated_month = replies_generated_month + 1,
+           last_reply_date = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      reply: aiReply
+    });
+  } catch (error) {
+    console.error('Error generating AI reply:', error);
+    res.status(500).json({ error: 'Failed to generate reply' });
+  }
+});
+
+// Helper function to generate AI reply (you'll need to implement this with your AI provider)
+async function generateAIReply(prompt) {
+  // Example using Anthropic's Claude API
+  // You'll need to add your API key and implement this
+  
+  // For now, return a placeholder
+  return "Thank you so much for your wonderful review! We're thrilled to hear you had a great experience with us. We look forward to serving you again soon!";
+}
+
+// GET - Get review reply statistics
+app.get('/api/google-business/stats', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      `SELECT replies_generated_today, replies_generated_week, 
+              replies_generated_month, last_reply_date 
+       FROM google_business_profiles 
+       WHERE user_id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        success: true,
+        stats: {
+          repliesToday: 0,
+          repliesWeek: 0,
+          repliesMonth: 0,
+          lastReplyDate: null
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      stats: {
+        repliesToday: result.rows[0].replies_generated_today || 0,
+        repliesWeek: result.rows[0].replies_generated_week || 0,
+        repliesMonth: result.rows[0].replies_generated_month || 0,
+        lastReplyDate: result.rows[0].last_reply_date
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// POST - Reset daily/weekly/monthly stats (run via cron job)
+app.post('/api/google-business/reset-stats', async (req, res) => {
+  try {
+    const { period } = req.body; // 'daily', 'weekly', or 'monthly'
+
+    let updateQuery;
+    if (period === 'daily') {
+      updateQuery = 'UPDATE google_business_profiles SET replies_generated_today = 0';
+    } else if (period === 'weekly') {
+      updateQuery = 'UPDATE google_business_profiles SET replies_generated_week = 0';
+    } else if (period === 'monthly') {
+      updateQuery = 'UPDATE google_business_profiles SET replies_generated_month = 0';
+    } else {
+      return res.status(400).json({ error: 'Invalid period' });
+    }
+
+    await pool.query(updateQuery);
+
+    res.json({ success: true, message: `${period} stats reset successfully` });
+  } catch (error) {
+    console.error('Error resetting stats:', error);
+    res.status(500).json({ error: 'Failed to reset stats' });
+  }
+});
+
 // ============================================
 // SERVICES ENDPOINTS
 // ============================================
@@ -2151,4 +2364,5 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
