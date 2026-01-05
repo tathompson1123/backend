@@ -573,8 +573,9 @@ app.put('/api/bookings/:id', async (req, res) => {
            customer_address = $7,
            job_notes = $8,
            employee_id = $9,
+           group_id = $10,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $10 AND user_id = $11
+       WHERE id = $11 AND user_id = $12
        RETURNING *`,
       [
         bookingDate,
@@ -586,6 +587,7 @@ app.put('/api/bookings/:id', async (req, res) => {
         customerInfo.address,
         notes,
         employeeId,
+        groupId || null,
         id,
         userId
       ]
@@ -1092,7 +1094,7 @@ app.get('/api/bookings', async (req, res) => {
 
 app.post('/api/bookings/create', async (req, res) => {
   try {
-    const { userId, serviceId, bookingDate, startTime, customerInfo, customerNotes, employeeId } = req.body;
+    const { userId, serviceId, bookingDate, startTime, customerInfo, customerNotes, employeeId, groupId } = req.body;
 
     if (!userId || !serviceId || !bookingDate || !startTime || !customerInfo) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -1149,51 +1151,51 @@ app.post('/api/bookings/create', async (req, res) => {
     }
 
     const bookingNumberResult = await pool.query('SELECT generate_booking_number() as number');
-    const bookingNumber = bookingNumberResult.rows[0].number;
+const bookingNumber = bookingNumberResult.rows[0].number;
 
-    const customerResult = await pool.query(
-      `INSERT INTO customers (user_id, name, email, phone)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id`,
-      [userId, customerInfo.name, customerInfo.email, customerInfo.phone]
-    );
-    const customerIdToUse = customerResult.rows[0].id;
+const customerResult = await pool.query(
+  `INSERT INTO customers (user_id, name, email, phone)
+   VALUES ($1, $2, $3, $4)
+   RETURNING id`,
+  [userId, customerInfo.name, customerInfo.email, customerInfo.phone]
+);
+const customerIdToUse = customerResult.rows[0].id;
 
-    const bookingResult = await pool.query(
-      `INSERT INTO bookings (
-        user_id, customer_id, booking_number, booking_date, start_time, end_time,
-        subtotal, total_amount, customer_name, customer_email, 
-        customer_phone, customer_notes, status, employee_id
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-      RETURNING *`,
-      [
-        userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
-        service.price, service.price, customerInfo.name, customerInfo.email,
-        customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId
-      ]
-    );
+const bookingResult = await pool.query(
+  `INSERT INTO bookings (
+    user_id, customer_id, booking_number, booking_date, start_time, end_time,
+    subtotal, total_amount, customer_name, customer_email, 
+    customer_phone, customer_notes, status, employee_id, group_id
+  )
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+  RETURNING *`,
+  [
+    userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
+    service.price, service.price, customerInfo.name, customerInfo.email,
+    customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null
+  ]
+);
 
-    const booking = bookingResult.rows[0];
+const booking = bookingResult.rows[0];
 
-    await pool.query(
-      `INSERT INTO booking_items (
-        booking_id, service_id, service_name, service_duration, 
-        service_price, quantity, subtotal
-      )
-      VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-      [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
-    );
+await pool.query(
+  `INSERT INTO booking_items (
+    booking_id, service_id, service_name, service_duration, 
+    service_price, quantity, subtotal
+  )
+  VALUES ($1, $2, $3, $4, $5, 1, $6)`,
+  [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
+);
 
-    const empResult = await pool.query('SELECT name FROM employees WHERE id = $1', [assignedEmployeeId]);
+const empResult = await pool.query('SELECT name FROM employees WHERE id = $1', [assignedEmployeeId]);
 
-    res.json({ 
-      success: true, 
-      booking,
-      assignedEmployee: empResult.rows[0].name,
-      message: 'Booking confirmed!'
-    });
-
+res.json({ 
+  success: true, 
+  booking,
+  assignedEmployee: empResult.rows[0].name,
+  message: 'Booking confirmed!'
+});
+    
   } catch (error) {
     console.error('Error creating booking:', error);
     res.status(500).json({ error: 'Failed to create booking' });
@@ -2556,6 +2558,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
