@@ -1331,6 +1331,82 @@ app.delete('/api/employees/:id', async (req, res) => {
   }
 });
 
+// GET all groups for a user
+app.get('/api/groups', async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM groups WHERE user_id = $1 ORDER BY created_at DESC',
+      [userId]
+    );
+
+    res.json({ groups: result.rows });
+  } catch (error) {
+    console.error('Error fetching groups:', error);
+    res.status(500).json({ error: 'Failed to fetch groups' });
+  }
+});
+
+// CREATE a new group
+app.post('/api/groups', async (req, res) => {
+  try {
+    const { userId, name, employeeIds } = req.body;
+
+    if (!userId || !name || !employeeIds || !Array.isArray(employeeIds)) {
+      return res.status(400).json({ error: 'userId, name, and employeeIds (array) required' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO groups (user_id, name, employee_ids) VALUES ($1, $2, $3) RETURNING *',
+      [userId, name, employeeIds]
+    );
+
+    res.json({ success: true, group: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating group:', error);
+    res.status(500).json({ error: 'Failed to create group' });
+  }
+});
+
+// UPDATE a group
+app.put('/api/groups/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, name, employeeIds } = req.body;
+
+    if (!userId || !name || !employeeIds || !Array.isArray(employeeIds)) {
+      return res.status(400).json({ error: 'userId, name, and employeeIds (array) required' });
+    }
+
+    const result = await pool.query(
+      'UPDATE groups SET name = $1, employee_ids = $2 WHERE id = $3 AND user_id = $4 RETURNING *',
+      [name, employeeIds, id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Group not found or unauthorized' });
+    }
+
+    res.json({ success: true, group: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating group:', error);
+    res.status(500).json({ error: 'Failed to update group' });
+  }
+});
+
+// DELETE a group
+app.delete('/api/groups/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.query;
+
+    if (!userId)
+
 // ============================================
 // AVAILABILITY CALCULATOR
 // ============================================
@@ -2462,6 +2538,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
