@@ -1405,7 +1405,25 @@ app.delete('/api/groups/:id', async (req, res) => {
     const { id } = req.params;
     const { userId } = req.query;
 
-    if (!userId)
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      'DELETE FROM groups WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Group not found or unauthorized' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting group:', error);
+    res.status(500).json({ error: 'Failed to delete group' });
+  }
+});
 
 // ============================================
 // AVAILABILITY CALCULATOR
@@ -2538,6 +2556,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
