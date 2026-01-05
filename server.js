@@ -531,6 +531,104 @@ app.post('/api/services', async (req, res) => {
   }
 });
 
+// Update booking
+app.put('/api/bookings/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, serviceId, bookingDate, startTime, customerInfo, notes, employeeId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    // Get service details
+    const serviceResult = await pool.query(
+      'SELECT duration_hours, price, name FROM services WHERE id = $1',
+      [serviceId]
+    );
+
+    if (serviceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    const service = serviceResult.rows[0];
+    
+    // Calculate end time
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = startMinutes + (service.duration_hours * 60);
+    const endHour = Math.floor(endMinutes / 60);
+    const endMin = endMinutes % 60;
+    const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
+
+    // Update booking
+    const bookingResult = await pool.query(
+      `UPDATE bookings 
+       SET booking_date = $1,
+           start_time = $2,
+           end_time = $3,
+           customer_name = $4,
+           customer_email = $5,
+           customer_phone = $6,
+           customer_address = $7,
+           job_notes = $8,
+           employee_id = $9,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $10 AND user_id = $11
+       RETURNING *`,
+      [
+        bookingDate,
+        startTime,
+        endTime,
+        customerInfo.name,
+        customerInfo.email,
+        customerInfo.phone,
+        customerInfo.address,
+        notes,
+        employeeId,
+        id,
+        userId
+      ]
+    );
+
+    if (bookingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found or unauthorized' });
+    }
+
+    // Update customer info if customer_id exists
+    if (bookingResult.rows[0].customer_id) {
+      await pool.query(
+        `UPDATE customers 
+         SET name = $1, email = $2, phone = $3
+         WHERE id = $4`,
+        [customerInfo.name, customerInfo.email, customerInfo.phone, bookingResult.rows[0].customer_id]
+      );
+    }
+
+    // Update booking items if service changed
+    await pool.query(
+      `UPDATE booking_items
+       SET service_id = $1,
+           service_name = $2,
+           service_duration = $3,
+           service_price = $4,
+           subtotal = $5
+       WHERE booking_id = $6`,
+      [serviceId, service.name, service.duration_hours, service.price, service.price, id]
+    );
+
+    res.json({ 
+      success: true,
+      booking: bookingResult.rows[0],
+      message: 'Booking updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating booking:', error);
+    res.status(500).json({ error: 'Failed to update booking' });
+  }
+});
+
 // Update booking notes
 app.put('/api/bookings/:id/notes', async (req, res) => {
   try {
@@ -2364,5 +2462,6 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
