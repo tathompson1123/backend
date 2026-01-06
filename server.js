@@ -2492,10 +2492,10 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
     <div class="logo">${businessName}</div>
     
     <div class="nav-center">
-      <a href="#home" class="nav-link active" onclick="showPage('home')">Home</a>
-      <a href="#services" class="nav-link" onclick="showPage('services')">Services</a>
-      <a href="#gift-cards" class="nav-link" onclick="showPage('gift-cards')">Gift Cards</a>
-      <a href="#contact" class="nav-link" onclick="showPage('contact')">Contact</a>
+      <a href="#home" class="nav-link active" data-page="home">Home</a>
+      <a href="#services" class="nav-link" data-page="services">Services</a>
+      <a href="#gift-cards" class="nav-link" data-page="gift-cards">Gift Cards</a>
+      <a href="#contact" class="nav-link" data-page="contact">Contact</a>
     </div>
     
     <div class="nav-right">
@@ -2561,41 +2561,80 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
 
 ---
 
-### PAGE NAVIGATION JAVASCRIPT
+### PAGE NAVIGATION JAVASCRIPT (WORKS IN PREVIEW)
 
 \`\`\`javascript
 <script>
-function showPage(pageName) {
-  document.querySelectorAll('.page').forEach(page => {
-    page.classList.remove('active');
-  });
+(function() {
+  let currentPage = 'home';
   
-  const selectedPage = document.getElementById(pageName + '-page');
-  if (selectedPage) {
-    selectedPage.classList.add('active');
+  function showPage(pageName, clickEvent) {
+    if (clickEvent) {
+      clickEvent.preventDefault();
+    }
+    
+    // Hide all pages
+    document.querySelectorAll('.page').forEach(page => {
+      page.classList.remove('active');
+      page.style.display = 'none';
+    });
+    
+    // Show selected page
+    const selectedPage = document.getElementById(pageName + '-page');
+    if (selectedPage) {
+      selectedPage.classList.add('active');
+      selectedPage.style.display = 'block';
+    }
+    
+    // Update active nav link
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.classList.remove('active');
+      if (link.getAttribute('data-page') === pageName) {
+        link.classList.add('active');
+      }
+    });
+    
+    currentPage = pageName;
+    window.location.hash = pageName;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    closeMobileMenu();
   }
   
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  event.target.classList.add('active');
+  function toggleMobileMenu() {
+    document.getElementById('navbar').classList.toggle('mobile-open');
+  }
   
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-  closeMobileMenu();
-}
-
-function toggleMobileMenu() {
-  document.getElementById('navbar').classList.toggle('mobile-open');
-}
-
-function closeMobileMenu() {
-  document.getElementById('navbar').classList.remove('mobile-open');
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-  const hash = window.location.hash.substring(1) || 'home';
-  showPage(hash);
-});
+  function closeMobileMenu() {
+    document.getElementById('navbar').classList.remove('mobile-open');
+  }
+  
+  // Make globally accessible
+  window.showPage = showPage;
+  window.toggleMobileMenu = toggleMobileMenu;
+  window.closeMobileMenu = closeMobileMenu;
+  
+  // Initialize
+  window.addEventListener('DOMContentLoaded', function() {
+    const hash = window.location.hash.substring(1) || 'home';
+    showPage(hash);
+    
+    // Add click handlers
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        showPage(this.getAttribute('data-page'), e);
+      });
+    });
+  });
+  
+  // Handle back/forward
+  window.addEventListener('hashchange', function() {
+    const hash = window.location.hash.substring(1);
+    if (hash && hash !== currentPage) {
+      showPage(hash);
+    }
+  });
+})();
 </script>
 \`\`\`
 
@@ -2608,7 +2647,7 @@ window.addEventListener('DOMContentLoaded', () => {
 }
 
 .page.active {
-  display: block;
+  display: block !important;
   opacity: 1;
   animation: fadeIn 0.3s ease;
 }
@@ -2616,6 +2655,11 @@ window.addEventListener('DOMContentLoaded', () => {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Ensure home page is visible by default */
+#home-page {
+  display: block;
 }
 \`\`\`
 
@@ -3440,6 +3484,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
