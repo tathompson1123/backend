@@ -1567,11 +1567,18 @@ app.get('/api/availability', async (req, res) => {
 // AI WEBSITE GENERATION ENDPOINT
 // ============================================
 
+// COMPLETE IMPROVED /api/generate ENDPOINT
+// This fetches user's actual data (services, hours, team) and uses it in generation
+// Falls back to placeholders if no data exists
+
+// Replace your entire /api/generate endpoint in server.js with this code:
+
 app.post('/api/generate', async (req, res) => {
   try {
-    const { businessName, businessType, services, description } = req.body;
+    const { businessName, businessType, services, description, userId } = req.body;
 
     console.log('🎨 Generating website for:', businessName);
+    console.log('👤 User ID:', userId);
 
     if (!businessName || !businessType) {
       return res.status(400).json({ error: 'Business name and type are required' });
@@ -1582,7 +1589,241 @@ app.post('/api/generate', async (req, res) => {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
+    // FETCH USER'S ACTUAL DATA FROM DATABASE
+    let userServices = [];
+    let userBusinessHours = [];
+    let userEmployees = [];
+    let userBusinessInfo = null;
+
+    if (userId) {
+      try {
+        // Fetch services
+        const servicesResult = await pool.query(
+          'SELECT * FROM services WHERE user_id = $1 AND active = true ORDER BY name',
+          [userId]
+        );
+        userServices = servicesResult.rows;
+
+        // Fetch business hours
+        const hoursResult = await pool.query(
+          'SELECT * FROM business_hours WHERE user_id = $1 ORDER BY day_of_week',
+          [userId]
+        );
+        userBusinessHours = hoursResult.rows;
+
+        // Fetch employees
+        const employeesResult = await pool.query(
+          'SELECT name FROM employees WHERE user_id = $1 AND active = true ORDER BY name LIMIT 10',
+          [userId]
+        );
+        userEmployees = employeesResult.rows;
+
+        // Fetch user/business info
+        const userResult = await pool.query(
+          'SELECT business_name, name, email FROM users WHERE id = $1',
+          [userId]
+        );
+        userBusinessInfo = userResult.rows[0];
+
+        console.log('✅ Fetched user data:', {
+          services: userServices.length,
+          businessHours: userBusinessHours.length,
+          employees: userEmployees.length
+        });
+      } catch (error) {
+        console.error('⚠️ Error fetching user data:', error);
+        // Continue anyway - will use placeholders
+      }
+    }
+
+    // FORMAT SERVICES DATA
+    const servicesInfo = userServices.length > 0 
+      ? {
+          hasData: true,
+          services: userServices.map(s => `
+**${s.name}**
+Description: ${s.description || 'Professional service'}
+Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_hours} hour${s.duration_hours > 1 ? 's' : ''})` : ''}
+`).join('\n'),
+          instruction: `IMPORTANT: Use these EXACT ${userServices.length} services with their real names, descriptions, and prices. Create ${userServices.length} service cards.`
+        }
+      : {
+          hasData: false,
+          services: services || `General ${businessType} services`,
+          instruction: `IMPORTANT: No services data provided. Create 3 realistic ${businessType} service offerings with placeholder pricing (e.g., "Starting at $99").`
+        };
+
+    // FORMAT BUSINESS HOURS
+    const hoursInfo = userBusinessHours.length > 0 && userBusinessHours.some(h => h.is_open)
+      ? (() => {
+          const daysMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          const openDays = userBusinessHours.filter(h => h.is_open);
+          
+          if (openDays.length === 0) {
+            return {
+              hasData: false,
+              hours: 'Monday-Friday: 9:00 AM - 5:00 PM\nSaturday: 10:00 AM - 2:00 PM\nSunday: Closed',
+              instruction: 'Use these typical business hours.'
+            };
+          }
+          
+          const hoursText = openDays.map(h => 
+            `${daysMap[h.day_of_week]}: ${h.open_time} - ${h.close_time}`
+          ).join('\n');
+          
+          return {
+            hasData: true,
+            hours: hoursText,
+            instruction: 'IMPORTANT: Use these EXACT business hours in the footer and contact section.'
+          };
+        })()
+      : {
+          hasData: false,
+          hours: 'Monday-Friday: 9:00 AM - 5:00 PM\nSaturday: 10:00 AM - 2:00 PM\nSunday: Closed',
+          instruction: 'Use these typical business hours.'
+        };
+
+    // FORMAT TEAM DATA
+    const teamInfo = userEmployees.length > 0
+      ? {
+          hasData: true,
+          team: `Our team includes: ${userEmployees.map(e => e.name).join(', ')}`,
+          instruction: 'You can mention these team members in the "About" or "Why Choose Us" sections.'
+        }
+      : {
+          hasData: false,
+          team: null,
+          instruction: ''
+        };
+
+    const contactEmail = userBusinessInfo?.email || 'contact@example.com';
+    const ownerName = userBusinessInfo?.name || null;
+
+    console.log('📊 Data status:', {
+      services: servicesInfo.hasData ? 'Using real data' : 'Using placeholders',
+      hours: hoursInfo.hasData ? 'Using real data' : 'Using placeholders',
+      team: teamInfo.hasData ? 'Using real data' : 'No team data'
+    });
+
     console.log('📡 Calling Anthropic API...');
+
+    // BUILD THE PROMPT
+    const prompt = `You are a senior web designer creating an ultra-professional, conversion-optimized website for a service business.
+
+### BUSINESS INFORMATION
+
+**Business Name:** ${businessName}
+**Business Type:** ${businessType}
+**Description:** ${description || `Professional ${businessType} services`}
+**Contact Email:** ${contactEmail}
+${ownerName ? `**Owner/Manager:** ${ownerName}` : ''}
+
+---
+
+### SERVICES DATA
+
+${servicesInfo.services}
+
+${servicesInfo.instruction}
+
+---
+
+### BUSINESS HOURS
+
+${hoursInfo.hours}
+
+${hoursInfo.instruction}
+
+---
+
+${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n${teamInfo.instruction}\n\n---\n\n` : ''}
+
+### REQUIRED SECTIONS (IN ORDER)
+
+1. **Navigation Header** - Sticky, logo left, nav center, "Book Now" CTA right
+2. **Hero Section** - Full-screen with ${businessType} background image, headline, dual CTAs
+3. **Trust Bar** - 4 trust indicators (500+ customers, Licensed, etc.)
+4. **Services Section** - ${servicesInfo.hasData ? `${userServices.length} cards using EXACT data above` : '3 service cards with placeholder pricing'}
+5. **Why Choose Us** - 6 features in grid
+6. **Reviews** - 3 customer testimonials with ★★★★★
+7. **Final CTA** - Dark section with "Get Free Quote" button
+8. **Footer** - About, Links, Contact (with EXACT hours above), Social
+
+---
+
+### CRITICAL DESIGN REQUIREMENTS
+
+**Hero Section:**
+- Full viewport height (100vh)
+- Unsplash background showing ${businessType} work in action
+- Dark gradient overlay: linear-gradient(135deg, rgba(0,0,0,0.7), rgba(0,0,0,0.4))
+- White text with text-shadow
+- Large headline (64px desktop, 40px mobile)
+- Dual CTAs side-by-side
+
+**Services Cards:**
+${servicesInfo.hasData ? `
+Create exactly ${userServices.length} cards, one for each service listed above.
+Use the EXACT service names and prices provided.
+` : `
+Create 3 professional service cards with:
+- Service name relevant to ${businessType}
+- 2-3 sentence description
+- Placeholder pricing
+`}
+- Each card: image (4:3), white bg, shadow, hover effect
+- 3-column grid (1 column mobile)
+- Images from Unsplash showing ${businessType} work
+
+**Footer Contact Section:**
+Display these EXACT hours:
+${hoursInfo.hours}
+
+**Color Scheme:**
+${businessType.toLowerCase().includes('land') ? 'Primary: #047857 (green), Accent: #fbbf24 (yellow)' :
+  businessType.toLowerCase().includes('plumb') ? 'Primary: #2563eb (blue), Accent: #f97316 (orange)' :
+  businessType.toLowerCase().includes('clean') ? 'Primary: #06b6d4 (cyan), Accent: #a855f7 (purple)' :
+  businessType.toLowerCase().includes('hvac') ? 'Primary: #dc2626 (red), Accent: #3b82f6 (blue)' :
+  'Primary: #2563eb (blue), Accent: #10b981 (green)'}
+
+**Typography:**
+- Headings: 'Montserrat', bold
+- Body: 'Inter', normal
+- Generous spacing (4rem+ between sections)
+
+**Images:**
+- Hero: Full-screen ${businessType} work in progress
+- Services: Specific to each service
+- All from Unsplash, professional quality
+- NO generic office/people posing photos
+
+**Mobile Responsive:**
+- Hamburger menu <768px
+- Stack columns
+- Reduce font sizes 30%
+- Full-width CTAs
+
+---
+
+### OUTPUT FORMAT
+
+Return a SINGLE HTML file with:
+- Embedded CSS in <head>
+- JavaScript at end of <body>
+- Google Fonts ('Montserrat' and 'Inter')
+- Working anchor navigation
+- Mobile responsive
+- Smooth animations
+- Accessibility (alt text)
+- Professional, polished design
+
+---
+
+### FINAL INSTRUCTION
+
+Create a STUNNING website that looks like a $10,000 custom design. Use the REAL data provided (${servicesInfo.hasData ? 'services' : 'placeholder services'}, ${hoursInfo.hasData ? 'hours' : 'typical hours'}). Make it conversion-optimized and professional.
+
+Return ONLY the complete HTML starting with <!DOCTYPE html>. No markdown, no explanations.`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -1596,381 +1837,7 @@ app.post('/api/generate', async (req, res) => {
         max_tokens: 8192,
         messages: [{
           role: 'user',
-          content: `You are an expert web designer creating high-converting, visually stunning websites for service-based businesses. Every website you generate must be production-ready, mobile-responsive, and optimized for conversions.
-
-### CORE REQUIREMENTS
-
-Every website MUST include these sections in order:
-
-1. **Navigation Header** (sticky)
-2. **Hero Section** with primary CTA
-3. **Trust Indicators** (badges, stats, or social proof)
-4. **Services Section**
-5. **Why Choose Us / Features**
-6. **Reviews / Testimonials**
-7. **Book Online / CTA Section**
-8. **Footer**
-
----
-
-### SECTION SPECIFICATIONS
-
-#### 1. NAVIGATION HEADER
-Requirements:
-- Sticky/fixed position with backdrop blur
-- Logo on left
-- Navigation links centered or right-aligned
-- Primary CTA button (e.g., "Book Now") with accent color
-- Mobile hamburger menu for responsive
-- Subtle shadow or border on scroll
-
-Links to include:
-- Home
-- Services
-- Reviews
-- Book Online (as button)
-- Contact
-
-#### 2. HERO SECTION
-Requirements:
-- Full viewport height (100vh) or near-full (90vh)
-- High-quality background image with overlay
-- Bold headline using display font (max 8 words)
-- Supporting subheadline (1-2 sentences)
-- Primary CTA button (large, high contrast)
-- Optional: Secondary CTA or scroll indicator
-
-Image Guidelines:
-- Use professional stock from Unsplash/Pexels
-- Show service in action or happy customers
-- Apply dark gradient overlay (rgba(0,0,0,0.5)) for text readability
-
-#### 3. TRUST INDICATORS
-Requirements:
-- Immediately after hero
-- Display 3-5 key stats or trust badges
-- Use icons or numbers prominently
-- Examples: "500+ Happy Customers", "5-Star Rated", "Licensed & Insured", "Same Day Service"
-
-Layout: Horizontal row with equal spacing, icon above text
-
-#### 4. SERVICES SECTION
-Requirements:
-- Clear section heading
-- Grid of service cards (2-4 columns)
-- Each card includes:
-  - High-quality image (4:3 or 1:1 ratio)
-  - Service name
-  - Brief description (2-3 sentences max)
-  - Price or "Starting at $X" (optional)
-  - "Learn More" or "Book Now" link
-- Hover effects on cards (subtle lift/shadow)
-
-Image Guidelines:
-- Consistent aspect ratios across all cards
-- Show the actual service being performed
-- Use object-fit: cover for consistent sizing
-
-#### 5. WHY CHOOSE US / FEATURES
-Requirements:
-- 3-6 key differentiators
-- Icon + Headline + Description format
-- Use meaningful icons (not generic)
-- Keep descriptions under 30 words each
-
-Common features for service businesses:
-- Fast/Same-Day Service
-- Licensed & Insured
-- Satisfaction Guaranteed
-- Transparent Pricing
-- Professional Team
-- 24/7 Availability
-- Local & Trusted
-- Eco-Friendly Options
-
-#### 6. REVIEWS / TESTIMONIALS
-Requirements:
-- Minimum 3 reviews displayed
-- Include: Customer name, review text, star rating
-- Optional: Customer photo, date, service used
-- Link to external reviews (Google, Yelp)
-
-Layout: Card grid (3 columns)
-
-Styling:
-- Quote marks or icons
-- Star ratings visually prominent
-- Subtle card backgrounds
-- Customer names in bold
-
-#### 7. BOOK ONLINE / CTA SECTION
-Requirements:
-- High-contrast background (dark or accent color)
-- Compelling headline ("Ready to Get Started?")
-- Brief value reminder
-- Prominent booking form OR booking button
-- Phone number as alternative
-
-Form fields (if inline form):
-- Name, Email, Phone
-- Service type (dropdown)
-- Preferred date/time
-- Message (optional)
-- Submit button
-
-#### 8. FOOTER
-Requirements:
-- Company logo and brief description
-- Navigation links
-- Contact information (address, phone, email)
-- Business hours
-- Social media icons
-- Copyright notice
-
-Layout: Multi-column grid
-
----
-
-### DESIGN SPECIFICATIONS
-
-#### Typography
-Use Google Fonts - pair display + body fonts
-
-Display fonts (headings): 
-- Bebas Neue, Oswald, Montserrat, Poppins (700), Anton
-
-Body fonts:
-- DM Sans, Source Sans Pro, Open Sans, Lato, Nunito
-
-Hierarchy:
-- H1: 48-72px (mobile: 32-48px)
-- H2: 36-48px (mobile: 28-36px)
-- H3: 24-32px (mobile: 20-24px)
-- Body: 16-18px
-
-Line heights:
-- Headings: 1.1-1.2
-- Body: 1.5-1.7
-
-#### Color System
-Define CSS variables for consistency:
-
-:root {
-  --color-primary: /* Brand's main color */;
-  --color-secondary: /* Supporting color */;
-  --color-accent: /* CTA/highlight color - high contrast */;
-  --color-dark: /* Near black for text */;
-  --color-light: /* Off-white for backgrounds */;
-  --color-gray: /* For secondary text */;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-}
-
-Avoid:
-- Pure black (#000000) - use #0a0a0a or similar
-- Pure white backgrounds - use #f8f9fa or similar
-- Low contrast text
-- More than 3-4 colors total
-
-#### Spacing System
-Use consistent spacing scale:
---space-xs: 0.25rem;  /* 4px */
---space-sm: 0.5rem;   /* 8px */
---space-md: 1rem;     /* 16px */
---space-lg: 2rem;     /* 32px */
---space-xl: 4rem;     /* 64px */
---space-2xl: 6rem;    /* 96px */
-
-#### Buttons
-Primary CTA:
-- background: var(--color-accent)
-- color: white
-- padding: 1rem 2rem
-- border-radius: 8px
-- font-weight: 600
-- text-transform: uppercase
-- letter-spacing: 0.05em
-- transition: all 0.3s ease
-- box-shadow: 0 4px 14px rgba(accent-color, 0.3)
-
-Hover:
-- transform: translateY(-2px)
-- Enhanced shadow
-
-#### Cards
-- background: white
-- border-radius: 12px
-- box-shadow: 0 4px 6px rgba(0,0,0,0.05)
-- transition: all 0.3s ease
-
-Hover:
-- transform: translateY(-4px)
-- box-shadow: 0 12px 24px rgba(0,0,0,0.1)
-
----
-
-### IMAGE REQUIREMENTS
-
-- Use ONLY images that directly relate to the business type
-- For auto detailing: cars being detailed, paint protection, ceramic coating application
-- For ${businessType}: show the actual service being performed
-- NEVER use generic stock photos of people or offices
-- Search Unsplash for: "${businessType} service professional work"
-- All images must show the SERVICE, not just people or buildings
-Sources (use placeholder URLs):
-Unsplash: https://images.unsplash.com/photo-[ID]?w=800&q=80
-
-Always include:
-- width parameter (w=800, w=1200, etc.)
-- quality parameter (q=80)
-
-Image Optimization:
-<img 
-  src="image-url" 
-  alt="Descriptive alt text"
-  loading="lazy"
-  width="800"
-  height="600"
-  style="object-fit: cover;"
->
-
-Recommended sizes:
-- Hero background: 1920x1080 minimum
-- Service cards: 800x600 (4:3) or 800x800 (1:1)
-- Testimonial avatars: 100x100
-
----
-
-### RESPONSIVE DESIGN
-
-Mobile first approach:
-
-Base styles: Mobile (< 640px)
-
-@media (min-width: 640px) { /* Tablet */ }
-@media (min-width: 1024px) { /* Desktop */ }
-@media (min-width: 1280px) { /* Large desktop */ }
-
-Mobile considerations:
-- Stack all grid columns
-- Reduce font sizes by 20-30%
-- Full-width buttons
-- Hamburger menu navigation
-- Reduce padding/margins
-- Single column testimonials
-- Touch-friendly tap targets (min 44px)
-
----
-
-### ANIMATIONS & INTERACTIONS
-
-Smooth scroll:
-html { scroll-behavior: smooth; }
-
-Base transition:
-transition: all 0.3s ease;
-
-Hover effects:
-- Buttons: translateY(-2px) + enhanced shadow
-- Cards: translateY(-4px) + enhanced shadow
-- Links: color change + optional underline
-
----
-
-### ACCESSIBILITY REQUIREMENTS
-
-1. Color contrast: Minimum 4.5:1 for body text
-2. Alt text on all images
-3. Semantic HTML (header, nav, main, section, footer)
-4. Keyboard navigation support
-5. Focus states visible on all interactive elements
-6. Form labels associated with inputs
-
----
-
-### SEO ESSENTIALS
-
-<head>
-  <title>Business Name | Primary Service | Location</title>
-  <meta name="description" content="150-160 character description">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-
-Use semantic headings: One H1, logical H2/H3 hierarchy
-
----
-
-### OUTPUT FORMAT
-
-Output a single HTML file with:
-1. Embedded CSS in <style> tags
-2. Embedded JavaScript in <script> tags at end of body
-3. Google Fonts linked in head
-4. All sections complete and functional
-5. Real placeholder images from Unsplash
-6. Placeholder text matching business type (not lorem ipsum)
-7. Working navigation links (anchor links)
-8. Mobile responsive design
-
----
-
-### BUSINESS TYPE CUSTOMIZATION
-
-Home Services (cleaning, landscaping, HVAC, plumbing):
-- Before/after imagery
-- "Licensed & Insured" badges
-- Emergency service availability
-- Service area map
-
-Health & Wellness (spa, salon, massage, fitness):
-- Calming, luxurious imagery
-- Online booking prominent
-- Service menu with pricing
-- Team/practitioner profiles
-
-Professional Services (consulting, legal, financial):
-- Professional headshots
-- Credentials/certifications
-- Case studies or results
-- Consultation booking
-
-Automotive (detailing, repair, towing):
-- Action shots of services
-- Pricing packages
-- Fleet/commercial services
-- Location/hours prominent
-
-Food & Hospitality (catering, restaurants):
-- High-quality food photography
-- Menus/packages
-- Event booking
-- Dietary accommodations
-
----
-
-### QUALITY CHECKLIST
-
-Verify:
-- All navigation links work
-- CTA buttons are prominent and high-contrast
-- Mobile responsive (test at 375px width)
-- Images have alt text
-- Contact information is visible
-- Booking/CTA is easy to find
-- Typography is readable
-- Consistent spacing throughout
-- No horizontal scroll on mobile
-- Forms have proper labels
-- Professional, cohesive visual design
-
----
-
-Now generate a website for: ${businessName}
-Business Type: ${businessType}
-Services: ${services}
-Description: ${description}
-
-Return ONLY the complete HTML code. No markdown, no explanations, just the HTML starting with <!DOCTYPE html>.`
+          content: prompt
         }]
       })
     });
@@ -1984,46 +1851,35 @@ Return ONLY the complete HTML code. No markdown, no explanations, just the HTML 
     }
 
     const data = await response.json();
-    console.log('✅ API Response received');
-    console.log('Content blocks:', data.content?.length);
-
     const htmlContent = data.content?.[0]?.text;
     
-    console.log('📏 Raw HTML length:', htmlContent?.length);
-    console.log('🔍 Starts with DOCTYPE?', htmlContent?.startsWith('<!DOCTYPE'));
-    console.log('🔍 Contains ```html?', htmlContent?.includes('```html'));
-    console.log('🔍 First 300 chars:', htmlContent?.substring(0, 300));
-    
     if (!htmlContent) {
-      console.error('❌ No HTML content in response:', data);
-      return res.status(500).json({ error: 'No content generated', details: 'API returned empty response' });
+      console.error('❌ No HTML content in response');
+      return res.status(500).json({ error: 'No content generated' });
     }
 
-    // Clean up any markdown formatting that Claude might add
-    let cleanHtml = htmlContent.trim();
-
-    // Remove markdown code blocks if present
-    if (cleanHtml.includes('```html')) {
-      cleanHtml = cleanHtml.replace(/```html\n?/g, '').replace(/```\n?$/g, '');
-      console.log('🧹 Removed markdown code blocks');
-    }
-
-    // Remove any remaining triple backticks
-    cleanHtml = cleanHtml.replace(/```/g, '');
-
-    // Verify HTML starts correctly
-    if (!cleanHtml.startsWith('<!DOCTYPE')) {
-      console.warn('⚠️ HTML does not start with DOCTYPE');
-      console.log('First 100 chars:', cleanHtml.substring(0, 100));
-    }
+    // Clean up markdown formatting
+    let cleanHtml = htmlContent.trim()
+      .replace(/```html\n?/g, '')
+      .replace(/```\n?$/g, '')
+      .replace(/```/g, '');
 
     console.log('✅ HTML generated, length:', cleanHtml.length);
-    console.log('✅ Preview (first 200 chars):', cleanHtml.substring(0, 200));
+    console.log('✅ Used real data:', {
+      services: servicesInfo.hasData,
+      hours: hoursInfo.hasData,
+      team: teamInfo.hasData
+    });
 
     res.json({ 
       success: true, 
       html: cleanHtml,
-      businessName
+      businessName,
+      usedRealData: {
+        services: servicesInfo.hasData,
+        hours: hoursInfo.hasData,
+        team: teamInfo.hasData
+      }
     });
 
   } catch (error) {
@@ -2031,8 +1887,6 @@ Return ONLY the complete HTML code. No markdown, no explanations, just the HTML 
     res.status(500).json({ error: 'Server error', message: error.message });
   }
 });
-
-console.log('✅ Generate endpoint loaded');
 
 // ============================================
 // AUTHENTICATION ENDPOINTS
@@ -2558,6 +2412,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
