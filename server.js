@@ -2651,7 +2651,47 @@ ${ownerName ? `**Owner:** ${ownerName}` : ''}
 
 ---
 
-### SERVICES DATA
+### IMAGES AND VISUAL CONTENT
+
+**CRITICAL: Use high-quality, relevant images throughout the website**
+
+**Image Sources:**
+- Use Unsplash for all images: \`https://source.unsplash.com/\`
+- All images must be relevant to ${businessType} services
+- Use specific search terms for better results
+
+**Required Images:**
+1. **Hero Section**: Large banner image
+   - \`https://source.unsplash.com/1600x900/?${businessType.toLowerCase().replace(/\s+/g, '-')},business\`
+   
+2. **Service Cards**: Each service needs an image
+   - Format: \`https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},service\`
+   - Vary the search terms for each service (e.g., "plumbing-repair", "plumbing-installation")
+   
+3. **About/Why Choose Us**: Professional business image
+   - \`https://source.unsplash.com/1200x800/?team,professional,business\`
+
+4. **Testimonials**: Use icon placeholders or initials
+   - Don't use fake profile photos
+
+**Image HTML Structure:**
+\`\`\`html
+<div class="service-card">
+  <div class="service-image">
+    <img src="https://source.unsplash.com/800x600/?plumbing,repair" 
+         alt="Service Name" 
+         loading="lazy"
+         style="width: 100%; height: 250px; object-fit: cover;">
+  </div>
+  <div class="service-content">
+    <!-- Content here -->
+  </div>
+</div>
+\`\`\`
+
+---
+
+
 
 ${servicesInfo.services}
 
@@ -2853,13 +2893,35 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
 
 ### HOME PAGE
 
-Keep existing structure:
-- Hero section (full-screen)
-- Trust bar
-- Featured services (3-4 cards with "Book This Service" → ${bookingUrl})
-- Why Choose Us
-- Customer reviews
-- Final CTA
+**CRITICAL: Include high-quality images from Unsplash**
+
+**Hero Section** - Full-screen with background image:
+\`\`\`html
+<section class="hero" style="background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('https://source.unsplash.com/1600x900/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional') center/cover; min-height: 100vh;">
+  <h1>${businessName}</h1>
+  <p>Professional ${businessType} Services</p>
+  <a href="${bookingUrl}" target="_blank" class="btn-primary">Book Service Now</a>
+</section>
+\`\`\`
+
+**Trust Bar** - Badges/stats
+
+**Featured Services (3-4 Cards)** - MUST include images:
+\`\`\`html
+<div class="service-card">
+  <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase()},service" alt="Service" style="width:100%; height:250px; object-fit:cover;">
+  <h3>Service Name</h3>
+  <p>Description</p>
+  <div class="price">$99 • 2 hours</div>
+  <a href="${bookingUrl}" target="_blank" class="btn-book">Book This Service</a>
+</div>
+\`\`\`
+
+**Why Choose Us** - Professional reasons
+
+**Customer Reviews** - Testimonials with star ratings
+
+**Final CTA** - Large booking button
 
 ---
 
@@ -2876,7 +2938,15 @@ Keep existing structure:
     <div class="container">
       <div class="services-grid">
         ${servicesInfo.hasData ? `<!-- ${userServices.length} service cards with REAL data -->` : '<!-- 3-6 service cards -->'}
-        <!-- Each card: image, name, description, features list, price, "Book This Service" button → ${bookingUrl} -->
+        <!-- EACH SERVICE CARD MUST INCLUDE:
+             <div class="service-card">
+               <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase()},work" style="width:100%; height:300px; object-fit:cover;">
+               <h3>Service Name</h3>
+               <p>Description</p>
+               <div class="price">$99 • 2hr</div>
+               <a href="${bookingUrl}" target="_blank" class="btn-book">Book This Service</a>
+             </div>
+        -->
       </div>
     </div>
   </section>
@@ -3671,6 +3741,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
