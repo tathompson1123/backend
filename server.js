@@ -2636,23 +2636,52 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
     // ============================================
     // BUILD THE PROMPT
     // ============================================
-    const prompt = `You are a SENIOR WEB DESIGNER creating a STUNNING, PROFESSIONAL multi-page website.
+    const prompt = `You are an AWARD-WINNING WEB DESIGNER creating a WORLD-CLASS, PREMIUM website for a SERVICE-BASED BUSINESS.
+
+**DESIGN PHILOSOPHY FOR SERVICE BUSINESSES:**
+Create a website that looks PROFESSIONAL, TRUSTWORTHY, and PREMIUM. Service businesses deserve beautiful design that builds credibility and converts visitors into customers.
 
 **CRITICAL SUCCESS CRITERIA:**
-1. Website MUST include HIGH-QUALITY IMAGES throughout
-2. Design must be MODERN, POLISHED, and PROFESSIONAL
-3. Every service card MUST have an image
-4. Hero section MUST have a background image
-5. Use REAL Unsplash image URLs - NOT placeholders
-6. Make it VISUALLY IMPRESSIVE
+1. Website MUST look PROFESSIONAL and CREDIBLE - emphasize trust and expertise
+2. Use HIGH-QUALITY, RELEVANT photography - show your work, team, and results
+3. Include SMOOTH ANIMATIONS and MODERN TRANSITIONS - polished but not distracting
+4. Premium elements: gradients, clean shadows, glass effects, professional polish
+5. TRUST INDICATORS throughout - certifications, experience, reviews, guarantees
+6. Bold professional typography - strong headlines, readable body text
+7. Strategic white space - organized, clean, not cluttered
+8. Make it look like a $15,000 professionally designed service business website
+
+**SERVICE BUSINESS DESIGN ELEMENTS:**
+- Professional hero sections with team/work imagery
+- Before/After showcases (where applicable)
+- Trust badges (licensed, insured, certified, years in business)
+- Customer testimonials with star ratings
+- Step-by-step process explanations
+- Service cards with clear pricing and descriptions
+- Team photos showing professionalism
+- Service area information
+- Emergency/same-day service callouts (if applicable)
+- Multiple contact methods (phone, email, booking)
+- Clear guarantees and policies
+
+**MODERN SERVICE WEB DESIGN:**
+- Gradient backgrounds and buttons
+- Glass morphism cards (backdrop-filter: blur)
+- Smooth hover effects on all interactive elements
+- Fade-in animations on scroll
+- Parallax effects on hero section
+- Premium shadows and borders
+- Color schemes matching business type (blue=trust, green=eco, black/gold=luxury)
+- Animated statistics counters
+- Responsive mobile-first design
 
 Create a **SINGLE HTML FILE** with **MULTIPLE PAGES** using JavaScript navigation.
 
 **REQUIRED PAGES:**
-1. Home (index)
-2. Services
-3. Gift Cards
-4. Contact
+1. Home (comprehensive business showcase with trust elements)
+2. Services (detailed service offerings with pricing and images)
+3. Gift Cards (professional gift card program)
+4. Contact (complete business information and easy booking)
 
 All pages accessible via navigation, content switches dynamically without page reload.
 
@@ -2678,54 +2707,142 @@ ${uniqueSellingPoints}` : ''}
 
 ---
 
+### PREMIUM DESIGN SYSTEM
+
+**Color Scheme Based on Business Type:**
+${businessType.toLowerCase().includes('auto') || businessType.toLowerCase().includes('detail') ? 
+  'Premium Auto: Primary #000000 (black), Secondary #FFD700 (gold), Accent #DC143C (crimson), Background gradients from #1a1a1a to #000000' :
+  businessType.toLowerCase().includes('land') ? 
+  'Nature Luxury: Primary #047857 (emerald), Secondary #fbbf24 (amber), Accent #16a34a (green), Background gradients from #ecfdf5 to #d1fae5' :
+  businessType.toLowerCase().includes('plumb') ? 
+  'Professional Blue: Primary #1e40af (royal blue), Secondary #0ea5e9 (sky), Accent #f97316 (orange), Background gradients from #eff6ff to #dbeafe' :
+  businessType.toLowerCase().includes('clean') ? 
+  'Fresh Clean: Primary #06b6d4 (cyan), Secondary #a855f7 (purple), Accent #10b981 (emerald), Background gradients from #ecfeff to #cffafe' :
+  businessType.toLowerCase().includes('hvac') ? 
+  'Climate Control: Primary #dc2626 (red), Secondary #3b82f6 (blue), Accent #f59e0b (amber), Background gradients from #fee2e2 to #dbeafe' :
+  businessType.toLowerCase().includes('salon') || businessType.toLowerCase().includes('spa') ?
+  'Beauty Luxury: Primary #ec4899 (pink), Secondary #a855f7 (purple), Accent #f472b6 (rose), Background gradients from #fdf2f8 to #fae8ff' :
+  'Modern Professional: Primary #2563eb (blue), Secondary #10b981 (emerald), Accent #f59e0b (amber), Background gradients from #eff6ff to #f0fdf4'}
+
+**Premium CSS Framework:**
+\`\`\`css
+/* Premium Gradients */
+.gradient-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glass Morphism */
+.glass-card {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  padding: 2rem;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* Premium Shadows */
+.premium-shadow {
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 
+              0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Smooth Animations */
+.fade-in {
+  animation: fadeInUp 0.8s ease forwards;
+  opacity: 0;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hover Effects */
+.hover-lift {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.2);
+}
+
+/* Premium Buttons */
+.btn-premium {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  border: none;
+  padding: 1rem 2.5rem;
+  border-radius: 50px;
+  color: white;
+  font-weight: 700;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-premium::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  transition: left 0.5s ease;
+}
+
+.btn-premium:hover::before {
+  left: 100%;
+}
+
+.btn-premium:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+}
+\`\`\`
+
+---
+
 ### IMAGES AND VISUAL CONTENT - EXTREMELY IMPORTANT
 
 **YOU MUST INCLUDE IMAGES - THIS IS CRITICAL**
 
-Every section MUST have images. A website without images looks unprofessional and incomplete.
+Every section MUST have images. Use high-quality, relevant Unsplash images throughout.
 
 **Image Sources:**
 - Use Unsplash: \`https://source.unsplash.com/[width]x[height]/?[search-terms]\`
 - Search terms MUST match ${businessType}
 - Examples:
-  * Hero: \`https://source.unsplash.com/1600x900/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,service\`
-  * Service: \`https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},work,tools\`
+  * Hero: \`https://source.unsplash.com/1600x900/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,premium\`
+  * Service: \`https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},work,quality\`
+  * Team: \`https://source.unsplash.com/1200x800/?team,professional,business\`
 
 **REQUIRED Images (DO NOT SKIP):**
 
-1. **Hero Section Background** - MANDATORY
-   \`\`\`html
-   <section class="hero" style="
-     background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), 
-                 url('https://source.unsplash.com/1600x900/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,business') center/cover;
-     min-height: 100vh;
-   ">
-   \`\`\`
-   
-2. **Service Cards** - MANDATORY for EACH service
-   \`\`\`html
-   <div class="service-card">
-     <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},service,work" 
-          alt="Service Name" 
-          style="width: 100%; height: 250px; object-fit: cover; border-radius: 12px;">
-     <h3>Service Name</h3>
-     <p>Description</p>
-   </div>
-   \`\`\`
-   
-3. **About/Why Choose Us Section** - MANDATORY
-   \`\`\`html
-   <img src="https://source.unsplash.com/1200x800/?team,professional,${businessType.toLowerCase().replace(/\s+/g, '-')}" 
-        alt="Our Team"
-        style="width: 100%; height: 400px; object-fit: cover; border-radius: 12px;">
-   \`\`\`
-
-**Image Requirements:**
-- Hero MUST have background image
-- Each service card MUST have an image
-- About section MUST have an image
-- Use inline styles: width: 100%; height: [size]px; object-fit: cover;
-- Round corners with border-radius: 12px;
+1. **Hero Section Background** - MANDATORY with parallax effect
+2. **Service Cards** - MANDATORY for EACH service with hover zoom
+3. **About/Why Choose Us** - MANDATORY with side-by-side layout
+4. **Team Section** - Professional business image
+5. **Testimonials Background** - Subtle overlay image
+6. **Call-to-Action Sections** - Background images with gradients
 
 ---
 
@@ -2929,37 +3046,242 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
 
 ---
 
-### HOME PAGE
+### HOME PAGE - COMPREHENSIVE SHOWCASE
 
-**CRITICAL: Include high-quality images from Unsplash**
+**MUST INCLUDE ALL THESE SECTIONS IN ORDER:**
 
-**Hero Section** - Full-screen with background image:
+**1. Hero Section** - Full-screen with parallax background
 \`\`\`html
-<section class="hero" style="background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('https://source.unsplash.com/1600x900/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional') center/cover; min-height: 100vh;">
-  <h1>${businessName}</h1>
-  <p>Professional ${businessType} Services</p>
-  <a href="${bookingUrl}" target="_blank" class="btn-primary">Book Service Now</a>
+<section class="hero" style="
+  position: relative;
+  background: linear-gradient(135deg, rgba(0,0,0,0.7), rgba(0,0,0,0.5)), 
+              url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,premium') center/cover fixed;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  text-align: center;
+">
+  <div class="hero-content fade-in">
+    <h1 style="font-size: 4rem; font-weight: 900; margin-bottom: 1rem; text-shadow: 2px 2px 20px rgba(0,0,0,0.5);">
+      ${businessName}
+    </h1>
+    ${tagline ? `<p class="gradient-text" style="font-size: 2rem; font-weight: 700; margin-bottom: 1rem;">${tagline}</p>` : ''}
+    <p style="font-size: 1.5rem; margin-bottom: 3rem; max-width: 700px; margin-left: auto; margin-right: auto;">
+      ${description || `Professional ${businessType} Services - Excellence You Can Trust`}
+    </p>
+    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+      <a href="${bookingUrl}" target="_blank" class="btn-premium">Book Now</a>
+      <a href="#services" class="btn-secondary">Our Services</a>
+    </div>
+  </div>
 </section>
 \`\`\`
 
-**Trust Bar** - Badges/stats
-
-**Featured Services (3-4 Cards)** - MUST include images:
+**2. Trust Bar / Stats Section** - Animated counters
 \`\`\`html
-<div class="service-card">
-  <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase()},service" alt="Service" style="width:100%; height:250px; object-fit:cover;">
-  <h3>Service Name</h3>
-  <p>Description</p>
-  <div class="price">$99 • 2 hours</div>
-  <a href="${bookingUrl}" target="_blank" class="btn-book">Book This Service</a>
-</div>
+<section class="trust-bar" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); padding: 3rem 0; color: white;">
+  <div class="container">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; text-align: center;">
+      ${yearsInBusiness ? `
+      <div class="stat-item fade-in">
+        <div style="font-size: 3rem; font-weight: 900;">${yearsInBusiness}+</div>
+        <div style="font-size: 1.2rem; opacity: 0.9;">Years Experience</div>
+      </div>` : ''}
+      <div class="stat-item fade-in">
+        <div style="font-size: 3rem; font-weight: 900;">5,000+</div>
+        <div style="font-size: 1.2rem; opacity: 0.9;">Happy Customers</div>
+      </div>
+      <div class="stat-item fade-in">
+        <div style="font-size: 3rem; font-weight: 900;">100%</div>
+        <div style="font-size: 1.2rem; opacity: 0.9;">Satisfaction Rate</div>
+      </div>
+      ${certifications ? `
+      <div class="stat-item fade-in">
+        <div style="font-size: 3rem; font-weight: 900;">✓</div>
+        <div style="font-size: 1.2rem; opacity: 0.9;">Licensed & Insured</div>
+      </div>` : ''}
+    </div>
+  </div>
+</section>
 \`\`\`
 
-**Why Choose Us** - Professional reasons
+**3. Featured Services** - Premium cards with images and hover effects
+\`\`\`html
+<section class="featured-services" style="padding: 6rem 0; background: linear-gradient(to bottom, #f9fafb, #ffffff);">
+  <div class="container">
+    <div style="text-align: center; margin-bottom: 4rem;">
+      <h2 class="gradient-text" style="font-size: 3rem; font-weight: 900; margin-bottom: 1rem;">Our Premium Services</h2>
+      <p style="font-size: 1.3rem; color: #6b7280; max-width: 600px; margin: 0 auto;">
+        Professional ${businessType} solutions tailored to your needs
+      </p>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem;">
+      <!-- Create 3-4 service cards with REAL images -->
+      <div class="service-card premium-shadow hover-lift" style="background: white; border-radius: 20px; overflow: hidden; transition: all 0.4s ease;">
+        <div style="overflow: hidden; height: 280px;">
+          <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},service,professional" 
+               alt="Service"
+               style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease;"
+               onmouseover="this.style.transform='scale(1.1)'"
+               onmouseout="this.style.transform='scale(1)'">
+        </div>
+        <div style="padding: 2rem;">
+          <h3 style="font-size: 1.8rem; font-weight: 800; margin-bottom: 1rem;">Service Name</h3>
+          <p style="color: #6b7280; margin-bottom: 1.5rem; line-height: 1.6;">Detailed description of the service and what it includes.</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <span style="font-size: 1.5rem; font-weight: 900; color: var(--primary);">$99</span>
+            <span style="color: #6b7280;">2 hours</span>
+          </div>
+          <a href="${bookingUrl}" target="_blank" class="btn-premium" style="display: block; text-align: center; text-decoration: none;">Book This Service</a>
+        </div>
+      </div>
+      <!-- Repeat for 2-3 more services -->
+    </div>
+    
+    <div style="text-align: center; margin-top: 3rem;">
+      <a href="#services" class="btn-secondary">View All Services</a>
+    </div>
+  </div>
+</section>
+\`\`\`
 
-**Customer Reviews** - Testimonials with star ratings
+**4. Why Choose Us** - Image + Benefits with icons
+\`\`\`html
+<section class="why-choose" style="padding: 6rem 0; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);">
+  <div class="container">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
+      <div>
+        <img src="https://source.unsplash.com/1200x800/?${businessType.toLowerCase().replace(/\s+/g, '-')},team,professional,business" 
+             alt="Why Choose Us"
+             class="premium-shadow"
+             style="width: 100%; height: 500px; object-fit: cover; border-radius: 20px;">
+      </div>
+      <div>
+        <h2 style="font-size: 3rem; font-weight: 900; margin-bottom: 2rem;">Why Choose ${businessName}?</h2>
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+          ${uniqueSellingPoints ? uniqueSellingPoints.split('\n').filter(p => p.trim()).map(point => `
+          <div class="glass-card" style="display: flex; gap: 1rem; align-items: start;">
+            <div style="font-size: 2rem;">✓</div>
+            <div>
+              <h4 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 0.5rem;">${point.replace(/[•\-]/g, '').trim()}</h4>
+              <p style="color: #6b7280;">Premium quality service you can rely on.</p>
+            </div>
+          </div>
+          `).join('') : `
+          <div class="glass-card" style="display: flex; gap: 1rem;">
+            <div style="font-size: 2rem;">✓</div>
+            <div>
+              <h4 style="font-size: 1.3rem; font-weight: 700;">Expert Technicians</h4>
+              <p style="color: #6b7280;">Certified professionals with years of experience</p>
+            </div>
+          </div>
+          <div class="glass-card" style="display: flex; gap: 1rem;">
+            <div style="font-size: 2rem;">✓</div>
+            <div>
+              <h4 style="font-size: 1.3rem; font-weight: 700;">Quality Guaranteed</h4>
+              <p style="color: #6b7280;">100% satisfaction or your money back</p>
+            </div>
+          </div>
+          <div class="glass-card" style="display: flex; gap: 1rem;">
+            <div style="font-size: 2rem;">✓</div>
+            <div>
+              <h4 style="font-size: 1.3rem; font-weight: 700;">Fast Response</h4>
+              <p style="color: #6b7280;">Same-day service available for emergencies</p>
+            </div>
+          </div>
+          `}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+\`\`\`
 
-**Final CTA** - Large booking button
+**5. Process / How It Works** - Step-by-step visual
+\`\`\`html
+<section class="process" style="padding: 6rem 0; background: white;">
+  <div class="container">
+    <div style="text-align: center; margin-bottom: 4rem;">
+      <h2 class="gradient-text" style="font-size: 3rem; font-weight: 900;">How It Works</h2>
+      <p style="font-size: 1.3rem; color: #6b7280;">Simple, fast, and hassle-free</p>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
+      <div style="text-align: center;" class="fade-in">
+        <div style="width: 100px; height: 100px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2.5rem; font-weight: 900; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">1</div>
+        <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">Book Online</h3>
+        <p style="color: #6b7280;">Choose your service and preferred time slot</p>
+      </div>
+      <div style="text-align: center;" class="fade-in">
+        <div style="width: 100px; height: 100px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2.5rem; font-weight: 900; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">2</div>
+        <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">We Arrive</h3>
+        <p style="color: #6b7280;">Professional team shows up on time</p>
+      </div>
+      <div style="text-align: center;" class="fade-in">
+        <div style="width: 100px; height: 100px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2.5rem; font-weight: 900; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">3</div>
+        <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">Get It Done</h3>
+        <p style="color: #6b7280;">Quality service completed to perfection</p>
+      </div>
+      <div style="text-align: center;" class="fade-in">
+        <div style="width: 100px; height: 100px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2.5rem; font-weight: 900; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">4</div>
+        <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">Enjoy Results</h3>
+        <p style="color: #6b7280;">Love your results or we'll make it right</p>
+      </div>
+    </div>
+  </div>
+</section>
+\`\`\`
+
+**6. Customer Testimonials** - Premium review cards
+\`\`\`html
+<section class="testimonials" style="
+  padding: 6rem 0;
+  background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), 
+              url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},satisfied,customer') center/cover fixed;
+  color: white;
+">
+  <div class="container">
+    <div style="text-align: center; margin-bottom: 4rem;">
+      <h2 style="font-size: 3rem; font-weight: 900; margin-bottom: 1rem;">What Our Clients Say</h2>
+      <p style="font-size: 1.3rem; opacity: 0.9;">Real reviews from real customers</p>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem;">
+      <div class="glass-card">
+        <div style="color: #fbbf24; font-size: 1.5rem; margin-bottom: 1rem;">★★★★★</div>
+        <p style="font-size: 1.1rem; line-height: 1.8; margin-bottom: 1.5rem; font-style: italic;">
+          "Absolutely outstanding service! Professional, courteous, and the quality exceeded our expectations. Highly recommend!"
+        </p>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <div style="width: 50px; height: 50px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.5rem;">JD</div>
+          <div>
+            <div style="font-weight: 700;">John Davis</div>
+            <div style="opacity: 0.7; font-size: 0.9rem;">Homeowner</div>
+          </div>
+        </div>
+      </div>
+      <!-- Add 2 more testimonials -->
+    </div>
+  </div>
+</section>
+\`\`\`
+
+**7. Final CTA** - Bold call-to-action
+\`\`\`html
+<section class="final-cta" style="padding: 6rem 0; background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%); color: white; text-align: center;">
+  <div class="container">
+    <h2 style="font-size: 3.5rem; font-weight: 900; margin-bottom: 1rem;">Ready to Get Started?</h2>
+    <p style="font-size: 1.5rem; margin-bottom: 3rem; opacity: 0.95;">Book your service today and experience the difference</p>
+    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+      <a href="${bookingUrl}" target="_blank" class="btn-premium" style="background: white; color: var(--primary);">Book Now</a>
+      <a href="tel:${phoneNumberClean}" class="btn-secondary" style="background: rgba(255,255,255,0.2); color: white; border: 2px solid white;">Call ${phoneNumber}</a>
+    </div>
+  </div>
+</section>
+\`\`\`
 
 ---
 
@@ -3779,6 +4101,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
