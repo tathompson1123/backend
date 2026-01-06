@@ -2059,11 +2059,8 @@ app.get('/api/availability', async (req, res) => {
 // AI WEBSITE GENERATION ENDPOINT
 // ============================================
 
-// COMPLETE IMPROVED /api/generate ENDPOINT
-// This fetches user's actual data (services, hours, team) and uses it in generation
-// Falls back to placeholders if no data exists
-
-// Replace your entire /api/generate endpoint in server.js with this code:
+// COMPLETE IMPROVED /api/generate ENDPOINT WITH BOOKING SYSTEM INTEGRATION
+// This version automatically adds working booking links to generated websites
 
 app.post('/api/generate', async (req, res) => {
   try {
@@ -2089,28 +2086,24 @@ app.post('/api/generate', async (req, res) => {
 
     if (userId) {
       try {
-        // Fetch services
         const servicesResult = await pool.query(
           'SELECT * FROM services WHERE user_id = $1 AND active = true ORDER BY name',
           [userId]
         );
         userServices = servicesResult.rows;
 
-        // Fetch business hours
         const hoursResult = await pool.query(
           'SELECT * FROM business_hours WHERE user_id = $1 ORDER BY day_of_week',
           [userId]
         );
         userBusinessHours = hoursResult.rows;
 
-        // Fetch employees
         const employeesResult = await pool.query(
           'SELECT name FROM employees WHERE user_id = $1 AND active = true ORDER BY name LIMIT 10',
           [userId]
         );
         userEmployees = employeesResult.rows;
 
-        // Fetch user/business info
         const userResult = await pool.query(
           'SELECT business_name, name, email FROM users WHERE id = $1',
           [userId]
@@ -2124,7 +2117,6 @@ app.post('/api/generate', async (req, res) => {
         });
       } catch (error) {
         console.error('⚠️ Error fetching user data:', error);
-        // Continue anyway - will use placeholders
       }
     }
 
@@ -2191,6 +2183,12 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
     const contactEmail = userBusinessInfo?.email || 'contact@example.com';
     const ownerName = userBusinessInfo?.name || null;
 
+    // DETERMINE BOOKING URL
+    const bookingUrl = userId 
+      ? `${process.env.FRONTEND_URL || 'http://localhost:5173'}/book/${userId}`
+      : '#';
+
+    console.log('🔗 Booking URL:', bookingUrl);
     console.log('📊 Data status:', {
       services: servicesInfo.hasData ? 'Using real data' : 'Using placeholders',
       hours: hoursInfo.hasData ? 'Using real data' : 'Using placeholders',
@@ -2199,8 +2197,26 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
 
     console.log('📡 Calling Anthropic API...');
 
-    // BUILD THE PROMPT
+    // BUILD THE PROMPT WITH BOOKING INTEGRATION
     const prompt = `You are a senior web designer creating an ultra-professional, conversion-optimized website for a service business.
+
+### CRITICAL BOOKING SYSTEM INTEGRATION
+
+**BOOKING URL:** ${bookingUrl}
+
+**IMPORTANT INSTRUCTIONS FOR BOOKING LINKS:**
+1. ALL "Book Now", "Book Online", "Get Free Quote", and "Schedule Service" buttons MUST link to: ${bookingUrl}
+2. Each service card's "Learn More" or "Book This Service" button MUST link to: ${bookingUrl}
+3. The navigation "Book Now" button MUST link to: ${bookingUrl}
+4. The final CTA section button MUST link to: ${bookingUrl}
+5. Use target="_blank" to open booking page in new tab
+
+**Button Example:**
+\`\`\`html
+<a href="${bookingUrl}" target="_blank" class="btn-primary">Book Now</a>
+\`\`\`
+
+---
 
 ### BUSINESS INFORMATION
 
@@ -2232,88 +2248,183 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n${teamInfo.instruction}\n\n--
 
 ### REQUIRED SECTIONS (IN ORDER)
 
-1. **Navigation Header** - Sticky, logo left, nav center, "Book Now" CTA right
-2. **Hero Section** - Full-screen with ${businessType} background image, headline, dual CTAs
-3. **Trust Bar** - 4 trust indicators (500+ customers, Licensed, etc.)
-4. **Services Section** - ${servicesInfo.hasData ? `${userServices.length} cards using EXACT data above` : '3 service cards with placeholder pricing'}
-5. **Why Choose Us** - 6 features in grid
-6. **Reviews** - 3 customer testimonials with ★★★★★
-7. **Final CTA** - Dark section with "Get Free Quote" button
-8. **Footer** - About, Links, Contact (with EXACT hours above), Social
+1. **Navigation Header** - Logo left, nav center, "Book Now" button (links to ${bookingUrl})
+2. **Hero Section** - Large "Book Service Now" button (links to ${bookingUrl})
+3. **Trust Bar** - 4 trust indicators
+4. **Services Section** - Each card has "Book This Service" button (links to ${bookingUrl})
+5. **Why Choose Us** - 6 features
+6. **Reviews** - 3 testimonials
+7. **Final CTA** - Large "Schedule Your Service" button (links to ${bookingUrl})
+8. **Footer** - Contact info with booking link
 
 ---
 
-### CRITICAL DESIGN REQUIREMENTS
+### CRITICAL REQUIREMENTS FOR SERVICE CARDS
 
-**Hero Section:**
+Each service card MUST include:
+1. Service name (from data above)
+2. Service description
+3. Price (from data above)
+4. Duration (from data above)
+5. **"Book This Service" button that links to: ${bookingUrl}**
+
+**Service Card Example:**
+\`\`\`html
+<div class="service-card">
+  <img src="..." alt="Service Name">
+  <h3>Service Name</h3>
+  <p>Service description here...</p>
+  <div class="price">$99.00 • 2 hours</div>
+  <a href="${bookingUrl}" target="_blank" class="btn-book">Book This Service</a>
+</div>
+\`\`\`
+
+---
+
+### BUTTON STYLING REQUIREMENTS
+
+**Primary CTA Buttons (Book Now):**
+\`\`\`css
+.btn-primary, .btn-book {
+  display: inline-block;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+}
+
+.btn-primary:hover, .btn-book:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
+}
+\`\`\`
+
+---
+
+### HERO SECTION WITH BOOKING
+
+**Requirements:**
 - Full viewport height (100vh)
-- Unsplash background showing ${businessType} work in action
-- Dark gradient overlay: linear-gradient(135deg, rgba(0,0,0,0.7), rgba(0,0,0,0.4))
-- White text with text-shadow
-- Large headline (64px desktop, 40px mobile)
-- Dual CTAs side-by-side
+- Background: Unsplash image of ${businessType} work
+- Dark gradient overlay
+- Centered content
+- Large headline
+- Subheadline
+- **TWO prominent CTAs:**
+  1. "Book Service Now" → ${bookingUrl}
+  2. "Call (555) 123-4567" → tel:5551234567
 
-**Services Cards:**
-${servicesInfo.hasData ? `
-Create exactly ${userServices.length} cards, one for each service listed above.
-Use the EXACT service names and prices provided.
-` : `
-Create 3 professional service cards with:
-- Service name relevant to ${businessType}
-- 2-3 sentence description
-- Placeholder pricing
-`}
-- Each card: image (4:3), white bg, shadow, hover effect
-- 3-column grid (1 column mobile)
-- Images from Unsplash showing ${businessType} work
+**Hero Example:**
+\`\`\`html
+<section class="hero">
+  <div class="hero-content">
+    <h1>Professional ${businessType} Services</h1>
+    <p>Quality work, transparent pricing, satisfaction guaranteed</p>
+    <div class="hero-cta">
+      <a href="${bookingUrl}" target="_blank" class="btn-primary btn-large">
+        Book Service Now
+      </a>
+      <a href="tel:5551234567" class="btn-secondary btn-large">
+        Call (555) 123-4567
+      </a>
+    </div>
+  </div>
+</section>
+\`\`\`
 
-**Footer Contact Section:**
-Display these EXACT hours:
-${hoursInfo.hours}
+---
 
-**Color Scheme:**
+### NAVIGATION WITH BOOKING
+
+**Nav Example:**
+\`\`\`html
+<nav class="navbar">
+  <div class="container">
+    <div class="logo">${businessName}</div>
+    <ul class="nav-links">
+      <li><a href="#home">Home</a></li>
+      <li><a href="#services">Services</a></li>
+      <li><a href="#reviews">Reviews</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ul>
+    <a href="${bookingUrl}" target="_blank" class="btn-nav-book">Book Now</a>
+  </div>
+</nav>
+\`\`\`
+
+---
+
+### FINAL CTA SECTION WITH BOOKING
+
+**Requirements:**
+- Dark background
+- Large headline: "Ready to Get Started?"
+- Brief value prop
+- **Prominent booking button → ${bookingUrl}**
+- Phone number as alternative
+- Business hours
+
+**CTA Example:**
+\`\`\`html
+<section class="final-cta">
+  <div class="container">
+    <h2>Ready to Get Started?</h2>
+    <p>Book your service online in minutes</p>
+    <a href="${bookingUrl}" target="_blank" class="btn-primary btn-xl">
+      Schedule Your Service
+    </a>
+    <p class="alt-contact">
+      Or call us at <a href="tel:5551234567">(555) 123-4567</a>
+    </p>
+  </div>
+</section>
+\`\`\`
+
+---
+
+### COLOR SCHEME
+
 ${businessType.toLowerCase().includes('land') ? 'Primary: #047857 (green), Accent: #fbbf24 (yellow)' :
   businessType.toLowerCase().includes('plumb') ? 'Primary: #2563eb (blue), Accent: #f97316 (orange)' :
   businessType.toLowerCase().includes('clean') ? 'Primary: #06b6d4 (cyan), Accent: #a855f7 (purple)' :
   businessType.toLowerCase().includes('hvac') ? 'Primary: #dc2626 (red), Accent: #3b82f6 (blue)' :
   'Primary: #2563eb (blue), Accent: #10b981 (green)'}
 
-**Typography:**
-- Headings: 'Montserrat', bold
-- Body: 'Inter', normal
-- Generous spacing (4rem+ between sections)
-
-**Images:**
-- Hero: Full-screen ${businessType} work in progress
-- Services: Specific to each service
-- All from Unsplash, professional quality
-- NO generic office/people posing photos
-
-**Mobile Responsive:**
-- Hamburger menu <768px
-- Stack columns
-- Reduce font sizes 30%
-- Full-width CTAs
-
 ---
 
-### OUTPUT FORMAT
+### OUTPUT REQUIREMENTS
 
 Return a SINGLE HTML file with:
-- Embedded CSS in <head>
-- JavaScript at end of <body>
-- Google Fonts ('Montserrat' and 'Inter')
-- Working anchor navigation
-- Mobile responsive
-- Smooth animations
-- Accessibility (alt text)
-- Professional, polished design
+1. All booking buttons linking to: ${bookingUrl}
+2. Embedded CSS in <head>
+3. JavaScript at end of <body>
+4. Google Fonts ('Montserrat' and 'Inter')
+5. Mobile responsive
+6. Professional design
+7. Working navigation
+8. **ALL CTAs open booking page in new tab (target="_blank")**
 
 ---
 
-### FINAL INSTRUCTION
+### FINAL CHECKLIST
 
-Create a STUNNING website that looks like a $10,000 custom design. Use the REAL data provided (${servicesInfo.hasData ? 'services' : 'placeholder services'}, ${hoursInfo.hasData ? 'hours' : 'typical hours'}). Make it conversion-optimized and professional.
+Before returning HTML, verify:
+✓ Navigation "Book Now" button links to ${bookingUrl}
+✓ Hero section CTA links to ${bookingUrl}
+✓ Each service card has booking button linking to ${bookingUrl}
+✓ Final CTA section links to ${bookingUrl}
+✓ All booking links use target="_blank"
+✓ Buttons are prominent and high-contrast
+✓ Mobile responsive
+✓ Professional appearance
+
+Create a STUNNING website with WORKING booking integration. Use REAL data where provided.
 
 Return ONLY the complete HTML starting with <!DOCTYPE html>. No markdown, no explanations.`;
 
@@ -2356,6 +2467,10 @@ Return ONLY the complete HTML starting with <!DOCTYPE html>. No markdown, no exp
       .replace(/```\n?$/g, '')
       .replace(/```/g, '');
 
+    // VERIFY BOOKING LINKS ARE PRESENT
+    const bookingLinkCount = (cleanHtml.match(new RegExp(bookingUrl, 'g')) || []).length;
+    console.log(`✅ Booking links added: ${bookingLinkCount} instances of ${bookingUrl}`);
+
     console.log('✅ HTML generated, length:', cleanHtml.length);
     console.log('✅ Used real data:', {
       services: servicesInfo.hasData,
@@ -2367,6 +2482,7 @@ Return ONLY the complete HTML starting with <!DOCTYPE html>. No markdown, no exp
       success: true, 
       html: cleanHtml,
       businessName,
+      bookingUrl,
       usedRealData: {
         services: servicesInfo.hasData,
         hours: hoursInfo.hasData,
@@ -2904,6 +3020,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
