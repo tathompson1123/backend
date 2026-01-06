@@ -2825,24 +2825,94 @@ ${businessType.toLowerCase().includes('auto') || businessType.toLowerCase().incl
 
 **YOU MUST INCLUDE IMAGES - THIS IS CRITICAL**
 
-Every section MUST have images. Use high-quality, relevant Unsplash images throughout.
+Every section MUST have images. Use high-quality, relevant images throughout.
 
-**Image Sources:**
-- Use Unsplash: \`https://source.unsplash.com/[width]x[height]/?[search-terms]\`
-- Search terms MUST match ${businessType}
+**PRIMARY Image Source - Picsum Photos (RELIABLE):**
+- Use: \`https://picsum.photos/[width]/[height]\`
+- This service is fast, reliable, and doesn't rate limit
 - Examples:
-  * Hero: \`https://source.unsplash.com/1600x900/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,premium\`
-  * Service: \`https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},work,quality\`
-  * Team: \`https://source.unsplash.com/1200x800/?team,professional,business\`
+  * Hero: \`https://picsum.photos/1600/900\`
+  * Service Card: \`https://picsum.photos/800/600\`
+  * About Section: \`https://picsum.photos/1200/800\`
 
-**REQUIRED Images (DO NOT SKIP):**
+**ALTERNATIVE - Unsplash Source (if Picsum doesn't fit):**
+- Use: \`https://source.unsplash.com/[width]x[height]/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional\`
+- Add specific keywords for better relevance
 
-1. **Hero Section Background** - MANDATORY with parallax effect
-2. **Service Cards** - MANDATORY for EACH service with hover zoom
-3. **About/Why Choose Us** - MANDATORY with side-by-side layout
-4. **Team Section** - Professional business image
-5. **Testimonials Background** - Subtle overlay image
-6. **Call-to-Action Sections** - Background images with gradients
+**BACKUP - Placeholder Images:**
+- Use: \`https://via.placeholder.com/[width]x[height]/4B5563/FFFFFF?text=Service+Image\`
+
+**IMAGE IMPLEMENTATION - MANDATORY:**
+
+1. **Hero Section Background** - MUST USE REAL IMAGE
+   \`\`\`html
+   <section class="hero" style="
+     background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
+                 url('https://picsum.photos/1920/1080') center/cover fixed;
+     min-height: 100vh;
+   ">
+   \`\`\`
+   
+2. **Service Cards** - EACH CARD MUST HAVE IMAGE
+   \`\`\`html
+   <div class="service-card">
+     <div style="overflow: hidden; height: 280px; border-radius: 12px 12px 0 0;">
+       <img src="https://picsum.photos/800/600?random=1" 
+            alt="Service Name" 
+            style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease;"
+            onmouseover="this.style.transform='scale(1.1)'"
+            onmouseout="this.style.transform='scale(1)'">
+     </div>
+     <div style="padding: 2rem;">
+       <h3>Service Name</h3>
+       <p>Description</p>
+       <a href="${bookingUrl}" class="btn-book">Book This Service</a>
+     </div>
+   </div>
+   \`\`\`
+   **IMPORTANT:** Use different random numbers for each image: ?random=1, ?random=2, ?random=3, etc.
+   
+3. **Why Choose Us / About Section** - MUST HAVE IMAGE
+   \`\`\`html
+   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem;">
+     <div>
+       <img src="https://picsum.photos/1200/800?random=10" 
+            alt="Our Team"
+            style="width: 100%; height: 500px; object-fit: cover; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
+     </div>
+     <div>
+       <!-- Content here -->
+     </div>
+   </div>
+   \`\`\`
+
+4. **Testimonials Background** - OPTIONAL BUT RECOMMENDED
+   \`\`\`html
+   <section style="
+     background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), 
+                 url('https://picsum.photos/1920/1080?random=20') center/cover fixed;
+     padding: 6rem 0;
+     color: white;
+   ">
+   \`\`\`
+
+**CRITICAL IMAGE RULES:**
+- ✅ EVERY service card MUST have an image
+- ✅ Hero section MUST have background image
+- ✅ Why Choose Us section MUST have an image
+- ✅ Use ?random=[number] to get different images
+- ✅ Set explicit width and height in style
+- ✅ Use object-fit: cover for proper scaling
+- ✅ Add border-radius for modern look
+- ✅ Include hover effects (transform: scale)
+
+**IF IMAGES DON'T LOAD:**
+The AI should automatically add onerror handlers:
+\`\`\`html
+<img src="https://picsum.photos/800/600?random=1" 
+     onerror="this.src='https://via.placeholder.com/800x600/4B5563/FFFFFF?text=Service'" 
+     alt="Service">
+\`\`\`
 
 ---
 
@@ -3055,7 +3125,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
 <section class="hero" style="
   position: relative;
   background: linear-gradient(135deg, rgba(0,0,0,0.7), rgba(0,0,0,0.5)), 
-              url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,premium') center/cover fixed;
+              url('https://picsum.photos/1920/1080?random=1') center/cover fixed;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -3122,7 +3192,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
       <!-- Create 3-4 service cards with REAL images -->
       <div class="service-card premium-shadow hover-lift" style="background: white; border-radius: 20px; overflow: hidden; transition: all 0.4s ease;">
         <div style="overflow: hidden; height: 280px;">
-          <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},service,professional" 
+          <img src="https://picsum.photos/800/600?random=2" 
                alt="Service"
                style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease;"
                onmouseover="this.style.transform='scale(1.1)'"
@@ -3154,7 +3224,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
   <div class="container">
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
       <div>
-        <img src="https://source.unsplash.com/1200x800/?${businessType.toLowerCase().replace(/\s+/g, '-')},team,professional,business" 
+        <img src="https://picsum.photos/1200/800?random=10" 
              alt="Why Choose Us"
              class="premium-shadow"
              style="width: 100%; height: 500px; object-fit: cover; border-radius: 20px;">
@@ -3240,7 +3310,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
 <section class="testimonials" style="
   padding: 6rem 0;
   background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), 
-              url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},satisfied,customer') center/cover fixed;
+              url('https://picsum.photos/1920/1080?random=20') center/cover fixed;
   color: white;
 ">
   <div class="container">
@@ -3300,7 +3370,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
         ${servicesInfo.hasData ? `<!-- ${userServices.length} service cards with REAL data -->` : '<!-- 3-6 service cards -->'}
         <!-- EACH SERVICE CARD MUST INCLUDE:
              <div class="service-card">
-               <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase()},work" style="width:100%; height:300px; object-fit:cover;">
+               <img src="https://picsum.photos/800/600?random=30" style="width:100%; height:300px; object-fit:cover; border-radius: 12px;">
                <h3>Service Name</h3>
                <p>Description</p>
                <div class="price">$99 • 2hr</div>
@@ -4101,6 +4171,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
