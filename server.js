@@ -1560,13 +1560,18 @@ app.get('/api/analytics/reviews', async (req, res) => {
   }
 });
 
+// COMPLETE BUSINESS INFORMATION & HOURS API ENDPOINTS
+// Add these to your server.js file
+
 // ============================================
 // BUSINESS HOURS ENDPOINTS
 // ============================================
 
+// GET - Fetch business hours
 app.get('/api/business-hours', async (req, res) => {
   try {
     const { userId } = req.query;
+    
     if (!userId) {
       return res.status(400).json({ error: 'userId required' });
     }
@@ -1576,55 +1581,236 @@ app.get('/api/business-hours', async (req, res) => {
       [userId]
     );
 
-    if (result.rows.length === 0) {
-      const defaults = [
-        { day_of_week: 0, is_open: false, open_time: null, close_time: null, day_name: 'Sunday' },
-        { day_of_week: 1, is_open: true, open_time: '09:00', close_time: '17:00', day_name: 'Monday' },
-        { day_of_week: 2, is_open: true, open_time: '09:00', close_time: '17:00', day_name: 'Tuesday' },
-        { day_of_week: 3, is_open: true, open_time: '09:00', close_time: '17:00', day_name: 'Wednesday' },
-        { day_of_week: 4, is_open: true, open_time: '09:00', close_time: '17:00', day_name: 'Thursday' },
-        { day_of_week: 5, is_open: true, open_time: '09:00', close_time: '17:00', day_name: 'Friday' },
-        { day_of_week: 6, is_open: true, open_time: '10:00', close_time: '14:00', day_name: 'Saturday' },
-      ];
-      return res.json({ businessHours: defaults });
-    }
-
-    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const hoursWithNames = result.rows.map(row => ({
-      ...row,
-      day_name: daysOfWeek[row.day_of_week]
-    }));
-
-    res.json({ businessHours: hoursWithNames });
+    res.json({ hours: result.rows });
   } catch (error) {
     console.error('Error fetching business hours:', error);
     res.status(500).json({ error: 'Failed to fetch business hours' });
   }
 });
 
+// POST - Save/Update business hours
 app.post('/api/business-hours', async (req, res) => {
   try {
     const { userId, hours } = req.body;
-    if (!userId || !hours || !Array.isArray(hours)) {
-      return res.status(400).json({ error: 'userId and hours array required' });
+
+    if (!userId || !hours) {
+      return res.status(400).json({ error: 'userId and hours required' });
     }
 
+    // Delete existing hours for this user
     await pool.query('DELETE FROM business_hours WHERE user_id = $1', [userId]);
 
-    for (const day of hours) {
+    // Insert new hours
+    for (const hour of hours) {
       await pool.query(
         `INSERT INTO business_hours (user_id, day_of_week, is_open, open_time, close_time)
          VALUES ($1, $2, $3, $4, $5)`,
-        [userId, day.day_of_week, day.is_open, day.open_time, day.close_time]
+        [userId, hour.day_of_week, hour.is_open, hour.open_time, hour.close_time]
       );
     }
 
-    res.json({ success: true, message: 'Business hours updated' });
+    // Fetch and return updated hours
+    const result = await pool.query(
+      'SELECT * FROM business_hours WHERE user_id = $1 ORDER BY day_of_week',
+      [userId]
+    );
+
+    res.json({ 
+      success: true,
+      hours: result.rows 
+    });
   } catch (error) {
-    console.error('Error updating business hours:', error);
-    res.status(500).json({ error: 'Failed to update business hours' });
+    console.error('Error saving business hours:', error);
+    res.status(500).json({ error: 'Failed to save business hours' });
   }
 });
+
+// ============================================
+// BUSINESS INFORMATION ENDPOINTS
+// ============================================
+
+// GET - Fetch business information
+app.get('/api/business-info', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM business_information WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      // Return empty object if no data exists yet
+      return res.json({ businessInfo: null });
+    }
+
+    res.json({ businessInfo: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching business info:', error);
+    res.status(500).json({ error: 'Failed to fetch business information' });
+  }
+});
+
+// POST - Save/Update business information
+app.post('/api/business-info', async (req, res) => {
+  try {
+    const { 
+      userId, 
+      phone, 
+      email, 
+      address, 
+      city, 
+      state, 
+      zipCode,
+      serviceAreaType,
+      serviceZipCodes,
+      serviceRadius,
+      centerZipCode
+    } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    // Check if record exists
+    const existing = await pool.query(
+      'SELECT id FROM business_information WHERE user_id = $1',
+      [userId]
+    );
+
+    let result;
+    
+    if (existing.rows.length > 0) {
+      // Update existing record
+      result = await pool.query(
+        `UPDATE business_information 
+         SET phone = $1,
+             email = $2,
+             address = $3,
+             city = $4,
+             state = $5,
+             zip_code = $6,
+             service_area_type = $7,
+             service_zip_codes = $8,
+             service_radius = $9,
+             center_zip_code = $10,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $11
+         RETURNING *`,
+        [
+          phone, 
+          email, 
+          address, 
+          city, 
+          state, 
+          zipCode,
+          serviceAreaType,
+          serviceZipCodes || [],
+          serviceRadius || 25,
+          centerZipCode,
+          userId
+        ]
+      );
+    } else {
+      // Insert new record
+      result = await pool.query(
+        `INSERT INTO business_information (
+          user_id, phone, email, address, city, state, zip_code,
+          service_area_type, service_zip_codes, service_radius, center_zip_code
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *`,
+        [
+          userId,
+          phone, 
+          email, 
+          address, 
+          city, 
+          state, 
+          zipCode,
+          serviceAreaType || 'zipcodes',
+          serviceZipCodes || [],
+          serviceRadius || 25,
+          centerZipCode
+        ]
+      );
+    }
+
+    // Also update users table phone if provided (for backward compatibility)
+    if (phone) {
+      await pool.query(
+        'UPDATE users SET phone = $1 WHERE id = $2',
+        [phone, userId]
+      );
+    }
+
+    res.json({ 
+      success: true,
+      businessInfo: result.rows[0] 
+    });
+  } catch (error) {
+    console.error('Error saving business info:', error);
+    res.status(500).json({ error: 'Failed to save business information' });
+  }
+});
+
+// GET - Check if zip code is in service area (informational only)
+app.get('/api/business-info/check-service-area', async (req, res) => {
+  try {
+    const { userId, zipCode } = req.query;
+    
+    if (!userId || !zipCode) {
+      return res.status(400).json({ error: 'userId and zipCode required' });
+    }
+
+    const result = await pool.query(
+      'SELECT service_area_type, service_zip_codes, service_radius, center_zip_code FROM business_information WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ 
+        inServiceArea: true, 
+        message: 'Service area not configured - accepting all bookings' 
+      });
+    }
+
+    const info = result.rows[0];
+
+    // Note: This is informational only - it does NOT restrict bookings
+    if (info.service_area_type === 'zipcodes') {
+      const inArea = info.service_zip_codes && info.service_zip_codes.includes(zipCode);
+      return res.json({ 
+        inServiceArea: true, // Always true since we don't restrict
+        isPrimaryArea: inArea,
+        message: inArea 
+          ? 'This is within our primary service area!' 
+          : 'We accept bookings from all locations'
+      });
+    } else if (info.service_area_type === 'radius') {
+      // For radius-based areas, always return true
+      return res.json({ 
+        inServiceArea: true,
+        isPrimaryArea: true, // Would need actual distance calculation
+        message: 'We accept bookings from all locations'
+      });
+    }
+
+    res.json({ 
+      inServiceArea: true,
+      message: 'We accept bookings from all locations'
+    });
+  } catch (error) {
+    console.error('Error checking service area:', error);
+    res.status(500).json({ error: 'Failed to check service area' });
+  }
+});
+
+console.log('✅ Business hours and information endpoints loaded');
 
 // ============================================
 // BOOKING SETTINGS ENDPOINTS
@@ -3485,6 +3671,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
