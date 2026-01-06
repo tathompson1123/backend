@@ -272,6 +272,188 @@ async function sendReviewRequest(reviewRequest) {
   }
 }
 
+// BUSINESS INFORMATION API ENDPOINTS
+// Add these to your server.js file
+
+// ============================================
+// BUSINESS INFORMATION ENDPOINTS
+// ============================================
+
+// GET - Fetch business information
+app.get('/api/business-info', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM business_information WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      // Return empty object if no data exists yet
+      return res.json({ businessInfo: null });
+    }
+
+    res.json({ businessInfo: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching business info:', error);
+    res.status(500).json({ error: 'Failed to fetch business information' });
+  }
+});
+
+// POST - Save/Update business information
+app.post('/api/business-info', async (req, res) => {
+  try {
+    const { 
+      userId, 
+      phone, 
+      email, 
+      address, 
+      city, 
+      state, 
+      zipCode,
+      serviceAreaType,
+      serviceZipCodes,
+      serviceRadius,
+      centerZipCode
+    } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    // Check if record exists
+    const existing = await pool.query(
+      'SELECT id FROM business_information WHERE user_id = $1',
+      [userId]
+    );
+
+    let result;
+    
+    if (existing.rows.length > 0) {
+      // Update existing record
+      result = await pool.query(
+        `UPDATE business_information 
+         SET phone = $1,
+             email = $2,
+             address = $3,
+             city = $4,
+             state = $5,
+             zip_code = $6,
+             service_area_type = $7,
+             service_zip_codes = $8,
+             service_radius = $9,
+             center_zip_code = $10,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $11
+         RETURNING *`,
+        [
+          phone, 
+          email, 
+          address, 
+          city, 
+          state, 
+          zipCode,
+          serviceAreaType,
+          serviceZipCodes || [],
+          serviceRadius || 25,
+          centerZipCode,
+          userId
+        ]
+      );
+    } else {
+      // Insert new record
+      result = await pool.query(
+        `INSERT INTO business_information (
+          user_id, phone, email, address, city, state, zip_code,
+          service_area_type, service_zip_codes, service_radius, center_zip_code
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *`,
+        [
+          userId,
+          phone, 
+          email, 
+          address, 
+          city, 
+          state, 
+          zipCode,
+          serviceAreaType || 'zipcodes',
+          serviceZipCodes || [],
+          serviceRadius || 25,
+          centerZipCode
+        ]
+      );
+    }
+
+    // Also update users table phone if provided (for backward compatibility)
+    if (phone) {
+      await pool.query(
+        'UPDATE users SET phone = $1 WHERE id = $2',
+        [phone, userId]
+      );
+    }
+
+    res.json({ 
+      success: true,
+      businessInfo: result.rows[0] 
+    });
+  } catch (error) {
+    console.error('Error saving business info:', error);
+    res.status(500).json({ error: 'Failed to save business information' });
+  }
+});
+
+// GET - Check if zip code is in service area
+app.get('/api/business-info/check-service-area', async (req, res) => {
+  try {
+    const { userId, zipCode } = req.query;
+    
+    if (!userId || !zipCode) {
+      return res.status(400).json({ error: 'userId and zipCode required' });
+    }
+
+    const result = await pool.query(
+      'SELECT service_area_type, service_zip_codes, service_radius, center_zip_code FROM business_information WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ inServiceArea: true, message: 'Service area not configured' });
+    }
+
+    const info = result.rows[0];
+
+    if (info.service_area_type === 'zipcodes') {
+      // Check if zip code is in the list
+      const inArea = info.service_zip_codes && info.service_zip_codes.includes(zipCode);
+      return res.json({ 
+        inServiceArea: inArea,
+        message: inArea ? 'We service your area!' : 'Sorry, we don\'t currently service this zip code'
+      });
+    } else if (info.service_area_type === 'radius') {
+      // For radius, you would need a zip code distance calculation API
+      // For now, we'll just return true as a placeholder
+      // In production, integrate with a zip code distance API
+      return res.json({ 
+        inServiceArea: true,
+        message: 'Radius-based service area (distance calculation needed)'
+      });
+    }
+
+    res.json({ inServiceArea: true });
+  } catch (error) {
+    console.error('Error checking service area:', error);
+    res.status(500).json({ error: 'Failed to check service area' });
+  }
+});
+
+console.log('✅ Business information endpoints loaded');
+
 // PUBLIC BOOKING API ENDPOINTS
 // Add these to your server.js file
 
@@ -3352,6 +3534,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
