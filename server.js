@@ -2803,8 +2803,9 @@ function selectCustom() {
           <div class="contact-item">
             <div class="icon">🗺️</div>
             <div>
-              <h3>Service Area</h3>
+              <h3>Primary Service Area</h3>
               <p>${serviceAreaText}</p>
+              <p class="text-xs mt-1 text-gray-500">We accept bookings from all locations</p>
             </div>
           </div>
           ` : ''}
@@ -3484,6 +3485,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
