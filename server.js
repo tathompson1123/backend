@@ -2241,8 +2241,8 @@ app.get('/api/availability', async (req, res) => {
 // AI WEBSITE GENERATION ENDPOINT
 // ============================================
 
-// MULTI-PAGE WEBSITE GENERATION WITH BOOKING INTEGRATION
-// This generates a complete multi-page website with navigation
+// COMPLETE /api/generate ENDPOINT WITH FULL BUSINESS INFORMATION INTEGRATION
+// Replace your entire /api/generate endpoint in server.js with this code
 
 app.post('/api/generate', async (req, res) => {
   try {
@@ -2260,52 +2260,76 @@ app.post('/api/generate', async (req, res) => {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
+    // ============================================
     // FETCH USER'S ACTUAL DATA FROM DATABASE
+    // ============================================
     let userServices = [];
     let userBusinessHours = [];
     let userEmployees = [];
     let userBusinessInfo = null;
-    let userPhone = null;
 
     if (userId) {
       try {
+        // Fetch services
         const servicesResult = await pool.query(
           'SELECT * FROM services WHERE user_id = $1 AND active = true ORDER BY name',
           [userId]
         );
         userServices = servicesResult.rows;
 
+        // Fetch business hours
         const hoursResult = await pool.query(
           'SELECT * FROM business_hours WHERE user_id = $1 ORDER BY day_of_week',
           [userId]
         );
         userBusinessHours = hoursResult.rows;
 
+        // Fetch employees
         const employeesResult = await pool.query(
           'SELECT name FROM employees WHERE user_id = $1 AND active = true ORDER BY name LIMIT 10',
           [userId]
         );
         userEmployees = employeesResult.rows;
 
-        const userResult = await pool.query(
-          'SELECT business_name, name, email, phone FROM users WHERE id = $1',
+        // Fetch business information (NEW - includes phone, email, address, service area)
+        const businessInfoResult = await pool.query(
+          `SELECT 
+            bi.*,
+            u.business_name,
+            u.name as owner_name
+           FROM business_information bi
+           LEFT JOIN users u ON bi.user_id = u.id
+           WHERE bi.user_id = $1`,
           [userId]
         );
-        userBusinessInfo = userResult.rows[0];
-        userPhone = userBusinessInfo?.phone || null;
+
+        if (businessInfoResult.rows.length > 0) {
+          userBusinessInfo = businessInfoResult.rows[0];
+        } else {
+          // Fallback to users table if business_information doesn't exist yet
+          const userResult = await pool.query(
+            'SELECT business_name, name, email, phone FROM users WHERE id = $1',
+            [userId]
+          );
+          userBusinessInfo = userResult.rows[0];
+        }
 
         console.log('✅ Fetched user data:', {
           services: userServices.length,
           businessHours: userBusinessHours.length,
           employees: userEmployees.length,
-          hasPhone: !!userPhone
+          hasPhone: !!userBusinessInfo?.phone,
+          hasAddress: !!userBusinessInfo?.address,
+          serviceAreaType: userBusinessInfo?.service_area_type
         });
       } catch (error) {
         console.error('⚠️ Error fetching user data:', error);
       }
     }
 
+    // ============================================
     // FORMAT SERVICES DATA
+    // ============================================
     const servicesInfo = userServices.length > 0 
       ? {
           hasData: true,
@@ -2322,7 +2346,9 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
           instruction: `IMPORTANT: Create 3-6 realistic ${businessType} service offerings with placeholder pricing.`
         };
 
+    // ============================================
     // FORMAT BUSINESS HOURS
+    // ============================================
     const hoursInfo = userBusinessHours.length > 0 && userBusinessHours.some(h => h.is_open)
       ? (() => {
           const daysMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -2352,6 +2378,9 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
           instruction: 'Use these typical business hours.'
         };
 
+    // ============================================
+    // FORMAT TEAM DATA
+    // ============================================
     const teamInfo = userEmployees.length > 0
       ? {
           hasData: true,
@@ -2360,22 +2389,53 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
         }
       : { hasData: false, team: null, instruction: '' };
 
+    // ============================================
+    // FORMAT BUSINESS CONTACT INFORMATION
+    // ============================================
     const contactEmail = userBusinessInfo?.email || 'contact@example.com';
-    const ownerName = userBusinessInfo?.name || null;
-    const phoneNumber = userPhone || '(555) 123-4567';
-    const phoneNumberClean = phoneNumber.replace(/\D/g, ''); // Remove non-digits for tel: link
+    const ownerName = userBusinessInfo?.owner_name || userBusinessInfo?.name || null;
+    const phoneNumber = userBusinessInfo?.phone || '(555) 123-4567';
+    const phoneNumberClean = phoneNumber.replace(/\D/g, '');
 
+    // Full address
+    const address = userBusinessInfo?.address || null;
+    const city = userBusinessInfo?.city || null;
+    const state = userBusinessInfo?.state || null;
+    const zipCode = userBusinessInfo?.zip_code || null;
+
+    const fullAddress = [address, city, state, zipCode]
+      .filter(Boolean)
+      .join(', ');
+
+    // Service area information
+    const serviceAreaType = userBusinessInfo?.service_area_type || 'zipcodes';
+    const serviceZipCodes = userBusinessInfo?.service_zip_codes || [];
+    const serviceRadius = userBusinessInfo?.service_radius || 25;
+    const centerZipCode = userBusinessInfo?.center_zip_code || zipCode;
+
+    const serviceAreaText = serviceAreaType === 'radius'
+      ? `We serve a ${serviceRadius} mile radius from ${centerZipCode || 'our location'}`
+      : serviceZipCodes.length > 0
+        ? `Service Areas: ${serviceZipCodes.slice(0, 10).join(', ')}${serviceZipCodes.length > 10 ? ' and more' : ''}`
+        : null;
+
+    // ============================================
     // DETERMINE BOOKING URL
+    // ============================================
     const bookingUrl = userId 
       ? `${process.env.FRONTEND_URL || 'http://localhost:5173'}/book/${userId}`
       : '#';
 
     console.log('🔗 Booking URL:', bookingUrl);
     console.log('📞 Phone:', phoneNumber);
+    console.log('📍 Address:', fullAddress || 'Not provided');
+    console.log('🗺️  Service Area:', serviceAreaText || 'Not configured');
 
     console.log('📡 Calling Anthropic API...');
 
+    // ============================================
     // BUILD THE PROMPT
+    // ============================================
     const prompt = `You are a senior web designer creating a complete multi-page website for a service business.
 
 ### CRITICAL REQUIREMENTS
@@ -2398,6 +2458,8 @@ All pages accessible via navigation, content switches dynamically without page r
 **Business Type:** ${businessType}
 **Phone Number:** ${phoneNumber}
 **Email:** ${contactEmail}
+${fullAddress ? `**Physical Address:** ${fullAddress}` : ''}
+${serviceAreaText ? `**Service Area:** ${serviceAreaText}` : ''}
 **Booking URL:** ${bookingUrl}
 ${ownerName ? `**Owner:** ${ownerName}` : ''}
 
@@ -2415,6 +2477,8 @@ ${servicesInfo.instruction}
 
 ${hoursInfo.hours}
 
+${hoursInfo.instruction}
+
 ---
 
 ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
@@ -2428,7 +2492,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
     <div class="logo">${businessName}</div>
     
     <div class="nav-center">
-      <a href="#home" class="nav-link" onclick="showPage('home')">Home</a>
+      <a href="#home" class="nav-link active" onclick="showPage('home')">Home</a>
       <a href="#services" class="nav-link" onclick="showPage('services')">Services</a>
       <a href="#gift-cards" class="nav-link" onclick="showPage('gift-cards')">Gift Cards</a>
       <a href="#contact" class="nav-link" onclick="showPage('contact')">Contact</a>
@@ -2442,17 +2506,14 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
       <a href="${bookingUrl}" target="_blank" class="btn-nav-book">Book Now</a>
     </div>
     
-    <!-- Mobile hamburger -->
     <button class="hamburger" onclick="toggleMobileMenu()">
-      <span></span>
-      <span></span>
-      <span></span>
+      <span></span><span></span><span></span>
     </button>
   </div>
 </nav>
 \`\`\`
 
-**Phone Number Styling:**
+**Phone Number Styling (CRITICAL):**
 \`\`\`css
 .phone-link {
   display: flex;
@@ -2470,7 +2531,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
   background: rgba(0,0,0,0.05);
 }
 
-/* Desktop: Not clickable (remove pointer) */
+/* Desktop: NOT clickable */
 @media (min-width: 768px) {
   .phone-link {
     pointer-events: none;
@@ -2478,7 +2539,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
   }
 }
 
-/* Mobile: Clickable (enable calling) */
+/* Mobile: Clickable */
 @media (max-width: 767px) {
   .phone-link {
     pointer-events: auto;
@@ -2486,100 +2547,51 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
   }
 }
 
-.phone-icon {
-  font-size: 1.25rem;
-}
-
 .phone-number {
   font-size: 1rem;
   white-space: nowrap;
 }
 
-/* Hide phone on small mobile */
+/* Hide number on very small screens */
 @media (max-width: 640px) {
-  .phone-number {
-    display: none;
-  }
-  .phone-icon {
-    font-size: 1.5rem;
-  }
+  .phone-number { display: none; }
+  .phone-icon { font-size: 1.5rem; }
 }
 \`\`\`
 
 ---
 
-### PAGE STRUCTURE WITH JAVASCRIPT NAVIGATION
+### PAGE NAVIGATION JAVASCRIPT
 
-**HTML Structure:**
-\`\`\`html
-<!-- Navigation (always visible) -->
-<nav>...</nav>
-
-<!-- Page Container -->
-<div id="page-container">
-  <!-- HOME PAGE -->
-  <div id="home-page" class="page active">
-    <!-- Home page content here -->
-  </div>
-  
-  <!-- SERVICES PAGE -->
-  <div id="services-page" class="page">
-    <!-- Services page content here -->
-  </div>
-  
-  <!-- GIFT CARDS PAGE -->
-  <div id="gift-cards-page" class="page">
-    <!-- Gift cards page content here -->
-  </div>
-  
-  <!-- CONTACT PAGE -->
-  <div id="contact-page" class="page">
-    <!-- Contact page content here -->
-  </div>
-</div>
-\`\`\`
-
-**JavaScript for Navigation:**
 \`\`\`javascript
 <script>
-// Page Navigation
 function showPage(pageName) {
-  // Hide all pages
   document.querySelectorAll('.page').forEach(page => {
     page.classList.remove('active');
   });
   
-  // Show selected page
   const selectedPage = document.getElementById(pageName + '-page');
   if (selectedPage) {
     selectedPage.classList.add('active');
   }
   
-  // Update active nav link
   document.querySelectorAll('.nav-link').forEach(link => {
     link.classList.remove('active');
   });
   event.target.classList.add('active');
   
-  // Scroll to top
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  
-  // Close mobile menu if open
   closeMobileMenu();
 }
 
-// Mobile Menu
 function toggleMobileMenu() {
-  const navbar = document.getElementById('navbar');
-  navbar.classList.toggle('mobile-open');
+  document.getElementById('navbar').classList.toggle('mobile-open');
 }
 
 function closeMobileMenu() {
-  const navbar = document.getElementById('navbar');
-  navbar.classList.remove('mobile-open');
+  document.getElementById('navbar').classList.remove('mobile-open');
 }
 
-// Set initial page on load
 window.addEventListener('DOMContentLoaded', () => {
   const hash = window.location.hash.substring(1) || 'home';
   showPage(hash);
@@ -2587,7 +2599,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 \`\`\`
 
-**CSS for Pages:**
+**Page CSS:**
 \`\`\`css
 .page {
   display: none;
@@ -2609,205 +2621,105 @@ window.addEventListener('DOMContentLoaded', () => {
 
 ---
 
-### HOME PAGE CONTENT
+### HOME PAGE
 
-Use the existing home page structure we've been using:
-1. Hero section (full-screen, dramatic)
-2. Trust bar
-3. Featured services (3-4 cards with booking buttons)
-4. Why Choose Us
-5. Customer reviews
-6. Final CTA
+Keep existing structure:
+- Hero section (full-screen)
+- Trust bar
+- Featured services (3-4 cards with "Book This Service" → ${bookingUrl})
+- Why Choose Us
+- Customer reviews
+- Final CTA
 
 ---
 
-### SERVICES PAGE CONTENT
+### SERVICES PAGE
 
-**Layout:**
-- Page title: "Our Services"
-- Brief intro paragraph
-- ALL services in detailed grid (2-3 columns)
-- Each service card includes:
-  * Service name
-  * Full description
-  * Price & duration
-  * "Book This Service" button → ${bookingUrl}
-  * Service benefits/features list
-- Bottom CTA: "Ready to book? Choose your service"
-
-**Services Grid Example:**
 \`\`\`html
 <div id="services-page" class="page">
   <section class="page-hero">
-    <div class="container">
-      <h1>Our Services</h1>
-      <p>Professional ${businessType} services tailored to your needs</p>
-    </div>
+    <h1>Our Services</h1>
+    <p>Professional ${businessType} services</p>
   </section>
   
   <section class="services-detailed">
     <div class="container">
       <div class="services-grid">
-        ${servicesInfo.hasData ? '<!-- Service cards with REAL data -->' : '<!-- 3-6 service cards with placeholder data -->'}
-        <div class="service-detail-card">
-          <div class="service-image">
-            <img src="..." alt="Service Name">
-          </div>
-          <div class="service-content">
-            <h3>Service Name</h3>
-            <div class="service-meta">
-              <span class="price">$99.00</span>
-              <span class="duration">2 hours</span>
-            </div>
-            <p class="description">Detailed service description here...</p>
-            <ul class="service-features">
-              <li>✓ Feature 1</li>
-              <li>✓ Feature 2</li>
-              <li>✓ Feature 3</li>
-            </ul>
-            <a href="${bookingUrl}" target="_blank" class="btn-book">Book This Service</a>
-          </div>
-        </div>
-        <!-- Repeat for all services -->
+        ${servicesInfo.hasData ? `<!-- ${userServices.length} service cards with REAL data -->` : '<!-- 3-6 service cards -->'}
+        <!-- Each card: image, name, description, features list, price, "Book This Service" button → ${bookingUrl} -->
       </div>
     </div>
   </section>
   
   <section class="services-cta">
-    <div class="container">
-      <h2>Ready to Get Started?</h2>
-      <a href="${bookingUrl}" target="_blank" class="btn-primary btn-lg">Book Your Service Now</a>
-    </div>
+    <h2>Ready to Get Started?</h2>
+    <a href="${bookingUrl}" target="_blank" class="btn-primary">Book Your Service</a>
   </section>
 </div>
 \`\`\`
 
 ---
 
-### GIFT CARDS PAGE CONTENT
+### GIFT CARDS PAGE
 
-**Layout:**
-- Page title: "Gift Cards"
-- Hero section with gift card image
-- Benefits of gift cards
-- Available denominations ($25, $50, $100, $150, $200, Custom)
-- How it works (3 steps)
-- Purchase CTA
-
-**Structure:**
 \`\`\`html
 <div id="gift-cards-page" class="page">
-  <section class="page-hero gift-hero">
-    <div class="container">
-      <h1>Give the Gift of ${businessType}</h1>
-      <p>Perfect for any occasion - birthdays, holidays, or just because</p>
-    </div>
+  <section class="page-hero">
+    <h1>Gift Cards</h1>
+    <p>Perfect for any occasion</p>
   </section>
   
   <section class="gift-amounts">
-    <div class="container">
-      <h2>Choose Your Amount</h2>
-      <div class="gift-cards-grid">
-        <div class="gift-card">
-          <div class="gift-amount">$25</div>
-          <button onclick="selectGiftCard(25)" class="btn-select">Select</button>
-        </div>
-        <div class="gift-card">
-          <div class="gift-amount">$50</div>
-          <button onclick="selectGiftCard(50)" class="btn-select">Select</button>
-        </div>
-        <div class="gift-card featured">
-          <div class="badge">Most Popular</div>
-          <div class="gift-amount">$100</div>
-          <button onclick="selectGiftCard(100)" class="btn-select">Select</button>
-        </div>
-        <div class="gift-card">
-          <div class="gift-amount">$150</div>
-          <button onclick="selectGiftCard(150)" class="btn-select">Select</button>
-        </div>
-        <div class="gift-card">
-          <div class="gift-amount">$200</div>
-          <button onclick="selectGiftCard(200)" class="btn-select">Select</button>
-        </div>
-        <div class="gift-card custom">
-          <div class="gift-amount">Custom</div>
-          <button onclick="selectCustomAmount()" class="btn-select">Select</button>
-        </div>
-      </div>
+    <h2>Choose Your Amount</h2>
+    <div class="gift-cards-grid">
+      <div class="gift-card"><div class="amount">$25</div><button onclick="selectGift(25)">Select</button></div>
+      <div class="gift-card"><div class="amount">$50</div><button onclick="selectGift(50)">Select</button></div>
+      <div class="gift-card featured"><div class="badge">Popular</div><div class="amount">$100</div><button onclick="selectGift(100)">Select</button></div>
+      <div class="gift-card"><div class="amount">$150</div><button onclick="selectGift(150)">Select</button></div>
+      <div class="gift-card"><div class="amount">$200</div><button onclick="selectGift(200)">Select</button></div>
+      <div class="gift-card custom"><div class="amount">Custom</div><button onclick="selectCustom()">Select</button></div>
     </div>
   </section>
   
   <section class="how-it-works">
-    <div class="container">
-      <h2>How It Works</h2>
-      <div class="steps-grid">
-        <div class="step">
-          <div class="step-number">1</div>
-          <h3>Choose Amount</h3>
-          <p>Select a pre-set amount or enter a custom value</p>
-        </div>
-        <div class="step">
-          <div class="step-number">2</div>
-          <h3>Purchase</h3>
-          <p>Contact us to complete your gift card purchase</p>
-        </div>
-        <div class="step">
-          <div class="step-number">3</div>
-          <h3>Gift & Redeem</h3>
-          <p>Recipient books online using their gift card code</p>
-        </div>
-      </div>
+    <h2>How It Works</h2>
+    <div class="steps">
+      <div class="step"><span>1</span><h3>Choose Amount</h3><p>Select preset or custom</p></div>
+      <div class="step"><span>2</span><h3>Purchase</h3><p>Contact us to complete</p></div>
+      <div class="step"><span>3</span><h3>Gift & Redeem</h3><p>Recipient books online</p></div>
     </div>
   </section>
   
   <section class="gift-cta">
-    <div class="container">
-      <h2>Ready to Purchase?</h2>
-      <p>Call us at <a href="tel:${phoneNumberClean}">${phoneNumber}</a> or email <a href="mailto:${contactEmail}">${contactEmail}</a></p>
-      <div class="cta-buttons">
-        <a href="tel:${phoneNumberClean}" class="btn-primary">Call to Purchase</a>
-        <a href="mailto:${contactEmail}?subject=Gift Card Purchase" class="btn-secondary">Email Us</a>
-      </div>
-    </div>
+    <h2>Ready to Purchase?</h2>
+    <p>Call <a href="tel:${phoneNumberClean}">${phoneNumber}</a> or email <a href="mailto:${contactEmail}">${contactEmail}</a></p>
+    <a href="tel:${phoneNumberClean}" class="btn-primary">Call to Purchase</a>
   </section>
 </div>
-\`\`\`
 
-**Gift Card JavaScript:**
-\`\`\`javascript
-function selectGiftCard(amount) {
-  alert(\`You selected a $\${amount} gift card. Please call ${phoneNumber} to complete your purchase.\`);
+<script>
+function selectGift(amount) {
+  alert('You selected $' + amount + '. Please call ${phoneNumber} to complete purchase.');
   window.location.href = 'tel:${phoneNumberClean}';
 }
-
-function selectCustomAmount() {
-  const amount = prompt('Enter your custom gift card amount:');
+function selectCustom() {
+  const amount = prompt('Enter custom amount:');
   if (amount && !isNaN(amount) && amount > 0) {
-    alert(\`You selected a $\${amount} gift card. Please call ${phoneNumber} to complete your purchase.\`);
-    window.location.href = 'tel:${phoneNumberClean}';
+    selectGift(amount);
   }
 }
+</script>
 \`\`\`
 
 ---
 
-### CONTACT PAGE CONTENT
+### CONTACT PAGE (CRITICAL - USE ALL BUSINESS INFO)
 
-**Layout:**
-- Page title: "Contact Us"
-- Contact information (phone, email, address, hours)
-- Contact form
-- Map (optional placeholder)
-- Social media links
-
-**Structure:**
 \`\`\`html
 <div id="contact-page" class="page">
-  <section class="page-hero contact-hero">
-    <div class="container">
-      <h1>Get In Touch</h1>
-      <p>We're here to answer your questions and serve you</p>
-    </div>
+  <section class="page-hero">
+    <h1>Get In Touch</h1>
+    <p>We're here to answer your questions</p>
   </section>
   
   <section class="contact-content">
@@ -2818,7 +2730,7 @@ function selectCustomAmount() {
           <h2>Contact Information</h2>
           
           <div class="contact-item">
-            <div class="contact-icon">📞</div>
+            <div class="icon">📞</div>
             <div>
               <h3>Phone</h3>
               <a href="tel:${phoneNumberClean}">${phoneNumber}</a>
@@ -2826,65 +2738,57 @@ function selectCustomAmount() {
           </div>
           
           <div class="contact-item">
-            <div class="contact-icon">✉️</div>
+            <div class="icon">✉️</div>
             <div>
               <h3>Email</h3>
               <a href="mailto:${contactEmail}">${contactEmail}</a>
             </div>
           </div>
           
+          ${fullAddress ? `
           <div class="contact-item">
-            <div class="contact-icon">🕐</div>
-            <div>
-              <h3>Business Hours</h3>
-              <div class="hours-list">
-${hoursInfo.hours.split('\n').map(line => `                <p>${line}</p>`).join('\n')}
-              </div>
-            </div>
-          </div>
-          
-          <div class="contact-item">
-            <div class="contact-icon">📍</div>
+            <div class="icon">📍</div>
             <div>
               <h3>Location</h3>
-              <p>Serving [Your City/Area]</p>
+              <p>${fullAddress}</p>
+            </div>
+          </div>
+          ` : ''}
+          
+          ${serviceAreaText ? `
+          <div class="contact-item">
+            <div class="icon">🗺️</div>
+            <div>
+              <h3>Service Area</h3>
+              <p>${serviceAreaText}</p>
+            </div>
+          </div>
+          ` : ''}
+          
+          <div class="contact-item">
+            <div class="icon">🕐</div>
+            <div>
+              <h3>Business Hours</h3>
+              <div class="hours">
+${hoursInfo.hours.split('\n').map(line => `                <p>${line}</p>`).join('\n')}
+              </div>
             </div>
           </div>
         </div>
         
         <!-- Contact Form -->
         <div class="contact-form">
-          <h2>Send Us A Message</h2>
-          <form id="contactForm" onsubmit="handleContactSubmit(event)">
-            <div class="form-group">
-              <label for="name">Name *</label>
-              <input type="text" id="name" name="name" required>
-            </div>
-            
-            <div class="form-group">
-              <label for="email">Email *</label>
-              <input type="email" id="email" name="email" required>
-            </div>
-            
-            <div class="form-group">
-              <label for="phone">Phone</label>
-              <input type="tel" id="phone" name="phone">
-            </div>
-            
-            <div class="form-group">
-              <label for="service">Service Interested In</label>
-              <select id="service" name="service">
-                <option value="">Select a service...</option>
-                ${servicesInfo.hasData ? userServices.map(s => `<option value="${s.name}">${s.name}</option>`).join('\n                ') : '<option value="General">General Inquiry</option>'}
-              </select>
-            </div>
-            
-            <div class="form-group">
-              <label for="message">Message *</label>
-              <textarea id="message" name="message" rows="5" required></textarea>
-            </div>
-            
-            <button type="submit" class="btn-primary btn-lg">Send Message</button>
+          <h2>Send A Message</h2>
+          <form onsubmit="handleContact(event)">
+            <input type="text" name="name" placeholder="Your Name *" required>
+            <input type="email" name="email" placeholder="Your Email *" required>
+            <input type="tel" name="phone" placeholder="Phone Number">
+            <select name="service">
+              <option value="">Service Interested In</option>
+              ${servicesInfo.hasData ? userServices.map(s => `<option value="${s.name}">${s.name}</option>`).join('\n              ') : '<option>General Inquiry</option>'}
+            </select>
+            <textarea name="message" rows="5" placeholder="Your Message *" required></textarea>
+            <button type="submit" class="btn-primary">Send Message</button>
           </form>
         </div>
       </div>
@@ -2892,29 +2796,19 @@ ${hoursInfo.hours.split('\n').map(line => `                <p>${line}</p>`).join
   </section>
   
   <section class="quick-book">
-    <div class="container">
-      <h2>Ready to Book?</h2>
-      <p>Skip the wait and book your service online now</p>
-      <a href="${bookingUrl}" target="_blank" class="btn-primary btn-lg">Book Online</a>
-    </div>
+    <h2>Ready to Book?</h2>
+    <p>Skip the wait and book online now</p>
+    <a href="${bookingUrl}" target="_blank" class="btn-primary">Book Online</a>
   </section>
 </div>
-\`\`\`
 
-**Contact Form JavaScript:**
-\`\`\`javascript
-function handleContactSubmit(event) {
-  event.preventDefault();
-  const formData = new FormData(event.target);
-  const data = Object.fromEntries(formData);
-  
-  // In a real implementation, this would send to your server
-  alert('Thank you for your message! We\\'ll get back to you soon.');
-  event.target.reset();
-  
-  // Or redirect to email
-  // window.location.href = \`mailto:${contactEmail}?subject=Contact Form: \${data.service}&body=\${data.message}\`;
+<script>
+function handleContact(e) {
+  e.preventDefault();
+  alert('Thank you! We will get back to you soon.');
+  e.target.reset();
 }
+</script>
 \`\`\`
 
 ---
@@ -2931,19 +2825,21 @@ ${businessType.toLowerCase().includes('land') ? 'Primary: #047857 (green), Accen
 
 ### FINAL REQUIREMENTS
 
-Return a SINGLE HTML file that includes:
+Return SINGLE HTML file with:
 ✓ All 4 pages (Home, Services, Gift Cards, Contact)
-✓ JavaScript navigation between pages
-✓ Phone number in header (clickable on mobile only)
-✓ All booking buttons link to ${bookingUrl}
-✓ Embedded CSS in <head>
-✓ JavaScript at end of <body>
+✓ JavaScript navigation
+✓ Phone in header (clickable mobile only)
+✓ ALL booking buttons → ${bookingUrl}
+✓ Contact page with ALL business info (phone, email, address, service area, hours)
+✓ Embedded CSS/JS
 ✓ Mobile responsive
 ✓ Professional design
-✓ Working forms and interactions
 
-Return ONLY the complete HTML starting with <!DOCTYPE html>. No markdown, no explanations.`;
+Return ONLY the HTML starting with <!DOCTYPE html>. No markdown, no explanations.`;
 
+    // ============================================
+    // CALL ANTHROPIC API
+    // ============================================
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -2953,7 +2849,7 @@ Return ONLY the complete HTML starting with <!DOCTYPE html>. No markdown, no exp
       },
       body: JSON.stringify({
         model: 'claude-opus-4-20250514',
-        max_tokens: 16000, // Increased for multi-page content
+        max_tokens: 16000,
         messages: [{
           role: 'user',
           content: prompt
@@ -2977,17 +2873,21 @@ Return ONLY the complete HTML starting with <!DOCTYPE html>. No markdown, no exp
       return res.status(500).json({ error: 'No content generated' });
     }
 
+    // Clean up markdown formatting
     let cleanHtml = htmlContent.trim()
       .replace(/```html\n?/g, '')
       .replace(/```\n?$/g, '')
       .replace(/```/g, '');
 
+    // Verify content
     const bookingLinkCount = (cleanHtml.match(new RegExp(bookingUrl, 'g')) || []).length;
     const phoneCount = (cleanHtml.match(new RegExp(phoneNumber, 'g')) || []).length;
     
     console.log(`✅ Multi-page website generated`);
     console.log(`✅ Booking links: ${bookingLinkCount}`);
     console.log(`✅ Phone displays: ${phoneCount}`);
+    console.log(`✅ Has address: ${!!fullAddress}`);
+    console.log(`✅ Has service area: ${!!serviceAreaText}`);
 
     res.json({ 
       success: true, 
@@ -2995,12 +2895,16 @@ Return ONLY the complete HTML starting with <!DOCTYPE html>. No markdown, no exp
       businessName,
       bookingUrl,
       phoneNumber,
+      address: fullAddress || null,
+      serviceArea: serviceAreaText || null,
       pages: ['Home', 'Services', 'Gift Cards', 'Contact'],
       usedRealData: {
         services: servicesInfo.hasData,
         hours: hoursInfo.hasData,
         team: teamInfo.hasData,
-        phone: !!userPhone
+        phone: !!userBusinessInfo?.phone,
+        address: !!fullAddress,
+        serviceArea: !!serviceAreaText
       }
     });
 
@@ -3009,6 +2913,8 @@ Return ONLY the complete HTML starting with <!DOCTYPE html>. No markdown, no exp
     res.status(500).json({ error: 'Server error', message: error.message });
   }
 });
+
+console.log('✅ Website generation endpoint loaded with full business information integration');
 
 // ============================================
 // AUTHENTICATION ENDPOINTS
@@ -3534,6 +3440,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
