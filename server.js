@@ -2543,7 +2543,37 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
       : {
           hasData: false,
           services: services || `General ${businessType} services`,
-          instruction: `IMPORTANT: Create 3-6 realistic ${businessType} service offerings with placeholder pricing.`
+          instruction: `CRITICAL: Create 4-6 SPECIFIC ${businessType} services. These MUST be actual, realistic ${businessType} services that would exist in the real world.
+
+**Examples of GOOD service names for different business types:**
+
+Auto Detailing:
+- Premium Ceramic Coating ($599 - 8 hours)
+- Interior Deep Clean & Sanitization ($249 - 4 hours)
+- Paint Correction & Polish ($399 - 6 hours)
+
+Plumbing:
+- Emergency Leak Repair ($150 - 2 hours)
+- Water Heater Installation ($800 - 4 hours)
+- Drain Cleaning & Inspection ($120 - 1.5 hours)
+
+HVAC:
+- AC Repair & Diagnostics ($125 - 2 hours)
+- Full System Installation ($4,500 - 8 hours)
+- Annual Maintenance Package ($199 - 1 hour)
+
+Landscaping:
+- Complete Lawn Care Package ($85 - 2 hours)
+- Landscape Design & Installation ($2,500 - varies)
+- Seasonal Cleanup Service ($150 - 3 hours)
+
+Cleaning:
+- Deep House Cleaning ($199 - 4 hours)
+- Move-In/Move-Out Cleaning ($299 - 5 hours)
+- Recurring Weekly Service ($120 - 2 hours)
+
+**Create similar SPECIFIC services for ${businessType} - NOT generic "Service 1", "Service 2"**
+Each service should have: realistic name, price ($50-$5000 range), duration (1-8 hours)`
         };
 
     // ============================================
@@ -2636,52 +2666,310 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
     // ============================================
     // BUILD THE PROMPT
     // ============================================
-    const prompt = `You are an AWARD-WINNING WEB DESIGNER creating a WORLD-CLASS, PREMIUM website for a SERVICE-BASED BUSINESS.
+    const prompt = `You are an EXPERT WEB DESIGNER creating a BEAUTIFUL, PROFESSIONAL website for a SERVICE-BASED BUSINESS.
 
-**DESIGN PHILOSOPHY FOR SERVICE BUSINESSES:**
-Create a website that looks PROFESSIONAL, TRUSTWORTHY, and PREMIUM. Service businesses deserve beautiful design that builds credibility and converts visitors into customers.
+**CRITICAL: READ ALL BUSINESS INFORMATION CAREFULLY**
+You are creating a website for **${businessName}**, a **${businessType}** business.
+${tagline ? `Their tagline is: "${tagline}"` : ''}
+${description ? `Business description: ${description}` : ''}
+${uniqueSellingPoints ? `What makes them different: ${uniqueSellingPoints}` : ''}
+${yearsInBusiness ? `They have ${yearsInBusiness} years of experience.` : ''}
+${certifications ? `Certifications: ${certifications}` : ''}
+${targetCustomer ? `Target customer: ${targetCustomer}` : ''}
 
-**CRITICAL SUCCESS CRITERIA:**
-1. Website MUST look PROFESSIONAL and CREDIBLE - emphasize trust and expertise
-2. Use HIGH-QUALITY, RELEVANT photography - show your work, team, and results
-3. Include SMOOTH ANIMATIONS and MODERN TRANSITIONS - polished but not distracting
-4. Premium elements: gradients, clean shadows, glass effects, professional polish
-5. TRUST INDICATORS throughout - certifications, experience, reviews, guarantees
-6. Bold professional typography - strong headlines, readable body text
-7. Strategic white space - organized, clean, not cluttered
-8. Make it look like a $15,000 professionally designed service business website
+**EXTREMELY IMPORTANT - CONTENT RELEVANCE:**
+- Every word, every service, every section MUST be specific to ${businessType}
+- Write content that ONLY makes sense for ${businessType} businesses
+- Use ${businessType}-specific terminology and language
+- Services should be ACTUAL ${businessType} services, not generic examples
+- Testimonials should mention ${businessType}-specific work
+- "Why Choose Us" reasons must relate to ${businessType} industry
 
-**SERVICE BUSINESS DESIGN ELEMENTS:**
-- Professional hero sections with team/work imagery
-- Before/After showcases (where applicable)
-- Trust badges (licensed, insured, certified, years in business)
-- Customer testimonials with star ratings
-- Step-by-step process explanations
-- Service cards with clear pricing and descriptions
-- Team photos showing professionalism
-- Service area information
-- Emergency/same-day service callouts (if applicable)
-- Multiple contact methods (phone, email, booking)
-- Clear guarantees and policies
+**WRONG (Generic):**
+"We provide quality service" ❌
+"Professional and reliable" ❌  
+"We care about our customers" ❌
 
-**MODERN SERVICE WEB DESIGN:**
-- Gradient backgrounds and buttons
-- Glass morphism cards (backdrop-filter: blur)
-- Smooth hover effects on all interactive elements
-- Fade-in animations on scroll
-- Parallax effects on hero section
-- Premium shadows and borders
-- Color schemes matching business type (blue=trust, green=eco, black/gold=luxury)
-- Animated statistics counters
-- Responsive mobile-first design
+**RIGHT (Specific to Business Type):**
+For Auto Detailing: "Ceramic coating protection that lasts 5+ years" ✅
+For Plumbing: "24/7 emergency leak repairs, licensed master plumbers" ✅
+For HVAC: "Same-day AC repair, EPA-certified technicians" ✅
+For Landscaping: "Drought-resistant native plant design" ✅
+
+---
+
+## THE FORMULA FOR STUNNING WEBSITES
+
+**BEAUTY + USABILITY = SUCCESS**
+
+You must balance visual appeal with effortless navigation.
+
+---
+
+## VISUAL BEAUTY PRINCIPLES
+
+### 1. WHITE SPACE (CRITICAL)
+- Give content room to BREATHE
+- Generous padding: 3rem (48px) between sections
+- Margins: 2rem (32px) around content blocks
+- Don't cram things together
+- Empty space is NOT wasted space - it creates elegance
+
+### 2. TYPOGRAPHY HIERARCHY
+**Use exactly this scale:**
+- H1: 3rem (48px), font-weight: 900, line-height: 1.2
+- H2: 2rem (32px), font-weight: 800, line-height: 1.3
+- H3: 1.5rem (24px), font-weight: 700, line-height: 1.4
+- Body: 1rem (16px), font-weight: 400, line-height: 1.6
+- Small: 0.875rem (14px)
+
+**Font Rules:**
+- Use ONE font family (system fonts: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif)
+- Bold headlines (700-900 weight)
+- Regular body text (400 weight)
+- Never use more than 2 fonts
+
+### 3. CONSISTENT COLOR PALETTE
+**CRITICAL: Use ONLY these colors:**
+- Primary color (based on business type)
+- White (#FFFFFF) for backgrounds
+- Light gray (#F9FAFB) for alternate sections
+- Dark gray (#1F2937) for body text
+- Medium gray (#6B7280) for secondary text
+- Border gray (#E5E7EB) for borders
+
+**Business-Specific Primary Colors:**
+${businessType.toLowerCase().includes('auto') || businessType.toLowerCase().includes('detail') ? 
+  'Auto/Detailing: #000000 (black) with #D4AF37 (gold) accents' :
+  businessType.toLowerCase().includes('land') ? 
+  'Landscaping: #047857 (emerald)' :
+  businessType.toLowerCase().includes('plumb') ? 
+  'Plumbing: #1E40AF (royal blue)' :
+  businessType.toLowerCase().includes('clean') ? 
+  'Cleaning: #06B6D4 (cyan)' :
+  businessType.toLowerCase().includes('hvac') ? 
+  'HVAC: #DC2626 (red)' :
+  businessType.toLowerCase().includes('salon') || businessType.toLowerCase().includes('spa') ?
+  'Salon/Spa: #EC4899 (rose)' :
+  'Professional: #2563EB (blue)'}
+
+### 4. VISUAL HIERARCHY
+- Most important = biggest, boldest, top of page
+- Eye should flow naturally: F-pattern or Z-pattern
+- Clear focal points (hero headline, CTAs)
+- Size indicates importance
+
+### 5. SUBTLE ANIMATIONS ONLY
+\`\`\`css
+/* Fade in on scroll */
+.fade-in {
+  animation: fadeInUp 0.6s ease forwards;
+  opacity: 0;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Gentle hover lift */
+.hover-lift:hover {
+  transform: translateY(-5px);
+  transition: transform 0.3s ease;
+}
+\`\`\`
+
+**NO spinning, bouncing, or flashy animations**
+
+### 6. CONSISTENT SPACING SYSTEM
+Use this spacing scale everywhere:
+- 0.5rem = 8px
+- 1rem = 16px
+- 1.5rem = 24px
+- 2rem = 32px
+- 3rem = 48px
+- 4rem = 64px
+- 6rem = 96px
+
+---
+
+## USABILITY PRINCIPLES
+
+### 1. CLEAR NAVIGATION
+\`\`\`html
+<nav style="position: sticky; top: 0; background: white; border-bottom: 1px solid #E5E7EB; z-index: 1000;">
+  <div style="max-width: 1200px; margin: 0 auto; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center;">
+    <div style="font-size: 1.5rem; font-weight: 900;">${businessName}</div>
+    <div style="display: flex; gap: 2rem; align-items: center;">
+      <a href="#home">Home</a>
+      <a href="#services">Services</a>
+      <a href="#contact">Contact</a>
+      <a href="${bookingUrl}" style="background: var(--primary-color); color: white; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600;">Book Now</a>
+    </div>
+  </div>
+</nav>
+\`\`\`
+
+### 2. OBVIOUS CALL-TO-ACTIONS
+- Use "Book Now" not "Learn More"
+- Primary button: solid primary color, white text, bold
+- Button size: min 44px height (touch-friendly)
+- CTAs every 2-3 sections
+- Multiple CTAs: hero, after services, bottom of page
+
+### 3. SCANNABLE CONTENT
+- Short paragraphs (2-3 sentences max)
+- Use subheadings frequently
+- Bullet points for lists
+- Bold key phrases
+- People SCAN, they don't read
+
+### 4. LOGICAL STRUCTURE
+**Homepage must have this exact order:**
+1. Hero (who you are, what you do)
+2. Trust bar (years, customers, rating, certs)
+3. Services overview (3-6 top services with images)
+4. Why choose us (benefits with image)
+5. How it works (4-step process)
+6. Testimonials (3 real reviews)
+7. Final CTA (large book now button)
+
+---
+
+## CRITICAL DESIGN REQUIREMENTS
+
+### CONTAINER & LAYOUT
+\`\`\`css
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+/* Consistent section spacing */
+section {
+  padding: 6rem 0;
+}
+
+/* Alternate section backgrounds */
+section:nth-child(even) {
+  background: #F9FAFB;
+}
+
+section:nth-child(odd) {
+  background: #FFFFFF;
+}
+\`\`\`
+
+### BUTTON STYLES (EXACT)
+\`\`\`css
+.btn-primary {
+  background: var(--primary-color);
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+  min-height: 44px;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.btn-secondary {
+  background: white;
+  color: var(--primary-color);
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  border: 2px solid var(--primary-color);
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-secondary:hover {
+  background: var(--primary-color);
+  color: white;
+}
+\`\`\`
+
+### CARD STYLES (EXACT)
+\`\`\`css
+.card {
+  background: white;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+\`\`\`
+
+---
+
+## MOBILE RESPONSIVE (CRITICAL)
+
+\`\`\`css
+/* Mobile first approach */
+@media (max-width: 768px) {
+  h1 { font-size: 2rem; }
+  h2 { font-size: 1.5rem; }
+  
+  section { padding: 3rem 0; }
+  
+  .container { padding: 0 1rem; }
+  
+  /* Stack cards on mobile */
+  .grid { 
+    grid-template-columns: 1fr !important;
+    gap: 1.5rem;
+  }
+  
+  /* Larger touch targets */
+  button, .btn { 
+    min-height: 48px;
+    padding: 1rem 1.5rem;
+  }
+}
+\`\`\`
+
+---
+
+## TRUST INDICATORS (MANDATORY)
+
+**Must include on homepage:**
+1. Years in business (if provided)
+2. Number of customers (5,000+ is fine as placeholder)
+3. Star rating (★★★★★ 5.0)
+4. Certifications/licenses (if provided)
+5. Customer testimonials (3 minimum)
+6. Guarantee statement
+
+---
 
 Create a **SINGLE HTML FILE** with **MULTIPLE PAGES** using JavaScript navigation.
 
 **REQUIRED PAGES:**
-1. Home (comprehensive business showcase with trust elements)
-2. Services (detailed service offerings with pricing and images)
+1. Home (7 sections following the exact structure above)
+2. Services (detailed ${businessType} service offerings)
 3. Gift Cards (professional gift card program)
-4. Contact (complete business information and easy booking)
+4. Contact (complete business information)
 
 All pages accessible via navigation, content switches dynamically without page reload.
 
@@ -2707,64 +2995,105 @@ ${uniqueSellingPoints}` : ''}
 
 ---
 
-### PREMIUM DESIGN SYSTEM
+### CLEAN PROFESSIONAL CSS FRAMEWORK
 
 **Color Scheme Based on Business Type:**
+Use SOLID colors, not gradients. Choose ONE primary color based on business type.
+
 ${businessType.toLowerCase().includes('auto') || businessType.toLowerCase().includes('detail') ? 
-  'Premium Auto: Primary #000000 (black), Secondary #FFD700 (gold), Accent #DC143C (crimson), Background gradients from #1a1a1a to #000000' :
+  'Auto/Detailing: Primary: #000000 (black), Accent: #D4AF37 (gold), Background: #FFFFFF (white)' :
   businessType.toLowerCase().includes('land') ? 
-  'Nature Luxury: Primary #047857 (emerald), Secondary #fbbf24 (amber), Accent #16a34a (green), Background gradients from #ecfdf5 to #d1fae5' :
+  'Landscaping: Primary: #047857 (emerald), Accent: #16a34a (green), Background: #FFFFFF (white)' :
   businessType.toLowerCase().includes('plumb') ? 
-  'Professional Blue: Primary #1e40af (royal blue), Secondary #0ea5e9 (sky), Accent #f97316 (orange), Background gradients from #eff6ff to #dbeafe' :
+  'Plumbing: Primary: #1e40af (royal blue), Accent: #f97316 (orange), Background: #FFFFFF (white)' :
   businessType.toLowerCase().includes('clean') ? 
-  'Fresh Clean: Primary #06b6d4 (cyan), Secondary #a855f7 (purple), Accent #10b981 (emerald), Background gradients from #ecfeff to #cffafe' :
+  'Cleaning: Primary: #06b6d4 (cyan), Accent: #10b981 (emerald), Background: #FFFFFF (white)' :
   businessType.toLowerCase().includes('hvac') ? 
-  'Climate Control: Primary #dc2626 (red), Secondary #3b82f6 (blue), Accent #f59e0b (amber), Background gradients from #fee2e2 to #dbeafe' :
+  'HVAC: Primary: #dc2626 (red), Accent: #3b82f6 (blue), Background: #FFFFFF (white)' :
   businessType.toLowerCase().includes('salon') || businessType.toLowerCase().includes('spa') ?
-  'Beauty Luxury: Primary #ec4899 (pink), Secondary #a855f7 (purple), Accent #f472b6 (rose), Background gradients from #fdf2f8 to #fae8ff' :
-  'Modern Professional: Primary #2563eb (blue), Secondary #10b981 (emerald), Accent #f59e0b (amber), Background gradients from #eff6ff to #f0fdf4'}
+  'Salon/Spa: Primary: #ec4899 (rose), Accent: #a855f7 (purple), Background: #FFFFFF (white)' :
+  'Professional: Primary: #2563eb (blue), Accent: #10b981 (emerald), Background: #FFFFFF (white)'}
 
-**Premium CSS Framework:**
+**Clean CSS Framework:**
 \`\`\`css
-/* Premium Gradients */
-.gradient-primary {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-}
-
-.gradient-text {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Glass Morphism */
-.glass-card {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
+/* Clean, Professional Cards */
+.service-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
 }
 
-/* Premium Shadows */
-.premium-shadow {
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 
-              0 10px 30px rgba(0, 0, 0, 0.1);
+.service-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
 }
 
-/* Smooth Animations */
+/* Simple Buttons - Solid Colors */
+.btn-primary {
+  background: var(--primary-color); /* Use solid primary color */
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.btn-secondary {
+  background: white;
+  color: var(--primary-color);
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  border: 2px solid var(--primary-color);
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-secondary:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
+/* Subtle Shadows */
+.shadow-sm {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.shadow-md {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.shadow-lg {
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Smooth Fade In Animation */
 .fade-in {
-  animation: fadeInUp 0.8s ease forwards;
+  animation: fadeInUp 0.6s ease forwards;
   opacity: 0;
 }
 
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(30px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
@@ -2772,50 +3101,14 @@ ${businessType.toLowerCase().includes('auto') || businessType.toLowerCase().incl
   }
 }
 
-/* Hover Effects */
+/* Simple Hover Lift */
 .hover-lift {
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .hover-lift:hover {
-  transform: translateY(-10px);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.2);
-}
-
-/* Premium Buttons */
-.btn-premium {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-  border: none;
-  padding: 1rem 2.5rem;
-  border-radius: 50px;
-  color: white;
-  font-weight: 700;
-  font-size: 1.1rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  position: relative;
-  overflow: hidden;
-}
-
-.btn-premium::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-  transition: left 0.5s ease;
-}
-
-.btn-premium:hover::before {
-  left: 100%;
-}
-
-.btn-premium:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
 }
 \`\`\`
 
@@ -2825,60 +3118,94 @@ ${businessType.toLowerCase().includes('auto') || businessType.toLowerCase().incl
 
 **YOU MUST INCLUDE IMAGES - THIS IS CRITICAL**
 
-Every section MUST have images. Use high-quality, relevant images throughout.
+Every section MUST have images that are RELEVANT to ${businessType} business.
 
-**PRIMARY Image Source - Picsum Photos (RELIABLE):**
-- Use: \`https://picsum.photos/[width]/[height]\`
-- This service is fast, reliable, and doesn't rate limit
-- Examples:
-  * Hero: \`https://picsum.photos/1600/900\`
-  * Service Card: \`https://picsum.photos/800/600\`
-  * About Section: \`https://picsum.photos/1200/800\`
+**IMAGE SOURCE - Unsplash with Business-Specific Keywords:**
 
-**ALTERNATIVE - Unsplash Source (if Picsum doesn't fit):**
-- Use: \`https://source.unsplash.com/[width]x[height]/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional\`
-- Add specific keywords for better relevance
+Use Unsplash with SPECIFIC search terms for ${businessType}:
+\`https://source.unsplash.com/[width]x[height]/?[keywords]\`
 
-**BACKUP - Placeholder Images:**
-- Use: \`https://via.placeholder.com/[width]x[height]/4B5563/FFFFFF?text=Service+Image\`
+**CRITICAL: Use ${businessType}-specific keywords, not generic ones**
+
+**Business-Type Specific Image Keywords:**
+
+${businessType.toLowerCase().includes('auto') || businessType.toLowerCase().includes('detail') ?
+`For Auto Detailing:
+- Hero: car,detailing,shine,polish,ceramic
+- Services: auto,wash,clean,interior,exterior,wax
+- About: professional,automotive,detail,workshop` :
+businessType.toLowerCase().includes('land') ?
+`For Landscaping:
+- Hero: landscape,garden,lawn,outdoor,yard
+- Services: plants,trees,grass,mowing,design
+- About: landscaper,gardening,professional,team` :
+businessType.toLowerCase().includes('plumb') ?
+`For Plumbing:
+- Hero: plumbing,pipe,water,repair,tools
+- Services: faucet,drain,leak,installation
+- About: plumber,professional,technician,work` :
+businessType.toLowerCase().includes('clean') ?
+`For Cleaning:
+- Hero: cleaning,clean,house,spotless,fresh
+- Services: vacuum,mop,sanitize,organize
+- About: cleaner,professional,service,team` :
+businessType.toLowerCase().includes('hvac') ?
+`For HVAC:
+- Hero: hvac,ac,heating,cooling,technician
+- Services: air-conditioner,furnace,vent,repair
+- About: technician,professional,hvac,work` :
+businessType.toLowerCase().includes('salon') || businessType.toLowerCase().includes('spa') ?
+`For Salon/Spa:
+- Hero: salon,hair,beauty,spa,styling
+- Services: haircut,style,color,treatment
+- About: stylist,professional,salon,interior` :
+`For Professional Services:
+- Hero: professional,business,office,service
+- Services: work,professional,quality,tools
+- About: team,professional,office,working`}
 
 **IMAGE IMPLEMENTATION - MANDATORY:**
 
-1. **Hero Section Background** - MUST USE REAL IMAGE
+1. **Hero Section Background** - MUST USE BUSINESS-SPECIFIC IMAGE
    \`\`\`html
    <section class="hero" style="
-     background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
-                 url('https://picsum.photos/1920/1080') center/cover fixed;
+     background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), 
+                 url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,service') center/cover;
      min-height: 100vh;
    ">
    \`\`\`
    
-2. **Service Cards** - EACH CARD MUST HAVE IMAGE
+2. **Service Cards** - EACH CARD MUST HAVE RELEVANT IMAGE
    \`\`\`html
    <div class="service-card">
-     <div style="overflow: hidden; height: 280px; border-radius: 12px 12px 0 0;">
-       <img src="https://picsum.photos/800/600?random=1" 
+     <div style="overflow: hidden; height: 250px; border-radius: 12px 12px 0 0;">
+       <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},work,professional" 
             alt="Service Name" 
             style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease;"
-            onmouseover="this.style.transform='scale(1.1)'"
+            onmouseover="this.style.transform='scale(1.05)'"
             onmouseout="this.style.transform='scale(1)'">
      </div>
      <div style="padding: 2rem;">
        <h3>Service Name</h3>
        <p>Description</p>
-       <a href="${bookingUrl}" class="btn-book">Book This Service</a>
+       <a href="${bookingUrl}" class="btn-primary">Book This Service</a>
      </div>
    </div>
    \`\`\`
-   **IMPORTANT:** Use different random numbers for each image: ?random=1, ?random=2, ?random=3, etc.
    
-3. **Why Choose Us / About Section** - MUST HAVE IMAGE
+   **IMPORTANT:** Vary search terms for each service card:
+   - Card 1: \`${businessType},service,professional\`
+   - Card 2: \`${businessType},work,quality\`
+   - Card 3: \`${businessType},business,expert\`
+   - Card 4: \`${businessType},tools,equipment\`
+   
+3. **Why Choose Us / About Section** - MUST HAVE TEAM/BUSINESS IMAGE
    \`\`\`html
    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem;">
      <div>
-       <img src="https://picsum.photos/1200/800?random=10" 
+       <img src="https://source.unsplash.com/1200x800/?${businessType.toLowerCase().replace(/\s+/g, '-')},team,professional,business" 
             alt="Our Team"
-            style="width: 100%; height: 500px; object-fit: cover; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
+            style="width: 100%; height: 500px; object-fit: cover; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1);">
      </div>
      <div>
        <!-- Content here -->
@@ -2886,33 +3213,37 @@ Every section MUST have images. Use high-quality, relevant images throughout.
    </div>
    \`\`\`
 
-4. **Testimonials Background** - OPTIONAL BUT RECOMMENDED
+4. **Testimonials Background** - RELEVANT BUSINESS IMAGE
    \`\`\`html
    <section style="
-     background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), 
-                 url('https://picsum.photos/1920/1080?random=20') center/cover fixed;
+     background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), 
+                 url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},happy,customer,satisfied') center/cover;
      padding: 6rem 0;
      color: white;
    ">
    \`\`\`
 
 **CRITICAL IMAGE RULES:**
-- ✅ EVERY service card MUST have an image
-- ✅ Hero section MUST have background image
-- ✅ Why Choose Us section MUST have an image
-- ✅ Use ?random=[number] to get different images
+- ✅ EVERY image MUST relate to ${businessType}
+- ✅ Use ${businessType}-specific keywords in URLs
+- ✅ Vary keywords for different sections
+- ✅ Hero: business type + "professional" + "service"
+- ✅ Services: business type + "work" + specific service term
+- ✅ About: business type + "team" + "professional"
+- ✅ Testimonials: business type + "happy" + "customer"
 - ✅ Set explicit width and height in style
 - ✅ Use object-fit: cover for proper scaling
-- ✅ Add border-radius for modern look
-- ✅ Include hover effects (transform: scale)
+- ✅ Add border-radius: 12px for modern look
+- ✅ Include subtle hover effects (scale 1.05, not 1.1)
 
-**IF IMAGES DON'T LOAD:**
-The AI should automatically add onerror handlers:
+**FALLBACK - If Unsplash fails:**
 \`\`\`html
-<img src="https://picsum.photos/800/600?random=1" 
-     onerror="this.src='https://via.placeholder.com/800x600/4B5563/FFFFFF?text=Service'" 
+<img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},service" 
+     onerror="this.src='https://via.placeholder.com/800x600/4B5563/FFFFFF?text=${businessType}+Service'" 
      alt="Service">
 \`\`\`
+
+**NEVER use generic placeholders like Picsum - always use business-specific Unsplash images**
 
 ---
 
@@ -3120,12 +3451,12 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
 
 **MUST INCLUDE ALL THESE SECTIONS IN ORDER:**
 
-**1. Hero Section** - Full-screen with parallax background
+**1. Hero Section** - Clean with solid color overlay
 \`\`\`html
 <section class="hero" style="
   position: relative;
-  background: linear-gradient(135deg, rgba(0,0,0,0.7), rgba(0,0,0,0.5)), 
-              url('https://picsum.photos/1920/1080?random=1') center/cover fixed;
+  background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), 
+              url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,service') center/cover;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -3134,65 +3465,65 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
   text-align: center;
 ">
   <div class="hero-content fade-in">
-    <h1 style="font-size: 4rem; font-weight: 900; margin-bottom: 1rem; text-shadow: 2px 2px 20px rgba(0,0,0,0.5);">
+    <h1 style="font-size: 3.5rem; font-weight: 900; margin-bottom: 1rem;">
       ${businessName}
     </h1>
-    ${tagline ? `<p class="gradient-text" style="font-size: 2rem; font-weight: 700; margin-bottom: 1rem;">${tagline}</p>` : ''}
-    <p style="font-size: 1.5rem; margin-bottom: 3rem; max-width: 700px; margin-left: auto; margin-right: auto;">
-      ${description || `Professional ${businessType} Services - Excellence You Can Trust`}
+    ${tagline ? `<p style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem; opacity: 0.95;">${tagline}</p>` : ''}
+    <p style="font-size: 1.2rem; margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto; opacity: 0.9;">
+      ${description || `Professional ${businessType} Services`}
     </p>
     <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-      <a href="${bookingUrl}" target="_blank" class="btn-premium">Book Now</a>
+      <a href="${bookingUrl}" target="_blank" class="btn-primary">Book Now</a>
       <a href="#services" class="btn-secondary">Our Services</a>
     </div>
   </div>
 </section>
 \`\`\`
 
-**2. Trust Bar / Stats Section** - Animated counters
+**2. Trust Bar / Stats Section** - Solid color background
 \`\`\`html
-<section class="trust-bar" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); padding: 3rem 0; color: white;">
+<section class="trust-bar" style="background: var(--primary-color); padding: 3rem 0; color: white;">
   <div class="container">
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; text-align: center;">
       ${yearsInBusiness ? `
       <div class="stat-item fade-in">
         <div style="font-size: 3rem; font-weight: 900;">${yearsInBusiness}+</div>
-        <div style="font-size: 1.2rem; opacity: 0.9;">Years Experience</div>
+        <div style="font-size: 1.1rem; opacity: 0.95;">Years Experience</div>
       </div>` : ''}
       <div class="stat-item fade-in">
         <div style="font-size: 3rem; font-weight: 900;">5,000+</div>
-        <div style="font-size: 1.2rem; opacity: 0.9;">Happy Customers</div>
+        <div style="font-size: 1.1rem; opacity: 0.95;">Happy Customers</div>
       </div>
       <div class="stat-item fade-in">
         <div style="font-size: 3rem; font-weight: 900;">100%</div>
-        <div style="font-size: 1.2rem; opacity: 0.9;">Satisfaction Rate</div>
+        <div style="font-size: 1.1rem; opacity: 0.95;">Satisfaction Rate</div>
       </div>
       ${certifications ? `
       <div class="stat-item fade-in">
         <div style="font-size: 3rem; font-weight: 900;">✓</div>
-        <div style="font-size: 1.2rem; opacity: 0.9;">Licensed & Insured</div>
+        <div style="font-size: 1.1rem; opacity: 0.95;">Licensed & Insured</div>
       </div>` : ''}
     </div>
   </div>
 </section>
 \`\`\`
 
-**3. Featured Services** - Premium cards with images and hover effects
+**3. Featured Services** - Clean white cards
 \`\`\`html
-<section class="featured-services" style="padding: 6rem 0; background: linear-gradient(to bottom, #f9fafb, #ffffff);">
+<section class="featured-services" style="padding: 6rem 0; background: #f9fafb;">
   <div class="container">
     <div style="text-align: center; margin-bottom: 4rem;">
-      <h2 class="gradient-text" style="font-size: 3rem; font-weight: 900; margin-bottom: 1rem;">Our Premium Services</h2>
-      <p style="font-size: 1.3rem; color: #6b7280; max-width: 600px; margin: 0 auto;">
+      <h2 style="font-size: 2.5rem; font-weight: 900; margin-bottom: 1rem; color: #111827;">Our Services</h2>
+      <p style="font-size: 1.2rem; color: #6b7280; max-width: 600px; margin: 0 auto;">
         Professional ${businessType} solutions tailored to your needs
       </p>
     </div>
     
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem;">
-      <!-- Create 3-4 service cards with REAL images -->
-      <div class="service-card premium-shadow hover-lift" style="background: white; border-radius: 20px; overflow: hidden; transition: all 0.4s ease;">
-        <div style="overflow: hidden; height: 280px;">
-          <img src="https://picsum.photos/800/600?random=2" 
+      <!-- Create 3-4 service cards -->
+      <div class="service-card hover-lift" style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
+        <div style="overflow: hidden; height: 250px;">
+          <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},work,professional" 
                alt="Service"
                style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease;"
                onmouseover="this.style.transform='scale(1.1)'"
@@ -3224,7 +3555,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
   <div class="container">
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
       <div>
-        <img src="https://picsum.photos/1200/800?random=10" 
+        <img src="https://source.unsplash.com/1200x800/?${businessType.toLowerCase().replace(/\s+/g, '-')},team,professional,business" 
              alt="Why Choose Us"
              class="premium-shadow"
              style="width: 100%; height: 500px; object-fit: cover; border-radius: 20px;">
@@ -3310,7 +3641,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
 <section class="testimonials" style="
   padding: 6rem 0;
   background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), 
-              url('https://picsum.photos/1920/1080?random=20') center/cover fixed;
+              url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},happy,customer') center/cover fixed;
   color: white;
 ">
   <div class="container">
@@ -3323,7 +3654,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
       <div class="glass-card">
         <div style="color: #fbbf24; font-size: 1.5rem; margin-bottom: 1rem;">★★★★★</div>
         <p style="font-size: 1.1rem; line-height: 1.8; margin-bottom: 1.5rem; font-style: italic;">
-          "Absolutely outstanding service! Professional, courteous, and the quality exceeded our expectations. Highly recommend!"
+          "EXAMPLE PLACEHOLDER - Replace with ${businessType}-specific testimonial mentioning actual ${businessType} work done"
         </p>
         <div style="display: flex; align-items: center; gap: 1rem;">
           <div style="width: 50px; height: 50px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.5rem;">JD</div>
@@ -3333,7 +3664,14 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
           </div>
         </div>
       </div>
-      <!-- Add 2 more testimonials -->
+      <!-- CRITICAL: Create 2-3 MORE testimonials, each mentioning SPECIFIC ${businessType} services -->
+      <!-- Examples for different business types:
+           Auto Detailing: "The ceramic coating made my car look brand new! Worth every penny."
+           Plumbing: "Fixed our emergency leak at 11pm on a Sunday. True professionals!"
+           HVAC: "New AC system installed in one day. House stays cool even in 100° heat!"
+           Landscaping: "Transformed our overgrown yard into a beautiful garden oasis."
+           Cleaning: "Deep clean before our party was amazing. Every surface sparkled!"
+      -->
     </div>
   </div>
 </section>
@@ -3370,7 +3708,7 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
         ${servicesInfo.hasData ? `<!-- ${userServices.length} service cards with REAL data -->` : '<!-- 3-6 service cards -->'}
         <!-- EACH SERVICE CARD MUST INCLUDE:
              <div class="service-card">
-               <img src="https://picsum.photos/800/600?random=30" style="width:100%; height:300px; object-fit:cover; border-radius: 12px;">
+               <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},service,quality" style="width:100%; height:300px; object-fit:cover; border-radius: 12px;">
                <h3>Service Name</h3>
                <p>Description</p>
                <div class="price">$99 • 2hr</div>
@@ -3392,52 +3730,149 @@ ${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
 
 ### GIFT CARDS PAGE
 
+**CRITICAL: Create a SINGLE gift card visual with service-based amount selection**
+
 \`\`\`html
 <div id="gift-cards-page" class="page">
-  <section class="page-hero">
-    <h1>Gift Cards</h1>
-    <p>Perfect for any occasion</p>
-  </section>
-  
-  <section class="gift-amounts">
-    <h2>Choose Your Amount</h2>
-    <div class="gift-cards-grid">
-      <div class="gift-card"><div class="amount">$25</div><button onclick="selectGift(25)">Select</button></div>
-      <div class="gift-card"><div class="amount">$50</div><button onclick="selectGift(50)">Select</button></div>
-      <div class="gift-card featured"><div class="badge">Popular</div><div class="amount">$100</div><button onclick="selectGift(100)">Select</button></div>
-      <div class="gift-card"><div class="amount">$150</div><button onclick="selectGift(150)">Select</button></div>
-      <div class="gift-card"><div class="amount">$200</div><button onclick="selectGift(200)">Select</button></div>
-      <div class="gift-card custom"><div class="amount">Custom</div><button onclick="selectCustom()">Select</button></div>
+  <section class="page-hero" style="background: linear-gradient(to bottom, #f9fafb, #ffffff); padding: 4rem 0; text-align: center;">
+    <div class="container">
+      <h1 style="font-size: 2.5rem; font-weight: 900; margin-bottom: 1rem;">Gift Cards</h1>
+      <p style="font-size: 1.2rem; color: #6b7280;">The perfect gift for any occasion</p>
     </div>
   </section>
   
-  <section class="how-it-works">
-    <h2>How It Works</h2>
-    <div class="steps">
-      <div class="step"><span>1</span><h3>Choose Amount</h3><p>Select preset or custom</p></div>
-      <div class="step"><span>2</span><h3>Purchase</h3><p>Contact us to complete</p></div>
-      <div class="step"><span>3</span><h3>Gift & Redeem</h3><p>Recipient books online</p></div>
+  <section style="padding: 6rem 0; background: white;">
+    <div class="container">
+      <div style="max-width: 900px; margin: 0 auto;">
+        <!-- Single Gift Card Visual -->
+        <div style="background: linear-gradient(135deg, var(--primary-color) 0%, rgba(0,0,0,0.8) 100%); border-radius: 20px; padding: 3rem; color: white; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2); margin-bottom: 3rem; position: relative; overflow: hidden;">
+          <div style="position: absolute; top: 20px; right: 20px; width: 60px; height: 60px; background: rgba(255,255,255,0.2); border-radius: 50%;"></div>
+          <div style="position: absolute; bottom: 20px; left: 20px; width: 80px; height: 80px; background: rgba(255,255,255,0.1); border-radius: 50%;"></div>
+          
+          <h2 style="font-size: 2rem; font-weight: 900; margin-bottom: 1rem;">${businessName}</h2>
+          <p style="font-size: 1.3rem; opacity: 0.95; margin-bottom: 2rem;">Gift Card</p>
+          <div id="selected-amount" style="font-size: 4rem; font-weight: 900; margin: 2rem 0;">$100</div>
+          <p style="opacity: 0.9;">Select an amount below</p>
+        </div>
+        
+        <!-- Amount Selection Based on Services -->
+        <div style="margin-bottom: 3rem;">
+          <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 2rem; text-align: center;">Choose Amount</h3>
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+            ${servicesInfo.hasData ? 
+              // If we have real services, create amounts based on service prices
+              userServices.slice(0, 6).map(service => `
+                <button onclick="selectAmount(${Math.round(parseFloat(service.price))})" 
+                        class="amount-btn" 
+                        style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease; text-align: center;">
+                  <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color); margin-bottom: 0.5rem;">$${Math.round(parseFloat(service.price))}</div>
+                  <div style="font-size: 0.875rem; color: #6b7280;">${service.name}</div>
+                </button>
+              `).join('') : 
+              // Otherwise use common preset amounts
+              `<button onclick="selectAmount(50)" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
+                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">$50</div>
+              </button>
+              <button onclick="selectAmount(75)" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
+                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">$75</div>
+              </button>
+              <button onclick="selectAmount(100)" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
+                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">$100</div>
+                <div style="font-size: 0.75rem; color: white; background: var(--primary-color); padding: 0.25rem 0.5rem; border-radius: 4px; margin-top: 0.5rem; display: inline-block;">Popular</div>
+              </button>
+              <button onclick="selectAmount(150)" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
+                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">$150</div>
+              </button>
+              <button onclick="selectAmount(200)" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
+                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">$200</div>
+              </button>
+              <button onclick="selectCustomAmount()" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
+                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">Custom</div>
+              </button>`
+            }
+          </div>
+          
+          <div style="text-align: center;">
+            <button onclick="purchaseGiftCard()" class="btn-primary" style="font-size: 1.1rem; padding: 1rem 3rem;">
+              Purchase Gift Card
+            </button>
+          </div>
+        </div>
+        
+        <!-- How It Works -->
+        <div style="background: #f9fafb; border-radius: 12px; padding: 3rem; margin-bottom: 3rem;">
+          <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 2rem; text-align: center;">How It Works</h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; text-align: center;">
+            <div>
+              <div style="width: 60px; height: 60px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; margin: 0 auto 1rem;">1</div>
+              <h4 style="font-weight: 700; margin-bottom: 0.5rem;">Select Amount</h4>
+              <p style="color: #6b7280; font-size: 0.875rem;">Choose from our service-based amounts or enter custom</p>
+            </div>
+            <div>
+              <div style="width: 60px; height: 60px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; margin: 0 auto 1rem;">2</div>
+              <h4 style="font-weight: 700; margin-bottom: 0.5rem;">Purchase</h4>
+              <p style="color: #6b7280; font-size: 0.875rem;">Contact us to complete your purchase</p>
+            </div>
+            <div>
+              <div style="width: 60px; height: 60px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; margin: 0 auto 1rem;">3</div>
+              <h4 style="font-weight: 700; margin-bottom: 0.5rem;">Gift & Redeem</h4>
+              <p style="color: #6b7280; font-size: 0.875rem;">Recipient can book any service online</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Contact for Purchase -->
+        <div style="text-align: center; padding: 2rem; background: white; border: 2px solid #e5e7eb; border-radius: 12px;">
+          <h3 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 1rem;">Questions?</h3>
+          <p style="color: #6b7280; margin-bottom: 1.5rem;">Call us at <a href="tel:${phoneNumberClean}" style="color: var(--primary-color); font-weight: 600;">${phoneNumber}</a> or email <a href="mailto:${contactEmail}" style="color: var(--primary-color); font-weight: 600;">${contactEmail}</a></p>
+        </div>
+      </div>
     </div>
-  </section>
-  
-  <section class="gift-cta">
-    <h2>Ready to Purchase?</h2>
-    <p>Call <a href="tel:${phoneNumberClean}">${phoneNumber}</a> or email <a href="mailto:${contactEmail}">${contactEmail}</a></p>
-    <a href="tel:${phoneNumberClean}" class="btn-primary">Call to Purchase</a>
   </section>
 </div>
 
 <script>
-function selectGift(amount) {
-  alert('You selected $' + amount + '. Please call ${phoneNumber} to complete purchase.');
-  window.location.href = 'tel:${phoneNumberClean}';
+let selectedGiftAmount = 100;
+
+function selectAmount(amount) {
+  selectedGiftAmount = amount;
+  document.getElementById('selected-amount').textContent = '$' + amount;
+  
+  // Update button styles
+  document.querySelectorAll('.amount-btn').forEach(btn => {
+    btn.style.border = '2px solid #e5e7eb';
+    btn.style.background = 'white';
+  });
+  event.target.closest('.amount-btn').style.border = '2px solid var(--primary-color)';
+  event.target.closest('.amount-btn').style.background = 'rgba(37, 99, 235, 0.05)';
 }
-function selectCustom() {
-  const amount = prompt('Enter custom amount:');
+
+function selectCustomAmount() {
+  const amount = prompt('Enter custom amount ($):');
   if (amount && !isNaN(amount) && amount > 0) {
-    selectGift(amount);
+    selectAmount(Math.round(amount));
   }
 }
+
+function purchaseGiftCard() {
+  if (confirm('Purchase $' + selectedGiftAmount + ' gift card?\\n\\nPlease call us at ${phoneNumber} to complete your purchase.')) {
+    window.location.href = 'tel:${phoneNumberClean}';
+  }
+}
+
+// Add hover effects
+document.addEventListener('DOMContentLoaded', function() {
+  const style = document.createElement('style');
+  style.textContent = \`
+    .amount-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+      border-color: var(--primary-color) !important;
+    }
+  \`;
+  document.head.appendChild(style);
+});
 </script>
 \`\`\`
 
@@ -3579,8 +4014,8 @@ Return ONLY the HTML starting with <!DOCTYPE html>. No markdown, no explanations
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',  // Sonnet 4.5
-max_tokens: 64000,  // 
+        model: 'claude-sonnet-4-20250514',  // Sonnet 4.5 - allows 64k output tokens
+        max_tokens: 64000,  // Maximum for Sonnet 4.5 - perfect for comprehensive websites
         messages: [{
           role: 'user',
           content: prompt
@@ -4171,6 +4606,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
