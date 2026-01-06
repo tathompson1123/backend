@@ -3580,7 +3580,7 @@ Return ONLY the HTML starting with <!DOCTYPE html>. No markdown, no explanations
       },
       body: JSON.stringify({
         model: 'claude-opus-4-20250514',
-        max_tokens: 16000,
+        max_tokens: 80000,
         messages: [{
           role: 'user',
           content: prompt
@@ -4171,6 +4171,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
