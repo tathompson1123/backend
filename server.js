@@ -2432,10 +2432,24 @@ app.get('/api/availability', async (req, res) => {
 
 app.post('/api/generate', async (req, res) => {
   try {
-    const { businessName, businessType, services, description, userId } = req.body;
+    const { 
+      businessName, 
+      businessType, 
+      tagline,
+      services, 
+      yearsInBusiness,
+      certifications,
+      description, 
+      uniqueSellingPoints,
+      targetCustomer,
+      userId 
+    } = req.body;
 
     console.log('🎨 Generating multi-page website for:', businessName);
     console.log('👤 User ID:', userId);
+    console.log('📋 Business Type:', businessType);
+    console.log('✨ Tagline:', tagline);
+    console.log('🎯 USPs:', uniqueSellingPoints);
 
     if (!businessName || !businessType) {
       return res.status(400).json({ error: 'Business name and type are required' });
@@ -2622,9 +2636,15 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
     // ============================================
     // BUILD THE PROMPT
     // ============================================
-    const prompt = `You are a senior web designer creating a complete multi-page website for a service business.
+    const prompt = `You are a SENIOR WEB DESIGNER creating a STUNNING, PROFESSIONAL multi-page website.
 
-### CRITICAL REQUIREMENTS
+**CRITICAL SUCCESS CRITERIA:**
+1. Website MUST include HIGH-QUALITY IMAGES throughout
+2. Design must be MODERN, POLISHED, and PROFESSIONAL
+3. Every service card MUST have an image
+4. Hero section MUST have a background image
+5. Use REAL Unsplash image URLs - NOT placeholders
+6. Make it VISUALLY IMPRESSIVE
 
 Create a **SINGLE HTML FILE** with **MULTIPLE PAGES** using JavaScript navigation.
 
@@ -2642,52 +2662,70 @@ All pages accessible via navigation, content switches dynamically without page r
 
 **Business Name:** ${businessName}
 **Business Type:** ${businessType}
+${tagline ? `**Tagline:** ${tagline}` : ''}
+${yearsInBusiness ? `**Years in Business:** ${yearsInBusiness} years` : ''}
+${certifications ? `**Certifications:** ${certifications}` : ''}
 **Phone Number:** ${phoneNumber}
 **Email:** ${contactEmail}
 ${fullAddress ? `**Physical Address:** ${fullAddress}` : ''}
 ${serviceAreaText ? `**Service Area:** ${serviceAreaText}` : ''}
+${targetCustomer ? `**Target Customer:** ${targetCustomer}` : ''}
 **Booking URL:** ${bookingUrl}
 ${ownerName ? `**Owner:** ${ownerName}` : ''}
 
+${uniqueSellingPoints ? `**What Makes Us Different:**
+${uniqueSellingPoints}` : ''}
+
 ---
 
-### IMAGES AND VISUAL CONTENT
+### IMAGES AND VISUAL CONTENT - EXTREMELY IMPORTANT
 
-**CRITICAL: Use high-quality, relevant images throughout the website**
+**YOU MUST INCLUDE IMAGES - THIS IS CRITICAL**
+
+Every section MUST have images. A website without images looks unprofessional and incomplete.
 
 **Image Sources:**
-- Use Unsplash for all images: \`https://source.unsplash.com/\`
-- All images must be relevant to ${businessType} services
-- Use specific search terms for better results
+- Use Unsplash: \`https://source.unsplash.com/[width]x[height]/?[search-terms]\`
+- Search terms MUST match ${businessType}
+- Examples:
+  * Hero: \`https://source.unsplash.com/1600x900/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,service\`
+  * Service: \`https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},work,tools\`
 
-**Required Images:**
-1. **Hero Section**: Large banner image
-   - \`https://source.unsplash.com/1600x900/?${businessType.toLowerCase().replace(/\s+/g, '-')},business\`
+**REQUIRED Images (DO NOT SKIP):**
+
+1. **Hero Section Background** - MANDATORY
+   \`\`\`html
+   <section class="hero" style="
+     background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), 
+                 url('https://source.unsplash.com/1600x900/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,business') center/cover;
+     min-height: 100vh;
+   ">
+   \`\`\`
    
-2. **Service Cards**: Each service needs an image
-   - Format: \`https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},service\`
-   - Vary the search terms for each service (e.g., "plumbing-repair", "plumbing-installation")
+2. **Service Cards** - MANDATORY for EACH service
+   \`\`\`html
+   <div class="service-card">
+     <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},service,work" 
+          alt="Service Name" 
+          style="width: 100%; height: 250px; object-fit: cover; border-radius: 12px;">
+     <h3>Service Name</h3>
+     <p>Description</p>
+   </div>
+   \`\`\`
    
-3. **About/Why Choose Us**: Professional business image
-   - \`https://source.unsplash.com/1200x800/?team,professional,business\`
+3. **About/Why Choose Us Section** - MANDATORY
+   \`\`\`html
+   <img src="https://source.unsplash.com/1200x800/?team,professional,${businessType.toLowerCase().replace(/\s+/g, '-')}" 
+        alt="Our Team"
+        style="width: 100%; height: 400px; object-fit: cover; border-radius: 12px;">
+   \`\`\`
 
-4. **Testimonials**: Use icon placeholders or initials
-   - Don't use fake profile photos
-
-**Image HTML Structure:**
-\`\`\`html
-<div class="service-card">
-  <div class="service-image">
-    <img src="https://source.unsplash.com/800x600/?plumbing,repair" 
-         alt="Service Name" 
-         loading="lazy"
-         style="width: 100%; height: 250px; object-fit: cover;">
-  </div>
-  <div class="service-content">
-    <!-- Content here -->
-  </div>
-</div>
-\`\`\`
+**Image Requirements:**
+- Hero MUST have background image
+- Each service card MUST have an image
+- About section MUST have an image
+- Use inline styles: width: 100%; height: [size]px; object-fit: cover;
+- Round corners with border-radius: 12px;
 
 ---
 
@@ -3741,6 +3779,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
