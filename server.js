@@ -272,6 +272,498 @@ async function sendReviewRequest(reviewRequest) {
   }
 }
 
+// PUBLIC BOOKING API ENDPOINTS
+// Add these to your server.js file
+
+// ============================================
+// PUBLIC BOOKING ENDPOINTS (No auth required)
+// ============================================
+
+// GET - Public services list
+app.get('/api/public/services', async (req, res) => {
+  try {
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT id, name, description, duration_hours, price FROM services WHERE user_id = $1 AND active = true ORDER BY name',
+      [businessId]
+    );
+
+    res.json({ services: result.rows });
+  } catch (error) {
+    console.error('Error fetching public services:', error);
+    res.status(500).json({ error: 'Failed to fetch services' });
+  }
+});
+
+// GET - Public employees list
+app.get('/api/public/employees', async (req, res) => {
+  try {
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT id, name, color FROM employees WHERE user_id = $1 AND active = true ORDER BY name',
+      [businessId]
+    );
+
+    res.json({ employees: result.rows });
+  } catch (error) {
+    console.error('Error fetching public employees:', error);
+    res.status(500).json({ error: 'Failed to fetch employees' });
+  }
+});
+
+// GET - Public groups list
+app.get('/api/public/groups', async (req, res) => {
+  try {
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT id, name, employee_ids FROM groups WHERE user_id = $1 ORDER BY name',
+      [businessId]
+    );
+
+    res.json({ groups: result.rows });
+  } catch (error) {
+    console.error('Error fetching public groups:', error);
+    res.status(500).json({ error: 'Failed to fetch groups' });
+  }
+});
+
+// GET - Public business hours
+app.get('/api/public/business-hours', async (req, res) => {
+  try {
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT day_of_week, is_open, open_time, close_time FROM business_hours WHERE user_id = $1 ORDER BY day_of_week',
+      [businessId]
+    );
+
+    res.json({ businessHours: result.rows });
+  } catch (error) {
+    console.error('Error fetching public business hours:', error);
+    res.status(500).json({ error: 'Failed to fetch business hours' });
+  }
+});
+
+// GET - Public business info
+app.get('/api/public/business-info', async (req, res) => {
+  try {
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId required' });
+    }
+
+    const result = await pool.query(
+      'SELECT business_name, email FROM users WHERE id = $1',
+      [businessId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    res.json({ business: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching public business info:', error);
+    res.status(500).json({ error: 'Failed to fetch business info' });
+  }
+});
+
+// GET - Public availability (available time slots)
+app.get('/api/public/availability', async (req, res) => {
+  try {
+    const { businessId, serviceIds, date } = req.query;
+    
+    if (!businessId || !serviceIds || !date) {
+      return res.status(400).json({ error: 'businessId, serviceIds, and date required' });
+    }
+
+    // Parse service IDs
+    const serviceIdArray = serviceIds.split(',').map(id => parseInt(id));
+    
+    // Get total duration for all selected services
+    const servicesResult = await pool.query(
+      `SELECT SUM(duration_hours) as total_duration 
+       FROM services 
+       WHERE id = ANY($1)`,
+      [serviceIdArray]
+    );
+    
+    const totalDuration = parseFloat(servicesResult.rows[0].total_duration) || 1;
+
+    // Get day of week
+    const requestDate = new Date(date);
+    const dayOfWeek = requestDate.getDay();
+
+    // Get business hours for this day
+    const hoursResult = await pool.query(
+      'SELECT * FROM business_hours WHERE user_id = $1 AND day_of_week = $2',
+      [businessId, dayOfWeek]
+    );
+
+    if (hoursResult.rows.length === 0 || !hoursResult.rows[0].is_open) {
+      return res.json({ slots: [], message: 'Business closed on this day' });
+    }
+
+    const businessHours = hoursResult.rows[0];
+
+    // Get booking settings
+    const settingsResult = await pool.query(
+      'SELECT * FROM booking_settings WHERE user_id = $1',
+      [businessId]
+    );
+
+    const settings = settingsResult.rows[0] || {
+      time_slot_interval: 30,
+      buffer_time: 15
+    };
+
+    // Get all employees who can perform these services
+    const employeesResult = await pool.query(
+      `SELECT DISTINCT e.id
+       FROM employees e
+       LEFT JOIN service_employees se ON e.id = se.employee_id
+       WHERE e.user_id = $1 
+       AND e.active = true
+       AND (
+         se.service_id = ANY($2)
+         OR NOT EXISTS (
+           SELECT 1 FROM service_employees WHERE employee_id = e.id
+         )
+       )`,
+      [businessId, serviceIdArray]
+    );
+
+    if (employeesResult.rows.length === 0) {
+      return res.json({ slots: [], message: 'No employees available for this service' });
+    }
+
+    const availableEmployees = employeesResult.rows;
+
+    // Get existing bookings for this date
+    const bookingsResult = await pool.query(
+      `SELECT employee_id, start_time, end_time 
+       FROM bookings 
+       WHERE user_id = $1 
+       AND booking_date = $2 
+       AND status NOT IN ('cancelled', 'no_show')
+       AND employee_id IN (${availableEmployees.map((_, i) => `$${i + 3}`).join(',')})`,
+      [businessId, date, ...availableEmployees.map(e => e.id)]
+    );
+
+    // Group bookings by employee
+    const employeeBookings = {};
+    availableEmployees.forEach(emp => {
+      employeeBookings[emp.id] = bookingsResult.rows
+        .filter(b => b.employee_id === emp.id)
+        .map(b => ({
+          start_time: b.start_time,
+          end_time: b.end_time
+        }));
+    });
+
+    // Generate time slots
+    const [openHour, openMin] = businessHours.open_time.split(':').map(Number);
+    const [closeHour, closeMin] = businessHours.close_time.split(':').map(Number);
+    
+    const openMinutes = openHour * 60 + openMin;
+    const closeMinutes = closeHour * 60 + closeMin;
+    const durationMinutes = totalDuration * 60;
+    const interval = settings.time_slot_interval;
+    const buffer = settings.buffer_time;
+
+    const availableSlots = [];
+
+    for (let minutes = openMinutes; minutes + durationMinutes <= closeMinutes; minutes += interval) {
+      const startHour = Math.floor(minutes / 60);
+      const startMin = minutes % 60;
+      const endMinutes = minutes + durationMinutes;
+      const endHour = Math.floor(endMinutes / 60);
+      const endMin = endMinutes % 60;
+
+      const slotStart = `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}`;
+      const slotEnd = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
+
+      // Check if any employee is available for this slot
+      let hasAvailableEmployee = false;
+
+      for (const employee of availableEmployees) {
+        const employeeBookingsForDay = employeeBookings[employee.id] || [];
+        let hasConflict = false;
+
+        for (const booking of employeeBookingsForDay) {
+          const [bookStartHour, bookStartMin] = booking.start_time.split(':').map(Number);
+          const [bookEndHour, bookEndMin] = booking.end_time.split(':').map(Number);
+          
+          const bookStart = bookStartHour * 60 + bookStartMin - buffer;
+          const bookEnd = bookEndHour * 60 + bookEndMin + buffer;
+
+          if (minutes < bookEnd && endMinutes > bookStart) {
+            hasConflict = true;
+            break;
+          }
+        }
+
+        if (!hasConflict) {
+          hasAvailableEmployee = true;
+          break;
+        }
+      }
+
+      if (hasAvailableEmployee) {
+        // Format time for display (12-hour format)
+        const period = startHour >= 12 ? 'PM' : 'AM';
+        const displayHour = startHour > 12 ? startHour - 12 : startHour === 0 ? 12 : startHour;
+        const displayTime = `${displayHour}:${String(startMin).padStart(2, '0')} ${period}`;
+
+        availableSlots.push({
+          time: slotStart,
+          displayTime: displayTime,
+          availableEmployees: availableEmployees.length
+        });
+      }
+    }
+
+    res.json({ 
+      slots: availableSlots,
+      totalDuration,
+      businessHours: {
+        open: businessHours.open_time,
+        close: businessHours.close_time
+      }
+    });
+
+  } catch (error) {
+    console.error('Error calculating public availability:', error);
+    res.status(500).json({ error: 'Failed to calculate availability' });
+  }
+});
+
+// POST - Create public booking
+app.post('/api/public/bookings/create', async (req, res) => {
+  try {
+    const { 
+      businessId, 
+      serviceId, 
+      additionalServiceIds,
+      bookingDate, 
+      startTime, 
+      customerInfo, 
+      customerNotes,
+      assignmentType,
+      employeeId,
+      groupId
+    } = req.body;
+
+    if (!businessId || !serviceId || !bookingDate || !startTime || !customerInfo) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Get main service details
+    const serviceResult = await pool.query(
+      'SELECT duration_hours, price, name FROM services WHERE id = $1',
+      [serviceId]
+    );
+
+    if (serviceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    const mainService = serviceResult.rows[0];
+    
+    // Calculate total duration and price
+    let totalDuration = parseFloat(mainService.duration_hours);
+    let totalPrice = parseFloat(mainService.price);
+
+    if (additionalServiceIds && additionalServiceIds.length > 0) {
+      const additionalResult = await pool.query(
+        'SELECT duration_hours, price FROM services WHERE id = ANY($1)',
+        [additionalServiceIds]
+      );
+
+      additionalResult.rows.forEach(service => {
+        totalDuration += parseFloat(service.duration_hours);
+        totalPrice += parseFloat(service.price);
+      });
+    }
+
+    // Calculate end time
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = startMinutes + (totalDuration * 60);
+    const endHour = Math.floor(endMinutes / 60);
+    const endMin = endMinutes % 60;
+    const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
+
+    // Determine employee assignment
+    let assignedEmployeeId = null;
+
+    if (assignmentType === 'employee' && employeeId) {
+      // User selected specific employee
+      assignedEmployeeId = employeeId;
+    } else if (assignmentType === 'group' && groupId) {
+      // User selected group - pick random employee from group
+      const groupResult = await pool.query(
+        'SELECT employee_ids FROM groups WHERE id = $1',
+        [groupId]
+      );
+
+      if (groupResult.rows.length > 0 && groupResult.rows[0].employee_ids.length > 0) {
+        const groupEmployees = groupResult.rows[0].employee_ids;
+        // Pick random employee from group
+        assignedEmployeeId = groupEmployees[Math.floor(Math.random() * groupEmployees.length)];
+      }
+    }
+
+    // If no employee assigned yet, auto-assign
+    if (!assignedEmployeeId) {
+      const availableEmpResult = await pool.query(
+        `SELECT e.id 
+         FROM employees e
+         LEFT JOIN service_employees se ON e.id = se.employee_id
+         WHERE e.user_id = $1 
+         AND e.active = true
+         AND (se.service_id = $2 OR NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id))
+         AND NOT EXISTS (
+           SELECT 1 FROM bookings b
+           WHERE b.employee_id = e.id
+           AND b.booking_date = $3
+           AND b.status NOT IN ('cancelled', 'no_show')
+           AND (
+             (b.start_time <= $4 AND b.end_time > $4) OR
+             (b.start_time < $5 AND b.end_time >= $5) OR
+             (b.start_time >= $4 AND b.end_time <= $5)
+           )
+         )
+         LIMIT 1`,
+        [businessId, serviceId, bookingDate, startTime, endTime]
+      );
+
+      if (availableEmpResult.rows.length === 0) {
+        return res.status(409).json({ error: 'No employees available for this time slot' });
+      }
+
+      assignedEmployeeId = availableEmpResult.rows[0].id;
+    }
+
+    // Generate booking number
+    const bookingNumberResult = await pool.query('SELECT generate_booking_number() as number');
+    const bookingNumber = bookingNumberResult.rows[0].number;
+
+    // Create or find customer
+    let customerId;
+    const existingCustomer = await pool.query(
+      'SELECT id FROM customers WHERE user_id = $1 AND email = $2',
+      [businessId, customerInfo.email]
+    );
+
+    if (existingCustomer.rows.length > 0) {
+      customerId = existingCustomer.rows[0].id;
+      
+      // Update customer info
+      await pool.query(
+        'UPDATE customers SET name = $1, phone = $2 WHERE id = $3',
+        [customerInfo.name, customerInfo.phone, customerId]
+      );
+    } else {
+      const customerResult = await pool.query(
+        `INSERT INTO customers (user_id, name, email, phone)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [businessId, customerInfo.name, customerInfo.email, customerInfo.phone]
+      );
+      customerId = customerResult.rows[0].id;
+    }
+
+    // Create booking
+    const bookingResult = await pool.query(
+      `INSERT INTO bookings (
+        user_id, customer_id, booking_number, booking_date, start_time, end_time,
+        subtotal, total_amount, customer_name, customer_email, 
+        customer_phone, customer_address, customer_notes, status, employee_id, group_id, source
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      RETURNING *`,
+      [
+        businessId, customerId, bookingNumber, bookingDate, startTime, endTime,
+        totalPrice, totalPrice, customerInfo.name, customerInfo.email,
+        customerInfo.phone, customerInfo.address || null, customerNotes || null, 
+        'confirmed', assignedEmployeeId, groupId || null, 'public_booking'
+      ]
+    );
+
+    const booking = bookingResult.rows[0];
+
+    // Create booking items
+    // Main service
+    await pool.query(
+      `INSERT INTO booking_items (
+        booking_id, service_id, service_name, service_duration, 
+        service_price, quantity, subtotal
+      )
+      VALUES ($1, $2, $3, $4, $5, 1, $6)`,
+      [booking.id, serviceId, mainService.name, mainService.duration_hours, mainService.price, mainService.price]
+    );
+
+    // Additional services
+    if (additionalServiceIds && additionalServiceIds.length > 0) {
+      const additionalResult = await pool.query(
+        'SELECT id, name, duration_hours, price FROM services WHERE id = ANY($1)',
+        [additionalServiceIds]
+      );
+
+      for (const service of additionalResult.rows) {
+        await pool.query(
+          `INSERT INTO booking_items (
+            booking_id, service_id, service_name, service_duration, 
+            service_price, quantity, subtotal
+          )
+          VALUES ($1, $2, $3, $4, $5, 1, $6)`,
+          [booking.id, service.id, service.name, service.duration_hours, service.price, service.price]
+        );
+      }
+    }
+
+    // Get assigned employee name
+    const empResult = await pool.query('SELECT name FROM employees WHERE id = $1', [assignedEmployeeId]);
+
+    console.log(`✅ Public booking created: ${bookingNumber} for ${customerInfo.name}`);
+
+    res.json({ 
+      success: true, 
+      booking,
+      bookingNumber,
+      assignedEmployee: empResult.rows[0].name,
+      message: 'Booking confirmed!'
+    });
+
+  } catch (error) {
+    console.error('Error creating public booking:', error);
+    res.status(500).json({ error: 'Failed to create booking' });
+  }
+});
+
+console.log('✅ Public booking endpoints loaded');
+
 // Google Business Profile API Endpoints
 
 // GET - Fetch Google Business Profile for a user
@@ -2412,6 +2904,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
