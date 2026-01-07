@@ -3419,6 +3419,17 @@ cron.schedule('* * * * *', async () => {
   }
 });
 
+// 404 handler
+app.use((req, res) => {
+  sendError(res, 404, 'Endpoint not found');
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  sendError(res, 500, 'Internal server error');
+});
+
 // ============================================
 // START SERVER
 // ============================================
@@ -3430,28 +3441,3 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
