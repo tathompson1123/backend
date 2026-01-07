@@ -971,7 +971,47 @@ app.get('/api/google-business/stats', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       stats: {
-        repliesToday:
+        repliesToday: result.rows[0].replies_generated_today || 0,
+        repliesWeek: result.rows[0].replies_generated_week || 0,
+        repliesMonth: result.rows[0].replies_generated_month || 0,
+        lastReplyDate: result.rows[0].last_reply_date
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// POST - Reset daily/weekly/monthly stats (internal/cron only)
+app.post('/api/google-business/reset-stats', async (req, res) => {
+  try {
+    const { period, apiKey } = req.body;
+
+    // Simple API key check for cron jobs
+    if (apiKey !== process.env.CRON_API_KEY) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    let updateQuery;
+    if (period === 'daily') {
+      updateQuery = 'UPDATE google_business_profiles SET replies_generated_today = 0';
+    } else if (period === 'weekly') {
+      updateQuery = 'UPDATE google_business_profiles SET replies_generated_week = 0';
+    } else if (period === 'monthly') {
+      updateQuery = 'UPDATE google_business_profiles SET replies_generated_month = 0';
+    } else {
+      return res.status(400).json({ error: 'Invalid period' });
+    }
+
+    await pool.query(updateQuery);
+
+    res.json({ success: true, message: `${period} stats reset successfully` });
+  } catch (error) {
+    console.error('Error resetting stats:', error);
+    res.status(500).json({ error: 'Failed to reset stats' });
+  }
+});
 
 // ============================================
 // SERVICES ENDPOINTS (SECURED)
@@ -1962,7 +2002,9 @@ app.delete('/api/employees/:id', authenticateToken, async (req, res) => {
     console.error('Error deleting employee:', error);
     res.status(500).json({ error: 'Failed to delete employee' });
   }
-});
+  });
+
+console.log('✅ Google Business Profile endpoints loaded');
 
 // ============================================
 // GROUPS ENDPOINTS (SECURED)
@@ -3113,6 +3155,7 @@ app.get('/api/health', (req, res) => {
 // CRON JOB
 // ============================================
 
+// Process review requests every minute
 cron.schedule('* * * * *', async () => {
   try {
     const result = await pool.query(
@@ -3131,6 +3174,36 @@ cron.schedule('* * * * *', async () => {
     }
   } catch (error) {
     console.error('Cron job error:', error);
+  }
+});
+
+// Reset daily stats at midnight
+cron.schedule('0 0 * * *', async () => {
+  try {
+    await pool.query('UPDATE google_business_profiles SET replies_generated_today = 0');
+    console.log('✅ Daily stats reset');
+  } catch (error) {
+    console.error('Daily reset error:', error);
+  }
+});
+
+// Reset weekly stats on Sunday at midnight
+cron.schedule('0 0 * * 0', async () => {
+  try {
+    await pool.query('UPDATE google_business_profiles SET replies_generated_week = 0');
+    console.log('✅ Weekly stats reset');
+  } catch (error) {
+    console.error('Weekly reset error:', error);
+  }
+});
+
+// Reset monthly stats on the 1st at midnight
+cron.schedule('0 0 1 * *', async () => {
+  try {
+    await pool.query('UPDATE google_business_profiles SET replies_generated_month = 0');
+    console.log('✅ Monthly stats reset');
+  } catch (error) {
+    console.error('Monthly reset error:', error);
   }
 });
 
@@ -3156,5 +3229,6 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
