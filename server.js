@@ -867,14 +867,14 @@ console.log('✅ Public booking endpoints loaded');
 
 // Google Business Profile API Endpoints
 
+// ============================================
+// GOOGLE BUSINESS PROFILE ENDPOINTS (SECURED)
+// ============================================
+
 // GET - Fetch Google Business Profile for a user
-app.get('/api/google-business/profile', async (req, res) => {
+app.get('/api/google-business/profile', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
 
     const result = await pool.query(
       'SELECT * FROM google_business_profiles WHERE user_id = $1',
@@ -892,10 +892,10 @@ app.get('/api/google-business/profile', async (req, res) => {
 });
 
 // POST - Create or update Google Business Profile
-app.post('/api/google-business/profile', async (req, res) => {
+app.post('/api/google-business/profile', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { 
-      userId, 
       businessName, 
       placeId, 
       connected, 
@@ -906,11 +906,6 @@ app.post('/api/google-business/profile', async (req, res) => {
       websiteUrl
     } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
-
-    // Check if profile exists
     const existing = await pool.query(
       'SELECT id FROM google_business_profiles WHERE user_id = $1',
       [userId]
@@ -918,7 +913,6 @@ app.post('/api/google-business/profile', async (req, res) => {
 
     let result;
     if (existing.rows.length > 0) {
-      // Update existing profile
       result = await pool.query(
         `UPDATE google_business_profiles 
          SET business_name = $1, place_id = $2, connected = $3, 
@@ -929,7 +923,6 @@ app.post('/api/google-business/profile', async (req, res) => {
         [businessName, placeId, connected, rating, totalReviews, address, phone, websiteUrl, userId]
       );
     } else {
-      // Create new profile
       result = await pool.query(
         `INSERT INTO google_business_profiles 
          (user_id, business_name, place_id, connected, rating, total_reviews, 
@@ -951,13 +944,9 @@ app.post('/api/google-business/profile', async (req, res) => {
 });
 
 // GET - Get review reply statistics
-app.get('/api/google-business/stats', async (req, res) => {
+app.get('/api/google-business/stats', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
 
     const result = await pool.query(
       `SELECT replies_generated_today, replies_generated_week, 
@@ -982,46 +971,7 @@ app.get('/api/google-business/stats', async (req, res) => {
     res.json({
       success: true,
       stats: {
-        repliesToday: result.rows[0].replies_generated_today || 0,
-        repliesWeek: result.rows[0].replies_generated_week || 0,
-        repliesMonth: result.rows[0].replies_generated_month || 0,
-        lastReplyDate: result.rows[0].last_reply_date
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching stats:', error);
-    res.status(500).json({ error: 'Failed to fetch stats' });
-  }
-});
-
-// POST - Reset daily/weekly/monthly stats (run via cron job)
-app.post('/api/google-business/reset-stats', async (req, res) => {
-  try {
-    const { period } = req.body; // 'daily', 'weekly', or 'monthly'
-
-    let updateQuery;
-    if (period === 'daily') {
-      updateQuery = 'UPDATE google_business_profiles SET replies_generated_today = 0';
-    } else if (period === 'weekly') {
-      updateQuery = 'UPDATE google_business_profiles SET replies_generated_week = 0';
-    } else if (period === 'monthly') {
-      updateQuery = 'UPDATE google_business_profiles SET replies_generated_month = 0';
-    } else {
-      return res.status(400).json({ error: 'Invalid period' });
-    }
-
-    await pool.query(updateQuery);
-
-    res.json({ success: true, message: `${period} stats reset successfully` });
-  } catch (error) {
-    console.error('Error resetting stats:', error);
-    res.status(500).json({ error: 'Failed to reset stats' });
-  }
-});
-
-// ============================================
-// SERVICES ENDPOINTS
-// ============================================
+        repliesToday:
 
 // ============================================
 // SERVICES ENDPOINTS (SECURED)
@@ -3206,4 +3156,5 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
