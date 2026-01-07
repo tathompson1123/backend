@@ -161,7 +161,18 @@ ${teamInfo.instruction}` : ''}
 \`\`\`
 
 ### Images
-Use: https://source.unsplash.com/[width]x[height]/?${safeBusinessType.replace(/\s+/g, ',')}
+Use Unsplash with industry-specific search terms:
+- Hero: https://source.unsplash.com/1920x1080/?professional-${safeBusinessType.replace(/\s+/g, '-')},quality-service
+- Service cards: https://source.unsplash.com/800x600/?${serviceType.replace(/\s+/g, '-')}-work,professional
+- About: https://source.unsplash.com/1200x800/?${safeBusinessType}-team,professional-equipment
+
+Use realistic, non-generic images that show:
+1. Actual ${safeBusinessType} work (not models)
+2. Professional equipment and tools
+3. Quality results and clean workspaces
+4. Real work scenarios
+
+Avoid: Generic stock photos, staged models, unrelated imagery
 
 ═══════════════════════════════════════════════════════════════════
 ✨ PREMIUM INTERACTIONS (REQUIRED)
