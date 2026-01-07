@@ -109,6 +109,26 @@ app.use('/api/website/ai-edit', aiLimiter);
 // HELPER FUNCTIONS
 // ============================================
 
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expired' });
+    }
+    return res.status(403).json({ error: 'Invalid token' });
+  }
+}
+
      // XSS Prevention - use this when outputting user data to HTML
 function escapeHtml(str) {
   if (!str) return '';
@@ -161,17 +181,6 @@ function generateIncentiveCode() {
 function createReviewLink(placeId, incentiveCode) {
   const googleReviewUrl = `https://search.google.com/local/writereview?placeid=${placeId}`;
   return googleReviewUrl;
-}
-
-function sanitizeForPrompt(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/</g, '')
-    .replace(/>/g, '')
-    .replace(/\$/g, '')
-    .replace(/`/g, "'")
-    .trim()
-    .substring(0, 5000);
 }
 
 function generateTimeSlots(openTime, closeTime, serviceDuration, interval, buffer) {
@@ -366,191 +375,6 @@ async function sendReviewRequest(reviewRequest) {
     console.error('Error sending review request:', error);
   }
 }
-
-// BUSINESS INFORMATION API ENDPOINTS
-// Add these to your server.js file
-
-// ============================================
-// BUSINESS INFORMATION ENDPOINTS
-// ============================================
-
-// GET - Fetch business information
-app.get('/api/business-info', async (req, res) => {
-  try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
-
-    const result = await pool.query(
-      'SELECT * FROM business_information WHERE user_id = $1',
-      [userId]
-    );
-
-    if (result.rows.length === 0) {
-      // Return empty object if no data exists yet
-      return res.json({ businessInfo: null });
-    }
-
-    res.json({ businessInfo: result.rows[0] });
-  } catch (error) {
-    console.error('Error fetching business info:', error);
-    res.status(500).json({ error: 'Failed to fetch business information' });
-  }
-});
-
-// POST - Save/Update business information
-app.post('/api/business-info', async (req, res) => {
-  try {
-    const { 
-      userId, 
-      phone, 
-      email, 
-      address, 
-      city, 
-      state, 
-      zipCode,
-      serviceAreaType,
-      serviceZipCodes,
-      serviceRadius,
-      centerZipCode
-    } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
-
-    // Check if record exists
-    const existing = await pool.query(
-      'SELECT id FROM business_information WHERE user_id = $1',
-      [userId]
-    );
-
-    let result;
-    
-    if (existing.rows.length > 0) {
-      // Update existing record
-      result = await pool.query(
-        `UPDATE business_information 
-         SET phone = $1,
-             email = $2,
-             address = $3,
-             city = $4,
-             state = $5,
-             zip_code = $6,
-             service_area_type = $7,
-             service_zip_codes = $8,
-             service_radius = $9,
-             center_zip_code = $10,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE user_id = $11
-         RETURNING *`,
-        [
-          phone, 
-          email, 
-          address, 
-          city, 
-          state, 
-          zipCode,
-          serviceAreaType,
-          serviceZipCodes || [],
-          serviceRadius || 25,
-          centerZipCode,
-          userId
-        ]
-      );
-    } else {
-      // Insert new record
-      result = await pool.query(
-        `INSERT INTO business_information (
-          user_id, phone, email, address, city, state, zip_code,
-          service_area_type, service_zip_codes, service_radius, center_zip_code
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        RETURNING *`,
-        [
-          userId,
-          phone, 
-          email, 
-          address, 
-          city, 
-          state, 
-          zipCode,
-          serviceAreaType || 'zipcodes',
-          serviceZipCodes || [],
-          serviceRadius || 25,
-          centerZipCode
-        ]
-      );
-    }
-
-    // Also update users table phone if provided (for backward compatibility)
-    if (phone) {
-      await pool.query(
-        'UPDATE users SET phone = $1 WHERE id = $2',
-        [phone, userId]
-      );
-    }
-
-    res.json({ 
-      success: true,
-      businessInfo: result.rows[0] 
-    });
-  } catch (error) {
-    console.error('Error saving business info:', error);
-    res.status(500).json({ error: 'Failed to save business information' });
-  }
-});
-
-// GET - Check if zip code is in service area
-app.get('/api/business-info/check-service-area', async (req, res) => {
-  try {
-    const { userId, zipCode } = req.query;
-    
-    if (!userId || !zipCode) {
-      return res.status(400).json({ error: 'userId and zipCode required' });
-    }
-
-    const result = await pool.query(
-      'SELECT service_area_type, service_zip_codes, service_radius, center_zip_code FROM business_information WHERE user_id = $1',
-      [userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.json({ inServiceArea: true, message: 'Service area not configured' });
-    }
-
-    const info = result.rows[0];
-
-    if (info.service_area_type === 'zipcodes') {
-      // Check if zip code is in the list
-      const inArea = info.service_zip_codes && info.service_zip_codes.includes(zipCode);
-      return res.json({ 
-        inServiceArea: inArea,
-        message: inArea ? 'We service your area!' : 'Sorry, we don\'t currently service this zip code'
-      });
-    } else if (info.service_area_type === 'radius') {
-      // For radius, you would need a zip code distance calculation API
-      // For now, we'll just return true as a placeholder
-      // In production, integrate with a zip code distance API
-      return res.json({ 
-        inServiceArea: true,
-        message: 'Radius-based service area (distance calculation needed)'
-      });
-    }
-
-    res.json({ inServiceArea: true });
-  } catch (error) {
-    console.error('Error checking service area:', error);
-    res.status(500).json({ error: 'Failed to check service area' });
-  }
-});
-
-console.log('✅ Business information endpoints loaded');
-
-// PUBLIC BOOKING API ENDPOINTS
-// Add these to your server.js file
 
 // ============================================
 // PUBLIC BOOKING ENDPOINTS (No auth required)
@@ -1125,65 +949,6 @@ app.post('/api/google-business/profile', async (req, res) => {
     res.status(500).json({ error: 'Failed to save profile' });
   }
 });
-
-// POST - Generate AI review reply
-app.post('/api/google-business/generate-reply', async (req, res) => {
-  try {
-    const { userId, reviewText, rating, businessName, customerName } = req.body;
-
-    if (!userId || !reviewText || !rating) {
-      return res.status(400).json({ error: 'userId, reviewText, and rating required' });
-    }
-
-    // Generate AI reply using Claude or your AI service
-    const prompt = `You are responding to a ${rating}-star Google Business review for ${businessName || 'a business'}. 
-    
-${customerName ? `Customer name: ${customerName}` : ''}
-Review: "${reviewText}"
-
-Generate a professional, empathetic response that:
-- Thanks the customer ${customerName ? `(use their name: ${customerName})` : ''}
-- ${rating >= 4 ? 'Expresses gratitude for the positive feedback' : 'Acknowledges their concerns and offers to make things right'}
-- ${rating >= 4 ? 'Encourages them to return' : 'Provides a solution or way to contact you directly'}
-- Is warm, professional, and concise (2-4 sentences)
-- Does not use generic AI phrases
-
-Response:`;
-
-    // Call your AI service here (OpenAI, Anthropic, etc.)
-    // For now, I'll create a placeholder response
-    const aiReply = await generateAIReply(prompt); // You need to implement this function
-
-    // Update statistics
-    await pool.query(
-      `UPDATE google_business_profiles 
-       SET replies_generated_today = replies_generated_today + 1,
-           replies_generated_week = replies_generated_week + 1,
-           replies_generated_month = replies_generated_month + 1,
-           last_reply_date = CURRENT_TIMESTAMP,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $1`,
-      [userId]
-    );
-
-    res.json({
-      success: true,
-      reply: aiReply
-    });
-  } catch (error) {
-    console.error('Error generating AI reply:', error);
-    res.status(500).json({ error: 'Failed to generate reply' });
-  }
-});
-
-// Helper function to generate AI reply (you'll need to implement this with your AI provider)
-async function generateAIReply(prompt) {
-  // Example using Anthropic's Claude API
-  // You'll need to add your API key and implement this
-  
-  // For now, return a placeholder
-  return "Thank you so much for your wonderful review! We're thrilled to hear you had a great experience with us. We look forward to serving you again soon!";
-}
 
 // GET - Get review reply statistics
 app.get('/api/google-business/stats', async (req, res) => {
@@ -3441,3 +3206,4 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
