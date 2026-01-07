@@ -1,3 +1,5 @@
+const { getImageGuidance } = require('./image_guidance');
+
 // ============================================
 // VISUAL SUPREMACY PROMPT - PREMIUM VERSION
 // This includes all advanced styling for $10k+ website look
@@ -31,9 +33,10 @@ function buildVisualSupremacyPrompt({
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '37, 99, 235';
   };
-  
+ 
   const primaryRgb = hexToRgb(primaryColor);
   const secondaryRgb = hexToRgb(accentColor);
+  const imageGuide = getImageGuidance(safeBusinessType);
 
   return `You are an elite web designer creating a VISUALLY STUNNING, premium service business website with cutting-edge design and micro-interactions.
 
