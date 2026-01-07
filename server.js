@@ -1,4 +1,6 @@
 const rateLimit = require('express-rate-limit'); 
+const { buildVisualSupremacyPrompt } = require('./visual_supremacy_prompt');
+const app = express();
 const helmet = require('helmet'); 
 const { body, query, param, validationResult } = require('express-validator');
 const express = require('express');
@@ -2234,10 +2236,6 @@ app.get('/api/availability', authenticateToken, async (req, res) => {
 });
 
 // ============================================
-// AI WEBSITE GENERATION ENDPOINT (FIXED)
-// ============================================
-
-// ============================================
 // AI WEBSITE GENERATION ENDPOINT (SECURED)
 // ============================================
 
@@ -3229,6 +3227,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
