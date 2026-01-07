@@ -2238,6 +2238,10 @@ app.get('/api/availability', authenticateToken, async (req, res) => {
 // AI WEBSITE GENERATION ENDPOINT (SECURED)
 // ============================================
 
+// ============================================
+// AI WEBSITE GENERATION ENDPOINT (SECURED)
+// ============================================
+
 app.post('/api/generate', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -2265,11 +2269,9 @@ app.post('/api/generate', authenticateToken, async (req, res) => {
     const safeUSPs = sanitizeForPrompt(uniqueSellingPoints);
     const safeTargetCustomer = sanitizeForPrompt(targetCustomer);
 
-    console.log('🎨 Generating multi-page website for:', safeBusinessName);
+    console.log('🎨 Generating premium website for:', safeBusinessName);
     console.log('👤 User ID:', userId);
     console.log('📋 Business Type:', safeBusinessType);
-    console.log('✨ Tagline:', safeTagline);
-    console.log('🎯 USPs:', safeUSPs);
 
     if (!safeBusinessName || !safeBusinessType) {
       return res.status(400).json({ error: 'Business name and type are required' });
@@ -2331,10 +2333,7 @@ app.post('/api/generate', authenticateToken, async (req, res) => {
       console.log('✅ Fetched user data:', {
         services: userServices.length,
         businessHours: userBusinessHours.length,
-        employees: userEmployees.length,
-        hasPhone: !!userBusinessInfo?.phone,
-        hasAddress: !!userBusinessInfo?.address,
-        serviceAreaType: userBusinessInfo?.service_area_type
+        employees: userEmployees.length
       });
     } catch (error) {
       console.error('⚠️ Error fetching user data:', error);
@@ -2438,7 +2437,6 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
     console.log('🔗 Booking URL:', bookingUrl);
     console.log('📞 Phone:', phoneNumber);
     console.log('📍 Address:', fullAddress || 'Not provided');
-    console.log('🗺️  Service Area:', serviceAreaText || 'Not configured');
 
     // ============================================
     // DETERMINE PRIMARY COLOR
@@ -2467,123 +2465,33 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
       accentColor = '#a855f7';
     }
 
-    console.log('📡 Calling Anthropic API...');
-
     // ============================================
-    // BUILD THE PROMPT (using sanitized values)
+    // BUILD THE PROMPT USING THE NEW FUNCTION
     // ============================================
-    const prompt = `You are an expert web designer creating a professional, mobile-responsive website.
+    const prompt = buildVisualSupremacyPrompt({
+      safeBusinessName,
+      safeBusinessType,
+      safeTagline,
+      safeDescription,
+      safeUSPs,
+      yearsInBusiness,
+      safeCertifications,
+      safeTargetCustomer,
+      phoneNumber,
+      phoneNumberClean,
+      contactEmail,
+      fullAddress,
+      serviceAreaText,
+      bookingUrl,
+      ownerName,
+      servicesInfo,
+      hoursInfo,
+      teamInfo,
+      primaryColor,
+      accentColor
+    });
 
-## BUSINESS INFORMATION
-- **Business Name:** ${safeBusinessName}
-- **Business Type:** ${safeBusinessType}
-${safeTagline ? `- **Tagline:** "${safeTagline}"` : ''}
-${safeDescription ? `- **Description:** ${safeDescription}` : ''}
-${safeUSPs ? `- **What Makes Us Different:** ${safeUSPs}` : ''}
-${yearsInBusiness ? `- **Years in Business:** ${yearsInBusiness}` : ''}
-${safeCertifications ? `- **Certifications:** ${safeCertifications}` : ''}
-${safeTargetCustomer ? `- **Target Customer:** ${safeTargetCustomer}` : ''}
-
-## CONTACT INFORMATION
-- **Phone:** ${phoneNumber}
-- **Email:** ${contactEmail}
-${fullAddress ? `- **Address:** ${fullAddress}` : ''}
-${serviceAreaText ? `- **Service Area:** ${serviceAreaText}` : ''}
-- **Booking URL:** ${bookingUrl}
-${ownerName ? `- **Owner:** ${ownerName}` : ''}
-
-## SERVICES
-${servicesInfo.services}
-${servicesInfo.instruction}
-
-## BUSINESS HOURS
-${hoursInfo.hours}
-${hoursInfo.instruction}
-
-${teamInfo.team ? `## TEAM\n${teamInfo.team}` : ''}
-
-## DESIGN REQUIREMENTS
-
-### Colors
-- Primary: ${primaryColor}
-- Accent: ${accentColor}
-- Background: #FFFFFF
-- Text: #1F2937
-- Secondary text: #6B7280
-- Borders: #E5E7EB
-
-### CSS Variables (MUST include in :root)
-:root {
-  --primary-color: ${primaryColor};
-  --accent-color: ${accentColor};
-}
-
-### Images
-Use placeholder images from https://picsum.photos/[width]/[height]
-- Hero: https://picsum.photos/1920/1080
-- Service cards: https://picsum.photos/800/600
-- About section: https://picsum.photos/1200/800
-- Testimonials: https://picsum.photos/400/400
-
-### Typography
-- Font: system-ui, -apple-system, sans-serif
-- H1: 3rem, font-weight 900
-- H2: 2rem, font-weight 800
-- H3: 1.5rem, font-weight 700
-- Body: 1rem, line-height 1.6
-
-### Layout
-- Max width: 1200px
-- Section padding: 6rem 0
-- Mobile padding: 3rem 0
-- Fully responsive (mobile-first)
-
-## REQUIRED PAGES (Single HTML file with JS navigation)
-
-### 1. HOME PAGE - Must include these sections in order:
-1. **Hero** - Full viewport, background image with overlay, headline, tagline, CTA buttons
-2. **Trust Bar** - Stats (years, customers, rating, certifications)
-3. **Services** - 3-6 service cards with images, descriptions, prices, book buttons
-4. **Why Choose Us** - Image + benefits list
-5. **How It Works** - 4 step process
-6. **Testimonials** - 3 customer reviews (create realistic ${safeBusinessType}-specific testimonials)
-7. **Final CTA** - Large call to action section
-
-### 2. SERVICES PAGE
-- All services with detailed descriptions
-- Each service has image, description, price, duration, book button
-
-### 3. GIFT CARDS PAGE
-- Gift card visual display
-- Amount selection buttons ($50, $75, $100, $150, $200, Custom)
-- Purchase button (shows alert with phone number)
-
-### 4. CONTACT PAGE
-- All contact information
-- Business hours
-- Contact form (shows success alert on submit)
-- Map placeholder
-- Quick book CTA
-
-## NAVIGATION
-- Sticky header with logo, nav links, phone number, Book Now button
-- Phone number: clickable on mobile only (use CSS pointer-events)
-- Mobile hamburger menu
-- JavaScript SPA navigation (no page reloads)
-
-## CRITICAL REQUIREMENTS
-1. All "Book Now" buttons link to: ${bookingUrl}
-2. Phone links use: tel:${phoneNumberClean}
-3. Email links use: mailto:${contactEmail}
-4. Contact form shows alert on submit (no backend needed)
-5. Gift card purchase shows confirmation alert
-6. Include smooth scroll behavior
-7. Include subtle hover animations on cards and buttons
-8. All content must be specific to ${safeBusinessType} industry
-
-## OUTPUT
-Return ONLY valid HTML starting with <!DOCTYPE html>
-No markdown formatting, no explanations, just the complete HTML file.`;
+    console.log('📡 Calling Anthropic API with premium prompt...');
 
     // ============================================
     // CALL ANTHROPIC API
@@ -2597,7 +2505,8 @@ No markdown formatting, no explanations, just the complete HTML file.`;
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 64000,
+        max_tokens: 40000,
+        temperature: 0.5,
         messages: [{
           role: 'user',
           content: prompt
@@ -2631,11 +2540,9 @@ No markdown formatting, no explanations, just the complete HTML file.`;
     const bookingLinkCount = (cleanHtml.match(new RegExp(bookingUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
     const phoneCount = (cleanHtml.match(new RegExp(phoneNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
     
-    console.log(`✅ Multi-page website generated`);
+    console.log(`✅ Premium website generated with visual enhancements`);
     console.log(`✅ Booking links: ${bookingLinkCount}`);
     console.log(`✅ Phone displays: ${phoneCount}`);
-    console.log(`✅ Has address: ${!!fullAddress}`);
-    console.log(`✅ Has service area: ${!!serviceAreaText}`);
 
     res.json({ 
       success: true, 
@@ -2662,7 +2569,7 @@ No markdown formatting, no explanations, just the complete HTML file.`;
   }
 });
 
-console.log('✅ Website generation endpoint loaded with sanitization');
+console.log('✅ Website generation endpoint loaded with Visual Supremacy prompt');
 
 // ============================================
 // AUTHENTICATION ENDPOINTS (NO AUTH NEEDED)
@@ -3226,6 +3133,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
