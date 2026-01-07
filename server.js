@@ -1,4 +1,6 @@
-// server-review-automation.js - Complete Review Automation System
+const rateLimit = require('express-rate-limit'); 
+const helmet = require('helmet'); 
+const { body, query, param, validationResult } = require('express-validator');
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -38,7 +40,13 @@ if (process.env.SENDGRID_API_KEY) {
 }
 
 // JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
+  console.error('❌ FATAL: JWT_SECRET must be set in production');
+  process.exit(1);
+}
+const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'dev-only-fallback-secret-change-me';
+
 
 // Middleware
 app.set('trust proxy', 1);
@@ -66,9 +74,85 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '50mb' }));
 
+// Helmet for security headers
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
+
+// Rate limiting
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200,
+  message: { error: 'Too many requests, please try again later' }
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many login attempts' }
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20,
+  message: { error: 'AI generation limit reached' }
+});
+
+app.use('/api/', generalLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/signup', authLimiter);
+app.use('/api/generate', aiLimiter);
+app.use('/api/website/ai-edit', aiLimiter);
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+     // XSS Prevention - use this when outputting user data to HTML
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Sanitize for AI prompts
+function sanitizeForPrompt(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/</g, '')
+    .replace(/>/g, '')
+    .replace(/\$/g, '')
+    .replace(/`/g, "'")
+    .trim()
+    .substring(0, 5000);
+}
+
+// Standardized responses
+function sendError(res, status, message, details = null) {
+  const response = { success: false, error: message };
+  if (details && process.env.NODE_ENV !== 'production') {
+    response.details = details;
+  }
+  return res.status(status).json(response);
+}
+
+function sendSuccess(res, data, message = null) {
+  return res.json({ success: true, ...(message && { message }), ...data });
+}
+
+// Validation handler
+function handleValidation(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return sendError(res, 400, 'Validation failed', errors.array());
+  }
+  next();
+}
 
 function generateIncentiveCode() {
   return 'REVIEW' + Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -77,6 +161,17 @@ function generateIncentiveCode() {
 function createReviewLink(placeId, incentiveCode) {
   const googleReviewUrl = `https://search.google.com/local/writereview?placeid=${placeId}`;
   return googleReviewUrl;
+}
+
+function sanitizeForPrompt(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/</g, '')
+    .replace(/>/g, '')
+    .replace(/\$/g, '')
+    .replace(/`/g, "'")
+    .trim()
+    .substring(0, 5000);
 }
 
 function generateTimeSlots(openTime, closeTime, serviceDuration, interval, buffer) {
@@ -1163,13 +1258,13 @@ app.post('/api/google-business/reset-stats', async (req, res) => {
 // SERVICES ENDPOINTS
 // ============================================
 
-app.get('/api/services', async (req, res) => {
+// ============================================
+// SERVICES ENDPOINTS (SECURED)
+// ============================================
+
+app.get('/api/services', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
 
     const result = await pool.query(
       'SELECT * FROM services WHERE user_id = $1 AND active = true ORDER BY name',
@@ -1183,11 +1278,12 @@ app.get('/api/services', async (req, res) => {
   }
 });
 
-app.post('/api/services', async (req, res) => {
+app.post('/api/services', authenticateToken, async (req, res) => {
   try {
-    const { userId, name, description, durationHours, price } = req.body;
+    const userId = req.user.userId;
+    const { name, description, durationHours, price } = req.body;
 
-    if (!userId || !name || !durationHours || !price) {
+    if (!name || !durationHours || !price) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -1205,140 +1301,9 @@ app.post('/api/services', async (req, res) => {
   }
 });
 
-// Update booking
-app.put('/api/bookings/:id', async (req, res) => {
+app.put('/api/services/:id', authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
-    const { userId, serviceId, bookingDate, startTime, customerInfo, notes, employeeId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
-
-    // Get service details
-    const serviceResult = await pool.query(
-      'SELECT duration_hours, price, name FROM services WHERE id = $1',
-      [serviceId]
-    );
-
-    if (serviceResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Service not found' });
-    }
-
-    const service = serviceResult.rows[0];
-    
-    // Calculate end time
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const startMinutes = startHour * 60 + startMin;
-    const endMinutes = startMinutes + (service.duration_hours * 60);
-    const endHour = Math.floor(endMinutes / 60);
-    const endMin = endMinutes % 60;
-    const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
-
-    // Update booking
-    const bookingResult = await pool.query(
-      `UPDATE bookings 
-       SET booking_date = $1,
-           start_time = $2,
-           end_time = $3,
-           customer_name = $4,
-           customer_email = $5,
-           customer_phone = $6,
-           customer_address = $7,
-           job_notes = $8,
-           employee_id = $9,
-           group_id = $10,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $11 AND user_id = $12
-       RETURNING *`,
-      [
-        bookingDate,
-        startTime,
-        endTime,
-        customerInfo.name,
-        customerInfo.email,
-        customerInfo.phone,
-        customerInfo.address,
-        notes,
-        employeeId,
-        groupId || null,
-        id,
-        userId
-      ]
-    );
-
-    if (bookingResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Booking not found or unauthorized' });
-    }
-
-    // Update customer info if customer_id exists
-    if (bookingResult.rows[0].customer_id) {
-      await pool.query(
-        `UPDATE customers 
-         SET name = $1, email = $2, phone = $3
-         WHERE id = $4`,
-        [customerInfo.name, customerInfo.email, customerInfo.phone, bookingResult.rows[0].customer_id]
-      );
-    }
-
-    // Update booking items if service changed
-    await pool.query(
-      `UPDATE booking_items
-       SET service_id = $1,
-           service_name = $2,
-           service_duration = $3,
-           service_price = $4,
-           subtotal = $5
-       WHERE booking_id = $6`,
-      [serviceId, service.name, service.duration_hours, service.price, service.price, id]
-    );
-
-    res.json({ 
-      success: true,
-      booking: bookingResult.rows[0],
-      message: 'Booking updated successfully'
-    });
-
-  } catch (error) {
-    console.error('Error updating booking:', error);
-    res.status(500).json({ error: 'Failed to update booking' });
-  }
-});
-
-// Update booking notes
-app.put('/api/bookings/:id/notes', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId, notes } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
-
-    const result = await pool.query(
-      `UPDATE bookings 
-       SET job_notes = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2 AND user_id = $3
-       RETURNING *`,
-      [notes, id, userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Booking not found' });
-    }
-
-    res.json({ 
-      success: true,
-      booking: result.rows[0]
-    });
-  } catch (error) {
-    console.error('Error updating booking notes:', error);
-    res.status(500).json({ error: 'Failed to update notes' });
-  }
-});
-
-app.put('/api/services/:id', async (req, res) => {
-  try {
+    const userId = req.user.userId;
     const { id } = req.params;
     const { name, description, durationHours, price, active } = req.body;
 
@@ -1349,9 +1314,9 @@ app.put('/api/services/:id', async (req, res) => {
            duration_hours = COALESCE($3, duration_hours),
            price = COALESCE($4, price),
            active = COALESCE($5, active)
-       WHERE id = $6
+       WHERE id = $6 AND user_id = $7
        RETURNING *`,
-      [name, description, durationHours, price, active, id]
+      [name, description, durationHours, price, active, id, userId]
     );
 
     if (result.rows.length === 0) {
@@ -1366,16 +1331,12 @@ app.put('/api/services/:id', async (req, res) => {
 });
 
 // ============================================
-// CUSTOMERS ENDPOINTS
+// CUSTOMERS ENDPOINTS (SECURED)
 // ============================================
 
-app.get('/api/customers', async (req, res) => {
+app.get('/api/customers', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.query;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
 
     const result = await pool.query(
       'SELECT * FROM customers WHERE user_id = $1 ORDER BY name',
@@ -1389,12 +1350,13 @@ app.get('/api/customers', async (req, res) => {
   }
 });
 
-app.post('/api/customers', async (req, res) => {
+app.post('/api/customers', authenticateToken, async (req, res) => {
   try {
-    const { userId, name, email, phone, notes } = req.body;
+    const userId = req.user.userId;
+    const { name, email, phone, notes } = req.body;
 
-    if (!userId || !name) {
-      return res.status(400).json({ error: 'userId and name required' });
+    if (!name) {
+      return res.status(400).json({ error: 'name required' });
     }
 
     const result = await pool.query(
@@ -1412,16 +1374,13 @@ app.post('/api/customers', async (req, res) => {
 });
 
 // ============================================
-// JOBS ENDPOINTS
+// JOBS ENDPOINTS (SECURED)
 // ============================================
 
-app.get('/api/jobs', async (req, res) => {
+app.get('/api/jobs', authenticateToken, async (req, res) => {
   try {
-    const { userId, status } = req.query;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
+    const { status } = req.query;
 
     let query = `
       SELECT j.*, c.name as customer_name, c.email, c.phone, s.name as service_name
@@ -1449,17 +1408,18 @@ app.get('/api/jobs', async (req, res) => {
   }
 });
 
-app.post('/api/jobs', async (req, res) => {
+app.post('/api/jobs', authenticateToken, async (req, res) => {
   try {
-    const { userId, customerId, serviceId, scheduledStart, notes } = req.body;
+    const userId = req.user.userId;
+    const { customerId, serviceId, scheduledStart, notes } = req.body;
 
-    if (!userId || !customerId || !serviceId || !scheduledStart) {
+    if (!customerId || !serviceId || !scheduledStart) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
     const serviceResult = await pool.query(
-      'SELECT name, duration_hours, price FROM services WHERE id = $1',
-      [serviceId]
+      'SELECT name, duration_hours, price FROM services WHERE id = $1 AND user_id = $2',
+      [serviceId, userId]
     );
 
     if (serviceResult.rows.length === 0) {
@@ -1486,16 +1446,17 @@ app.post('/api/jobs', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/complete', async (req, res) => {
+app.post('/api/jobs/:id/complete', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { id } = req.params;
 
     const result = await pool.query(
       `UPDATE jobs 
        SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-       WHERE id = $1
+       WHERE id = $1 AND user_id = $2
        RETURNING *`,
-      [id]
+      [id, userId]
     );
 
     if (result.rows.length === 0) {
@@ -1515,19 +1476,16 @@ app.post('/api/jobs/:id/complete', async (req, res) => {
 });
 
 // ============================================
-// ANALYTICS ENDPOINTS
+// ANALYTICS ENDPOINTS (SECURED)
 // ============================================
 
-app.get('/api/analytics/reviews', async (req, res) => {
+app.get('/api/analytics/reviews', authenticateToken, async (req, res) => {
   try {
-    const { userId, startDate, endDate } = req.query;
+    const userId = req.user.userId;
+    const { startDate, endDate } = req.query;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
-
-    const statsResult = await pool.query(
-      `SELECT 
+    let queryStr = `
+      SELECT 
         COALESCE(SUM(requests_sent), 0) as total_sent,
         COALESCE(SUM(sms_sent), 0) as total_sms,
         COALESCE(SUM(emails_sent), 0) as total_emails,
@@ -1537,10 +1495,24 @@ app.get('/api/analytics/reviews', async (req, res) => {
         ROUND(AVG(review_rate), 2) as avg_review_rate
        FROM review_analytics
        WHERE user_id = $1
-       ${startDate ? 'AND date >= $2' : ''}
-       ${endDate ? 'AND date <= $3' : ''}`,
-      [userId, startDate, endDate].filter(Boolean)
-    );
+    `;
+    
+    const params = [userId];
+    let paramCount = 1;
+
+    if (startDate) {
+      paramCount++;
+      queryStr += ` AND date >= $${paramCount}`;
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      paramCount++;
+      queryStr += ` AND date <= $${paramCount}`;
+      params.push(endDate);
+    }
+
+    const statsResult = await pool.query(queryStr, params);
 
     const dailyResult = await pool.query(
       `SELECT * FROM review_analytics
@@ -1560,21 +1532,13 @@ app.get('/api/analytics/reviews', async (req, res) => {
   }
 });
 
-// COMPLETE BUSINESS INFORMATION & HOURS API ENDPOINTS
-// Add these to your server.js file
-
 // ============================================
-// BUSINESS HOURS ENDPOINTS
+// BUSINESS HOURS ENDPOINTS (SECURED)
 // ============================================
 
-// GET - Fetch business hours
-app.get('/api/business-hours', async (req, res) => {
+app.get('/api/business-hours', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
 
     const result = await pool.query(
       'SELECT * FROM business_hours WHERE user_id = $1 ORDER BY day_of_week',
@@ -1588,19 +1552,17 @@ app.get('/api/business-hours', async (req, res) => {
   }
 });
 
-// POST - Save/Update business hours
-app.post('/api/business-hours', async (req, res) => {
+app.post('/api/business-hours', authenticateToken, async (req, res) => {
   try {
-    const { userId, hours } = req.body;
+    const userId = req.user.userId;
+    const { hours } = req.body;
 
-    if (!userId || !hours) {
-      return res.status(400).json({ error: 'userId and hours required' });
+    if (!hours) {
+      return res.status(400).json({ error: 'hours required' });
     }
 
-    // Delete existing hours for this user
     await pool.query('DELETE FROM business_hours WHERE user_id = $1', [userId]);
 
-    // Insert new hours
     for (const hour of hours) {
       await pool.query(
         `INSERT INTO business_hours (user_id, day_of_week, is_open, open_time, close_time)
@@ -1609,7 +1571,6 @@ app.post('/api/business-hours', async (req, res) => {
       );
     }
 
-    // Fetch and return updated hours
     const result = await pool.query(
       'SELECT * FROM business_hours WHERE user_id = $1 ORDER BY day_of_week',
       [userId]
@@ -1626,17 +1587,12 @@ app.post('/api/business-hours', async (req, res) => {
 });
 
 // ============================================
-// BUSINESS INFORMATION ENDPOINTS
+// BUSINESS INFORMATION ENDPOINTS (SECURED)
 // ============================================
 
-// GET - Fetch business information
-app.get('/api/business-info', async (req, res) => {
+app.get('/api/business-info', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
 
     const result = await pool.query(
       'SELECT * FROM business_information WHERE user_id = $1',
@@ -1644,7 +1600,6 @@ app.get('/api/business-info', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      // Return empty object if no data exists yet
       return res.json({ businessInfo: null });
     }
 
@@ -1655,11 +1610,10 @@ app.get('/api/business-info', async (req, res) => {
   }
 });
 
-// POST - Save/Update business information
-app.post('/api/business-info', async (req, res) => {
+app.post('/api/business-info', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { 
-      userId, 
       phone, 
       email, 
       address, 
@@ -1672,11 +1626,6 @@ app.post('/api/business-info', async (req, res) => {
       centerZipCode
     } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
-
-    // Check if record exists
     const existing = await pool.query(
       'SELECT id FROM business_information WHERE user_id = $1',
       [userId]
@@ -1685,7 +1634,6 @@ app.post('/api/business-info', async (req, res) => {
     let result;
     
     if (existing.rows.length > 0) {
-      // Update existing record
       result = await pool.query(
         `UPDATE business_information 
          SET phone = $1,
@@ -1716,7 +1664,6 @@ app.post('/api/business-info', async (req, res) => {
         ]
       );
     } else {
-      // Insert new record
       result = await pool.query(
         `INSERT INTO business_information (
           user_id, phone, email, address, city, state, zip_code,
@@ -1740,7 +1687,6 @@ app.post('/api/business-info', async (req, res) => {
       );
     }
 
-    // Also update users table phone if provided (for backward compatibility)
     if (phone) {
       await pool.query(
         'UPDATE users SET phone = $1 WHERE id = $2',
@@ -1758,13 +1704,13 @@ app.post('/api/business-info', async (req, res) => {
   }
 });
 
-// GET - Check if zip code is in service area (informational only)
-app.get('/api/business-info/check-service-area', async (req, res) => {
+app.get('/api/business-info/check-service-area', authenticateToken, async (req, res) => {
   try {
-    const { userId, zipCode } = req.query;
+    const userId = req.user.userId;
+    const { zipCode } = req.query;
     
-    if (!userId || !zipCode) {
-      return res.status(400).json({ error: 'userId and zipCode required' });
+    if (!zipCode) {
+      return res.status(400).json({ error: 'zipCode required' });
     }
 
     const result = await pool.query(
@@ -1781,21 +1727,19 @@ app.get('/api/business-info/check-service-area', async (req, res) => {
 
     const info = result.rows[0];
 
-    // Note: This is informational only - it does NOT restrict bookings
     if (info.service_area_type === 'zipcodes') {
       const inArea = info.service_zip_codes && info.service_zip_codes.includes(zipCode);
       return res.json({ 
-        inServiceArea: true, // Always true since we don't restrict
+        inServiceArea: true,
         isPrimaryArea: inArea,
         message: inArea 
           ? 'This is within our primary service area!' 
           : 'We accept bookings from all locations'
       });
     } else if (info.service_area_type === 'radius') {
-      // For radius-based areas, always return true
       return res.json({ 
         inServiceArea: true,
-        isPrimaryArea: true, // Would need actual distance calculation
+        isPrimaryArea: true,
         message: 'We accept bookings from all locations'
       });
     }
@@ -1810,18 +1754,13 @@ app.get('/api/business-info/check-service-area', async (req, res) => {
   }
 });
 
-console.log('✅ Business hours and information endpoints loaded');
-
 // ============================================
-// BOOKING SETTINGS ENDPOINTS
+// BOOKING SETTINGS ENDPOINTS (SECURED)
 // ============================================
 
-app.get('/api/booking-settings', async (req, res) => {
+app.get('/api/booking-settings', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.query;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
 
     const result = await pool.query(
       'SELECT * FROM booking_settings WHERE user_id = $1',
@@ -1850,12 +1789,10 @@ app.get('/api/booking-settings', async (req, res) => {
   }
 });
 
-app.post('/api/booking-settings', async (req, res) => {
+app.post('/api/booking-settings', authenticateToken, async (req, res) => {
   try {
-    const { userId, ...settings } = req.body;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
+    const settings = req.body;
 
     const result = await pool.query(
       `INSERT INTO booking_settings (
@@ -1896,15 +1833,13 @@ app.post('/api/booking-settings', async (req, res) => {
 });
 
 // ============================================
-// BOOKINGS ENDPOINTS
+// BOOKINGS ENDPOINTS (SECURED)
 // ============================================
 
-app.get('/api/bookings', async (req, res) => {
+app.get('/api/bookings', authenticateToken, async (req, res) => {
   try {
-    const { userId, startDate, endDate, status } = req.query;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
+    const { startDate, endDate, status } = req.query;
 
     let query = `
       SELECT b.*, 
@@ -1952,17 +1887,18 @@ app.get('/api/bookings', async (req, res) => {
   }
 });
 
-app.post('/api/bookings/create', async (req, res) => {
+app.post('/api/bookings/create', authenticateToken, async (req, res) => {
   try {
-    const { userId, serviceId, bookingDate, startTime, customerInfo, customerNotes, employeeId, groupId } = req.body;
+    const userId = req.user.userId;
+    const { serviceId, bookingDate, startTime, customerInfo, customerNotes, employeeId, groupId } = req.body;
 
-    if (!userId || !serviceId || !bookingDate || !startTime || !customerInfo) {
+    if (!serviceId || !bookingDate || !startTime || !customerInfo) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
     const serviceResult = await pool.query(
-      'SELECT duration_hours, price, name FROM services WHERE id = $1',
-      [serviceId]
+      'SELECT duration_hours, price, name FROM services WHERE id = $1 AND user_id = $2',
+      [serviceId, userId]
     );
 
     if (serviceResult.rows.length === 0) {
@@ -2011,67 +1947,183 @@ app.post('/api/bookings/create', async (req, res) => {
     }
 
     const bookingNumberResult = await pool.query('SELECT generate_booking_number() as number');
-const bookingNumber = bookingNumberResult.rows[0].number;
+    const bookingNumber = bookingNumberResult.rows[0].number;
 
-const customerResult = await pool.query(
-  `INSERT INTO customers (user_id, name, email, phone)
-   VALUES ($1, $2, $3, $4)
-   RETURNING id`,
-  [userId, customerInfo.name, customerInfo.email, customerInfo.phone]
-);
-const customerIdToUse = customerResult.rows[0].id;
+    const customerResult = await pool.query(
+      `INSERT INTO customers (user_id, name, email, phone)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [userId, customerInfo.name, customerInfo.email, customerInfo.phone]
+    );
+    const customerIdToUse = customerResult.rows[0].id;
 
-const bookingResult = await pool.query(
-  `INSERT INTO bookings (
-    user_id, customer_id, booking_number, booking_date, start_time, end_time,
-    subtotal, total_amount, customer_name, customer_email, 
-    customer_phone, customer_notes, status, employee_id, group_id
-  )
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-  RETURNING *`,
-  [
-    userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
-    service.price, service.price, customerInfo.name, customerInfo.email,
-    customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null
-  ]
-);
+    const bookingResult = await pool.query(
+      `INSERT INTO bookings (
+        user_id, customer_id, booking_number, booking_date, start_time, end_time,
+        subtotal, total_amount, customer_name, customer_email, 
+        customer_phone, customer_notes, status, employee_id, group_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      RETURNING *`,
+      [
+        userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
+        service.price, service.price, customerInfo.name, customerInfo.email,
+        customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null
+      ]
+    );
 
-const booking = bookingResult.rows[0];
+    const booking = bookingResult.rows[0];
 
-await pool.query(
-  `INSERT INTO booking_items (
-    booking_id, service_id, service_name, service_duration, 
-    service_price, quantity, subtotal
-  )
-  VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-  [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
-);
+    await pool.query(
+      `INSERT INTO booking_items (
+        booking_id, service_id, service_name, service_duration, 
+        service_price, quantity, subtotal
+      )
+      VALUES ($1, $2, $3, $4, $5, 1, $6)`,
+      [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
+    );
 
-const empResult = await pool.query('SELECT name FROM employees WHERE id = $1', [assignedEmployeeId]);
+    const empResult = await pool.query('SELECT name FROM employees WHERE id = $1', [assignedEmployeeId]);
 
-res.json({ 
-  success: true, 
-  booking,
-  assignedEmployee: empResult.rows[0].name,
-  message: 'Booking confirmed!'
-});
-    
+    res.json({ 
+      success: true, 
+      booking,
+      assignedEmployee: empResult.rows[0].name,
+      message: 'Booking confirmed!'
+    });
+      
   } catch (error) {
     console.error('Error creating booking:', error);
     res.status(500).json({ error: 'Failed to create booking' });
   }
 });
 
+app.put('/api/bookings/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { serviceId, bookingDate, startTime, customerInfo, notes, employeeId, groupId } = req.body;
+
+    const serviceResult = await pool.query(
+      'SELECT duration_hours, price, name FROM services WHERE id = $1',
+      [serviceId]
+    );
+
+    if (serviceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    const service = serviceResult.rows[0];
+    
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = startMinutes + (service.duration_hours * 60);
+    const endHour = Math.floor(endMinutes / 60);
+    const endMin = endMinutes % 60;
+    const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
+
+    const bookingResult = await pool.query(
+      `UPDATE bookings 
+       SET booking_date = $1,
+           start_time = $2,
+           end_time = $3,
+           customer_name = $4,
+           customer_email = $5,
+           customer_phone = $6,
+           customer_address = $7,
+           job_notes = $8,
+           employee_id = $9,
+           group_id = $10,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $11 AND user_id = $12
+       RETURNING *`,
+      [
+        bookingDate,
+        startTime,
+        endTime,
+        customerInfo.name,
+        customerInfo.email,
+        customerInfo.phone,
+        customerInfo.address,
+        notes,
+        employeeId,
+        groupId || null,
+        id,
+        userId
+      ]
+    );
+
+    if (bookingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (bookingResult.rows[0].customer_id) {
+      await pool.query(
+        `UPDATE customers 
+         SET name = $1, email = $2, phone = $3
+         WHERE id = $4`,
+        [customerInfo.name, customerInfo.email, customerInfo.phone, bookingResult.rows[0].customer_id]
+      );
+    }
+
+    await pool.query(
+      `UPDATE booking_items
+       SET service_id = $1,
+           service_name = $2,
+           service_duration = $3,
+           service_price = $4,
+           subtotal = $5
+       WHERE booking_id = $6`,
+      [serviceId, service.name, service.duration_hours, service.price, service.price, id]
+    );
+
+    res.json({ 
+      success: true,
+      booking: bookingResult.rows[0],
+      message: 'Booking updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating booking:', error);
+    res.status(500).json({ error: 'Failed to update booking' });
+  }
+});
+
+app.put('/api/bookings/:id/notes', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { notes } = req.body;
+
+    const result = await pool.query(
+      `UPDATE bookings 
+       SET job_notes = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND user_id = $3
+       RETURNING *`,
+      [notes, id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    res.json({ 
+      success: true,
+      booking: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating booking notes:', error);
+    res.status(500).json({ error: 'Failed to update notes' });
+  }
+});
+
 // ============================================
-// EMPLOYEE ENDPOINTS
+// EMPLOYEE ENDPOINTS (SECURED)
 // ============================================
 
-app.get('/api/employees', async (req, res) => {
+app.get('/api/employees', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.query;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
 
     const result = await pool.query(
       `SELECT e.*, 
@@ -2089,11 +2141,13 @@ app.get('/api/employees', async (req, res) => {
   }
 });
 
-app.post('/api/employees', async (req, res) => {
+app.post('/api/employees', authenticateToken, async (req, res) => {
   try {
-    const { userId, name, email, phone, color, serviceIds } = req.body;
-    if (!userId || !name) {
-      return res.status(400).json({ error: 'userId and name required' });
+    const userId = req.user.userId;
+    const { name, email, phone, color, serviceIds } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ error: 'name required' });
     }
 
     const result = await pool.query(
@@ -2123,8 +2177,9 @@ app.post('/api/employees', async (req, res) => {
   }
 });
 
-app.put('/api/employees/:id', async (req, res) => {
+app.put('/api/employees/:id', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { id } = req.params;
     const { name, email, phone, color, active, serviceIds } = req.body;
 
@@ -2135,9 +2190,9 @@ app.put('/api/employees/:id', async (req, res) => {
            phone = COALESCE($3, phone),
            color = COALESCE($4, color),
            active = COALESCE($5, active)
-       WHERE id = $6
+       WHERE id = $6 AND user_id = $7
        RETURNING *`,
-      [name, email, phone, color, active, id]
+      [name, email, phone, color, active, id, userId]
     );
 
     if (result.rows.length === 0) {
@@ -2166,8 +2221,9 @@ app.put('/api/employees/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/employees/:id', async (req, res) => {
+app.delete('/api/employees/:id', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { id } = req.params;
 
     const bookingsCheck = await pool.query(
@@ -2185,7 +2241,7 @@ app.delete('/api/employees/:id', async (req, res) => {
       });
     }
 
-    await pool.query('DELETE FROM employees WHERE id = $1', [id]);
+    await pool.query('DELETE FROM employees WHERE id = $1 AND user_id = $2', [id, userId]);
     res.json({ success: true, message: 'Employee deleted' });
   } catch (error) {
     console.error('Error deleting employee:', error);
@@ -2193,14 +2249,13 @@ app.delete('/api/employees/:id', async (req, res) => {
   }
 });
 
-// GET all groups for a user
-app.get('/api/groups', async (req, res) => {
-  try {
-    const { userId } = req.query;
+// ============================================
+// GROUPS ENDPOINTS (SECURED)
+// ============================================
 
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+app.get('/api/groups', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
 
     const result = await pool.query(
       'SELECT * FROM groups WHERE user_id = $1 ORDER BY created_at DESC',
@@ -2214,13 +2269,13 @@ app.get('/api/groups', async (req, res) => {
   }
 });
 
-// CREATE a new group
-app.post('/api/groups', async (req, res) => {
+app.post('/api/groups', authenticateToken, async (req, res) => {
   try {
-    const { userId, name, employeeIds } = req.body;
+    const userId = req.user.userId;
+    const { name, employeeIds } = req.body;
 
-    if (!userId || !name || !employeeIds || !Array.isArray(employeeIds)) {
-      return res.status(400).json({ error: 'userId, name, and employeeIds (array) required' });
+    if (!name || !employeeIds || !Array.isArray(employeeIds)) {
+      return res.status(400).json({ error: 'name and employeeIds (array) required' });
     }
 
     const result = await pool.query(
@@ -2235,14 +2290,14 @@ app.post('/api/groups', async (req, res) => {
   }
 });
 
-// UPDATE a group
-app.put('/api/groups/:id', async (req, res) => {
+app.put('/api/groups/:id', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { id } = req.params;
-    const { userId, name, employeeIds } = req.body;
+    const { name, employeeIds } = req.body;
 
-    if (!userId || !name || !employeeIds || !Array.isArray(employeeIds)) {
-      return res.status(400).json({ error: 'userId, name, and employeeIds (array) required' });
+    if (!name || !employeeIds || !Array.isArray(employeeIds)) {
+      return res.status(400).json({ error: 'name and employeeIds (array) required' });
     }
 
     const result = await pool.query(
@@ -2251,7 +2306,7 @@ app.put('/api/groups/:id', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Group not found or unauthorized' });
+      return res.status(404).json({ error: 'Group not found' });
     }
 
     res.json({ success: true, group: result.rows[0] });
@@ -2261,15 +2316,10 @@ app.put('/api/groups/:id', async (req, res) => {
   }
 });
 
-// DELETE a group
-app.delete('/api/groups/:id', async (req, res) => {
+app.delete('/api/groups/:id', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { id } = req.params;
-    const { userId } = req.query;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
 
     const result = await pool.query(
       'DELETE FROM groups WHERE id = $1 AND user_id = $2 RETURNING *',
@@ -2277,7 +2327,7 @@ app.delete('/api/groups/:id', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Group not found or unauthorized' });
+      return res.status(404).json({ error: 'Group not found' });
     }
 
     res.json({ success: true });
@@ -2288,19 +2338,21 @@ app.delete('/api/groups/:id', async (req, res) => {
 });
 
 // ============================================
-// AVAILABILITY CALCULATOR
+// AVAILABILITY CALCULATOR (SECURED)
 // ============================================
 
-app.get('/api/availability', async (req, res) => {
+app.get('/api/availability', authenticateToken, async (req, res) => {
   try {
-    const { userId, serviceId, date } = req.query;
-    if (!userId || !serviceId || !date) {
-      return res.status(400).json({ error: 'userId, serviceId, and date required' });
+    const userId = req.user.userId;
+    const { serviceId, date } = req.query;
+
+    if (!serviceId || !date) {
+      return res.status(400).json({ error: 'serviceId and date required' });
     }
 
     const serviceResult = await pool.query(
-      'SELECT duration_hours FROM services WHERE id = $1',
-      [serviceId]
+      'SELECT duration_hours FROM services WHERE id = $1 AND user_id = $2',
+      [serviceId, userId]
     );
 
     if (serviceResult.rows.length === 0) {
@@ -2365,14 +2417,15 @@ app.get('/api/availability', async (req, res) => {
       return res.json({ availableSlots: [], message: 'Date is blocked' });
     }
 
+    const employeeIds = availableEmployees.map(e => e.id);
     const bookingsResult = await pool.query(
       `SELECT employee_id, start_time, end_time 
        FROM bookings 
        WHERE user_id = $1 
        AND booking_date = $2 
        AND status NOT IN ('cancelled', 'no_show')
-       AND employee_id IN (${availableEmployees.map((_, i) => `$${i + 3}`).join(',')})`,
-      [userId, date, ...availableEmployees.map(e => e.id)]
+       AND employee_id = ANY($3)`,
+      [userId, date, employeeIds]
     );
 
     const employeeBookings = {};
@@ -2424,14 +2477,16 @@ app.get('/api/availability', async (req, res) => {
 });
 
 // ============================================
-// AI WEBSITE GENERATION ENDPOINT
+// AI WEBSITE GENERATION ENDPOINT (FIXED)
 // ============================================
 
-// COMPLETE /api/generate ENDPOINT WITH FULL BUSINESS INFORMATION INTEGRATION
-// Replace your entire /api/generate endpoint in server.js with this code
+// ============================================
+// AI WEBSITE GENERATION ENDPOINT (SECURED)
+// ============================================
 
-app.post('/api/generate', async (req, res) => {
+app.post('/api/generate', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { 
       businessName, 
       businessType, 
@@ -2441,10 +2496,12 @@ app.post('/api/generate', async (req, res) => {
       certifications,
       description, 
       uniqueSellingPoints,
-      targetCustomer,
-      userId 
+      targetCustomer
     } = req.body;
 
+    // ============================================
+    // SANITIZE ALL USER INPUTS
+    // ============================================
     const safeBusinessName = sanitizeForPrompt(businessName);
     const safeBusinessType = sanitizeForPrompt(businessType);
     const safeTagline = sanitizeForPrompt(tagline);
@@ -2455,14 +2512,12 @@ app.post('/api/generate', async (req, res) => {
     const safeTargetCustomer = sanitizeForPrompt(targetCustomer);
 
     console.log('🎨 Generating multi-page website for:', safeBusinessName);
-
-    console.log('🎨 Generating multi-page website for:', businessName);
     console.log('👤 User ID:', userId);
-    console.log('📋 Business Type:', businessType);
-    console.log('✨ Tagline:', tagline);
-    console.log('🎯 USPs:', uniqueSellingPoints);
+    console.log('📋 Business Type:', safeBusinessType);
+    console.log('✨ Tagline:', safeTagline);
+    console.log('🎯 USPs:', safeUSPs);
 
-    if (!businessName || !businessType) {
+    if (!safeBusinessName || !safeBusinessType) {
       return res.status(400).json({ error: 'Business name and type are required' });
     }
 
@@ -2479,63 +2534,56 @@ app.post('/api/generate', async (req, res) => {
     let userEmployees = [];
     let userBusinessInfo = null;
 
-    if (userId) {
-      try {
-        // Fetch services
-        const servicesResult = await pool.query(
-          'SELECT * FROM services WHERE user_id = $1 AND active = true ORDER BY name',
+    try {
+      const servicesResult = await pool.query(
+        'SELECT * FROM services WHERE user_id = $1 AND active = true ORDER BY name',
+        [userId]
+      );
+      userServices = servicesResult.rows;
+
+      const hoursResult = await pool.query(
+        'SELECT * FROM business_hours WHERE user_id = $1 ORDER BY day_of_week',
+        [userId]
+      );
+      userBusinessHours = hoursResult.rows;
+
+      const employeesResult = await pool.query(
+        'SELECT name FROM employees WHERE user_id = $1 AND active = true ORDER BY name LIMIT 10',
+        [userId]
+      );
+      userEmployees = employeesResult.rows;
+
+      const businessInfoResult = await pool.query(
+        `SELECT 
+          bi.*,
+          u.business_name,
+          u.name as owner_name
+         FROM business_information bi
+         LEFT JOIN users u ON bi.user_id = u.id
+         WHERE bi.user_id = $1`,
+        [userId]
+      );
+
+      if (businessInfoResult.rows.length > 0) {
+        userBusinessInfo = businessInfoResult.rows[0];
+      } else {
+        const userResult = await pool.query(
+          'SELECT business_name, name, email, phone FROM users WHERE id = $1',
           [userId]
         );
-        userServices = servicesResult.rows;
-
-        // Fetch business hours
-        const hoursResult = await pool.query(
-          'SELECT * FROM business_hours WHERE user_id = $1 ORDER BY day_of_week',
-          [userId]
-        );
-        userBusinessHours = hoursResult.rows;
-
-        // Fetch employees
-        const employeesResult = await pool.query(
-          'SELECT name FROM employees WHERE user_id = $1 AND active = true ORDER BY name LIMIT 10',
-          [userId]
-        );
-        userEmployees = employeesResult.rows;
-
-        // Fetch business information (NEW - includes phone, email, address, service area)
-        const businessInfoResult = await pool.query(
-          `SELECT 
-            bi.*,
-            u.business_name,
-            u.name as owner_name
-           FROM business_information bi
-           LEFT JOIN users u ON bi.user_id = u.id
-           WHERE bi.user_id = $1`,
-          [userId]
-        );
-
-        if (businessInfoResult.rows.length > 0) {
-          userBusinessInfo = businessInfoResult.rows[0];
-        } else {
-          // Fallback to users table if business_information doesn't exist yet
-          const userResult = await pool.query(
-            'SELECT business_name, name, email, phone FROM users WHERE id = $1',
-            [userId]
-          );
-          userBusinessInfo = userResult.rows[0];
-        }
-
-        console.log('✅ Fetched user data:', {
-          services: userServices.length,
-          businessHours: userBusinessHours.length,
-          employees: userEmployees.length,
-          hasPhone: !!userBusinessInfo?.phone,
-          hasAddress: !!userBusinessInfo?.address,
-          serviceAreaType: userBusinessInfo?.service_area_type
-        });
-      } catch (error) {
-        console.error('⚠️ Error fetching user data:', error);
+        userBusinessInfo = userResult.rows[0];
       }
+
+      console.log('✅ Fetched user data:', {
+        services: userServices.length,
+        businessHours: userBusinessHours.length,
+        employees: userEmployees.length,
+        hasPhone: !!userBusinessInfo?.phone,
+        hasAddress: !!userBusinessInfo?.address,
+        serviceAreaType: userBusinessInfo?.service_area_type
+      });
+    } catch (error) {
+      console.error('⚠️ Error fetching user data:', error);
     }
 
     // ============================================
@@ -2545,46 +2593,16 @@ app.post('/api/generate', async (req, res) => {
       ? {
           hasData: true,
           services: userServices.map(s => `
-**${s.name}**
-Description: ${s.description || 'Professional service'}
+**${sanitizeForPrompt(s.name)}**
+Description: ${sanitizeForPrompt(s.description) || 'Professional service'}
 Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_hours} hour${s.duration_hours > 1 ? 's' : ''})` : ''}
 `).join('\n'),
           instruction: `IMPORTANT: Use these EXACT ${userServices.length} services with their real names, descriptions, and prices.`
         }
       : {
           hasData: false,
-          services: services || `General ${businessType} services`,
-          instruction: `CRITICAL: Create 4-6 SPECIFIC ${businessType} services. These MUST be actual, realistic ${businessType} services that would exist in the real world.
-
-**Examples of GOOD service names for different business types:**
-
-Auto Detailing:
-- Premium Ceramic Coating ($599 - 8 hours)
-- Interior Deep Clean & Sanitization ($249 - 4 hours)
-- Paint Correction & Polish ($399 - 6 hours)
-
-Plumbing:
-- Emergency Leak Repair ($150 - 2 hours)
-- Water Heater Installation ($800 - 4 hours)
-- Drain Cleaning & Inspection ($120 - 1.5 hours)
-
-HVAC:
-- AC Repair & Diagnostics ($125 - 2 hours)
-- Full System Installation ($4,500 - 8 hours)
-- Annual Maintenance Package ($199 - 1 hour)
-
-Landscaping:
-- Complete Lawn Care Package ($85 - 2 hours)
-- Landscape Design & Installation ($2,500 - varies)
-- Seasonal Cleanup Service ($150 - 3 hours)
-
-Cleaning:
-- Deep House Cleaning ($199 - 4 hours)
-- Move-In/Move-Out Cleaning ($299 - 5 hours)
-- Recurring Weekly Service ($120 - 2 hours)
-
-**Create similar SPECIFIC services for ${businessType} - NOT generic "Service 1", "Service 2"**
-Each service should have: realistic name, price ($50-$5000 range), duration (1-8 hours)`
+          services: safeServices || `General ${safeBusinessType} services`,
+          instruction: `CRITICAL: Create 4-6 SPECIFIC ${safeBusinessType} services with realistic names, prices ($50-$5000), and durations (1-8 hours).`
         };
 
     // ============================================
@@ -2625,7 +2643,7 @@ Each service should have: realistic name, price ($50-$5000 range), duration (1-8
     const teamInfo = userEmployees.length > 0
       ? {
           hasData: true,
-          team: `Our team includes: ${userEmployees.map(e => e.name).join(', ')}`,
+          team: `Our team includes: ${userEmployees.map(e => sanitizeForPrompt(e.name)).join(', ')}`,
           instruction: 'You can mention these team members.'
         }
       : { hasData: false, team: null, instruction: '' };
@@ -2633,26 +2651,24 @@ Each service should have: realistic name, price ($50-$5000 range), duration (1-8
     // ============================================
     // FORMAT BUSINESS CONTACT INFORMATION
     // ============================================
-    const contactEmail = userBusinessInfo?.email || 'contact@example.com';
-    const ownerName = userBusinessInfo?.owner_name || userBusinessInfo?.name || null;
-    const phoneNumber = userBusinessInfo?.phone || '(555) 123-4567';
+    const contactEmail = sanitizeForPrompt(userBusinessInfo?.email) || 'contact@example.com';
+    const ownerName = sanitizeForPrompt(userBusinessInfo?.owner_name || userBusinessInfo?.name) || null;
+    const phoneNumber = sanitizeForPrompt(userBusinessInfo?.phone) || '(555) 123-4567';
     const phoneNumberClean = phoneNumber.replace(/\D/g, '');
 
-    // Full address
-    const address = userBusinessInfo?.address || null;
-    const city = userBusinessInfo?.city || null;
-    const state = userBusinessInfo?.state || null;
-    const zipCode = userBusinessInfo?.zip_code || null;
+    const address = sanitizeForPrompt(userBusinessInfo?.address) || null;
+    const city = sanitizeForPrompt(userBusinessInfo?.city) || null;
+    const state = sanitizeForPrompt(userBusinessInfo?.state) || null;
+    const zipCode = sanitizeForPrompt(userBusinessInfo?.zip_code) || null;
 
     const fullAddress = [address, city, state, zipCode]
       .filter(Boolean)
       .join(', ');
 
-    // Service area information
     const serviceAreaType = userBusinessInfo?.service_area_type || 'zipcodes';
     const serviceZipCodes = userBusinessInfo?.service_zip_codes || [];
     const serviceRadius = userBusinessInfo?.service_radius || 25;
-    const centerZipCode = userBusinessInfo?.center_zip_code || zipCode;
+    const centerZipCode = sanitizeForPrompt(userBusinessInfo?.center_zip_code) || zipCode;
 
     const serviceAreaText = serviceAreaType === 'radius'
       ? `We serve a ${serviceRadius} mile radius from ${centerZipCode || 'our location'}`
@@ -2663,1356 +2679,157 @@ Each service should have: realistic name, price ($50-$5000 range), duration (1-8
     // ============================================
     // DETERMINE BOOKING URL
     // ============================================
-    const bookingUrl = userId 
-      ? `${process.env.FRONTEND_URL || 'http://localhost:5173'}/book/${userId}`
-      : '#';
+    const bookingUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/book/${userId}`;
 
     console.log('🔗 Booking URL:', bookingUrl);
     console.log('📞 Phone:', phoneNumber);
     console.log('📍 Address:', fullAddress || 'Not provided');
     console.log('🗺️  Service Area:', serviceAreaText || 'Not configured');
 
+    // ============================================
+    // DETERMINE PRIMARY COLOR
+    // ============================================
+    const businessTypeLower = safeBusinessType.toLowerCase();
+    let primaryColor = '#2563eb';
+    let accentColor = '#10b981';
+    
+    if (businessTypeLower.includes('auto') || businessTypeLower.includes('detail')) {
+      primaryColor = '#000000';
+      accentColor = '#D4AF37';
+    } else if (businessTypeLower.includes('land')) {
+      primaryColor = '#047857';
+      accentColor = '#16a34a';
+    } else if (businessTypeLower.includes('plumb')) {
+      primaryColor = '#1e40af';
+      accentColor = '#f97316';
+    } else if (businessTypeLower.includes('clean')) {
+      primaryColor = '#06b6d4';
+      accentColor = '#10b981';
+    } else if (businessTypeLower.includes('hvac')) {
+      primaryColor = '#dc2626';
+      accentColor = '#3b82f6';
+    } else if (businessTypeLower.includes('salon') || businessTypeLower.includes('spa')) {
+      primaryColor = '#ec4899';
+      accentColor = '#a855f7';
+    }
+
     console.log('📡 Calling Anthropic API...');
 
     // ============================================
-    // BUILD THE PROMPT
+    // BUILD THE PROMPT (using sanitized values)
     // ============================================
-    const prompt = `You are an EXPERT WEB DESIGNER creating a BEAUTIFUL, PROFESSIONAL website for a SERVICE-BASED BUSINESS.
-
-**CRITICAL: READ ALL BUSINESS INFORMATION CAREFULLY**
-You are creating a website for **${businessName}**, a **${businessType}** business.
-${tagline ? `Their tagline is: "${tagline}"` : ''}
-${description ? `Business description: ${description}` : ''}
-${uniqueSellingPoints ? `What makes them different: ${uniqueSellingPoints}` : ''}
-${yearsInBusiness ? `They have ${yearsInBusiness} years of experience.` : ''}
-${certifications ? `Certifications: ${certifications}` : ''}
-${targetCustomer ? `Target customer: ${targetCustomer}` : ''}
-
-**EXTREMELY IMPORTANT - CONTENT RELEVANCE:**
-- Every word, every service, every section MUST be specific to ${businessType}
-- Write content that ONLY makes sense for ${businessType} businesses
-- Use ${businessType}-specific terminology and language
-- Services should be ACTUAL ${businessType} services, not generic examples
-- Testimonials should mention ${businessType}-specific work
-- "Why Choose Us" reasons must relate to ${businessType} industry
-
-**WRONG (Generic):**
-"We provide quality service" ❌
-"Professional and reliable" ❌  
-"We care about our customers" ❌
-
-**RIGHT (Specific to Business Type):**
-For Auto Detailing: "Ceramic coating protection that lasts 5+ years" ✅
-For Plumbing: "24/7 emergency leak repairs, licensed master plumbers" ✅
-For HVAC: "Same-day AC repair, EPA-certified technicians" ✅
-For Landscaping: "Drought-resistant native plant design" ✅
-
----
-
-## THE FORMULA FOR STUNNING WEBSITES
-
-**BEAUTY + USABILITY = SUCCESS**
-
-You must balance visual appeal with effortless navigation.
-
----
-
-## VISUAL BEAUTY PRINCIPLES
-
-### 1. WHITE SPACE (CRITICAL)
-- Give content room to BREATHE
-- Generous padding: 3rem (48px) between sections
-- Margins: 2rem (32px) around content blocks
-- Don't cram things together
-- Empty space is NOT wasted space - it creates elegance
-
-### 2. TYPOGRAPHY HIERARCHY
-**Use exactly this scale:**
-- H1: 3rem (48px), font-weight: 900, line-height: 1.2
-- H2: 2rem (32px), font-weight: 800, line-height: 1.3
-- H3: 1.5rem (24px), font-weight: 700, line-height: 1.4
-- Body: 1rem (16px), font-weight: 400, line-height: 1.6
-- Small: 0.875rem (14px)
-
-**Font Rules:**
-- Use ONE font family (system fonts: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif)
-- Bold headlines (700-900 weight)
-- Regular body text (400 weight)
-- Never use more than 2 fonts
-
-### 3. CONSISTENT COLOR PALETTE
-**CRITICAL: Use ONLY these colors:**
-- Primary color (based on business type)
-- White (#FFFFFF) for backgrounds
-- Light gray (#F9FAFB) for alternate sections
-- Dark gray (#1F2937) for body text
-- Medium gray (#6B7280) for secondary text
-- Border gray (#E5E7EB) for borders
-
-**Business-Specific Primary Colors:**
-${businessType.toLowerCase().includes('auto') || businessType.toLowerCase().includes('detail') ? 
-  'Auto/Detailing: #000000 (black) with #D4AF37 (gold) accents' :
-  businessType.toLowerCase().includes('land') ? 
-  'Landscaping: #047857 (emerald)' :
-  businessType.toLowerCase().includes('plumb') ? 
-  'Plumbing: #1E40AF (royal blue)' :
-  businessType.toLowerCase().includes('clean') ? 
-  'Cleaning: #06B6D4 (cyan)' :
-  businessType.toLowerCase().includes('hvac') ? 
-  'HVAC: #DC2626 (red)' :
-  businessType.toLowerCase().includes('salon') || businessType.toLowerCase().includes('spa') ?
-  'Salon/Spa: #EC4899 (rose)' :
-  'Professional: #2563EB (blue)'}
-
-### 4. VISUAL HIERARCHY
-- Most important = biggest, boldest, top of page
-- Eye should flow naturally: F-pattern or Z-pattern
-- Clear focal points (hero headline, CTAs)
-- Size indicates importance
-
-### 5. SUBTLE ANIMATIONS ONLY
-\`\`\`css
-/* Fade in on scroll */
-.fade-in {
-  animation: fadeInUp 0.6s ease forwards;
-  opacity: 0;
-}
-
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Gentle hover lift */
-.hover-lift:hover {
-  transform: translateY(-5px);
-  transition: transform 0.3s ease;
-}
-\`\`\`
-
-**NO spinning, bouncing, or flashy animations**
-
-### 6. CONSISTENT SPACING SYSTEM
-Use this spacing scale everywhere:
-- 0.5rem = 8px
-- 1rem = 16px
-- 1.5rem = 24px
-- 2rem = 32px
-- 3rem = 48px
-- 4rem = 64px
-- 6rem = 96px
-
----
-
-## USABILITY PRINCIPLES
-
-### 1. CLEAR NAVIGATION
-\`\`\`html
-<nav style="position: sticky; top: 0; background: white; border-bottom: 1px solid #E5E7EB; z-index: 1000;">
-  <div style="max-width: 1200px; margin: 0 auto; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center;">
-    <div style="font-size: 1.5rem; font-weight: 900;">${businessName}</div>
-    <div style="display: flex; gap: 2rem; align-items: center;">
-      <a href="#home">Home</a>
-      <a href="#services">Services</a>
-      <a href="#contact">Contact</a>
-      <a href="${bookingUrl}" style="background: var(--primary-color); color: white; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600;">Book Now</a>
-    </div>
-  </div>
-</nav>
-\`\`\`
-
-### 2. OBVIOUS CALL-TO-ACTIONS
-- Use "Book Now" not "Learn More"
-- Primary button: solid primary color, white text, bold
-- Button size: min 44px height (touch-friendly)
-- CTAs every 2-3 sections
-- Multiple CTAs: hero, after services, bottom of page
-
-### 3. SCANNABLE CONTENT
-- Short paragraphs (2-3 sentences max)
-- Use subheadings frequently
-- Bullet points for lists
-- Bold key phrases
-- People SCAN, they don't read
-
-### 4. LOGICAL STRUCTURE
-**Homepage must have this exact order:**
-1. Hero (who you are, what you do)
-2. Trust bar (years, customers, rating, certs)
-3. Services overview (3-6 top services with images)
-4. Why choose us (benefits with image)
-5. How it works (4-step process)
-6. Testimonials (3 real reviews)
-7. Final CTA (large book now button)
-
----
-
-## CRITICAL DESIGN REQUIREMENTS
-
-### CONTAINER & LAYOUT
-\`\`\`css
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 2rem;
-}
-
-/* Consistent section spacing */
-section {
-  padding: 6rem 0;
-}
-
-/* Alternate section backgrounds */
-section:nth-child(even) {
-  background: #F9FAFB;
-}
-
-section:nth-child(odd) {
-  background: #FFFFFF;
-}
-\`\`\`
-
-### BUTTON STYLES (EXACT)
-\`\`\`css
-.btn-primary {
-  background: var(--primary-color);
-  color: white;
-  padding: 1rem 2rem;
-  border-radius: 8px;
-  border: none;
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-decoration: none;
-  display: inline-block;
-  min-height: 44px;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
-}
-
-.btn-secondary {
-  background: white;
-  color: var(--primary-color);
-  padding: 1rem 2rem;
-  border-radius: 8px;
-  border: 2px solid var(--primary-color);
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-decoration: none;
-  display: inline-block;
-}
-
-.btn-secondary:hover {
-  background: var(--primary-color);
-  color: white;
-}
-\`\`\`
-
-### CARD STYLES (EXACT)
-\`\`\`css
-.card {
-  background: white;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s ease;
-}
-
-.card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-}
-\`\`\`
-
----
-
-## MOBILE RESPONSIVE (CRITICAL)
-
-\`\`\`css
-/* Mobile first approach */
-@media (max-width: 768px) {
-  h1 { font-size: 2rem; }
-  h2 { font-size: 1.5rem; }
-  
-  section { padding: 3rem 0; }
-  
-  .container { padding: 0 1rem; }
-  
-  /* Stack cards on mobile */
-  .grid { 
-    grid-template-columns: 1fr !important;
-    gap: 1.5rem;
-  }
-  
-  /* Larger touch targets */
-  button, .btn { 
-    min-height: 48px;
-    padding: 1rem 1.5rem;
-  }
-}
-\`\`\`
-
----
-
-## TRUST INDICATORS (MANDATORY)
-
-**Must include on homepage:**
-1. Years in business (if provided)
-2. Number of customers (5,000+ is fine as placeholder)
-3. Star rating (★★★★★ 5.0)
-4. Certifications/licenses (if provided)
-5. Customer testimonials (3 minimum)
-6. Guarantee statement
-
----
-
-Create a **SINGLE HTML FILE** with **MULTIPLE PAGES** using JavaScript navigation.
-
-**REQUIRED PAGES:**
-1. Home (7 sections following the exact structure above)
-2. Services (detailed ${businessType} service offerings)
-3. Gift Cards (professional gift card program)
-4. Contact (complete business information)
-
-All pages accessible via navigation, content switches dynamically without page reload.
-
----
-
-### BUSINESS INFORMATION
-
-**Business Name:** ${businessName}
-**Business Type:** ${businessType}
-${tagline ? `**Tagline:** ${tagline}` : ''}
-${yearsInBusiness ? `**Years in Business:** ${yearsInBusiness} years` : ''}
-${certifications ? `**Certifications:** ${certifications}` : ''}
-**Phone Number:** ${phoneNumber}
-**Email:** ${contactEmail}
-${fullAddress ? `**Physical Address:** ${fullAddress}` : ''}
-${serviceAreaText ? `**Service Area:** ${serviceAreaText}` : ''}
-${targetCustomer ? `**Target Customer:** ${targetCustomer}` : ''}
-**Booking URL:** ${bookingUrl}
-${ownerName ? `**Owner:** ${ownerName}` : ''}
-
-${uniqueSellingPoints ? `**What Makes Us Different:**
-${uniqueSellingPoints}` : ''}
-
----
-
-### CLEAN PROFESSIONAL CSS FRAMEWORK
-
-**Color Scheme Based on Business Type:**
-Use SOLID colors, not gradients. Choose ONE primary color based on business type.
-
-${businessType.toLowerCase().includes('auto') || businessType.toLowerCase().includes('detail') ? 
-  'Auto/Detailing: Primary: #000000 (black), Accent: #D4AF37 (gold), Background: #FFFFFF (white)' :
-  businessType.toLowerCase().includes('land') ? 
-  'Landscaping: Primary: #047857 (emerald), Accent: #16a34a (green), Background: #FFFFFF (white)' :
-  businessType.toLowerCase().includes('plumb') ? 
-  'Plumbing: Primary: #1e40af (royal blue), Accent: #f97316 (orange), Background: #FFFFFF (white)' :
-  businessType.toLowerCase().includes('clean') ? 
-  'Cleaning: Primary: #06b6d4 (cyan), Accent: #10b981 (emerald), Background: #FFFFFF (white)' :
-  businessType.toLowerCase().includes('hvac') ? 
-  'HVAC: Primary: #dc2626 (red), Accent: #3b82f6 (blue), Background: #FFFFFF (white)' :
-  businessType.toLowerCase().includes('salon') || businessType.toLowerCase().includes('spa') ?
-  'Salon/Spa: Primary: #ec4899 (rose), Accent: #a855f7 (purple), Background: #FFFFFF (white)' :
-  'Professional: Primary: #2563eb (blue), Accent: #10b981 (emerald), Background: #FFFFFF (white)'}
-
-**Clean CSS Framework:**
-\`\`\`css
-/* Clean, Professional Cards */
-.service-card {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s ease;
-}
-
-.service-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-}
-
-/* Simple Buttons - Solid Colors */
-.btn-primary {
-  background: var(--primary-color); /* Use solid primary color */
-  color: white;
-  padding: 1rem 2rem;
-  border-radius: 8px;
-  border: none;
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-decoration: none;
-  display: inline-block;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
-}
-
-.btn-secondary {
-  background: white;
-  color: var(--primary-color);
-  padding: 1rem 2rem;
-  border-radius: 8px;
-  border: 2px solid var(--primary-color);
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-decoration: none;
-  display: inline-block;
-}
-
-.btn-secondary:hover {
-  background: var(--primary-color);
-  color: white;
-}
-
-/* Subtle Shadows */
-.shadow-sm {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.shadow-md {
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.shadow-lg {
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-}
-
-/* Smooth Fade In Animation */
-.fade-in {
-  animation: fadeInUp 0.6s ease forwards;
-  opacity: 0;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Simple Hover Lift */
-.hover-lift {
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.hover-lift:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-}
-\`\`\`
-
----
-
-### IMAGES AND VISUAL CONTENT - EXTREMELY IMPORTANT
-
-**YOU MUST INCLUDE IMAGES - THIS IS CRITICAL**
-
-Every section MUST have images that are RELEVANT to ${businessType} business.
-
-**IMAGE SOURCE - Unsplash with Business-Specific Keywords:**
-
-Use Unsplash with SPECIFIC search terms for ${businessType}:
-\`https://source.unsplash.com/[width]x[height]/?[keywords]\`
-
-**CRITICAL: Use ${businessType}-specific keywords, not generic ones**
-
-**Business-Type Specific Image Keywords:**
-
-${businessType.toLowerCase().includes('auto') || businessType.toLowerCase().includes('detail') ?
-`For Auto Detailing:
-- Hero: car,detailing,shine,polish,ceramic
-- Services: auto,wash,clean,interior,exterior,wax
-- About: professional,automotive,detail,workshop` :
-businessType.toLowerCase().includes('land') ?
-`For Landscaping:
-- Hero: landscape,garden,lawn,outdoor,yard
-- Services: plants,trees,grass,mowing,design
-- About: landscaper,gardening,professional,team` :
-businessType.toLowerCase().includes('plumb') ?
-`For Plumbing:
-- Hero: plumbing,pipe,water,repair,tools
-- Services: faucet,drain,leak,installation
-- About: plumber,professional,technician,work` :
-businessType.toLowerCase().includes('clean') ?
-`For Cleaning:
-- Hero: cleaning,clean,house,spotless,fresh
-- Services: vacuum,mop,sanitize,organize
-- About: cleaner,professional,service,team` :
-businessType.toLowerCase().includes('hvac') ?
-`For HVAC:
-- Hero: hvac,ac,heating,cooling,technician
-- Services: air-conditioner,furnace,vent,repair
-- About: technician,professional,hvac,work` :
-businessType.toLowerCase().includes('salon') || businessType.toLowerCase().includes('spa') ?
-`For Salon/Spa:
-- Hero: salon,hair,beauty,spa,styling
-- Services: haircut,style,color,treatment
-- About: stylist,professional,salon,interior` :
-`For Professional Services:
-- Hero: professional,business,office,service
-- Services: work,professional,quality,tools
-- About: team,professional,office,working`}
-
-**IMAGE IMPLEMENTATION - MANDATORY:**
-
-1. **Hero Section Background** - MUST USE BUSINESS-SPECIFIC IMAGE
-   \`\`\`html
-   <section class="hero" style="
-     background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), 
-                 url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,service') center/cover;
-     min-height: 100vh;
-   ">
-   \`\`\`
-   
-2. **Service Cards** - EACH CARD MUST HAVE RELEVANT IMAGE
-   \`\`\`html
-   <div class="service-card">
-     <div style="overflow: hidden; height: 250px; border-radius: 12px 12px 0 0;">
-       <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},work,professional" 
-            alt="Service Name" 
-            style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease;"
-            onmouseover="this.style.transform='scale(1.05)'"
-            onmouseout="this.style.transform='scale(1)'">
-     </div>
-     <div style="padding: 2rem;">
-       <h3>Service Name</h3>
-       <p>Description</p>
-       <a href="${bookingUrl}" class="btn-primary">Book This Service</a>
-     </div>
-   </div>
-   \`\`\`
-   
-   **IMPORTANT:** Vary search terms for each service card:
-   - Card 1: \`${businessType},service,professional\`
-   - Card 2: \`${businessType},work,quality\`
-   - Card 3: \`${businessType},business,expert\`
-   - Card 4: \`${businessType},tools,equipment\`
-   
-3. **Why Choose Us / About Section** - MUST HAVE TEAM/BUSINESS IMAGE
-   \`\`\`html
-   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem;">
-     <div>
-       <img src="https://source.unsplash.com/1200x800/?${businessType.toLowerCase().replace(/\s+/g, '-')},team,professional,business" 
-            alt="Our Team"
-            style="width: 100%; height: 500px; object-fit: cover; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1);">
-     </div>
-     <div>
-       <!-- Content here -->
-     </div>
-   </div>
-   \`\`\`
-
-4. **Testimonials Background** - RELEVANT BUSINESS IMAGE
-   \`\`\`html
-   <section style="
-     background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), 
-                 url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},happy,customer,satisfied') center/cover;
-     padding: 6rem 0;
-     color: white;
-   ">
-   \`\`\`
-
-**CRITICAL IMAGE RULES:**
-- ✅ EVERY image MUST relate to ${businessType}
-- ✅ Use ${businessType}-specific keywords in URLs
-- ✅ Vary keywords for different sections
-- ✅ Hero: business type + "professional" + "service"
-- ✅ Services: business type + "work" + specific service term
-- ✅ About: business type + "team" + "professional"
-- ✅ Testimonials: business type + "happy" + "customer"
-- ✅ Set explicit width and height in style
-- ✅ Use object-fit: cover for proper scaling
-- ✅ Add border-radius: 12px for modern look
-- ✅ Include subtle hover effects (scale 1.05, not 1.1)
-
-**FALLBACK - If Unsplash fails:**
-\`\`\`html
-<img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},service" 
-     onerror="this.src='https://via.placeholder.com/800x600/4B5563/FFFFFF?text=${businessType}+Service'" 
-     alt="Service">
-\`\`\`
-
-**NEVER use generic placeholders like Picsum - always use business-specific Unsplash images**
-
----
-
-
-
+    const prompt = `You are an expert web designer creating a professional, mobile-responsive website.
+
+## BUSINESS INFORMATION
+- **Business Name:** ${safeBusinessName}
+- **Business Type:** ${safeBusinessType}
+${safeTagline ? `- **Tagline:** "${safeTagline}"` : ''}
+${safeDescription ? `- **Description:** ${safeDescription}` : ''}
+${safeUSPs ? `- **What Makes Us Different:** ${safeUSPs}` : ''}
+${yearsInBusiness ? `- **Years in Business:** ${yearsInBusiness}` : ''}
+${safeCertifications ? `- **Certifications:** ${safeCertifications}` : ''}
+${safeTargetCustomer ? `- **Target Customer:** ${safeTargetCustomer}` : ''}
+
+## CONTACT INFORMATION
+- **Phone:** ${phoneNumber}
+- **Email:** ${contactEmail}
+${fullAddress ? `- **Address:** ${fullAddress}` : ''}
+${serviceAreaText ? `- **Service Area:** ${serviceAreaText}` : ''}
+- **Booking URL:** ${bookingUrl}
+${ownerName ? `- **Owner:** ${ownerName}` : ''}
+
+## SERVICES
 ${servicesInfo.services}
-
 ${servicesInfo.instruction}
 
----
-
-### BUSINESS HOURS
-
+## BUSINESS HOURS
 ${hoursInfo.hours}
-
 ${hoursInfo.instruction}
 
----
+${teamInfo.team ? `## TEAM\n${teamInfo.team}` : ''}
 
-${teamInfo.team ? `### TEAM\n\n${teamInfo.team}\n\n---\n\n` : ''}
+## DESIGN REQUIREMENTS
 
-### NAVIGATION HEADER REQUIREMENTS
+### Colors
+- Primary: ${primaryColor}
+- Accent: ${accentColor}
+- Background: #FFFFFF
+- Text: #1F2937
+- Secondary text: #6B7280
+- Borders: #E5E7EB
 
-**Structure:**
-\`\`\`html
-<nav class="navbar" id="navbar">
-  <div class="nav-container">
-    <div class="logo">${businessName}</div>
-    
-    <div class="nav-center">
-      <a href="#home" class="nav-link active" data-page="home">Home</a>
-      <a href="#services" class="nav-link" data-page="services">Services</a>
-      <a href="#gift-cards" class="nav-link" data-page="gift-cards">Gift Cards</a>
-      <a href="#contact" class="nav-link" data-page="contact">Contact</a>
-    </div>
-    
-    <div class="nav-right">
-      <a href="tel:${phoneNumberClean}" class="phone-link">
-        <span class="phone-icon">📞</span>
-        <span class="phone-number">${phoneNumber}</span>
-      </a>
-      <a href="${bookingUrl}" target="_blank" class="btn-nav-book">Book Now</a>
-    </div>
-    
-    <button class="hamburger" onclick="toggleMobileMenu()">
-      <span></span><span></span><span></span>
-    </button>
-  </div>
-</nav>
-\`\`\`
-
-**Phone Number Styling (CRITICAL):**
-\`\`\`css
-.phone-link {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: inherit;
-  text-decoration: none;
-  font-weight: 600;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  transition: background 0.3s ease;
+### CSS Variables (MUST include in :root)
+:root {
+  --primary-color: ${primaryColor};
+  --accent-color: ${accentColor};
 }
 
-.phone-link:hover {
-  background: rgba(0,0,0,0.05);
-}
+### Images
+Use placeholder images from https://picsum.photos/[width]/[height]
+- Hero: https://picsum.photos/1920/1080
+- Service cards: https://picsum.photos/800/600
+- About section: https://picsum.photos/1200/800
+- Testimonials: https://picsum.photos/400/400
 
-/* Desktop: NOT clickable */
-@media (min-width: 768px) {
-  .phone-link {
-    pointer-events: none;
-    cursor: default;
-  }
-}
+### Typography
+- Font: system-ui, -apple-system, sans-serif
+- H1: 3rem, font-weight 900
+- H2: 2rem, font-weight 800
+- H3: 1.5rem, font-weight 700
+- Body: 1rem, line-height 1.6
 
-/* Mobile: Clickable */
-@media (max-width: 767px) {
-  .phone-link {
-    pointer-events: auto;
-    cursor: pointer;
-  }
-}
+### Layout
+- Max width: 1200px
+- Section padding: 6rem 0
+- Mobile padding: 3rem 0
+- Fully responsive (mobile-first)
 
-.phone-number {
-  font-size: 1rem;
-  white-space: nowrap;
-}
+## REQUIRED PAGES (Single HTML file with JS navigation)
 
-/* Hide number on very small screens */
-@media (max-width: 640px) {
-  .phone-number { display: none; }
-  .phone-icon { font-size: 1.5rem; }
-}
-\`\`\`
+### 1. HOME PAGE - Must include these sections in order:
+1. **Hero** - Full viewport, background image with overlay, headline, tagline, CTA buttons
+2. **Trust Bar** - Stats (years, customers, rating, certifications)
+3. **Services** - 3-6 service cards with images, descriptions, prices, book buttons
+4. **Why Choose Us** - Image + benefits list
+5. **How It Works** - 4 step process
+6. **Testimonials** - 3 customer reviews (create realistic ${safeBusinessType}-specific testimonials)
+7. **Final CTA** - Large call to action section
 
----
+### 2. SERVICES PAGE
+- All services with detailed descriptions
+- Each service has image, description, price, duration, book button
 
-### PAGE NAVIGATION JAVASCRIPT (WORKS IN PREVIEW)
+### 3. GIFT CARDS PAGE
+- Gift card visual display
+- Amount selection buttons ($50, $75, $100, $150, $200, Custom)
+- Purchase button (shows alert with phone number)
 
-\`\`\`javascript
-<script>
-(function() {
-  let currentPage = 'home';
-  
-  function showPage(pageName, clickEvent) {
-    if (clickEvent) {
-      clickEvent.preventDefault();
-    }
-    
-    // Hide all pages
-    document.querySelectorAll('.page').forEach(page => {
-      page.classList.remove('active');
-      page.style.display = 'none';
-    });
-    
-    // Show selected page
-    const selectedPage = document.getElementById(pageName + '-page');
-    if (selectedPage) {
-      selectedPage.classList.add('active');
-      selectedPage.style.display = 'block';
-    }
-    
-    // Update active nav link
-    document.querySelectorAll('.nav-link').forEach(link => {
-      link.classList.remove('active');
-      if (link.getAttribute('data-page') === pageName) {
-        link.classList.add('active');
-      }
-    });
-    
-    currentPage = pageName;
-    window.location.hash = pageName;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    closeMobileMenu();
-  }
-  
-  function toggleMobileMenu() {
-    document.getElementById('navbar').classList.toggle('mobile-open');
-  }
-  
-  function closeMobileMenu() {
-    document.getElementById('navbar').classList.remove('mobile-open');
-  }
-  
-  // Make globally accessible
-  window.showPage = showPage;
-  window.toggleMobileMenu = toggleMobileMenu;
-  window.closeMobileMenu = closeMobileMenu;
-  
-  // Initialize
-  window.addEventListener('DOMContentLoaded', function() {
-    const hash = window.location.hash.substring(1) || 'home';
-    showPage(hash);
-    
-    // Add click handlers
-    document.querySelectorAll('.nav-link').forEach(link => {
-      link.addEventListener('click', function(e) {
-        e.preventDefault();
-        showPage(this.getAttribute('data-page'), e);
-      });
-    });
-  });
-  
-  // Handle back/forward
-  window.addEventListener('hashchange', function() {
-    const hash = window.location.hash.substring(1);
-    if (hash && hash !== currentPage) {
-      showPage(hash);
-    }
-  });
-})();
-</script>
-\`\`\`
+### 4. CONTACT PAGE
+- All contact information
+- Business hours
+- Contact form (shows success alert on submit)
+- Map placeholder
+- Quick book CTA
 
-**Page CSS:**
-\`\`\`css
-.page {
-  display: none;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
+## NAVIGATION
+- Sticky header with logo, nav links, phone number, Book Now button
+- Phone number: clickable on mobile only (use CSS pointer-events)
+- Mobile hamburger menu
+- JavaScript SPA navigation (no page reloads)
 
-.page.active {
-  display: block !important;
-  opacity: 1;
-  animation: fadeIn 0.3s ease;
-}
+## CRITICAL REQUIREMENTS
+1. All "Book Now" buttons link to: ${bookingUrl}
+2. Phone links use: tel:${phoneNumberClean}
+3. Email links use: mailto:${contactEmail}
+4. Contact form shows alert on submit (no backend needed)
+5. Gift card purchase shows confirmation alert
+6. Include smooth scroll behavior
+7. Include subtle hover animations on cards and buttons
+8. All content must be specific to ${safeBusinessType} industry
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Ensure home page is visible by default */
-#home-page {
-  display: block;
-}
-\`\`\`
-
----
-
-### HOME PAGE - COMPREHENSIVE SHOWCASE
-
-**MUST INCLUDE ALL THESE SECTIONS IN ORDER:**
-
-**1. Hero Section** - Clean with solid color overlay
-\`\`\`html
-<section class="hero" style="
-  position: relative;
-  background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), 
-              url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},professional,service') center/cover;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  text-align: center;
-">
-  <div class="hero-content fade-in">
-    <h1 style="font-size: 3.5rem; font-weight: 900; margin-bottom: 1rem;">
-      ${businessName}
-    </h1>
-    ${tagline ? `<p style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem; opacity: 0.95;">${tagline}</p>` : ''}
-    <p style="font-size: 1.2rem; margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto; opacity: 0.9;">
-      ${description || `Professional ${businessType} Services`}
-    </p>
-    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-      <a href="${bookingUrl}" target="_blank" class="btn-primary">Book Now</a>
-      <a href="#services" class="btn-secondary">Our Services</a>
-    </div>
-  </div>
-</section>
-\`\`\`
-
-**2. Trust Bar / Stats Section** - Solid color background
-\`\`\`html
-<section class="trust-bar" style="background: var(--primary-color); padding: 3rem 0; color: white;">
-  <div class="container">
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; text-align: center;">
-      ${yearsInBusiness ? `
-      <div class="stat-item fade-in">
-        <div style="font-size: 3rem; font-weight: 900;">${yearsInBusiness}+</div>
-        <div style="font-size: 1.1rem; opacity: 0.95;">Years Experience</div>
-      </div>` : ''}
-      <div class="stat-item fade-in">
-        <div style="font-size: 3rem; font-weight: 900;">5,000+</div>
-        <div style="font-size: 1.1rem; opacity: 0.95;">Happy Customers</div>
-      </div>
-      <div class="stat-item fade-in">
-        <div style="font-size: 3rem; font-weight: 900;">100%</div>
-        <div style="font-size: 1.1rem; opacity: 0.95;">Satisfaction Rate</div>
-      </div>
-      ${certifications ? `
-      <div class="stat-item fade-in">
-        <div style="font-size: 3rem; font-weight: 900;">✓</div>
-        <div style="font-size: 1.1rem; opacity: 0.95;">Licensed & Insured</div>
-      </div>` : ''}
-    </div>
-  </div>
-</section>
-\`\`\`
-
-**3. Featured Services** - Clean white cards
-\`\`\`html
-<section class="featured-services" style="padding: 6rem 0; background: #f9fafb;">
-  <div class="container">
-    <div style="text-align: center; margin-bottom: 4rem;">
-      <h2 style="font-size: 2.5rem; font-weight: 900; margin-bottom: 1rem; color: #111827;">Our Services</h2>
-      <p style="font-size: 1.2rem; color: #6b7280; max-width: 600px; margin: 0 auto;">
-        Professional ${businessType} solutions tailored to your needs
-      </p>
-    </div>
-    
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem;">
-      <!-- Create 3-4 service cards -->
-      <div class="service-card hover-lift" style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
-        <div style="overflow: hidden; height: 250px;">
-          <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},work,professional" 
-               alt="Service"
-               style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease;"
-               onmouseover="this.style.transform='scale(1.1)'"
-               onmouseout="this.style.transform='scale(1)'">
-        </div>
-        <div style="padding: 2rem;">
-          <h3 style="font-size: 1.8rem; font-weight: 800; margin-bottom: 1rem;">Service Name</h3>
-          <p style="color: #6b7280; margin-bottom: 1.5rem; line-height: 1.6;">Detailed description of the service and what it includes.</p>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-            <span style="font-size: 1.5rem; font-weight: 900; color: var(--primary);">$99</span>
-            <span style="color: #6b7280;">2 hours</span>
-          </div>
-          <a href="${bookingUrl}" target="_blank" class="btn-premium" style="display: block; text-align: center; text-decoration: none;">Book This Service</a>
-        </div>
-      </div>
-      <!-- Repeat for 2-3 more services -->
-    </div>
-    
-    <div style="text-align: center; margin-top: 3rem;">
-      <a href="#services" class="btn-secondary">View All Services</a>
-    </div>
-  </div>
-</section>
-\`\`\`
-
-**4. Why Choose Us** - Image + Benefits with icons
-\`\`\`html
-<section class="why-choose" style="padding: 6rem 0; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);">
-  <div class="container">
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
-      <div>
-        <img src="https://source.unsplash.com/1200x800/?${businessType.toLowerCase().replace(/\s+/g, '-')},team,professional,business" 
-             alt="Why Choose Us"
-             class="premium-shadow"
-             style="width: 100%; height: 500px; object-fit: cover; border-radius: 20px;">
-      </div>
-      <div>
-        <h2 style="font-size: 3rem; font-weight: 900; margin-bottom: 2rem;">Why Choose ${businessName}?</h2>
-        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-          ${uniqueSellingPoints ? uniqueSellingPoints.split('\n').filter(p => p.trim()).map(point => `
-          <div class="glass-card" style="display: flex; gap: 1rem; align-items: start;">
-            <div style="font-size: 2rem;">✓</div>
-            <div>
-              <h4 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 0.5rem;">${point.replace(/[•\-]/g, '').trim()}</h4>
-              <p style="color: #6b7280;">Premium quality service you can rely on.</p>
-            </div>
-          </div>
-          `).join('') : `
-          <div class="glass-card" style="display: flex; gap: 1rem;">
-            <div style="font-size: 2rem;">✓</div>
-            <div>
-              <h4 style="font-size: 1.3rem; font-weight: 700;">Expert Technicians</h4>
-              <p style="color: #6b7280;">Certified professionals with years of experience</p>
-            </div>
-          </div>
-          <div class="glass-card" style="display: flex; gap: 1rem;">
-            <div style="font-size: 2rem;">✓</div>
-            <div>
-              <h4 style="font-size: 1.3rem; font-weight: 700;">Quality Guaranteed</h4>
-              <p style="color: #6b7280;">100% satisfaction or your money back</p>
-            </div>
-          </div>
-          <div class="glass-card" style="display: flex; gap: 1rem;">
-            <div style="font-size: 2rem;">✓</div>
-            <div>
-              <h4 style="font-size: 1.3rem; font-weight: 700;">Fast Response</h4>
-              <p style="color: #6b7280;">Same-day service available for emergencies</p>
-            </div>
-          </div>
-          `}
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-\`\`\`
-
-**5. Process / How It Works** - Step-by-step visual
-\`\`\`html
-<section class="process" style="padding: 6rem 0; background: white;">
-  <div class="container">
-    <div style="text-align: center; margin-bottom: 4rem;">
-      <h2 class="gradient-text" style="font-size: 3rem; font-weight: 900;">How It Works</h2>
-      <p style="font-size: 1.3rem; color: #6b7280;">Simple, fast, and hassle-free</p>
-    </div>
-    
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
-      <div style="text-align: center;" class="fade-in">
-        <div style="width: 100px; height: 100px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2.5rem; font-weight: 900; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">1</div>
-        <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">Book Online</h3>
-        <p style="color: #6b7280;">Choose your service and preferred time slot</p>
-      </div>
-      <div style="text-align: center;" class="fade-in">
-        <div style="width: 100px; height: 100px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2.5rem; font-weight: 900; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">2</div>
-        <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">We Arrive</h3>
-        <p style="color: #6b7280;">Professional team shows up on time</p>
-      </div>
-      <div style="text-align: center;" class="fade-in">
-        <div style="width: 100px; height: 100px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2.5rem; font-weight: 900; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">3</div>
-        <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">Get It Done</h3>
-        <p style="color: #6b7280;">Quality service completed to perfection</p>
-      </div>
-      <div style="text-align: center;" class="fade-in">
-        <div style="width: 100px; height: 100px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2.5rem; font-weight: 900; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">4</div>
-        <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">Enjoy Results</h3>
-        <p style="color: #6b7280;">Love your results or we'll make it right</p>
-      </div>
-    </div>
-  </div>
-</section>
-\`\`\`
-
-**6. Customer Testimonials** - Premium review cards
-\`\`\`html
-<section class="testimonials" style="
-  padding: 6rem 0;
-  background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), 
-              url('https://source.unsplash.com/1920x1080/?${businessType.toLowerCase().replace(/\s+/g, '-')},happy,customer') center/cover fixed;
-  color: white;
-">
-  <div class="container">
-    <div style="text-align: center; margin-bottom: 4rem;">
-      <h2 style="font-size: 3rem; font-weight: 900; margin-bottom: 1rem;">What Our Clients Say</h2>
-      <p style="font-size: 1.3rem; opacity: 0.9;">Real reviews from real customers</p>
-    </div>
-    
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem;">
-      <div class="glass-card">
-        <div style="color: #fbbf24; font-size: 1.5rem; margin-bottom: 1rem;">★★★★★</div>
-        <p style="font-size: 1.1rem; line-height: 1.8; margin-bottom: 1.5rem; font-style: italic;">
-          "EXAMPLE PLACEHOLDER - Replace with ${businessType}-specific testimonial mentioning actual ${businessType} work done"
-        </p>
-        <div style="display: flex; align-items: center; gap: 1rem;">
-          <div style="width: 50px; height: 50px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.5rem;">JD</div>
-          <div>
-            <div style="font-weight: 700;">John Davis</div>
-            <div style="opacity: 0.7; font-size: 0.9rem;">Homeowner</div>
-          </div>
-        </div>
-      </div>
-      <!-- CRITICAL: Create 2-3 MORE testimonials, each mentioning SPECIFIC ${businessType} services -->
-      <!-- Examples for different business types:
-           Auto Detailing: "The ceramic coating made my car look brand new! Worth every penny."
-           Plumbing: "Fixed our emergency leak at 11pm on a Sunday. True professionals!"
-           HVAC: "New AC system installed in one day. House stays cool even in 100° heat!"
-           Landscaping: "Transformed our overgrown yard into a beautiful garden oasis."
-           Cleaning: "Deep clean before our party was amazing. Every surface sparkled!"
-      -->
-    </div>
-  </div>
-</section>
-\`\`\`
-
-**7. Final CTA** - Bold call-to-action
-\`\`\`html
-<section class="final-cta" style="padding: 6rem 0; background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%); color: white; text-align: center;">
-  <div class="container">
-    <h2 style="font-size: 3.5rem; font-weight: 900; margin-bottom: 1rem;">Ready to Get Started?</h2>
-    <p style="font-size: 1.5rem; margin-bottom: 3rem; opacity: 0.95;">Book your service today and experience the difference</p>
-    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-      <a href="${bookingUrl}" target="_blank" class="btn-premium" style="background: white; color: var(--primary);">Book Now</a>
-      <a href="tel:${phoneNumberClean}" class="btn-secondary" style="background: rgba(255,255,255,0.2); color: white; border: 2px solid white;">Call ${phoneNumber}</a>
-    </div>
-  </div>
-</section>
-\`\`\`
-
----
-
-### SERVICES PAGE
-
-\`\`\`html
-<div id="services-page" class="page">
-  <section class="page-hero">
-    <h1>Our Services</h1>
-    <p>Professional ${businessType} services</p>
-  </section>
-  
-  <section class="services-detailed">
-    <div class="container">
-      <div class="services-grid">
-        ${servicesInfo.hasData ? `<!-- ${userServices.length} service cards with REAL data -->` : '<!-- 3-6 service cards -->'}
-        <!-- EACH SERVICE CARD MUST INCLUDE:
-             <div class="service-card">
-               <img src="https://source.unsplash.com/800x600/?${businessType.toLowerCase().replace(/\s+/g, '-')},service,quality" style="width:100%; height:300px; object-fit:cover; border-radius: 12px;">
-               <h3>Service Name</h3>
-               <p>Description</p>
-               <div class="price">$99 • 2hr</div>
-               <a href="${bookingUrl}" target="_blank" class="btn-book">Book This Service</a>
-             </div>
-        -->
-      </div>
-    </div>
-  </section>
-  
-  <section class="services-cta">
-    <h2>Ready to Get Started?</h2>
-    <a href="${bookingUrl}" target="_blank" class="btn-primary">Book Your Service</a>
-  </section>
-</div>
-\`\`\`
-
----
-
-### GIFT CARDS PAGE
-
-**CRITICAL: Create a SINGLE gift card visual with service-based amount selection**
-
-\`\`\`html
-<div id="gift-cards-page" class="page">
-  <section class="page-hero" style="background: linear-gradient(to bottom, #f9fafb, #ffffff); padding: 4rem 0; text-align: center;">
-    <div class="container">
-      <h1 style="font-size: 2.5rem; font-weight: 900; margin-bottom: 1rem;">Gift Cards</h1>
-      <p style="font-size: 1.2rem; color: #6b7280;">The perfect gift for any occasion</p>
-    </div>
-  </section>
-  
-  <section style="padding: 6rem 0; background: white;">
-    <div class="container">
-      <div style="max-width: 900px; margin: 0 auto;">
-        <!-- Single Gift Card Visual -->
-        <div style="background: linear-gradient(135deg, var(--primary-color) 0%, rgba(0,0,0,0.8) 100%); border-radius: 20px; padding: 3rem; color: white; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2); margin-bottom: 3rem; position: relative; overflow: hidden;">
-          <div style="position: absolute; top: 20px; right: 20px; width: 60px; height: 60px; background: rgba(255,255,255,0.2); border-radius: 50%;"></div>
-          <div style="position: absolute; bottom: 20px; left: 20px; width: 80px; height: 80px; background: rgba(255,255,255,0.1); border-radius: 50%;"></div>
-          
-          <h2 style="font-size: 2rem; font-weight: 900; margin-bottom: 1rem;">${businessName}</h2>
-          <p style="font-size: 1.3rem; opacity: 0.95; margin-bottom: 2rem;">Gift Card</p>
-          <div id="selected-amount" style="font-size: 4rem; font-weight: 900; margin: 2rem 0;">$100</div>
-          <p style="opacity: 0.9;">Select an amount below</p>
-        </div>
-        
-        <!-- Amount Selection Based on Services -->
-        <div style="margin-bottom: 3rem;">
-          <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 2rem; text-align: center;">Choose Amount</h3>
-          
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-            ${servicesInfo.hasData ? 
-              // If we have real services, create amounts based on service prices
-              userServices.slice(0, 6).map(service => `
-                <button onclick="selectAmount(${Math.round(parseFloat(service.price))})" 
-                        class="amount-btn" 
-                        style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease; text-align: center;">
-                  <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color); margin-bottom: 0.5rem;">$${Math.round(parseFloat(service.price))}</div>
-                  <div style="font-size: 0.875rem; color: #6b7280;">${service.name}</div>
-                </button>
-              `).join('') : 
-              // Otherwise use common preset amounts
-              `<button onclick="selectAmount(50)" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
-                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">$50</div>
-              </button>
-              <button onclick="selectAmount(75)" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
-                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">$75</div>
-              </button>
-              <button onclick="selectAmount(100)" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
-                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">$100</div>
-                <div style="font-size: 0.75rem; color: white; background: var(--primary-color); padding: 0.25rem 0.5rem; border-radius: 4px; margin-top: 0.5rem; display: inline-block;">Popular</div>
-              </button>
-              <button onclick="selectAmount(150)" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
-                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">$150</div>
-              </button>
-              <button onclick="selectAmount(200)" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
-                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">$200</div>
-              </button>
-              <button onclick="selectCustomAmount()" class="amount-btn" style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s ease;">
-                <div style="font-size: 1.8rem; font-weight: 900; color: var(--primary-color);">Custom</div>
-              </button>`
-            }
-          </div>
-          
-          <div style="text-align: center;">
-            <button onclick="purchaseGiftCard()" class="btn-primary" style="font-size: 1.1rem; padding: 1rem 3rem;">
-              Purchase Gift Card
-            </button>
-          </div>
-        </div>
-        
-        <!-- How It Works -->
-        <div style="background: #f9fafb; border-radius: 12px; padding: 3rem; margin-bottom: 3rem;">
-          <h3 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 2rem; text-align: center;">How It Works</h3>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; text-align: center;">
-            <div>
-              <div style="width: 60px; height: 60px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; margin: 0 auto 1rem;">1</div>
-              <h4 style="font-weight: 700; margin-bottom: 0.5rem;">Select Amount</h4>
-              <p style="color: #6b7280; font-size: 0.875rem;">Choose from our service-based amounts or enter custom</p>
-            </div>
-            <div>
-              <div style="width: 60px; height: 60px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; margin: 0 auto 1rem;">2</div>
-              <h4 style="font-weight: 700; margin-bottom: 0.5rem;">Purchase</h4>
-              <p style="color: #6b7280; font-size: 0.875rem;">Contact us to complete your purchase</p>
-            </div>
-            <div>
-              <div style="width: 60px; height: 60px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; margin: 0 auto 1rem;">3</div>
-              <h4 style="font-weight: 700; margin-bottom: 0.5rem;">Gift & Redeem</h4>
-              <p style="color: #6b7280; font-size: 0.875rem;">Recipient can book any service online</p>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Contact for Purchase -->
-        <div style="text-align: center; padding: 2rem; background: white; border: 2px solid #e5e7eb; border-radius: 12px;">
-          <h3 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 1rem;">Questions?</h3>
-          <p style="color: #6b7280; margin-bottom: 1.5rem;">Call us at <a href="tel:${phoneNumberClean}" style="color: var(--primary-color); font-weight: 600;">${phoneNumber}</a> or email <a href="mailto:${contactEmail}" style="color: var(--primary-color); font-weight: 600;">${contactEmail}</a></p>
-        </div>
-      </div>
-    </div>
-  </section>
-</div>
-
-<script>
-let selectedGiftAmount = 100;
-
-function selectAmount(amount) {
-  selectedGiftAmount = amount;
-  document.getElementById('selected-amount').textContent = '$' + amount;
-  
-  // Update button styles
-  document.querySelectorAll('.amount-btn').forEach(btn => {
-    btn.style.border = '2px solid #e5e7eb';
-    btn.style.background = 'white';
-  });
-  event.target.closest('.amount-btn').style.border = '2px solid var(--primary-color)';
-  event.target.closest('.amount-btn').style.background = 'rgba(37, 99, 235, 0.05)';
-}
-
-function selectCustomAmount() {
-  const amount = prompt('Enter custom amount ($):');
-  if (amount && !isNaN(amount) && amount > 0) {
-    selectAmount(Math.round(amount));
-  }
-}
-
-function purchaseGiftCard() {
-  if (confirm('Purchase $' + selectedGiftAmount + ' gift card?\\n\\nPlease call us at ${phoneNumber} to complete your purchase.')) {
-    window.location.href = 'tel:${phoneNumberClean}';
-  }
-}
-
-// Add hover effects
-document.addEventListener('DOMContentLoaded', function() {
-  const style = document.createElement('style');
-  style.textContent = \`
-    .amount-btn:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-      border-color: var(--primary-color) !important;
-    }
-  \`;
-  document.head.appendChild(style);
-});
-</script>
-\`\`\`
-
----
-
-### CONTACT PAGE (CRITICAL - USE ALL BUSINESS INFO)
-
-\`\`\`html
-<div id="contact-page" class="page">
-  <section class="page-hero">
-    <h1>Get In Touch</h1>
-    <p>We're here to answer your questions</p>
-  </section>
-  
-  <section class="contact-content">
-    <div class="container">
-      <div class="contact-grid">
-        <!-- Contact Info -->
-        <div class="contact-info">
-          <h2>Contact Information</h2>
-          
-          <div class="contact-item">
-            <div class="icon">📞</div>
-            <div>
-              <h3>Phone</h3>
-              <a href="tel:${phoneNumberClean}">${phoneNumber}</a>
-            </div>
-          </div>
-          
-          <div class="contact-item">
-            <div class="icon">✉️</div>
-            <div>
-              <h3>Email</h3>
-              <a href="mailto:${contactEmail}">${contactEmail}</a>
-            </div>
-          </div>
-          
-          ${fullAddress ? `
-          <div class="contact-item">
-            <div class="icon">📍</div>
-            <div>
-              <h3>Location</h3>
-              <p>${fullAddress}</p>
-            </div>
-          </div>
-          ` : ''}
-          
-          ${serviceAreaText ? `
-          <div class="contact-item">
-            <div class="icon">🗺️</div>
-            <div>
-              <h3>Primary Service Area</h3>
-              <p>${serviceAreaText}</p>
-              <p class="text-xs mt-1 text-gray-500">We accept bookings from all locations</p>
-            </div>
-          </div>
-          ` : ''}
-          
-          <div class="contact-item">
-            <div class="icon">🕐</div>
-            <div>
-              <h3>Business Hours</h3>
-              <div class="hours">
-${hoursInfo.hours.split('\n').map(line => `                <p>${line}</p>`).join('\n')}
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Contact Form -->
-        <div class="contact-form">
-          <h2>Send A Message</h2>
-          <form onsubmit="handleContact(event)">
-            <input type="text" name="name" placeholder="Your Name *" required>
-            <input type="email" name="email" placeholder="Your Email *" required>
-            <input type="tel" name="phone" placeholder="Phone Number">
-            <select name="service">
-              <option value="">Service Interested In</option>
-              ${servicesInfo.hasData ? userServices.map(s => `<option value="${s.name}">${s.name}</option>`).join('\n              ') : '<option>General Inquiry</option>'}
-            </select>
-            <textarea name="message" rows="5" placeholder="Your Message *" required></textarea>
-            <button type="submit" class="btn-primary">Send Message</button>
-          </form>
-        </div>
-      </div>
-    </div>
-  </section>
-  
-  <section class="quick-book">
-    <h2>Ready to Book?</h2>
-    <p>Skip the wait and book online now</p>
-    <a href="${bookingUrl}" target="_blank" class="btn-primary">Book Online</a>
-  </section>
-</div>
-
-<script>
-function handleContact(e) {
-  e.preventDefault();
-  alert('Thank you! We will get back to you soon.');
-  e.target.reset();
-}
-</script>
-\`\`\`
-
----
-
-### COLOR SCHEME
-
-${businessType.toLowerCase().includes('land') ? 'Primary: #047857 (green), Accent: #fbbf24 (yellow)' :
-  businessType.toLowerCase().includes('plumb') ? 'Primary: #2563eb (blue), Accent: #f97316 (orange)' :
-  businessType.toLowerCase().includes('clean') ? 'Primary: #06b6d4 (cyan), Accent: #a855f7 (purple)' :
-  businessType.toLowerCase().includes('hvac') ? 'Primary: #dc2626 (red), Accent: #3b82f6 (blue)' :
-  'Primary: #2563eb (blue), Accent: #10b981 (green)'}
-
----
-
-### FINAL REQUIREMENTS
-
-Return SINGLE HTML file with:
-✓ All 4 pages (Home, Services, Gift Cards, Contact)
-✓ JavaScript navigation
-✓ Phone in header (clickable mobile only)
-✓ ALL booking buttons → ${bookingUrl}
-✓ Contact page with ALL business info (phone, email, address, service area, hours)
-✓ Embedded CSS/JS
-✓ Mobile responsive
-✓ Professional design
-
-Return ONLY the HTML starting with <!DOCTYPE html>. No markdown, no explanations.`;
+## OUTPUT
+Return ONLY valid HTML starting with <!DOCTYPE html>
+No markdown formatting, no explanations, just the complete HTML file.`;
 
     // ============================================
     // CALL ANTHROPIC API
@@ -4025,8 +2842,8 @@ Return ONLY the HTML starting with <!DOCTYPE html>. No markdown, no explanations
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',  // Sonnet 4.5 - allows 64k output tokens
-        max_tokens: 64000,  // Maximum for Sonnet 4.5 - perfect for comprehensive websites
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 64000,
         messages: [{
           role: 'user',
           content: prompt
@@ -4050,15 +2867,15 @@ Return ONLY the HTML starting with <!DOCTYPE html>. No markdown, no explanations
       return res.status(500).json({ error: 'No content generated' });
     }
 
-    // Clean up markdown formatting
+    // Clean up markdown formatting if present
     let cleanHtml = htmlContent.trim()
       .replace(/```html\n?/g, '')
       .replace(/```\n?$/g, '')
       .replace(/```/g, '');
 
     // Verify content
-    const bookingLinkCount = (cleanHtml.match(new RegExp(bookingUrl, 'g')) || []).length;
-    const phoneCount = (cleanHtml.match(new RegExp(phoneNumber, 'g')) || []).length;
+    const bookingLinkCount = (cleanHtml.match(new RegExp(bookingUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+    const phoneCount = (cleanHtml.match(new RegExp(phoneNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
     
     console.log(`✅ Multi-page website generated`);
     console.log(`✅ Booking links: ${bookingLinkCount}`);
@@ -4069,7 +2886,7 @@ Return ONLY the HTML starting with <!DOCTYPE html>. No markdown, no explanations
     res.json({ 
       success: true, 
       html: cleanHtml,
-      businessName,
+      businessName: safeBusinessName,
       bookingUrl,
       phoneNumber,
       address: fullAddress || null,
@@ -4091,10 +2908,10 @@ Return ONLY the HTML starting with <!DOCTYPE html>. No markdown, no explanations
   }
 });
 
-console.log('✅ Website generation endpoint loaded with full business information integration');
+console.log('✅ Website generation endpoint loaded with sanitization');
 
 // ============================================
-// AUTHENTICATION ENDPOINTS
+// AUTHENTICATION ENDPOINTS (NO AUTH NEEDED)
 // ============================================
 
 app.post('/api/auth/signup', async (req, res) => {
@@ -4114,7 +2931,7 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     const result = await pool.query(
       `INSERT INTO users (email, password_hash, name, business_name, plan, created_at)
@@ -4130,7 +2947,7 @@ app.post('/api/auth/signup', async (req, res) => {
     );
 
     const user = result.rows[0];
-    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
 
     console.log('✅ New user:', email);
 
@@ -4175,7 +2992,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
 
     console.log('✅ User logged in:', email);
 
@@ -4204,7 +3021,7 @@ app.post('/api/auth/verify', async (req, res) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET);
 
     const result = await pool.query(
       'SELECT id, email, business_name, plan FROM users WHERE id = $1',
@@ -4234,33 +3051,21 @@ app.post('/api/auth/verify', async (req, res) => {
 });
 
 app.post('/api/auth/logout', async (req, res) => {
-  try {
-    res.json({ 
-      success: true, 
-      message: 'Logged out successfully' 
-    });
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({ 
-      error: 'Logout failed',
-      message: error.message 
-    });
-  }
+  res.json({ 
+    success: true, 
+    message: 'Logged out successfully' 
+  });
 });
 
 console.log('✅ Auth endpoints loaded (signup, login, verify, logout)');
 
 // ============================================
-// WEBSITE ENDPOINTS
+// WEBSITE ENDPOINTS (SECURED)
 // ============================================
 
-app.get('/api/website', async (req, res) => {
+app.get('/api/website', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
 
     const result = await pool.query(
       'SELECT * FROM websites WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
@@ -4276,12 +3081,13 @@ app.get('/api/website', async (req, res) => {
   }
 });
 
-app.post('/api/website', async (req, res) => {
+app.post('/api/website', authenticateToken, async (req, res) => {
   try {
-    const { userId, htmlContent } = req.body;
+    const userId = req.user.userId;
+    const { htmlContent } = req.body;
 
-    if (!userId || !htmlContent) {
-      return res.status(400).json({ error: 'userId and htmlContent required' });
+    if (!htmlContent) {
+      return res.status(400).json({ error: 'htmlContent required' });
     }
 
     const existing = await pool.query(
@@ -4317,13 +3123,10 @@ app.post('/api/website', async (req, res) => {
   }
 });
 
-app.post('/api/website/publish', async (req, res) => {
+app.post('/api/website/publish', authenticateToken, async (req, res) => {
   try {
-    const { userId, isPublished } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
+    const { isPublished } = req.body;
 
     const result = await pool.query(
       `UPDATE websites 
@@ -4347,13 +3150,10 @@ app.post('/api/website/publish', async (req, res) => {
   }
 });
 
-app.post('/api/website/domain', async (req, res) => {
+app.post('/api/website/domain', authenticateToken, async (req, res) => {
   try {
-    const { userId, customDomain } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
+    const userId = req.user.userId;
+    const { customDomain } = req.body;
 
     const result = await pool.query(
       `UPDATE websites 
@@ -4378,14 +3178,15 @@ app.post('/api/website/domain', async (req, res) => {
 });
 
 // ============================================
-// WEBSITE EDITOR ENDPOINT (OPTIMIZED)
+// WEBSITE EDITOR ENDPOINT (SECURED)
 // ============================================
 
-app.post('/api/website/ai-edit', async (req, res) => {
+app.post('/api/website/ai-edit', authenticateToken, async (req, res) => {
   try {
-    const { userId, currentHTML, userRequest } = req.body;
+    const userId = req.user.userId;
+    const { currentHTML, userRequest } = req.body;
 
-    if (!userId || !currentHTML || !userRequest) {
+    if (!currentHTML || !userRequest) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -4395,15 +3196,16 @@ app.post('/api/website/ai-edit', async (req, res) => {
 
     const startTime = Date.now();
     const htmlSize = (currentHTML.length / 1024).toFixed(1);
+    const safeUserRequest = sanitizeForPrompt(userRequest);
     
-    console.log(`🎨 AI Edit: "${userRequest.substring(0, 60)}..." (${htmlSize}KB)`);
+    console.log(`🎨 AI Edit for user ${userId}: "${safeUserRequest.substring(0, 60)}..." (${htmlSize}KB)`);
 
     const estimatedTokens = Math.ceil(currentHTML.length / 3);
     const maxTokens = Math.min(estimatedTokens + 500, 4000);
 
     const prompt = `You are an expert web developer. Modify this HTML based on the user's request.
 
-USER REQUEST: ${userRequest}
+USER REQUEST: ${safeUserRequest}
 
 CURRENT HTML:
 ${currentHTML}
@@ -4469,7 +3271,7 @@ Return ONLY the updated HTML with no explanation or markdown formatting.`;
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
     let message = "Done! ✨";
-    const lowerRequest = userRequest.toLowerCase();
+    const lowerRequest = safeUserRequest.toLowerCase();
     
     if (lowerRequest.includes('color') || lowerRequest.includes('colour')) {
       message = "Updated the colors! 🎨";
@@ -4512,13 +3314,22 @@ Return ONLY the updated HTML with no explanation or markdown formatting.`;
 console.log('✅ AI editor endpoint loaded');
 
 // ============================================
-// GOOGLE BUSINESS PROFILE - AI REPLY GENERATOR ONLY
+// GOOGLE BUSINESS PROFILE - AI REPLY GENERATOR (SECURED)
 // ============================================
 
-app.post('/api/google-business/generate-reply', async (req, res) => {
-  const { reviewText, rating, businessName, customerName } = req.body;
-  
+app.post('/api/google-business/generate-reply', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.userId;
+    const { reviewText, rating, businessName, customerName } = req.body;
+
+    if (!reviewText || !rating) {
+      return res.status(400).json({ error: 'reviewText and rating required' });
+    }
+
+    const safeReviewText = sanitizeForPrompt(reviewText);
+    const safeBusinessName = sanitizeForPrompt(businessName) || 'our business';
+    const safeCustomerName = sanitizeForPrompt(customerName);
+    
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -4532,16 +3343,16 @@ app.post('/api/google-business/generate-reply', async (req, res) => {
         temperature: 0.7,
         messages: [{
           role: 'user',
-          content: `You are replying to a Google Business review for ${businessName}.
+          content: `You are replying to a Google Business review for ${safeBusinessName}.
 
-Review (${rating}/5 stars): "${reviewText}"
-${customerName ? `Customer: ${customerName}` : ''}
+Review (${rating}/5 stars): "${safeReviewText}"
+${safeCustomerName ? `Customer: ${safeCustomerName}` : ''}
 
 Write a professional, warm, personalized response (2-3 sentences). 
 - If 4-5 stars: Thank them and encourage return visit
 - If 1-3 stars: Apologize, show empathy, offer to make it right
 - Use the business name naturally
-${customerName ? `- Address ${customerName} by name if appropriate` : ''}
+${safeCustomerName ? `- Address ${safeCustomerName} by name if appropriate` : ''}
 - Be authentic, not corporate
 
 Return ONLY the reply text, no quotes or formatting.`
@@ -4551,6 +3362,8 @@ Return ONLY the reply text, no quotes or formatting.`
     
     const data = await response.json();
     const reply = data.content[0].text.trim();
+    
+    console.log(`✅ Generated review reply for user ${userId}`);
     
     res.json({
       success: true,
@@ -4566,7 +3379,7 @@ Return ONLY the reply text, no quotes or formatting.`
 console.log('✅ Google Business Profile AI reply generator loaded');
 
 // ============================================
-// HEALTH CHECK
+// HEALTH CHECK (NO AUTH NEEDED)
 // ============================================
 
 app.get('/api/health', (req, res) => {
@@ -4617,6 +3430,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
