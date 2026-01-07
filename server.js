@@ -2445,6 +2445,17 @@ app.post('/api/generate', async (req, res) => {
       userId 
     } = req.body;
 
+    const safeBusinessName = sanitizeForPrompt(businessName);
+    const safeBusinessType = sanitizeForPrompt(businessType);
+    const safeTagline = sanitizeForPrompt(tagline);
+    const safeServices = sanitizeForPrompt(services);
+    const safeCertifications = sanitizeForPrompt(certifications);
+    const safeDescription = sanitizeForPrompt(description);
+    const safeUSPs = sanitizeForPrompt(uniqueSellingPoints);
+    const safeTargetCustomer = sanitizeForPrompt(targetCustomer);
+
+    console.log('🎨 Generating multi-page website for:', safeBusinessName);
+
     console.log('🎨 Generating multi-page website for:', businessName);
     console.log('👤 User ID:', userId);
     console.log('📋 Business Type:', businessType);
@@ -4606,6 +4617,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
