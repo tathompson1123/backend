@@ -191,7 +191,7 @@ https://i.pravatar.cc/150?img=[1-70] (use different numbers for variety)
 3. Show professional work in action, not generic stock photos
 4. Use multiple specific keywords for better results
 5. Images should match the service description perfectly
-```
+
 ═══════════════════════════════════════════════════════════════════
 ✨ PREMIUM INTERACTIONS (REQUIRED)
 ═══════════════════════════════════════════════════════════════════
