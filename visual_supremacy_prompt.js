@@ -1,7 +1,8 @@
 const { getImageGuidance } = require('./image_guidance');
+const { getRecommendedTemplate, getTemplateInfo } = require('./templates');
 
 // ============================================
-// VISUAL SUPREMACY PROMPT - PREMIUM VERSION
+// VISUAL SUPREMACY PROMPT - PREMIUM VERSION WITH TEMPLATES
 // This includes all advanced styling for $10k+ website look
 // ============================================
 
@@ -28,6 +29,10 @@ function buildVisualSupremacyPrompt({
   accentColor
 }) {
   
+  // Get recommended template based on business type
+  const recommendedTemplateKey = getRecommendedTemplate(safeBusinessType);
+  const templateInfo = getTemplateInfo(recommendedTemplateKey);
+  
   // Calculate RGB values for color effects
   const hexToRgb = (hex) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -39,6 +44,30 @@ function buildVisualSupremacyPrompt({
   const imageGuide = getImageGuidance(safeBusinessType);
 
   return `You are an elite web designer creating a VISUALLY STUNNING, premium service business website with cutting-edge design and micro-interactions.
+
+═══════════════════════════════════════════════════════════════════
+🎨 RECOMMENDED TEMPLATE
+═══════════════════════════════════════════════════════════════════
+
+**Template:** ${templateInfo.name}
+**Best For:** ${safeBusinessType}
+
+${templateInfo.description}
+
+**Key Features:**
+${templateInfo.features.map(f => `- ${f}`).join('\n')}
+
+**Template Color Palette:**
+${Object.entries(templateInfo.colors).map(([key, value]) => `- ${key}: ${value}`).join('\n')}
+
+**Typography:**
+- Headings: ${templateInfo.fonts.heading}
+- Body: ${templateInfo.fonts.body}
+
+**Pages Structure:**
+${templateInfo.pages.map((p, i) => `${i + 1}. ${p}`).join('\n')}
+
+⚠️ IMPORTANT: Use this template as your BASE DESIGN SYSTEM. Adapt the layout, animations, and styling patterns from this template while customizing the content for ${safeBusinessName}.
 
 ═══════════════════════════════════════════════════════════════════
 🏢 BUSINESS PROFILE
@@ -87,30 +116,35 @@ ${teamInfo.team}
 ${teamInfo.instruction}` : ''}
 
 ═══════════════════════════════════════════════════════════════════
-🎨 PREMIUM DESIGN SYSTEM
+🎨 DESIGN SYSTEM (Based on ${templateInfo.name} Template)
 ═══════════════════════════════════════════════════════════════════
 
-### CSS Variables (REQUIRED - Copy exactly)
+### CSS Variables (REQUIRED - Copy exactly and adapt template colors)
 \`\`\`css
+${templateInfo.cssVars}
+
+/* Extended Design Tokens */
 :root {
-  /* Colors */
-  --primary: ${primaryColor};
-  --primary-rgb: ${primaryRgb};
-  --secondary: ${accentColor};
-  --secondary-rgb: ${secondaryRgb};
+  /* User's Custom Colors (use these for primary branding) */
+  --user-primary: ${primaryColor};
+  --user-primary-rgb: ${primaryRgb};
+  --user-secondary: ${accentColor};
+  --user-secondary-rgb: ${secondaryRgb};
+  
+  /* Surface Colors */
   --background: #FFFFFF;
   --surface: #F9FAFB;
   --text-primary: #111827;
   --text-secondary: #6B7280;
   --border: #E5E7EB;
   
-  /* Layered Shadow System */
+  /* Layered Shadow System (from template) */
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.1);
   --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
   --shadow-lg: 0 10px 15px rgba(0,0,0,0.1), 0 4px 6px rgba(0,0,0,0.05);
   --shadow-xl: 0 20px 25px rgba(0,0,0,0.1), 0 10px 10px rgba(0,0,0,0.04);
   --shadow-2xl: 0 25px 50px rgba(0,0,0,0.15), 0 15px 30px rgba(0,0,0,0.1);
-  --shadow-primary: 0 10px 30px rgba(var(--primary-rgb), 0.3), 0 4px 12px rgba(var(--primary-rgb), 0.2);
+  --shadow-primary: 0 10px 30px rgba(var(--user-primary-rgb), 0.3), 0 4px 12px rgba(var(--user-primary-rgb), 0.2);
   
   /* Spacing */
   --space-xs: 0.5rem;
@@ -145,8 +179,9 @@ ${teamInfo.instruction}` : ''}
 }
 \`\`\`
 
-### Typography (Responsive with clamp)
-- **Font:** 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif
+### Typography (Responsive with clamp - use template fonts)
+- **Font Family:** ${templateInfo.fonts.body}, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif
+- **Heading Font:** ${templateInfo.fonts.heading}
 - **H1 Display:** clamp(2.5rem, 5vw, 4rem) / 1.1, weight 900, letter-spacing -0.02em
 - **H2 Heading:** clamp(2rem, 4vw, 3rem) / 1.2, weight 800, letter-spacing -0.015em
 - **H3 Subheading:** clamp(1.5rem, 3vw, 2rem) / 1.3, weight 700
@@ -156,7 +191,7 @@ ${teamInfo.instruction}` : ''}
 **OPTIONAL:** Gradient text for main headings:
 \`\`\`css
 .gradient-text {
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  background: linear-gradient(135deg, var(--user-primary), var(--user-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -193,16 +228,24 @@ https://i.pravatar.cc/150?img=[1-70] (use different numbers for variety)
 5. Images should match the service description perfectly
 
 ═══════════════════════════════════════════════════════════════════
-✨ PREMIUM INTERACTIONS (REQUIRED)
+✨ TEMPLATE-SPECIFIC ANIMATIONS & INTERACTIONS
 ═══════════════════════════════════════════════════════════════════
 
-### Button Ripple Effect
+### From ${templateInfo.name} Template:
+
+**Wave Transitions (if template uses them):**
+Use smooth SVG wave transitions between sections with the template's color scheme.
+
+**Scroll Animations:**
+Implement scroll-triggered fade-in and slide animations as shown in the template.
+
+**Button Effects:**
 \`\`\`css
 .btn-primary {
   position: relative;
   overflow: hidden;
   padding: 1rem 2rem;
-  background: var(--primary);
+  background: var(--user-primary);
   color: white;
   border: none;
   border-radius: var(--radius-lg);
@@ -236,7 +279,7 @@ https://i.pravatar.cc/150?img=[1-70] (use different numbers for variety)
 }
 \`\`\`
 
-### Card Hover Effects
+### Card Hover Effects (from template)
 \`\`\`css
 .card {
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -259,7 +302,7 @@ https://i.pravatar.cc/150?img=[1-70] (use different numbers for variety)
 }
 \`\`\`
 
-### Scroll Animations (Use Intersection Observer)
+### Scroll Animations (Use Intersection Observer - REQUIRED)
 \`\`\`css
 .fade-in-up {
   opacity: 0;
@@ -280,7 +323,7 @@ https://i.pravatar.cc/150?img=[1-70] (use different numbers for variety)
 \`\`\`
 
 \`\`\`javascript
-// Intersection Observer for scroll animations
+// Intersection Observer for scroll animations (REQUIRED)
 const observerOptions = {
   threshold: 0.1,
   rootMargin: '0px 0px -50px 0px'
@@ -298,24 +341,24 @@ document.querySelectorAll('.fade-in-up').forEach(el => observer.observe(el));
 \`\`\`
 
 ═══════════════════════════════════════════════════════════════════
-🏗️ SITE STRUCTURE (Single Page App)
+🏗️ SITE STRUCTURE (Following ${templateInfo.name} Layout)
 ═══════════════════════════════════════════════════════════════════
 
-## NAVIGATION (Sticky with glass effect on scroll)
+## NAVIGATION (Sticky with template styling)
 - Logo/Name | Home | Services | Gift Cards | Contact
 - Phone: ${phoneNumber} (desktop: text, mobile: clickable)
-- "Book Now" button (primary, shadow-primary)
+- "Book Now" button (primary color, template styling)
 - Mobile: Hamburger with smooth slide-in
 
 \`\`\`javascript
-// Add glass effect on scroll
+// Add glass/scroll effect on scroll (if template uses it)
 window.addEventListener('scroll', () => {
   const nav = document.querySelector('nav');
   if (window.scrollY > 100) {
-    nav.classList.add('glass-dark');
+    nav.classList.add('scrolled');
     nav.style.boxShadow = 'var(--shadow-lg)';
   } else {
-    nav.classList.remove('glass-dark');
+    nav.classList.remove('scrolled');
     nav.style.boxShadow = 'none';
   }
 });
@@ -325,324 +368,123 @@ window.addEventListener('scroll', () => {
 📄 PAGE 1: HOME (ID: page-home)
 ═══════════════════════════════════════════════════════════════════
 
-### 1. HERO (Full viewport with parallax)
+Follow the ${templateInfo.name} template structure:
+
+### 1. HERO (Full viewport with template styling)
 **Layout:**
 - min-height: 100vh
-- Background image with animated gradient overlay:
-  \`\`\`css
-  background: linear-gradient(135deg, 
-    rgba(var(--primary-rgb), 0.9), 
-    rgba(var(--primary-rgb), 0.7)
-  ), url(...);
-  \`\`\`
+- Background image with gradient overlay using template colors
+- Use template's wave transition if applicable
 
 **Content (centered):**
 - H1: Powerful headline${safeTagline ? ` - Use: "${safeTagline}"` : ''}
-  * Add .gradient-text class for gradient effect
-  * Add subtle text-shadow: 0 2px 8px rgba(0,0,0,0.1)
-- Tagline (H2, white, opacity 0.9)
-- Two CTAs:
-  * "Book Now" (.btn-primary with ripple)
-  * "View Services" (outline button, glass effect)
-${yearsInBusiness ? `- Trust badge: "${yearsInBusiness}+ Years" (glass effect, absolute bottom)` : ''}
-- Animated scroll indicator (↓ bounce animation)
+  * Apply template's heading style
+  * Add template's text effects if applicable
+- Tagline (H2, styled per template)
+- Two CTAs with template button styles
+${yearsInBusiness ? `- Trust badge: "${yearsInBusiness}+ Years" (template style)` : ''}
+- Animated scroll indicator (template style)
 
-\`\`\`javascript
-// Parallax hero background
-window.addEventListener('scroll', () => {
-  const hero = document.querySelector('.hero-background');
-  hero.style.transform = \`translateY(\${window.pageYOffset * 0.5}px)\`;
-});
-\`\`\`
-
-### 2. TRUST BAR (.fade-in-up)
+### 2. FEATURES/TRUST BAR (template style)
 **Grid: 4 columns (2 on mobile)**
 ${yearsInBusiness ? `- "${yearsInBusiness}+ Years"` : '- "10+ Years"'}
 - "500+ Happy Customers"
 - "4.9/5 Stars"
 ${safeCertifications ? `- "${safeCertifications}"` : '- "Licensed & Insured"'}
 
-**Style:** Each stat is a card with animated counter
-\`\`\`javascript
-// Animate counters when visible
-const animateCounter = (el, target) => {
-  let count = 0;
-  const increment = target / 60;
-  const timer = setInterval(() => {
-    count += increment;
-    if (count >= target) {
-      el.textContent = target;
-      clearInterval(timer);
-    } else {
-      el.textContent = Math.floor(count);
-    }
-  }, 16);
-};
+Use template's feature card styling with icons/animations.
 
-document.querySelectorAll('[data-count]').forEach(el => {
-  observer.observe(el);
-  el.addEventListener('visible', () => {
-    animateCounter(el, parseInt(el.dataset.count));
-  });
-});
-\`\`\`
+### 3. SERVICES GRID (template layout)
+**Use template's service card design**
+**Grid: Responsive per template**
 
-### 3. SERVICES GRID (.fade-in-up.stagger-X)
-**Grid: 2 cols mobile, 3 cols desktop**
-**Gap: 2rem**
-
-**Each card:**
-\`\`\`html
-<div class="card service-card fade-in-up stagger-1">
-  <div class="card-image">
-    <img src="..." alt="Service name">
-    <div class="price-badge">$XXX</div>
-  </div>
-  <div class="card-content">
-    <h3>Service Name</h3>
-    <p>Description (2-3 lines)</p>
-    <div class="service-meta">
-      <span>⏱ X hours</span>
-    </div>
-    <button class="btn-primary">Book Now</button>
-  </div>
-</div>
-\`\`\`
-
-**Card styling:**
-- .card hover: translateY(-8px) scale(1.02)
-- Image zoom on hover
-- Price badge: absolute top-right, pulse animation
-- shadow-md → shadow-2xl on hover
+Each service card follows template structure with:
+- Image with hover effects
+- Service name and description
+- Pricing display
+- "Book Now" button
+- Template's card hover animations
 
 ${servicesInfo.hasData ? 
 `**Use ALL ${servicesInfo.services.split('\n\n').filter(s => s.includes('**')).length} services exactly as provided**` :
 `**Create 4-6 realistic ${safeBusinessType} services**`}
 
-### 4. WHY CHOOSE US (.fade-in-up)
-**Layout: Two columns (image left, content right)**
+### 4. WHY CHOOSE US / BENEFITS (template style)
+Follow template's benefits section layout:
+${safeUSPs ? `- Display your USPs with template styling` : '- Create 3-4 compelling benefits'}
+- Use template's card/grid layout
+- Apply template's animations
+- Include relevant icon or image per template
 
-**Left:** 
-- Image with border-radius: var(--radius-2xl)
-- Image zoom on scroll (scale 1 → 1.05)
-
-**Right:**
-- H2 (gradient-text optional)
-${safeUSPs ? `- Your USPs as cards with icons` : '- 4-6 benefit cards'}
-- Each benefit:
-  * Icon (circle background, primary color)
-  * Heading (H4)
-  * Description (1-2 sentences)
-  * .fade-in-up.stagger-X
-- CTA button
-
-### 5. PROCESS (.fade-in-up)
-**4-step timeline (horizontal desktop, vertical mobile)**
-
-Each step:
-\`\`\`html
-<div class="step-card glass">
-  <div class="step-number">1</div>
-  <h3>Book Online</h3>
-  <p>Quick scheduling in minutes</p>
-</div>
-\`\`\`
-
-**Connection line:** Gradient between steps (primary → secondary)
-
-### 6. TESTIMONIALS (.fade-in-up)
-**Carousel with auto-rotation (6s intervals)**
-
-**Card design:**
-\`\`\`css
-.testimonial-card {
-  background: white;
-  padding: 2.5rem;
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  position: relative;
-}
-
-.testimonial-card::before {
-  content: '"';
-  position: absolute;
-  top: -20px;
-  left: 20px;
-  font-size: 6rem;
-  color: var(--primary);
-  opacity: 0.1;
-  font-family: Georgia, serif;
-}
-\`\`\`
+### 5. TESTIMONIALS (template style)
+Follow template's testimonial design:
+- Layout per template (carousel, grid, etc.)
+- Template's card styling
+- Star ratings with animations
 
 **Create 3-6 authentic ${safeBusinessType} testimonials:**
-- 5 animated stars (pop in sequence)
-- Quote (2-3 sentences, specific details)
+- Specific details about service received
 - Customer name + service type
-- Avatar: https://i.pravatar.cc/100?img=X
+- Avatar images
 
-**Example:** "The team was incredible! They spent extra time on the stubborn stains in my truck and used eco-friendly products. My interior looks factory-new. Professional, punctual, and worth every dollar. - Mike T., Full Interior Detail"
-
-❌ Avoid: "Great service!" "Highly recommend!"
-
-### 7. FINAL CTA (.fade-in-up)
-**Full-width section, animated gradient background**
-
-\`\`\`css
-background: linear-gradient(-45deg, 
-  var(--primary), var(--secondary), 
-  var(--primary), var(--secondary)
-);
-background-size: 400% 400%;
-animation: gradientShift 15s ease infinite;
-\`\`\`
-
-**Content (white text, centered):**
-- H2: "Ready to Get Started?"
-- Subheading
-- Large "Book Your Service" button (white bg, primary text, shadow-glow)
-- Secondary: "Or call ${phoneNumber}"
+### 6. FINAL CTA (template style)
+Follow template's CTA section:
+- Use template's background/styling
+- Large headline and subheading
+- Primary CTA button
+- Secondary contact option
 
 ═══════════════════════════════════════════════════════════════════
-📄 PAGE 2: SERVICES (ID: page-services)
+📄 ADDITIONAL PAGES (Following Template Structure)
 ═══════════════════════════════════════════════════════════════════
 
-- Hero banner (smaller, 50vh)
-- Detailed service cards (larger, more info)
-- Hover reveal: Hidden details slide up
-- FAQ accordion (smooth expand/collapse)
-- CTA at bottom
+Create additional pages based on the ${templateInfo.name} template structure:
+- Services detail page
+- Gallery/Portfolio page
+- Gift Cards page
+- Contact page with form
 
-═══════════════════════════════════════════════════════════════════
-📄 PAGE 3: GIFT CARDS (ID: page-gift-cards)
-═══════════════════════════════════════════════════════════════════
-
-- Animated gift card visual (3D tilt on hover)
-- Amount buttons with active state (shadow-primary)
-- Purchase → Alert: "Call ${phoneNumber}"
-
-═══════════════════════════════════════════════════════════════════
-📄 PAGE 4: CONTACT (ID: page-contact)
-═══════════════════════════════════════════════════════════════════
-
-**Left:** Contact cards + map
-**Right:** Premium form with floating labels
-
-\`\`\`css
-.form-group {
-  position: relative;
-  margin-bottom: 2rem;
-}
-
-.form-input {
-  width: 100%;
-  padding: 1rem;
-  border: 2px solid var(--border);
-  border-radius: var(--radius-md);
-  transition: all 0.3s ease;
-}
-
-.form-input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.1);
-}
-
-.form-label {
-  position: absolute;
-  left: 1rem;
-  top: 1rem;
-  transition: all 0.3s ease;
-  pointer-events: none;
-}
-
-.form-input:focus + .form-label,
-.form-input:not(:placeholder-shown) + .form-label {
-  top: -0.75rem;
-  left: 0.75rem;
-  font-size: 0.875rem;
-  color: var(--primary);
-  background: white;
-  padding: 0 0.5rem;
-}
-\`\`\`
+Each page should maintain template's design language, animations, and styling.
 
 ═══════════════════════════════════════════════════════════════════
 🎯 CRITICAL JAVASCRIPT FEATURES
 ═══════════════════════════════════════════════════════════════════
 
-### 1. SPA Navigation with Page Transition
-\`\`\`javascript
-// Smooth page transitions
-const transitionPage = (targetPage) => {
-  const overlay = document.createElement('div');
-  overlay.style.cssText = \`
-    position: fixed;
-    inset: 0;
-    background: var(--primary);
-    z-index: 9999;
-    opacity: 0;
-    transition: opacity 0.3s;
-  \`;
-  document.body.appendChild(overlay);
-  
-  setTimeout(() => overlay.style.opacity = '1', 10);
-  
-  setTimeout(() => {
-    // Switch pages
-    document.querySelectorAll('[id^="page-"]').forEach(p => p.style.display = 'none');
-    document.getElementById(targetPage).style.display = 'block';
-    window.scrollTo(0, 0);
-    
-    overlay.style.opacity = '0';
-    setTimeout(() => overlay.remove(), 300);
-  }, 300);
-};
-\`\`\`
-
-### 2. Intersection Observer (Required)
-- Animate .fade-in-up elements
-- Trigger counter animations
+### 1. Intersection Observer (REQUIRED)
+- Animate scroll-triggered elements
+- Template-specific animations
 - Lazy load images
 
-### 3. Parallax & Scroll Effects
-- Hero background parallax
-- Nav glass effect on scroll
-- Image zoom on scroll
+### 2. Navigation & Scroll Effects
+- Sticky nav with template styling
+- Smooth scrolling
+- Mobile menu with template animations
 
-### 4. Form Validation & Animation
-- Floating labels
-- Success animation
-- Error shake
+### 3. Interactive Elements
+- Button hover effects per template
+- Card interactions per template
+- Form validation with template styling
 
 ═══════════════════════════════════════════════════════════════════
-📱 RESPONSIVE (Mobile-First)
+📱 RESPONSIVE (Mobile-First - Template Standards)
 ═══════════════════════════════════════════════════════════════════
 
-- Breakpoints: 320px, 768px, 1024px
+- Follow template's responsive breakpoints
 - Touch targets: min 44px
 - Phone links: clickable only on mobile
-- Hamburger menu with slide-in animation
-- Max content width: 1280px
-
-\`\`\`css
-@media (min-width: 768px) {
-  .phone-link {
-    pointer-events: none;
-    cursor: default;
-  }
-}
-\`\`\`
+- Template's mobile navigation
+- Max content width per template
 
 ═══════════════════════════════════════════════════════════════════
 🚫 AVOID
 ═══════════════════════════════════════════════════════════════════
 
+❌ Deviating from template's design language
 ❌ Generic testimonials
 ❌ Lorem ipsum
 ❌ Broken links
-❌ Missing animations
-❌ No hover states
-❌ Flat design (needs depth via shadows)
+❌ Missing template animations
+❌ Ignoring template's color scheme
 ❌ Generic stock photos
 ❌ Poor mobile experience
 
@@ -650,20 +492,21 @@ const transitionPage = (targetPage) => {
 📋 OUTPUT
 ═══════════════════════════════════════════════════════════════════
 
-Return SINGLE, COMPLETE HTML file with:
+Return SINGLE, COMPLETE HTML file based on ${templateInfo.name} template with:
+✅ Template's layout structure
+✅ Template's color scheme (adapted with user's colors)
+✅ Template's typography and fonts
+✅ Template's animations and transitions
 ✅ All CSS in <style> (organized by section)
 ✅ All JavaScript in <script> (modern ES6+)
-✅ All 4 pages with smooth transitions
 ✅ Intersection Observer animations
-✅ Premium micro-interactions
-✅ Glassmorphism effects
-✅ Layered shadows
-✅ Responsive typography (clamp)
-✅ Mobile-first design
+✅ Template-specific interactions
+✅ Responsive design per template
+✅ Mobile-first approach
 
 **START WITH:** <!DOCTYPE html>
 
-Generate the premium website now with ALL visual enhancements.`;
+Generate the premium website now following the ${templateInfo.name} template design system.`;
 }
 
 module.exports = { buildVisualSupremacyPrompt };
