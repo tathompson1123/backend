@@ -31,10 +31,25 @@ function buildVisualSupremacyPrompt({
 }) {
   
   // Get recommended template based on business type
-  const recommendedTemplateKey = getRecommendedTemplate(safeBusinessType);
-  
-  // LOAD ACTUAL TEMPLATE HTML FILES
-   const templateInfo = TEMPLATES[recommendedTemplateKey];
+const recommendedTemplateKey = getRecommendedTemplate(safeBusinessType);
+
+// LOAD ACTUAL TEMPLATE HTML FILES
+const templateInfo = TEMPLATES[recommendedTemplateKey];
+const templateDir = path.join(__dirname, templateInfo.folder);
+
+// ADD THESE DEBUG LINES:
+console.log('🔍 __dirname:', __dirname);
+console.log('🔍 templateInfo.folder:', templateInfo.folder);
+console.log('🔍 templateDir:', templateDir);
+console.log('🔍 Directory exists?', fs.existsSync(templateDir));
+
+// Try listing what's actually in __dirname
+try {
+  const filesInDir = fs.readdirSync(__dirname);
+  console.log('🔍 Files in __dirname:', filesInDir);
+} catch (e) {
+  console.log('🔍 Cannot read __dirname:', e.message);
+}
   // Try to find templates in the outputs directory first
 const outputsTemplateDir = path.join(__dirname, '..', 'outputs', templateInfo.folder);
 const localTemplateDir = path.join(__dirname, templateInfo.folder);
