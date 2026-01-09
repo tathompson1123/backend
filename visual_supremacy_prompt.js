@@ -1,4 +1,3 @@
-const { getImageGuidance } = require('./image_guidance');
 const { getRecommendedTemplate, getTemplateInfo } = require('./templates-enhanced');
 const fs = require('fs');
 const path = require('path');
@@ -62,7 +61,6 @@ function buildVisualSupremacyPrompt({
  
   const primaryRgb = hexToRgb(primaryColor);
   const secondaryRgb = hexToRgb(accentColor);
-  const imageGuide = getImageGuidance(safeBusinessType);
   
   // Build template HTML section if files were loaded
   const templateHTMLSection = Object.keys(templateFiles).length > 0 ? `
@@ -189,11 +187,10 @@ ${teamInfo.instruction}` : ''}
 📸 IMAGES
 ═══════════════════════════════════════════════════════════════════
 
-${imageGuide.guidelines}
-
-**Hero Background:** https://source.unsplash.com/1920x1080/?${imageGuide.hero}
-**Service Images:** https://source.unsplash.com/800x600/?${imageGuide.serviceKeywords.join(',')}
-**About Image:** https://source.unsplash.com/1200x800/?${imageGuide.about}
+**Note:** The template includes placeholder image URLs. Users will replace these with their own business photos.
+- Hero images should showcase the business service/results
+- Service cards should show specific services being performed
+- About section should show the team/equipment/facility
 
 ═══════════════════════════════════════════════════════════════════
 📋 OUTPUT
