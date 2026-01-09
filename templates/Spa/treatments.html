@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Our Treatments - Serenity Spa & Salon</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --rose-gold: #B76E79;
+            --deep-rose: #8B4C5C;
+            --cream: #FAF7F2;
+            --sage: #A8B5A0;
+            --charcoal: #2C2C2C;
+            --white: #FFFFFF;
+            --light-grey: #F5F5F5;
+        }
+
+        body { font-family: 'Montserrat', sans-serif; color: var(--charcoal); background: var(--cream); line-height: 1.7; }
+
+        /* Trust Banner */
+        .trust-banner { background: linear-gradient(90deg, var(--rose-gold), var(--deep-rose)); color: var(--white); padding: 0.75rem 0; overflow: hidden; }
+        .reviews-track { display: flex; animation: scroll 40s linear infinite; width: max-content; }
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .review-item { display: flex; align-items: center; gap: 0.75rem; padding: 0 2rem; font-size: 0.9rem; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+        .stars { color: #FFD700; font-size: 0.85rem; letter-spacing: 2px; }
+
+        /* Navigation */
+        nav { background: rgba(255, 255, 255, 0.98); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 600; color: var(--rose-gold); letter-spacing: 2px; text-decoration: none; }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { color: var(--charcoal); text-decoration: none; font-weight: 500; font-size: 0.95rem; letter-spacing: 0.5px; transition: color 0.3s; position: relative; }
+        .nav-links a::after { content: ''; position: absolute; bottom: -5px; left: 0; width: 0; height: 2px; background: var(--rose-gold); transition: width 0.3s ease; }
+        .nav-links a:hover { color: var(--rose-gold); }
+        .nav-links a:hover::after { width: 100%; }
+        .nav-cta { background: var(--rose-gold); color: var(--white); padding: 0.875rem 2rem; border-radius: 30px; font-weight: 600; box-shadow: 0 4px 15px rgba(183, 110, 121, 0.3); }
+        .nav-cta::after { display: none; }
+
+        /* Page Header */
+        .page-header {
+            background: linear-gradient(135deg, rgba(250, 247, 242, 0.95), rgba(245, 245, 245, 0.9)), url('https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=1920');
+            background-size: cover;
+            background-position: center;
+            padding: 8rem 3rem 6rem;
+            text-align: center;
+        }
+        .page-header h1 { font-family: 'Cormorant Garamond', serif; font-size: 4.5rem; font-weight: 400; margin-bottom: 1.5rem; color: var(--charcoal); }
+        .page-header p { font-size: 1.2rem; max-width: 700px; margin: 0 auto; color: #666; line-height: 1.8; }
+
+        /* Treatment Categories */
+        .treatments-section { padding: 8rem 3rem; background: var(--white); }
+        .category { margin-bottom: 8rem; }
+        .category:last-child { margin-bottom: 0; }
+        
+        .category-header { 
+            text-align: center; 
+            margin-bottom: 4rem;
+            padding-bottom: 2rem;
+            border-bottom: 2px solid var(--rose-gold);
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .category-label {
+            font-size: 0.9rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--rose-gold);
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+        .category-title { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-size: 3rem; 
+            font-weight: 500; 
+            color: var(--charcoal);
+            margin-bottom: 1rem;
+        }
+        .category-description {
+            color: #666;
+            font-size: 1.1rem;
+            line-height: 1.8;
+        }
+
+        .treatments-grid { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 3rem; 
+        }
+        
+        .treatment-card {
+            background: var(--cream);
+            padding: 3rem;
+            border-radius: 20px;
+            transition: all 0.4s ease;
+            border: 1px solid transparent;
+        }
+        .treatment-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+            border-color: var(--rose-gold);
+        }
+        .treatment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+        }
+        .treatment-card h3 { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-size: 2rem; 
+            color: var(--charcoal);
+            font-weight: 500;
+        }
+        .treatment-duration {
+            color: var(--rose-gold);
+            font-weight: 600;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            margin-left: 1rem;
+        }
+        .treatment-description {
+            color: #666;
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+        }
+        .treatment-features {
+            list-style: none;
+            margin-bottom: 2rem;
+        }
+        .treatment-features li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+            color: #666;
+        }
+        .treatment-features li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 1rem;
+            width: 6px;
+            height: 6px;
+            background: var(--rose-gold);
+            border-radius: 50%;
+        }
+        .treatment-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        .treatment-price {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--rose-gold);
+        }
+        .book-treatment {
+            background: var(--rose-gold);
+            color: var(--white);
+            padding: 0.875rem 2rem;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(183, 110, 121, 0.3);
+        }
+        .book-treatment:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(183, 110, 121, 0.4);
+        }
+
+        /* CTA Section */
+        .cta-section { 
+            padding: 8rem 3rem; 
+            background: linear-gradient(135deg, var(--rose-gold) 0%, var(--deep-rose) 100%); 
+            text-align: center; 
+            color: var(--white); 
+        }
+        .cta-content { max-width: 800px; margin: 0 auto; }
+        .cta-section h2 { font-family: 'Cormorant Garamond', serif; font-size: 4rem; margin-bottom: 1.5rem; font-weight: 400; }
+        .cta-subtitle { font-size: 1.3rem; margin-bottom: 3rem; opacity: 0.95; line-height: 1.8; }
+        .cta-button { display: inline-block; background: var(--white); color: var(--rose-gold); padding: 1.5rem 4rem; border-radius: 30px; text-decoration: none; font-weight: 700; font-size: 1.1rem; letter-spacing: 1px; transition: all 0.4s ease; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); }
+        .cta-button:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3); }
+
+        /* Footer */
+        footer { background: var(--charcoal); color: rgba(255,255,255,0.8); padding: 5rem 3rem 2rem; }
+        .footer-content { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4rem; margin-bottom: 3rem; }
+        .footer-brand { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 600; color: var(--rose-gold); letter-spacing: 2px; margin-bottom: 1rem; }
+        .footer h4 { color: var(--rose-gold); margin-bottom: 1.5rem; font-size: 1.1rem; letter-spacing: 1px; }
+        .footer a { color: rgba(255,255,255,0.7); text-decoration: none; transition: color 0.3s ease; }
+        .footer a:hover { color: var(--rose-gold); }
+        .footer-bottom { text-align: center; padding-top: 3rem; border-top: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); font-size: 0.9rem; }
+
+        @media (max-width: 768px) {
+            .page-header h1 { font-size: 3rem; }
+            .treatments-grid { grid-template-columns: 1fr; }
+            .footer-content { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item"><span class="review-text">"Absolutely divine experience!" - Emily R.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best facial I've ever had" - Sarah M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"So relaxing and rejuvenating" - Jessica T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"My skin has never looked better!" - Amanda K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Pure luxury and bliss" - Maria S.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Absolutely divine experience!" - Emily R.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best facial I've ever had" - Sarah M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"So relaxing and rejuvenating" - Jessica T.</span><span class="stars">★★★★★</span></div>
+        </div>
+    </div>
+
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">Serenity Spa</a>
+            <div class="nav-links">
+                <a href="treatments.html">Treatments</a>
+                <a href="packages.html">Packages</a>
+                <a href="gallery.html">Gallery</a>
+                <a href="contact.html">Contact</a>
+                <a href="contact.html" class="nav-cta">Book Now</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="page-header">
+        <h1>Our Treatments</h1>
+        <p>Discover our complete menu of luxury treatments designed to enhance your natural beauty and promote holistic wellness</p>
+    </section>
+
+    <section class="treatments-section">
+        <!-- Facial Treatments -->
+        <div class="category">
+            <div class="category-header">
+                <div class="category-label">Skincare</div>
+                <h2 class="category-title">Facial Treatments</h2>
+                <p class="category-description">Customized skincare treatments using premium products to address your unique concerns and reveal radiant, healthy skin</p>
+            </div>
+
+            <div class="treatments-grid">
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Signature Facial</h3>
+                        <span class="treatment-duration">60 min</span>
+                    </div>
+                    <p class="treatment-description">Our most popular treatment featuring deep cleansing, exfoliation, extraction, and a customized mask tailored to your skin type.</p>
+                    <ul class="treatment-features">
+                        <li>Skin analysis and consultation</li>
+                        <li>Deep pore cleansing</li>
+                        <li>Gentle exfoliation</li>
+                        <li>Relaxing facial massage</li>
+                        <li>Custom treatment mask</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$125</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Anti-Aging Facial</h3>
+                        <span class="treatment-duration">75 min</span>
+                    </div>
+                    <p class="treatment-description">Target fine lines, wrinkles, and loss of firmness with our advanced anti-aging treatment featuring peptides and antioxidants.</p>
+                    <ul class="treatment-features">
+                        <li>Collagen-boosting serums</li>
+                        <li>Microcurrent therapy</li>
+                        <li>Peptide treatment mask</li>
+                        <li>LED light therapy</li>
+                        <li>Hydrating finishing treatment</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$175</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Hydration Facial</h3>
+                        <span class="treatment-duration">60 min</span>
+                    </div>
+                    <p class="treatment-description">Intensive moisture therapy to restore hydration and plumpness to dry, dehydrated skin with hyaluronic acid and botanical extracts.</p>
+                    <ul class="treatment-features">
+                        <li>Hyaluronic acid infusion</li>
+                        <li>Hydrating sheet mask</li>
+                        <li>Moisture barrier repair</li>
+                        <li>Cooling treatment</li>
+                        <li>Rich moisturizer application</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$140</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Acne Treatment</h3>
+                        <span class="treatment-duration">60 min</span>
+                    </div>
+                    <p class="treatment-description">Specialized treatment to clear breakouts, reduce inflammation, and prevent future blemishes with salicylic acid and blue LED therapy.</p>
+                    <ul class="treatment-features">
+                        <li>Deep pore cleansing</li>
+                        <li>Salicylic acid treatment</li>
+                        <li>Gentle extractions</li>
+                        <li>Blue LED light therapy</li>
+                        <li>Oil-balancing mask</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$135</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Massage Therapy -->
+        <div class="category">
+            <div class="category-header">
+                <div class="category-label">Body Work</div>
+                <h2 class="category-title">Massage Therapy</h2>
+                <p class="category-description">Therapeutic massage treatments to release tension, improve circulation, and restore balance to body and mind</p>
+            </div>
+
+            <div class="treatments-grid">
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Swedish Massage</h3>
+                        <span class="treatment-duration">60 / 90 min</span>
+                    </div>
+                    <p class="treatment-description">Classic relaxation massage using gentle flowing strokes to ease muscle tension and promote overall wellness.</p>
+                    <ul class="treatment-features">
+                        <li>Full body massage</li>
+                        <li>Long, flowing strokes</li>
+                        <li>Aromatherapy enhancement</li>
+                        <li>Hot towel treatment</li>
+                        <li>Choice of pressure level</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$95 / $135</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Deep Tissue Massage</h3>
+                        <span class="treatment-duration">60 / 90 min</span>
+                    </div>
+                    <p class="treatment-description">Focused therapeutic massage targeting chronic muscle tension and knots with deep pressure techniques.</p>
+                    <ul class="treatment-features">
+                        <li>Targeted muscle work</li>
+                        <li>Deep pressure techniques</li>
+                        <li>Trigger point therapy</li>
+                        <li>Myofascial release</li>
+                        <li>Post-treatment stretching</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$110 / $155</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Hot Stone Massage</h3>
+                        <span class="treatment-duration">90 min</span>
+                    </div>
+                    <p class="treatment-description">Luxurious massage using heated basalt stones to melt away tension and create deep muscle relaxation.</p>
+                    <ul class="treatment-features">
+                        <li>Heated volcanic stones</li>
+                        <li>Full body massage</li>
+                        <li>Deep heat therapy</li>
+                        <li>Enhanced circulation</li>
+                        <li>Ultimate relaxation</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$165</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Prenatal Massage</h3>
+                        <span class="treatment-duration">60 min</span>
+                    </div>
+                    <p class="treatment-description">Gentle, nurturing massage specially designed for expecting mothers to relieve pregnancy-related discomfort.</p>
+                    <ul class="treatment-features">
+                        <li>Side-lying position</li>
+                        <li>Pregnancy-safe techniques</li>
+                        <li>Lower back relief</li>
+                        <li>Leg and foot massage</li>
+                        <li>Stress reduction</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$105</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hair Services -->
+        <div class="category">
+            <div class="category-header">
+                <div class="category-label">Hair Salon</div>
+                <h2 class="category-title">Hair Services</h2>
+                <p class="category-description">Expert hair styling, cutting, and color services to create your perfect look and enhance your natural beauty</p>
+            </div>
+
+            <div class="treatments-grid">
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Haircut & Style</h3>
+                        <span class="treatment-duration">45 min</span>
+                    </div>
+                    <p class="treatment-description">Precision haircut with personalized styling to complement your face shape and lifestyle.</p>
+                    <ul class="treatment-features">
+                        <li>Consultation and style advice</li>
+                        <li>Shampoo and conditioning</li>
+                        <li>Precision cutting technique</li>
+                        <li>Professional blow dry</li>
+                        <li>Finishing products</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$75</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Color Service</h3>
+                        <span class="treatment-duration">120 min</span>
+                    </div>
+                    <p class="treatment-description">Full color transformation using premium products for vibrant, long-lasting results with healthy shine.</p>
+                    <ul class="treatment-features">
+                        <li>Color consultation</li>
+                        <li>Custom color formulation</li>
+                        <li>Professional application</li>
+                        <li>Deep conditioning treatment</li>
+                        <li>Style and finish</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$145</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Highlights</h3>
+                        <span class="treatment-duration">150 min</span>
+                    </div>
+                    <p class="treatment-description">Dimensional highlighting to add depth and brightness with natural-looking sun-kissed results.</p>
+                    <ul class="treatment-features">
+                        <li>Customized highlight placement</li>
+                        <li>Foil or balayage technique</li>
+                        <li>Toner application</li>
+                        <li>Bond-building treatment</li>
+                        <li>Haircut and style</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$195</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+
+                <div class="treatment-card">
+                    <div class="treatment-header">
+                        <h3>Deep Conditioning</h3>
+                        <span class="treatment-duration">30 min</span>
+                    </div>
+                    <p class="treatment-description">Intensive repair treatment to restore moisture, strength, and shine to damaged or dry hair.</p>
+                    <ul class="treatment-features">
+                        <li>Keratin-rich treatment</li>
+                        <li>Steam therapy</li>
+                        <li>Protein reconstruction</li>
+                        <li>Moisture seal</li>
+                        <li>Leave-in treatment</li>
+                    </ul>
+                    <div class="treatment-footer">
+                        <span class="treatment-price">$55</span>
+                        <a href="contact.html" class="book-treatment">Book Now</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="cta-content">
+            <h2>Ready to Experience Serenity?</h2>
+            <p class="cta-subtitle">Book your appointment today and receive 20% off your first visit. Transform the way you look and feel.</p>
+            <a href="contact.html" class="cta-button">Schedule Your Treatment</a>
+        </div>
+    </section>
+
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">Serenity Spa</div>
+                <p style="color: rgba(255,255,255,0.7); line-height: 1.8;">Your sanctuary for beauty, wellness, and relaxation in the heart of the city.</p>
+            </div>
+            <div>
+                <h4>Quick Links</h4>
+                <p><a href="treatments.html">All Treatments</a><br>
+                <a href="packages.html">Spa Packages</a><br>
+                <a href="gallery.html">Gallery</a><br>
+                <a href="contact.html">Book Appointment</a></p>
+            </div>
+            <div>
+                <h4>Contact</h4>
+                <p><a href="tel:555-555-5555">(555) 555-5555</a><br>
+                <a href="mailto:hello@serenityspa.com">hello@serenityspa.com</a><br>
+                123 Wellness Lane<br>
+                Seattle, WA 98101</p>
+            </div>
+            <div>
+                <h4>Hours</h4>
+                <p>Monday - Friday: 9AM - 8PM<br>
+                Saturday: 9AM - 6PM<br>
+                Sunday: 10AM - 5PM</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 Serenity Spa & Salon. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
