@@ -1,4 +1,4 @@
-const { getRecommendedTemplate, getTemplateInfo } = require('./templates-enhanced');
+const { getRecommendedTemplate, getTemplateInfo, TEMPLATES } = require('./templates');
 const fs = require('fs');
 const path = require('path');
 
@@ -32,10 +32,10 @@ function buildVisualSupremacyPrompt({
   
   // Get recommended template based on business type
   const recommendedTemplateKey = getRecommendedTemplate(safeBusinessType);
-  const templateInfo = getTemplateInfo(recommendedTemplateKey);
   
   // LOAD ACTUAL TEMPLATE HTML FILES
-  const templateDir = path.join(__dirname, 'templates', recommendedTemplateKey === 'landscaping' ? 'landscaping-template' : 'auto-detailing-template');
+   const templateInfo = TEMPLATES[recommendedTemplateKey];
+  const templateDir = path.join(__dirname, templateInfo.folder);
   
   let templateFiles = {};
   try {
