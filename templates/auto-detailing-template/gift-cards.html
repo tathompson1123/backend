@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gift Cards - Precision Auto Detailing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --red: #DC143C;
+            --dark-red: #8B0000;
+            --black: #0a0a0a;
+            --grey: #2a2a2a;
+            --white: #ffffff;
+        }
+
+        body { font-family: 'Rajdhani', sans-serif; color: var(--white); background: var(--black); line-height: 1.6; }
+
+        /* Trust Banner */
+        .trust-banner { background: var(--red); color: var(--white); padding: 1rem 0; overflow: hidden; }
+        .reviews-track { display: flex; animation: scroll 40s linear infinite; width: max-content; }
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .review-item { display: flex; align-items: center; gap: 0.5rem; padding: 0 1.5rem; font-size: 0.9rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+        .stars { color: #FFD700; font-size: 0.85rem; letter-spacing: 1px; }
+
+        /* Nav */
+        nav { background: rgba(10, 10, 10, 0.95); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; backdrop-filter: blur(10px); border-bottom: 1px solid rgba(220, 20, 60, 0.2); }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-family: 'Montserrat', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--red); text-transform: uppercase; letter-spacing: 2px; text-decoration: none; }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { color: var(--white); text-decoration: none; font-weight: 600; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; transition: color 0.3s; }
+        .nav-links a:hover { color: var(--red); }
+        .nav-cta { background: var(--red); color: var(--white); padding: 0.875rem 2rem; border-radius: 50px; font-weight: 700; }
+
+        /* Hero */
+        .hero {
+            background: linear-gradient(135deg, rgba(10, 10, 10, 0.85), rgba(42, 42, 42, 0.75)), url('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=1920');
+            background-size: cover;
+            background-position: center;
+            padding: 8rem 3rem 6rem;
+            text-align: center;
+        }
+        .hero h1 { font-family: 'Montserrat', sans-serif; font-size: 4.5rem; font-weight: 800; margin-bottom: 1.5rem; text-transform: uppercase; letter-spacing: 3px; }
+        .hero p { font-size: 1.4rem; max-width: 700px; margin: 0 auto 3rem; opacity: 0.95; }
+
+        /* Gift Card Section */
+        .gift-card-section { padding: 8rem 3rem; background: var(--grey); }
+        .gift-card-container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 5rem; align-items: center; }
+        
+        .card-preview {
+            perspective: 1000px;
+        }
+        .gift-card {
+            width: 100%;
+            aspect-ratio: 1.586;
+            background: linear-gradient(135deg, var(--red), var(--dark-red));
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 25px 60px rgba(220, 20, 60, 0.5);
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            position: relative;
+            overflow: hidden;
+        }
+        .gift-card:hover {
+            transform: rotateY(10deg) rotateX(5deg);
+        }
+        .gift-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        }
+        .card-logo {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 3rem;
+        }
+        .card-value {
+            font-size: 4rem;
+            font-weight: 800;
+            margin-bottom: 2rem;
+        }
+        .card-text {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .purchase-section h2 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .purchase-section p {
+            font-size: 1.2rem;
+            margin-bottom: 3rem;
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .amount-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        .amount-btn {
+            background: var(--black);
+            border: 2px solid rgba(220, 20, 60, 0.3);
+            color: var(--white);
+            padding: 1.5rem;
+            border-radius: 15px;
+            font-size: 1.5rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .amount-btn:hover,
+        .amount-btn.active {
+            background: var(--red);
+            border-color: var(--red);
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(220, 20, 60, 0.4);
+        }
+        
+        .purchase-btn {
+            display: block;
+            width: 100%;
+            background: var(--red);
+            color: var(--white);
+            padding: 1.5rem;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.3rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .purchase-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(220, 20, 60, 0.5);
+        }
+
+        /* Benefits */
+        .benefits-section { padding: 8rem 3rem; background: var(--black); }
+        .section-title { font-family: 'Montserrat', sans-serif; font-size: 3.5rem; font-weight: 800; text-align: center; color: var(--white); margin-bottom: 4rem; text-transform: uppercase; letter-spacing: 2px; }
+        .benefits-grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3rem; }
+        .benefit-card { background: var(--grey); padding: 3rem 2rem; border-radius: 20px; text-align: center; border: 1px solid rgba(220, 20, 60, 0.2); }
+        .benefit-icon { font-size: 4rem; margin-bottom: 1.5rem; }
+        .benefit-card h3 { font-family: 'Montserrat', sans-serif; font-size: 1.5rem; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px; }
+        .benefit-card p { color: rgba(255,255,255,0.8); line-height: 1.8; }
+
+        /* Footer */
+        footer { background: var(--black); color: var(--white); padding: 5rem 3rem 2rem; border-top: 1px solid rgba(220, 20, 60, 0.2); }
+        .footer-content { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4rem; }
+        .footer-brand { font-family: 'Montserrat', sans-serif; font-size: 2rem; font-weight: 800; color: var(--red); text-transform: uppercase; letter-spacing: 2px; }
+
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 3rem; }
+            .gift-card-container { grid-template-columns: 1fr; }
+            .benefits-grid, .footer-content { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item"><span class="review-text">"Best detail ever!" - Mike T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Looks brand new!" - Sarah K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Incredible work" - James R.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Worth every penny!" - Lisa M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Highly recommend" - David P.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best detail ever!" - Mike T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Looks brand new!" - Sarah K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Incredible work" - James R.</span><span class="stars">★★★★★</span></div>
+        </div>
+    </div>
+
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">Precision Auto</a>
+            <div class="nav-links">
+                <a href="ceramic-coatings.html">Ceramic Coatings</a>
+                <a href="detailing.html">Detailing</a>
+                <a href="gift-cards.html">Gift Cards</a>
+                <a href="gallery.html">Gallery</a>
+                <a href="auto-contact.html">Contact</a>
+                <a href="auto-contact.html" class="nav-cta">Book Now</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <h1>Gift Cards</h1>
+        <p>Give the gift of a pristine, professionally detailed vehicle. Perfect for car enthusiasts, friends, and family.</p>
+    </section>
+
+    <section class="gift-card-section">
+        <div class="gift-card-container">
+            <div class="card-preview">
+                <div class="gift-card">
+                    <div class="card-logo">Precision Auto</div>
+                    <div class="card-value">$100</div>
+                    <div class="card-text">Premium Detailing Gift Card</div>
+                </div>
+            </div>
+
+            <div class="purchase-section">
+                <h2>Purchase Gift Card</h2>
+                <p>Select an amount below and call us to complete your purchase. Gift cards never expire and can be used for any service.</p>
+                
+                <div class="amount-buttons">
+                    <button class="amount-btn" data-amount="50">$50</button>
+                    <button class="amount-btn active" data-amount="100">$100</button>
+                    <button class="amount-btn" data-amount="150">$150</button>
+                    <button class="amount-btn" data-amount="200">$200</button>
+                </div>
+
+                <button class="purchase-btn" onclick="purchaseCard()">Call to Purchase</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="benefits-section">
+        <h2 class="section-title">Why Gift Cards?</h2>
+        <div class="benefits-grid">
+            <div class="benefit-card">
+                <div class="benefit-icon">🎁</div>
+                <h3>Perfect Gift</h3>
+                <p>Ideal for birthdays, holidays, or special occasions. Every car owner appreciates professional detailing.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">⏳</div>
+                <h3>Never Expires</h3>
+                <p>Our gift cards have no expiration date. Recipients can use them whenever it's convenient for them.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">💳</div>
+                <h3>Flexible Use</h3>
+                <p>Can be applied to any of our services - from basic details to premium ceramic coatings.</p>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">Precision Auto</div>
+                <p style="color: rgba(255,255,255,0.7); margin-top: 1rem;">Premium detailing excellence</p>
+            </div>
+            <div>
+                <h4 style="color: var(--red); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Services</h4>
+                <p style="color: rgba(255,255,255,0.7);">Ceramic Coating<br>Full Detailing<br>Paint Correction</p>
+            </div>
+            <div>
+                <h4 style="color: var(--red); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Contact</h4>
+                <p style="color: rgba(255,255,255,0.7);">(555) CAR-WASH<br>info@precisionauto.com</p>
+            </div>
+            <div>
+                <h4 style="color: var(--red); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Hours</h4>
+                <p style="color: rgba(255,255,255,0.7);">Mon-Sat: 8AM-6PM<br>Sunday: By Appointment</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const amountBtns = document.querySelectorAll('.amount-btn');
+        const giftCardValue = document.querySelector('.card-value');
+        
+        amountBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                amountBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                giftCardValue.textContent = '$' + btn.dataset.amount;
+            });
+        });
+
+        function purchaseCard() {
+            const selectedAmount = document.querySelector('.amount-btn.active').dataset.amount;
+            alert(`Please call us at (555) CAR-WASH to purchase a $${selectedAmount} gift card.\n\nWe'll take your payment over the phone and mail the physical card or email a digital version.`);
+        }
+    </script>
+</body>
+</html>
