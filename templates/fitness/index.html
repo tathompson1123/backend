@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peak Performance Gym - Transform Your Body & Mind</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --electric-blue: #0EA5E9; --neon-yellow: #FACC15; --black: #0A0A0A; --dark-grey: #1A1A1A; --white: #FFFFFF; }
+        body { font-family: 'Roboto', sans-serif; color: var(--white); background: var(--black); line-height: 1.6; }
+        .trust-banner { background: var(--electric-blue); color: var(--white); padding: 0.75rem 0; overflow: hidden; }
+        .reviews-track { display: flex; animation: scroll 35s linear infinite; width: max-content; }
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .review-item { padding: 0 2rem; font-size: 0.9rem; font-weight: 700; white-space: nowrap; text-transform: uppercase; letter-spacing: 1px; }
+        nav { background: rgba(10, 10, 10, 0.95); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; border-bottom: 3px solid var(--electric-blue); }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-family: 'Bebas Neue', sans-serif; font-size: 2.5rem; color: var(--neon-yellow); text-decoration: none; letter-spacing: 2px; }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { color: var(--white); text-decoration: none; font-weight: 700; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; transition: color 0.3s; }
+        .nav-links a:hover { color: var(--electric-blue); }
+        .nav-cta { background: var(--electric-blue); color: var(--white); padding: 1rem 2rem; clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%); font-weight: 900; }
+        .hero { min-height: 100vh; background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(10, 10, 10, 0.8)), url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1920'); background-size: cover; background-position: center; display: flex; align-items: center; position: relative; }
+        .hero::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(45deg, transparent 48%, var(--electric-blue) 48%, var(--electric-blue) 52%, transparent 52%); opacity: 0.05; pointer-events: none; }
+        .hero-content { max-width: 1400px; margin: 0 auto; padding: 0 3rem; }
+        .hero h1 { font-family: 'Bebas Neue', sans-serif; font-size: 7rem; line-height: 0.9; margin-bottom: 2rem; text-transform: uppercase; letter-spacing: 3px; }
+        .hero h1 span { color: var(--neon-yellow); display: block; }
+        .hero p { font-size: 1.3rem; margin-bottom: 3rem; max-width: 600px; font-weight: 300; }
+        .hero-cta { display: flex; gap: 1.5rem; }
+        .btn-primary { background: var(--electric-blue); color: var(--white); padding: 1.5rem 3rem; clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%); text-decoration: none; font-weight: 900; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 2px; transition: all 0.3s; display: inline-block; }
+        .btn-primary:hover { background: var(--neon-yellow); color: var(--black); transform: translateX(5px); }
+        .btn-secondary { background: transparent; color: var(--white); padding: 1.5rem 3rem; border: 3px solid var(--white); clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%); text-decoration: none; font-weight: 900; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 2px; transition: all 0.3s; }
+        .btn-secondary:hover { background: var(--white); color: var(--black); }
+        .stats-bar { background: var(--dark-grey); padding: 4rem 3rem; border-top: 3px solid var(--electric-blue); border-bottom: 3px solid var(--electric-blue); }
+        .stats-container { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 3rem; text-align: center; }
+        .stat-item h3 { font-family: 'Bebas Neue', sans-serif; font-size: 4rem; color: var(--neon-yellow); margin-bottom: 0.5rem; }
+        .stat-item p { text-transform: uppercase; letter-spacing: 2px; font-weight: 700; font-size: 0.9rem; }
+        .programs-section { padding: 8rem 3rem; background: var(--black); }
+        .section-header { text-align: center; margin-bottom: 5rem; }
+        .section-label { font-size: 0.9rem; letter-spacing: 3px; text-transform: uppercase; color: var(--electric-blue); font-weight: 700; margin-bottom: 1rem; }
+        .section-title { font-family: 'Bebas Neue', sans-serif; font-size: 5rem; color: var(--white); text-transform: uppercase; letter-spacing: 3px; }
+        .programs-grid { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
+        .program-card { background: var(--dark-grey); border: 2px solid var(--electric-blue); position: relative; overflow: hidden; transition: transform 0.3s; }
+        .program-card:hover { transform: translateY(-10px) scale(1.02); border-color: var(--neon-yellow); }
+        .program-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 5px; background: linear-gradient(90deg, var(--electric-blue), var(--neon-yellow)); }
+        .program-image { height: 250px; overflow: hidden; }
+        .program-image img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(50%); transition: all 0.5s; }
+        .program-card:hover .program-image img { filter: grayscale(0%); transform: scale(1.1); }
+        .program-content { padding: 2.5rem; }
+        .program-card h3 { font-family: 'Bebas Neue', sans-serif; font-size: 2.5rem; color: var(--neon-yellow); margin-bottom: 1rem; text-transform: uppercase; }
+        .program-card p { color: #CCC !important; margin-bottom: 1.5rem; line-height: 1.8; }
+        .program-link { color: var(--electric-blue); text-decoration: none; font-weight: 700; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; }
+        .program-link:hover { color: var(--neon-yellow); }
+        .cta-section { padding: 8rem 3rem; background: linear-gradient(135deg, var(--electric-blue), var(--black)); clip-path: polygon(0 10%, 100% 0, 100% 90%, 0 100%); margin: 5rem 0; }
+        .cta-content { max-width: 800px; margin: 0 auto; text-align: center; }
+        .cta-section h2 { font-family: 'Bebas Neue', sans-serif; font-size: 5rem; margin-bottom: 1.5rem; text-transform: uppercase; letter-spacing: 3px; }
+        .cta-section p { font-size: 1.3rem; margin-bottom: 3rem; }
+        footer { background: var(--dark-grey); padding: 5rem 3rem 2rem; border-top: 3px solid var(--electric-blue); }
+        .footer-content { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4rem; margin-bottom: 3rem; }
+        .footer-brand { font-family: 'Bebas Neue', sans-serif; font-size: 2.5rem; color: var(--neon-yellow); letter-spacing: 2px; }
+        .footer h4 { color: var(--electric-blue); margin-bottom: 1.5rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+        .footer a { color: #CCC !important; text-decoration: none; transition: color 0.3s; }
+        .footer a:hover { color: var(--electric-blue); }
+        .footer-bottom { text-align: center; padding-top: 3rem; border-top: 1px solid rgba(255,255,255,0.1); color: #888; }
+        @media (max-width: 768px) { .hero h1 { font-size: 4rem; } .programs-grid, .stats-container, .footer-content { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item">5,000+ MEMBERS STRONG</div>
+            <div class="review-item">BEST GYM 2024 AWARD</div>
+            <div class="review-item">CERTIFIED TRAINERS</div>
+            <div class="review-item">OPEN 24/7</div>
+            <div class="review-item">5,000+ MEMBERS STRONG</div>
+            <div class="review-item">BEST GYM 2024 AWARD</div>
+        </div>
+    </div>
+
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">PEAK PERFORMANCE</a>
+            <div class="nav-links">
+                <a href="programs.html">Programs</a>
+                <a href="membership.html">Membership</a>
+                <a href="schedule.html">Schedule</a>
+                <a href="contact.html">Contact</a>
+                <a href="contact.html" class="nav-cta">JOIN NOW</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-content">
+            <h1>PUSH YOUR<span>LIMITS</span></h1>
+            <p>Transform your body and mind with our cutting-edge facilities, expert trainers, and supportive community. Your fitness journey starts here.</p>
+            <div class="hero-cta">
+                <a href="contact.html" class="btn-primary">START FREE TRIAL</a>
+                <a href="programs.html" class="btn-secondary">VIEW PROGRAMS</a>
+            </div>
+        </div>
+    </section>
+
+    <div class="stats-bar">
+        <div class="stats-container">
+            <div class="stat-item">
+                <h3>5,000+</h3>
+                <p>Active Members</p>
+            </div>
+            <div class="stat-item">
+                <h3>50+</h3>
+                <p>Expert Trainers</p>
+            </div>
+            <div class="stat-item">
+                <h3>100+</h3>
+                <p>Classes Weekly</p>
+            </div>
+            <div class="stat-item">
+                <h3>24/7</h3>
+                <p>Access</p>
+            </div>
+        </div>
+    </div>
+
+    <section class="programs-section">
+        <div class="section-header">
+            <div class="section-label">TRAIN LIKE A CHAMPION</div>
+            <h2 class="section-title">OUR PROGRAMS</h2>
+        </div>
+
+        <div class="programs-grid">
+            <div class="program-card">
+                <div class="program-image">
+                    <img src="https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=800" alt="Strength Training">
+                </div>
+                <div class="program-content">
+                    <h3>STRENGTH TRAINING</h3>
+                    <p>Build muscle and increase power with our comprehensive strength programs designed for all experience levels.</p>
+                    <a href="programs.html" class="program-link">LEARN MORE →</a>
+                </div>
+            </div>
+
+            <div class="program-card">
+                <div class="program-image">
+                    <img src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800" alt="HIIT Classes">
+                </div>
+                <div class="program-content">
+                    <h3>HIIT CLASSES</h3>
+                    <p>High-intensity interval training that torches calories and builds endurance in 45-minute sessions.</p>
+                    <a href="programs.html" class="program-link">LEARN MORE →</a>
+                </div>
+            </div>
+
+            <div class="program-card">
+                <div class="program-image">
+                    <img src="https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=800" alt="Personal Training">
+                </div>
+                <div class="program-content">
+                    <h3>PERSONAL TRAINING</h3>
+                    <p>One-on-one coaching with certified trainers who create custom programs for your specific goals.</p>
+                    <a href="programs.html" class="program-link">LEARN MORE →</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="cta-content">
+            <h2>READY TO TRANSFORM?</h2>
+            <p>Join thousands of members who have achieved their fitness goals. Start your free 7-day trial today.</p>
+            <a href="contact.html" class="btn-primary">CLAIM FREE TRIAL</a>
+        </div>
+    </section>
+
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">PEAK</div>
+                <p style="margin-top: 1rem; color: #CCC !important;">Transform Your Life</p>
+            </div>
+            <div>
+                <h4>Quick Links</h4>
+                <p><a href="programs.html">Programs</a><br><a href="membership.html">Membership</a><br><a href="schedule.html">Class Schedule</a></p>
+            </div>
+            <div>
+                <h4>Contact</h4>
+                <p><a href="tel:555-555-5555">(555) 555-5555</a><br><a href="/cdn-cgi/l/email-protection#462f282029063623272d213f2b6825292b"><span class="__cf_email__" data-cfemail="630a0d050c2313060208041a0e4d000c0e">[email&#160;protected]</span></a><br>456 Fitness Ave<br>Seattle, WA 98101</p>
+            </div>
+            <div>
+                <h4>Hours</h4>
+                <p>Open 24/7<br>Staff Available:<br>Mon-Fri: 6AM-10PM<br>Sat-Sun: 8AM-8PM</p>
+            </div>
+        </div>
+        <div class="footer
