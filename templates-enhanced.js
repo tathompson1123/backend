@@ -47,7 +47,7 @@ const TEMPLATES = {
       charcoal: "#2C2C2C"
     },
     description: "Elegant spa design with rose gold accents and calming aesthetics.",
-    folder: "salon-spa-template",
+    folder: "SalonSpa",
     fonts: { heading: "Cormorant Garamond", body: "Montserrat" },
     bestFor: ["Spa", "Salon", "Massage", "Facial", "Beauty", "Wellness", "Hair", "Nail", "Esthetician"]
   },
@@ -63,7 +63,7 @@ const TEMPLATES = {
       light: "#FFFFFF"
     },
     description: "Warm, elegant restaurant design with food-focused aesthetics.",
-    folder: "restaurant-template",
+    folder: "resturant",
     fonts: { heading: "Playfair Display", body: "Open Sans" },
     bestFor: ["Restaurant", "Cafe", "Bistro", "Fine Dining", "Italian", "Steakhouse", "Bar & Grill"]
   },
@@ -79,7 +79,7 @@ const TEMPLATES = {
       light: "#FFFFFF"
     },
     description: "Bold, energetic fitness design with angular shapes and high energy.",
-    folder: "fitness-template",
+    folder: "fitness",
     fonts: { heading: "Bebas Neue", body: "Roboto" },
     bestFor: ["Gym", "Fitness", "Training", "CrossFit", "Yoga", "Pilates", "Boxing"]
   },
@@ -95,7 +95,7 @@ const TEMPLATES = {
       charcoal: "#1E293B"
     },
     description: "Clean, clinical dental design with calming teal colors.",
-    folder: "dental-template",
+    folder: "dental",
     fonts: { heading: "Nunito Sans", body: "Inter" },
     bestFor: ["Dental", "Dentist", "Orthodontics", "Family Dental", "Cosmetic Dentistry"]
   },
@@ -111,7 +111,7 @@ const TEMPLATES = {
       charcoal: "#1F2937"
     },
     description: "Sophisticated luxury real estate with property showcase focus.",
-    folder: "real-estate-template",
+    folder: "realty",
     fonts: { heading: "Merriweather", body: "Lato" },
     bestFor: ["Real Estate", "Realtor", "Property", "Homes", "Luxury Homes", "Realty"]
   },
@@ -127,7 +127,7 @@ const TEMPLATES = {
       charcoal: "#374151"
     },
     description: "Playful, caring pet grooming with rounded shapes and fun colors.",
-    folder: "pet-grooming-template",
+    folder: "pets",
     fonts: { heading: "Quicksand", body: "Poppins" },
     bestFor: ["Pet Grooming", "Dog Grooming", "Cat Grooming", "Pet Spa", "Veterinary"]
   },
@@ -143,7 +143,7 @@ const TEMPLATES = {
       white: "#FFFFFF"
     },
     description: "Reliable HVAC design with emergency orange accents.",
-    folder: "hvac-template",
+    folder: "HvacPlumbing",
     fonts: { heading: "Oswald", body: "Work Sans" },
     bestFor: ["HVAC", "Plumbing", "Air Conditioning", "Heating", "Furnace", "Emergency Services"]
   },
@@ -158,7 +158,7 @@ const TEMPLATES = {
       grey: "#E5E5E5"
     },
     description: "Artistic, minimal photography with image-first layout.",
-    folder: "photography-template",
+    folder: "photography",
     fonts: { heading: "Crimson Text", body: "Raleway" },
     bestFor: ["Photography", "Photographer", "Wedding Photography", "Portrait", "Event Photography"]
   },
@@ -174,7 +174,7 @@ const TEMPLATES = {
       charcoal: "#1F2937"
     },
     description: "Fresh, organized cleaning service with checklist focus.",
-    folder: "cleaning-template",
+    folder: "homecleaning",
     fonts: { heading: "Rubik", body: "Karla" },
     bestFor: ["Cleaning", "Maid", "Janitorial", "Housekeeping", "Commercial Cleaning"]
   },
@@ -190,7 +190,7 @@ const TEMPLATES = {
       white: "#FFFFFF"
     },
     description: "Professional, authoritative law firm with traditional styling.",
-    folder: "legal-template",
+    folder: "legal&attorney",
     fonts: { heading: "EB Garamond", body: "Source Sans Pro" },
     bestFor: ["Law", "Legal", "Attorney", "Lawyer", "Legal Services"]
   },
@@ -206,7 +206,7 @@ const TEMPLATES = {
       white: "#FFFFFF"
     },
     description: "Modern-rustic renovation with transformation focus.",
-    folder: "renovation-template",
+    folder: "homeremodel&renovation",
     fonts: { heading: "Archivo Black", body: "Mulish" },
     bestFor: ["Renovation", "Remodeling", "Contractor", "Construction", "Kitchen Remodel", "Home Improvement"]
   }
