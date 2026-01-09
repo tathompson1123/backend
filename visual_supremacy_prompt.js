@@ -1,4 +1,4 @@
-const { getRecommendedTemplate, getTemplateInfo, TEMPLATES } = require('./templates');
+const { getRecommendedTemplate, getTemplateInfo, TEMPLATES } = require('./templates-enhanced.js');
 const fs = require('fs');
 const path = require('path');
 
