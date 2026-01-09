@@ -10,6 +10,9 @@ const twilio = require('twilio');
 const sgMail = require('@sendgrid/mail');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { getRecommendedTemplate, getTemplateInfo } = require('./templates');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -3133,6 +3136,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
