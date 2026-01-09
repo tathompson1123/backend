@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pawsitive Grooming - Professional Pet Grooming & Spa</title>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { 
+            --purple: #9333EA; 
+            --mint: #6EE7B7; 
+            --pink: #F472B6; 
+            --white: #FFFFFF; 
+            --cream: #FEF3C7; 
+            --charcoal: #374151;
+        }
+        body { font-family: 'Poppins', sans-serif; color: var(--charcoal); background: var(--cream); line-height: 1.7; }
+        
+        /* Trust Banner */
+        .trust-banner { 
+            background: linear-gradient(90deg, var(--purple), var(--pink)); 
+            color: var(--white); 
+            padding: 0.75rem 0; 
+            overflow: hidden; 
+        }
+        .reviews-track { 
+            display: flex; 
+            animation: scroll 40s linear infinite; 
+            width: max-content; 
+        }
+        @keyframes scroll { 
+            0% { transform: translateX(0); } 
+            100% { transform: translateX(-50%); } 
+        }
+        .review-item { 
+            padding: 0 2rem; 
+            font-size: 0.9rem; 
+            font-weight: 600; 
+            white-space: nowrap; 
+        }
+        .stars { color: #FFD700; margin-left: 0.5rem; }
+        
+        /* Navigation */
+        nav { 
+            background: var(--white); 
+            padding: 1.5rem 0; 
+            position: sticky; 
+            top: 0; 
+            z-index: 1000; 
+            box-shadow: 0 2px 20px rgba(147,51,234,0.15); 
+        }
+        .nav-container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 0 3rem; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .logo { 
+            font-family: 'Quicksand', sans-serif; 
+            font-size: 2rem; 
+            font-weight: 700; 
+            color: var(--purple); 
+            text-decoration: none; 
+        }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { 
+            color: var(--charcoal); 
+            text-decoration: none; 
+            font-weight: 600; 
+            transition: all 0.3s; 
+            position: relative;
+        }
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--purple);
+            transition: width 0.3s;
+        }
+        .nav-links a:hover { color: var(--purple); }
+        .nav-links a:hover::after { width: 100%; }
+        .nav-cta { 
+            background: var(--purple); 
+            color: var(--white); 
+            padding: 0.875rem 2rem; 
+            border-radius: 50px; 
+            font-weight: 700; 
+            box-shadow: 0 4px 15px rgba(147,51,234,0.3);
+        }
+        .nav-cta::after { display: none; }
+        
+        /* Hero */
+        .hero { 
+            min-height: 90vh; 
+            background: linear-gradient(135deg, rgba(147,51,234,0.9), rgba(244,114,182,0.9)), url('https://images.unsplash.com/photo-1516734212186-a967f81ad0d7?w=1920'); 
+            background-size: cover; 
+            background-position: center; 
+            display: flex; 
+            align-items: center; 
+            color: var(--white); 
+            text-align: center; 
+        }
+        .hero-content { 
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 3rem; 
+        }
+        .hero h1 { 
+            font-family: 'Quicksand', sans-serif; 
+            font-size: 5.5rem; 
+            margin-bottom: 1.5rem; 
+            font-weight: 700; 
+            line-height: 1.1;
+        }
+        .hero p { 
+            font-size: 1.4rem; 
+            margin-bottom: 3rem; 
+            opacity: 0.95; 
+            line-height: 1.8;
+        }
+        .hero-buttons { display: flex; gap: 1.5rem; justify-content: center; }
+        .btn-primary { 
+            background: var(--mint); 
+            color: #065F46; 
+            padding: 1.25rem 3rem; 
+            border-radius: 50px; 
+            text-decoration: none; 
+            font-weight: 700; 
+            font-size: 1.1rem; 
+            display: inline-block; 
+            transition: all 0.3s; 
+            box-shadow: 0 6px 20px rgba(110,231,183,0.4);
+        }
+        .btn-primary:hover { 
+            transform: translateY(-3px) scale(1.05); 
+            box-shadow: 0 10px 30px rgba(110,231,183,0.5);
+        }
+        .btn-secondary {
+            background: transparent;
+            color: var(--white);
+            padding: 1.25rem 3rem;
+            border: 2px solid var(--white);
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.1rem;
+            transition: all 0.3s;
+        }
+        .btn-secondary:hover {
+            background: var(--white);
+            color: var(--purple);
+        }
+        
+        /* Services */
+        .services { 
+            padding: 8rem 3rem; 
+            background: var(--white); 
+        }
+        .section-header {
+            text-align: center;
+            margin-bottom: 5rem;
+        }
+        .section-label {
+            font-size: 0.95rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--purple);
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+        .section-title { 
+            font-family: 'Quicksand', sans-serif; 
+            font-size: 3.5rem; 
+            margin-bottom: 1rem; 
+            font-weight: 700; 
+            color: var(--purple); 
+        }
+        .section-description {
+            font-size: 1.1rem;
+            color: #6B7280;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .services-grid { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 3rem; 
+        }
+        .service-card { 
+            background: var(--cream); 
+            padding: 3rem; 
+            border-radius: 30px; 
+            text-align: center; 
+            transition: all 0.4s; 
+            border: 3px solid transparent; 
+        }
+        .service-card:hover { 
+            transform: translateY(-10px) rotate(-2deg); 
+            border-color: var(--purple); 
+            box-shadow: 0 15px 40px rgba(147,51,234,0.2);
+        }
+        .service-icon { 
+            width: 100px; 
+            height: 100px; 
+            background: linear-gradient(135deg, var(--purple), var(--pink)); 
+            border-radius: 50%; 
+            margin: 0 auto 2rem; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 3rem; 
+        }
+        .service-card h3 { 
+            font-family: 'Quicksand', sans-serif; 
+            font-size: 2rem; 
+            margin-bottom: 1rem; 
+            color: var(--purple); 
+            font-weight: 700;
+        }
+        .service-card p {
+            color: #6B7280;
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+        }
+        .service-price { 
+            font-size: 2rem; 
+            color: var(--purple); 
+            font-weight: 700; 
+            font-family: 'Quicksand', sans-serif;
+        }
+        
+        /* Why Choose Us */
+        .why-section {
+            padding: 8rem 3rem;
+            background: var(--cream);
+        }
+        .benefits-grid {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 3rem;
+        }
+        .benefit {
+            background: var(--white);
+            padding: 3rem;
+            border-radius: 30px;
+            text-align: center;
+            transition: transform 0.3s;
+        }
+        .benefit:hover {
+            transform: translateY(-10px);
+        }
+        .benefit-icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+        }
+        .benefit h3 {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            color: var(--purple);
+        }
+        .benefit p {
+            color: #6B7280;
+            line-height: 1.8;
+        }
+        
+        /* CTA */
+        .cta-section {
+            padding: 8rem 3rem;
+            background: linear-gradient(135deg, var(--purple), var(--pink));
+            text-align: center;
+            color: var(--white);
+        }
+        .cta-section h2 {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+        }
+        .cta-section p {
+            font-size: 1.3rem;
+            margin-bottom: 3rem;
+            opacity: 0.95;
+        }
+        .cta-button {
+            background: var(--white);
+            color: var(--purple);
+            padding: 1.5rem 4rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.2rem;
+            display: inline-block;
+            transition: all 0.3s;
+        }
+        .cta-button:hover {
+            transform: translateY(-5px) scale(1.05);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+        }
+        
+        /* Footer */
+        footer { 
+            background: var(--purple); 
+            color: var(--white); 
+            padding: 5rem 3rem 2rem; 
+        }
+        .footer-content { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 4rem; 
+            margin-bottom: 3rem;
+        }
+        .footer-brand { 
+            font-family: 'Quicksand', sans-serif; 
+            font-size: 2rem; 
+            font-weight: 700; 
+            margin-bottom: 1rem;
+        }
+        .footer-description {
+            color: rgba(255,255,255,0.8) !important;
+            line-height: 1.8;
+        }
+        .footer h4 { 
+            color: var(--mint); 
+            margin-bottom: 1.5rem; 
+            font-weight: 700; 
+        }
+        .footer a { 
+            color: rgba(255,255,255,0.8) !important; 
+            text-decoration: none; 
+            transition: color 0.3s;
+        }
+        .footer a:hover { color: var(--mint); }
+        .footer p {
+            line-height: 2;
+        }
+        .footer-bottom { 
+            text-align: center; 
+            padding-top: 3rem; 
+            border-top: 1px solid rgba(255,255,255,0.2); 
+            color: rgba(255,255,255,0.7) !important; 
+        }
+        
+        @media (max-width: 768px) { 
+            .hero h1 { font-size: 3.5rem; }
+            .services-grid, .benefits-grid, .footer-content { grid-template-columns: 1fr; } 
+            .hero-buttons { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item">5,000+ Pets Pampered <span class="stars">★★★★★</span></div>
+            <div class="review-item">Certified Groomers <span class="stars">★★★★★</span></div>
+            <div class="review-item">Stress-Free Experience <span class="stars">★★★★★</span></div>
+            <div class="review-item">5-Star Reviews <span class="stars">★★★★★</span></div>
+            <div class="review-item">5,000+ Pets Pampered <span class="stars">★★★★★</span></div>
+            <div class="review-item">Certified Groomers <span class="stars">★★★★★</span></div>
+        </div>
+    </div>
+
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">Pawsitive Grooming</a>
+            <div class="nav-links">
+                <a href="services.html">Services</a>
+                <a href="gallery.html">Gallery</a>
+                <a href="about.html">About</a>
+                <a href="contact.html">Contact</a>
+                <a href="contact.html" class="nav-cta">Book Now</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Where Pets Get Pampered</h1>
+            <p>Professional grooming services for dogs and cats in a stress-free, loving environment. Your pet's happiness is our priority.</p>
+            <div class="hero-buttons">
+                <a href="contact.html" class="btn-primary">Book Appointment</a>
+                <a href="services.html" class="btn-secondary">View Services</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="services">
+        <div class="section-header">
+            <div class="section-label">Pamper Your Pet</div>
+            <h2 class="section-title">Our Services</h2>
+            <p class="section-description">Professional grooming tailored to your pet's breed, size, and personality</p>
+        </div>
+
+        <div class="services-grid">
+            <div class="service-card">
+                <div class="service-icon">🛁</div>
+                <h3>Full Groom</h3>
+                <p>Complete spa treatment including bath, haircut, nail trim, ear cleaning, and teeth brushing</p>
+                <div class="service-price">From $75</div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-icon">✂️</div>
+                <h3>Bath & Brush</h3>
+                <p>Thorough bath with premium shampoo, blow dry, brush out, and nail trim</p>
+                <div class="service-price">From $45</div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-icon">💅</div>
+                <h3>Nail Trim</h3>
+                <p>Quick and gentle nail trim and filing for comfort and health</p>
+                <div class="service-price">$15</div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-icon">🐱</div>
+                <h3>Cat Grooming</h3>
+                <p>Specialized feline grooming with patience and gentle care</p>
+                <div class="service-price">From $65</div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-icon">🐶</div>
+                <h3>Puppy Package</h3>
+                <p>Introductory grooming for puppies under 6 months old</p>
+                <div class="service-price">From $40</div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-icon">✨</div>
+                <h3>Spa Add-Ons</h3>
+                <p>Deep conditioning, paw balm, cologne, and specialty treatments</p>
+                <div class="service-price">From $10</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="why-section">
+        <div class="section-header">
+            <div class="section-label">Why Pawsitive</div>
+            <h2 class="section-title">What Makes Us Special</h2>
+        </div>
+
+        <div class="benefits-grid">
+            <div class="benefit">
+                <div class="benefit-icon">💙</div>
+                <h3>Stress-Free</h3>
+                <p>Calm, patient approach to make grooming a positive experience for anxious pets</p>
+            </div>
+            <div class="benefit">
+                <div class="benefit-icon">🎓</div>
+                <h3>Certified Pros</h3>
+                <p>All groomers are professionally trained and certified with years of experience</p>
+            </div>
+            <div class="benefit">
+                <div class="benefit-icon">🌿</div>
+                <h3>Safe Products</h3>
+                <p>Premium, natural grooming products that are gentle on skin and coat</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <h2>Ready to Pamper Your Pet?</h2>
+        <p>Book your appointment today and give your furry friend the spa day they deserve!</p>
+        <a href="contact.html" class="cta-button">Book Appointment</a>
+    </section>
+
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">Pawsitive Grooming</div>
+                <p class="footer-description">Where every pet gets the royal treatment they deserve.</p>
+            </div>
+            <div>
+                <h4>Services</h4>
+                <p>
+                    <a href="services.html">Dog Grooming</a><br>
+                    <a href="services.html">Cat Grooming</a><br>
+                    <a href="services.html">Puppy Packages</a><br>
+                    <a href="services.html">Spa Add-Ons</a>
+                </p>
+            </div>
+            <div>
+                <h4>Contact</h4>
+                <p>
+                    <a href="tel:555-555-5555">(555) 555-5555</a><br>
+                    <a href="mailto:woof@pawsitive.com">woof@pawsitive.com</a><br>
+                    321 Pet Lane<br>
+                    Seattle, WA 98101
+                </p>
+            </div>
+            <div>
+                <h4>Hours</h4>
+                <p>
+                    Tuesday-Saturday: 8AM-6PM<br>
+                    Sunday: 10AM-4PM<br>
+                    Closed Mondays
+                </p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 Pawsitive Grooming. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
