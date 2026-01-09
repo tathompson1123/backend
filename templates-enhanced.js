@@ -73,12 +73,57 @@ const TEMPLATES = {
       body: "Rajdhani (sans-serif)"
     },
     bestFor: ["Auto Detailing", "Car Wash", "Ceramic Coating", "Paint Correction", "Mobile Detailing", "Vehicle Care"]
+  },
+
+  salonSpa: {
+    name: "Serenity Spa & Salon",
+    industry: "Beauty & Wellness",
+    colorScheme: {
+      primary: "#B76E79",       // Rose Gold
+      accent: "#8B4C5C",        // Deep Rose
+      sage: "#A8B5A0",          // Sage Green
+      cream: "#FAF7F2",         // Cream
+      charcoal: "#2C2C2C",      // Charcoal
+      light: "#FFFFFF"          // White
+    },
+    description: "An elegant, luxurious spa and salon design with soft rose gold accents, gentle animations, and a calming aesthetic perfect for beauty and wellness businesses.",
+    features: [
+      "Elegant serif typography (Cormorant Garamond)",
+      "Soft gradient backgrounds",
+      "Gentle floating animations",
+      "Rose gold accent throughout",
+      "Circular icon designs",
+      "Premium photography aesthetics",
+      "Scroll-triggered fade animations",
+      "Trust banner with client reviews",
+      "Benefit-driven content sections",
+      "Multiple booking CTAs",
+      "Mobile-responsive design"
+    ],
+    pages: [
+      "Homepage with hero, signature treatments, benefits, testimonials",
+      "Complete treatment menu (Facials, Massage, Hair services)",
+      "Spa packages page with 3 curated bundles",
+      "Gallery with before/after transformations",
+      "Contact page with booking form and 20% off offer"
+    ],
+    fonts: {
+      heading: "Cormorant Garamond (serif)",
+      body: "Montserrat (sans-serif)"
+    },
+    bestFor: ["Day Spa", "Hair Salon", "Nail Salon", "Massage Therapy", "Medical Spa", "Beauty Clinic", "Facial Studio", "Wellness Center", "Esthetician"]
   }
 };
 
 // Helper function to get template recommendation
 function getRecommendedTemplate(businessType) {
   const businessTypeLower = businessType.toLowerCase();
+  
+  // Salon/Spa keywords
+  const salonKeywords = ['salon', 'spa', 'massage', 'facial', 'beauty', 'wellness', 'hair', 'nail', 'esthetician', 'skin', 'skincare'];
+  if (salonKeywords.some(keyword => businessTypeLower.includes(keyword))) {
+    return 'salonSpa';
+  }
   
   // Auto detailing keywords
   const autoKeywords = ['detailing', 'car', 'auto', 'vehicle', 'ceramic', 'paint', 'wash'];
