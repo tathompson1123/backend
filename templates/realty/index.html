@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premier Realty - Luxury Homes & Investment Properties</title>
+    <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700;900&family=Lato:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { 
+            --navy: #1E3A8A; 
+            --gold: #F59E0B; 
+            --white: #FFFFFF; 
+            --light: #F3F4F6; 
+            --charcoal: #1F2937; 
+        }
+        body { font-family: 'Lato', sans-serif; color: var(--charcoal); background: var(--white); line-height: 1.7; }
+        
+        /* Trust Banner */
+        .trust-banner { 
+            background: var(--navy); 
+            color: var(--white); 
+            padding: 0.75rem 0; 
+            overflow: hidden; 
+        }
+        .reviews-track { 
+            display: flex; 
+            animation: scroll 40s linear infinite; 
+            width: max-content; 
+        }
+        @keyframes scroll { 
+            0% { transform: translateX(0); } 
+            100% { transform: translateX(-50%); } 
+        }
+        .review-item { 
+            padding: 0 2rem; 
+            font-size: 0.9rem; 
+            font-weight: 600; 
+            white-space: nowrap; 
+        }
+        .stars { color: var(--gold); margin-left: 0.5rem; }
+        
+        /* Navigation */
+        nav { 
+            background: var(--white); 
+            padding: 1.5rem 0; 
+            position: sticky; 
+            top: 0; 
+            z-index: 1000; 
+            box-shadow: 0 2px 15px rgba(0,0,0,0.08); 
+        }
+        .nav-container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 0 3rem; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .logo { 
+            font-family: 'Merriweather', serif; 
+            font-size: 2rem; 
+            font-weight: 900; 
+            color: var(--navy); 
+            text-decoration: none; 
+            letter-spacing: 1px; 
+        }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { 
+            color: var(--charcoal); 
+            text-decoration: none; 
+            font-weight: 600; 
+            transition: color 0.3s; 
+            position: relative;
+        }
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--navy);
+            transition: width 0.3s;
+        }
+        .nav-links a:hover { color: var(--navy); }
+        .nav-links a:hover::after { width: 100%; }
+        .nav-cta { 
+            background: var(--gold); 
+            color: var(--white); 
+            padding: 0.875rem 2rem; 
+            border-radius: 5px; 
+            font-weight: 700; 
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+        }
+        .nav-cta::after { display: none; }
+        
+        /* Hero */
+        .hero { 
+            min-height: 90vh; 
+            background: linear-gradient(rgba(30, 58, 138, 0.85), rgba(30, 58, 138, 0.85)), url('https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1920'); 
+            background-size: cover; 
+            background-position: center; 
+            display: flex; 
+            align-items: center; 
+            color: var(--white); 
+        }
+        .hero-content { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 0 3rem; 
+        }
+        .hero h1 { 
+            font-family: 'Merriweather', serif; 
+            font-size: 5.5rem; 
+            line-height: 1.1; 
+            margin-bottom: 1.5rem; 
+            font-weight: 900; 
+        }
+        .hero p { 
+            font-size: 1.4rem; 
+            margin-bottom: 3rem; 
+            max-width: 600px; 
+            opacity: 0.95; 
+            line-height: 1.8;
+        }
+        .hero-buttons { display: flex; gap: 1.5rem; }
+        .btn-primary { 
+            background: var(--gold); 
+            color: var(--white); 
+            padding: 1.25rem 3rem; 
+            border-radius: 5px; 
+            text-decoration: none; 
+            font-weight: 700; 
+            font-size: 1.1rem; 
+            display: inline-block; 
+            transition: all 0.3s; 
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.3);
+        }
+        .btn-primary:hover { 
+            transform: translateY(-3px); 
+            box-shadow: 0 10px 30px rgba(245, 158, 11, 0.4); 
+        }
+        .btn-secondary {
+            background: transparent;
+            color: var(--white);
+            padding: 1.25rem 3rem;
+            border: 2px solid var(--white);
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.1rem;
+            transition: all 0.3s;
+        }
+        .btn-secondary:hover {
+            background: var(--white);
+            color: var(--navy);
+        }
+        
+        /* Stats Bar */
+        .stats { 
+            background: var(--navy); 
+            color: var(--white); 
+            padding: 4rem 3rem; 
+        }
+        .stats-grid { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 3rem; 
+            text-align: center; 
+        }
+        .stat h3 { 
+            font-family: 'Merriweather', serif; 
+            font-size: 4rem; 
+            color: var(--gold); 
+            margin-bottom: 0.5rem; 
+            font-weight: 900;
+        }
+        .stat p { 
+            font-size: 1rem; 
+            opacity: 0.9; 
+            font-weight: 600; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+        }
+        
+        /* Featured Properties */
+        .listings { 
+            padding: 8rem 3rem; 
+            background: var(--light); 
+        }
+        .section-header {
+            text-align: center;
+            margin-bottom: 5rem;
+        }
+        .section-label {
+            font-size: 0.95rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--navy);
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+        .section-title { 
+            font-family: 'Merriweather', serif; 
+            font-size: 3.5rem; 
+            margin-bottom: 1rem; 
+            font-weight: 700; 
+            color: var(--charcoal);
+        }
+        .section-description {
+            font-size: 1.1rem;
+            color: #6B7280;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .listings-grid { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 2.5rem; 
+        }
+        .listing-card { 
+            background: var(--white); 
+            border-radius: 10px; 
+            overflow: hidden; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1); 
+            transition: all 0.4s; 
+        }
+        .listing-card:hover { 
+            transform: translateY(-10px); 
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+        .listing-image { 
+            height: 280px; 
+            overflow: hidden; 
+            position: relative; 
+        }
+        .listing-image img { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+            transition: transform 0.5s;
+        }
+        .listing-card:hover .listing-image img {
+            transform: scale(1.1);
+        }
+        .listing-badge { 
+            position: absolute; 
+            top: 1rem; 
+            right: 1rem; 
+            background: var(--gold); 
+            color: var(--white); 
+            padding: 0.5rem 1.25rem; 
+            border-radius: 5px; 
+            font-weight: 700; 
+            font-size: 0.85rem; 
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .listing-content { padding: 2.5rem; }
+        .listing-price { 
+            font-family: 'Merriweather', serif; 
+            font-size: 2.2rem; 
+            color: var(--navy); 
+            font-weight: 900; 
+            margin-bottom: 0.75rem; 
+        }
+        .listing-address { 
+            color: #6B7280; 
+            margin-bottom: 1.5rem; 
+            font-size: 1.05rem;
+        }
+        .listing-details { 
+            display: flex; 
+            gap: 2rem; 
+            color: #6B7280; 
+            font-size: 0.95rem; 
+            font-weight: 600;
+        }
+        .listing-details span {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        /* Why Choose Us */
+        .why-section {
+            padding: 8rem 3rem;
+            background: var(--white);
+        }
+        .benefits-grid {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 3rem;
+            text-align: center;
+        }
+        .benefit {
+            padding: 2.5rem;
+        }
+        .benefit-icon {
+            width: 80px;
+            height: 80px;
+            background: var(--light);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 2rem;
+            font-size: 2.5rem;
+            color: var(--navy);
+        }
+        .benefit h3 {
+            font-family: 'Merriweather', serif;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--charcoal);
+        }
+        .benefit p {
+            color: #6B7280;
+            line-height: 1.8;
+        }
+        
+        /* CTA */
+        .cta-section {
+            padding: 8rem 3rem;
+            background: linear-gradient(135deg, var(--navy), #1E40AF);
+            text-align: center;
+            color: var(--white);
+        }
+        .cta-section h2 {
+            font-family: 'Merriweather', serif;
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            font-weight: 900;
+        }
+        .cta-section p {
+            font-size: 1.3rem;
+            margin-bottom: 3rem;
+            opacity: 0.95;
+        }
+        .cta-button {
+            background: var(--gold);
+            color: var(--white);
+            padding: 1.5rem 4rem;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.2rem;
+            display: inline-block;
+            transition: all 0.3s;
+        }
+        .cta-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        /* Footer */
+        footer { 
+            background: var(--charcoal); 
+            color: var(--white); 
+            padding: 5rem 3rem 2rem; 
+        }
+        .footer-content { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 4rem; 
+            margin-bottom: 3rem;
+        }
+        .footer-brand { 
+            font-family: 'Merriweather', serif; 
+            font-size: 2rem; 
+            font-weight: 900; 
+            color: var(--gold); 
+            margin-bottom: 1rem;
+        }
+        .footer-description {
+            color: rgba(255,255,255,0.7) !important;
+            line-height: 1.8;
+        }
+        .footer h4 { 
+            color: var(--gold); 
+            margin-bottom: 1.5rem; 
+            font-weight: 700; 
+            font-size: 1.1rem;
+        }
+        .footer a { 
+            color: rgba(255,255,255,0.8) !important; 
+            text-decoration: none; 
+            transition: color 0.3s;
+        }
+        .footer a:hover { color: var(--gold); }
+        .footer p {
+            line-height: 2;
+        }
+        .footer-bottom { 
+            text-align: center; 
+            padding-top: 3rem; 
+            border-top: 1px solid rgba(255,255,255,0.1); 
+            color: rgba(255,255,255,0.6); 
+        }
+        
+        @media (max-width: 768px) { 
+            .hero h1 { font-size: 3.5rem; }
+            .listings-grid, .stats-grid, .benefits-grid, .footer-content { grid-template-columns: 1fr; } 
+            .hero-buttons { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item">$2.5B+ in Properties Sold <span class="stars">★★★★★</span></div>
+            <div class="review-item">2,500+ Happy Clients <span class="stars">★★★★★</span></div>
+            <div class="review-item">Top Producer 2024 <span class="stars">★★★★★</span></div>
+            <div class="review-item">15+ Years Experience <span class="stars">★★★★★</span></div>
+            <div class="review-item">$2.5B+ in Properties Sold <span class="stars">★★★★★</span></div>
+            <div class="review-item">2,500+ Happy Clients <span class="stars">★★★★★</span></div>
+        </div>
+    </div>
+
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">PREMIER REALTY</a>
+            <div class="nav-links">
+                <a href="listings.html">Listings</a>
+                <a href="sell.html">Sell</a>
+                <a href="about.html">About</a>
+                <a href="contact.html">Contact</a>
+                <a href="contact.html" class="nav-cta">Get Started</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Find Your Dream Home</h1>
+            <p>Discover luxury properties and investment opportunities with Seattle's most trusted real estate experts.</p>
+            <div class="hero-buttons">
+                <a href="listings.html" class="btn-primary">Browse Listings</a>
+                <a href="sell.html" class="btn-secondary">Sell Your Home</a>
+            </div>
+        </div>
+    </section>
+
+    <div class="stats">
+        <div class="stats-grid">
+            <div class="stat">
+                <h3>$2.5B+</h3>
+                <p>Properties Sold</p>
+            </div>
+            <div class="stat">
+                <h3>2,500+</h3>
+                <p>Happy Clients</p>
+            </div>
+            <div class="stat">
+                <h3>15+</h3>
+                <p>Years Experience</p>
+            </div>
+            <div class="stat">
+                <h3>98%</h3>
+                <p>Satisfaction Rate</p>
+            </div>
+        </div>
+    </div>
+
+    <section class="listings">
+        <div class="section-header">
+            <div class="section-label">Luxury Living</div>
+            <h2 class="section-title">Featured Properties</h2>
+            <p class="section-description">Handpicked selection of the finest homes in Seattle and surrounding areas</p>
+        </div>
+
+        <div class="listings-grid">
+            <div class="listing-card">
+                <div class="listing-image">
+                    <img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800" alt="Property">
+                    <div class="listing-badge">NEW</div>
+                </div>
+                <div class="listing-content">
+                    <div class="listing-price">$2,450,000</div>
+                    <div class="listing-address">123 Harbor View Drive, Seattle, WA 98101</div>
+                    <div class="listing-details">
+                        <span>🛏  4 Beds</span>
+                        <span>🛁  3.5 Baths</span>
+                        <span>📐  3,200 SF</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="listing-card">
+                <div class="listing-image">
+                    <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800" alt="Property">
+                </div>
+                <div class="listing-content">
+                    <div class="listing-price">$1,875,000</div>
+                    <div class="listing-address">456 Lake Shore Boulevard, Bellevue, WA 98004</div>
+                    <div class="listing-details">
+                        <span>🛏  5 Beds</span>
+                        <span>🛁  4 Baths</span>
+                        <span>📐  4,100 SF</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="listing-card">
+                <div class="listing-image">
+                    <img src="https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800" alt="Property">
+                    <div class="listing-badge">REDUCED</div>
+                </div>
+                <div class="listing-content">
+                    <div class="listing-price">$1,695,000</div>
+                    <div class="listing-address">789 Mountain View Road, Redmond, WA 98052</div>
+                    <div class="listing-details">
+                        <span>🛏  3 Beds</span>
+                        <span>🛁  2.5 Baths</span>
+                        <span>📐  2,800 SF</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="why-section">
+        <div class="section-header">
+            <div class="section-label">Why Premier</div>
+            <h2 class="section-title">Your Success is Our Mission</h2>
+        </div>
+
+        <div class="benefits-grid">
+            <div class="benefit">
+                <div class="benefit-icon">★</div>
+                <h3>Top Producer</h3>
+                <p>Ranked in the top 1% of agents nationwide with a proven track record of success</p>
+            </div>
+            <div class="benefit">
+                <div class="benefit-icon">$</div>
+                <h3>Maximum Value</h3>
+                <p>Strategic pricing and marketing to get you the best possible price for your property</p>
+            </div>
+            <div class="benefit">
+                <div class="benefit-icon">✓</div>
+                <h3>White Glove Service</h3>
+                <p>Personalized attention and guidance throughout every step of your real estate journey</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <h2>Ready to Make Your Move?</h2>
+        <p>Let's discuss your real estate goals. Schedule a free consultation today.</p>
+        <a href="contact.html" class="cta-button">Schedule Consultation</a>
+    </section>
+
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">PREMIER REALTY</div>
+                <p class="footer-description">Seattle's premier real estate experts specializing in luxury homes and investment properties.</p>
+            </div>
+            <div>
+                <h4>Services</h4>
+                <p>
+                    <a href="listings.html">Buy a Home</a><br>
+                    <a href="sell.html">Sell Your Home</a><br>
+                    <a href="about.html">Market Analysis</a><br>
+                    <a href="contact.html">Consultation</a>
+                </p>
+            </div>
+            <div>
+                <h4>Contact</h4>
+                <p>
+                    <a href="tel:555-555-5555">(555) 555-5555</a><br>
+                    <a href="mailto:info@premierrealty.com">info@premierrealty.com</a><br>
+                    100 Main Street, Suite 500<br>
+                    Seattle, WA 98101
+                </p>
+            </div>
+            <div>
+                <h4>Office Hours</h4>
+                <p>
+                    Monday-Saturday: 9AM-7PM<br>
+                    Sunday: 10AM-5PM<br>
+                    Available 24/7 for clients
+                </p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 Premier Realty. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
