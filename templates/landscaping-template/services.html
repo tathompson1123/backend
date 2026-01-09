@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Our Services - Green Valley Landscaping</title>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --forest: #1a3a1a;
+            --lime: #7cb342;
+            --green: #2d5016;
+            --cream: #faf8f3;
+        }
+
+        body { font-family: 'Archivo', sans-serif; color: var(--forest); line-height: 1.6; }
+
+        /* Trust Banner */
+        .trust-banner { background: var(--lime); color: white; padding: 1rem 0; overflow: hidden; }
+        .reviews-track { display: flex; animation: scroll 40s linear infinite; width: max-content; }
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .review-item { display: flex; align-items: center; gap: 0.5rem; padding: 0 1.5rem; font-size: 0.9rem; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+        .stars { color: #fbbf24; font-size: 0.85rem; letter-spacing: 1px; }
+
+        /* Nav */
+        nav { background: rgba(250, 248, 243, 0.98); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-family: 'Lora', serif; font-size: 1.8rem; font-weight: 700; color: var(--forest); text-decoration: none; }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { color: var(--forest); text-decoration: none; font-weight: 500; transition: color 0.3s; }
+        .nav-links a:hover { color: var(--lime); }
+        .nav-cta { background: var(--lime); color: white; padding: 0.875rem 2rem; border-radius: 50px; font-weight: 600; }
+
+        /* Page Header */
+        .page-header {
+            background: linear-gradient(135deg, rgba(26, 58, 26, 0.9), rgba(45, 80, 22, 0.85)), url('https://picsum.photos/1920/600?random=20');
+            background-size: cover;
+            background-position: center;
+            color: white;
+            padding: 8rem 3rem 6rem;
+            text-align: center;
+        }
+        .page-header h1 { font-family: 'Lora', serif; font-size: 4.5rem; margin-bottom: 1.5rem; }
+        .page-header p { font-size: 1.4rem; max-width: 800px; margin: 0 auto; opacity: 0.95; }
+
+        /* Services Grid */
+        .services-section { padding: 8rem 3rem; background: var(--cream); }
+        .services-grid { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 3rem; }
+        
+        .service-card {
+            background: white;
+            border-radius: 25px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .service-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        }
+        .service-image { height: 280px; overflow: hidden; }
+        .service-image img { width: 100%; height: 100%; object-fit: cover; }
+        .service-content { padding: 2.5rem; }
+        .service-card h3 { font-family: 'Lora', serif; font-size: 2rem; color: var(--forest); margin-bottom: 1rem; }
+        .service-price { font-family: 'Lora', serif; font-size: 2rem; font-weight: 700; color: var(--lime); margin-bottom: 1.5rem; }
+        .service-features { list-style: none; margin-bottom: 2rem; }
+        .service-features li { padding: 0.5rem 0; padding-left: 1.5rem; position: relative; }
+        .service-features li::before { content: "✓"; position: absolute; left: 0; color: var(--lime); font-weight: bold; }
+        
+        .book-button {
+            display: block;
+            background: var(--lime);
+            color: white;
+            text-align: center;
+            padding: 1.25rem 2rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.1rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .book-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(124, 179, 66, 0.4);
+        }
+
+        /* Benefits Section */
+        .benefits-section {
+            padding: 8rem 3rem;
+            background: white;
+        }
+        .section-title {
+            font-family: 'Lora', serif;
+            font-size: 3.5rem;
+            text-align: center;
+            color: var(--forest);
+            margin-bottom: 4rem;
+        }
+        .benefits-grid {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 3rem;
+        }
+        .benefit-card {
+            display: flex;
+            gap: 2rem;
+            padding: 2.5rem;
+            background: var(--cream);
+            border-radius: 20px;
+            transition: transform 0.3s ease;
+        }
+        .benefit-card:hover {
+            transform: translateX(10px);
+        }
+        .benefit-icon {
+            width: 80px;
+            height: 80px;
+            background: var(--lime);
+            color: white;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            flex-shrink: 0;
+        }
+        .benefit-content h3 {
+            font-family: 'Lora', serif;
+            font-size: 1.6rem;
+            color: var(--forest);
+            margin-bottom: 0.75rem;
+        }
+        .benefit-content p {
+            color: #666;
+            line-height: 1.8;
+        }
+
+        /* Process Section */
+        .process-section {
+            padding: 8rem 3rem;
+            background: var(--forest);
+            color: white;
+        }
+        .process-steps {
+            max-width: 1200px;
+            margin: 4rem auto 0;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2rem;
+        }
+        .process-step {
+            text-align: center;
+            position: relative;
+        }
+        .step-number {
+            width: 80px;
+            height: 80px;
+            background: var(--lime);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0 auto 1.5rem;
+        }
+        .process-step h3 {
+            font-family: 'Lora', serif;
+            font-size: 1.4rem;
+            margin-bottom: 1rem;
+            color: var(--lime);
+        }
+        .process-step p {
+            opacity: 0.9;
+        }
+
+        /* CTA Section */
+        .cta-section {
+            padding: 8rem 3rem;
+            background: linear-gradient(135deg, #7cb342 0%, #2d5016 100%);
+            text-align: center;
+            color: white;
+        }
+        .cta-section h2 {
+            font-family: 'Lora', serif;
+            font-size: 3.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .cta-section p {
+            font-size: 1.3rem;
+            margin-bottom: 2rem;
+            opacity: 0.95;
+        }
+        .cta-button {
+            display: inline-block;
+            background: white;
+            color: var(--forest);
+            padding: 1.5rem 4rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.2rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Footer */
+        footer { background: var(--forest); color: white; padding: 5rem 3rem 2rem; }
+        .footer-content { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4rem; }
+        .footer-brand { font-family: 'Lora', serif; font-size: 2rem; font-weight: 700; color: var(--lime); }
+
+        @media (max-width: 768px) {
+            .page-header h1 { font-size: 3rem; }
+            .services-grid, .benefits-grid, .process-steps, .footer-content { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Reviews -->
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item"><span class="review-text">"Amazing transformation!" - Jennifer M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Professional work" - Robert T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best in area" - Maria S.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Exceeded expectations!" - David K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Beautiful results" - Lisa P.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Amazing transformation!" - Jennifer M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Professional work" - Robert T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best in area" - Maria S.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Exceeded expectations!" - David K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Beautiful results" - Lisa P.</span><span class="stars">★★★★★</span></div>
+        </div>
+    </div>
+
+    <!-- Nav -->
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">Green Valley Landscaping</a>
+            <div class="nav-links">
+                <a href="services.html">Services</a>
+                <a href="recent-work.html">Recent Work</a>
+                <a href="contact.html">Contact</a>
+                <a href="contact.html" class="nav-cta">Book Here</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <section class="page-header">
+        <h1>Our Services</h1>
+        <p>Professional landscaping solutions tailored to transform your outdoor space into a beautiful, sustainable oasis</p>
+    </section>
+
+    <!-- Services Grid -->
+    <section class="services-section">
+        <div class="services-grid">
+            <div class="service-card">
+                <div class="service-image"><img src="https://picsum.photos/600/400?random=2" alt="Landscape Design"></div>
+                <div class="service-content">
+                    <h3>Landscape Design</h3>
+                    <div class="service-price">From $2,500</div>
+                    <ul class="service-features">
+                        <li>Custom design consultation</li>
+                        <li>3D visualization mockups</li>
+                        <li>Plant selection & sourcing</li>
+                        <li>Professional installation</li>
+                        <li>1-year maintenance plan</li>
+                    </ul>
+                    <a href="contact.html" class="book-button">Book This Service</a>
+                </div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-image"><img src="https://picsum.photos/600/400?random=3" alt="Lawn Maintenance"></div>
+                <div class="service-content">
+                    <h3>Lawn Maintenance</h3>
+                    <div class="service-price">From $150/mo</div>
+                    <ul class="service-features">
+                        <li>Weekly mowing & edging</li>
+                        <li>Fertilization program</li>
+                        <li>Weed control treatment</li>
+                        <li>Seasonal cleanup</li>
+                        <li>Aeration & overseeding</li>
+                    </ul>
+                    <a href="contact.html" class="book-button">Book This Service</a>
+                </div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-image"><img src="https://picsum.photos/600/400?random=4" alt="Garden Design"></div>
+                <div class="service-content">
+                    <h3>Garden Design</h3>
+                    <div class="service-price">From $1,800</div>
+                    <ul class="service-features">
+                        <li>Native plant gardens</li>
+                        <li>Vegetable & herb gardens</li>
+                        <li>Flower bed installation</li>
+                        <li>Irrigation system setup</li>
+                        <li>Mulching & soil prep</li>
+                    </ul>
+                    <a href="contact.html" class="book-button">Book This Service</a>
+                </div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-image"><img src="https://picsum.photos/600/400?random=21" alt="Hardscaping"></div>
+                <div class="service-content">
+                    <h3>Hardscaping</h3>
+                    <div class="service-price">From $3,500</div>
+                    <ul class="service-features">
+                        <li>Patio & walkway installation</li>
+                        <li>Retaining walls</li>
+                        <li>Outdoor fire pits</li>
+                        <li>Stone & brick work</li>
+                        <li>Drainage solutions</li>
+                    </ul>
+                    <a href="contact.html" class="book-button">Book This Service</a>
+                </div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-image"><img src="https://picsum.photos/600/400?random=22" alt="Tree Services"></div>
+                <div class="service-content">
+                    <h3>Tree Services</h3>
+                    <div class="service-price">From $500</div>
+                    <ul class="service-features">
+                        <li>Tree trimming & pruning</li>
+                        <li>Tree removal</li>
+                        <li>Stump grinding</li>
+                        <li>Emergency tree service</li>
+                        <li>Health assessments</li>
+                    </ul>
+                    <a href="contact.html" class="book-button">Book This Service</a>
+                </div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-image"><img src="https://picsum.photos/600/400?random=23" alt="Irrigation Systems"></div>
+                <div class="service-content">
+                    <h3>Irrigation Systems</h3>
+                    <div class="service-price">From $2,200</div>
+                    <ul class="service-features">
+                        <li>Smart irrigation installation</li>
+                        <li>Sprinkler system design</li>
+                        <li>Drip irrigation setup</li>
+                        <li>System repairs & upgrades</li>
+                        <li>Water efficiency audits</li>
+                    </ul>
+                    <a href="contact.html" class="book-button">Book This Service</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Benefits Section -->
+    <section class="benefits-section">
+        <h2 class="section-title">Why Choose Our Services?</h2>
+        <div class="benefits-grid">
+            <div class="benefit-card">
+                <div class="benefit-icon">🏆</div>
+                <div class="benefit-content">
+                    <h3>Award-Winning Quality</h3>
+                    <p>Recognized as Washington's top landscaping company for three consecutive years. Our commitment to excellence shows in every project.</p>
+                </div>
+            </div>
+
+            <div class="benefit-card">
+                <div class="benefit-icon">💰</div>
+                <div class="benefit-content">
+                    <h3>Best Value Guarantee</h3>
+                    <p>We'll match any competitor's quote and ensure you get premium quality at competitive prices. No hidden fees, ever.</p>
+                </div>
+            </div>
+
+            <div class="benefit-card">
+                <div class="benefit-icon">⚡</div>
+                <div class="benefit-content">
+                    <h3>Fast Turnaround</h3>
+                    <p>Most projects completed within 2 weeks. We respect your time with efficient scheduling and on-time completion.</p>
+                </div>
+            </div>
+
+            <div class="benefit-card">
+                <div class="benefit-icon">🌱</div>
+                <div class="benefit-content">
+                    <h3>Eco-Friendly Methods</h3>
+                    <p>Sustainable practices using organic fertilizers, native plants, and water-conservation techniques to protect our environment.</p>
+                </div>
+            </div>
+
+            <div class="benefit-card">
+                <div class="benefit-icon">✓</div>
+                <div class="benefit-content">
+                    <h3>Licensed & Insured</h3>
+                    <p>Fully licensed, bonded, and insured for your protection. Our team follows all safety protocols and industry standards.</p>
+                </div>
+            </div>
+
+            <div class="benefit-card">
+                <div class="benefit-icon">📞</div>
+                <div class="benefit-content">
+                    <h3>24/7 Customer Support</h3>
+                    <p>Questions or concerns? Our support team is always available to help. Emergency services available for urgent needs.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Process Section -->
+    <section class="process-section">
+        <h2 class="section-title">Our Simple Process</h2>
+        <div class="process-steps">
+            <div class="process-step">
+                <div class="step-number">1</div>
+                <h3>Free Consultation</h3>
+                <p>Schedule a visit to discuss your vision and get expert recommendations</p>
+            </div>
+            <div class="process-step">
+                <div class="step-number">2</div>
+                <h3>Custom Quote</h3>
+                <p>Receive a detailed proposal with transparent pricing within 24 hours</p>
+            </div>
+            <div class="process-step">
+                <div class="step-number">3</div>
+                <h3>Professional Work</h3>
+                <p>Our skilled team executes your project with precision and care</p>
+            </div>
+            <div class="process-step">
+                <div class="step-number">4</div>
+                <h3>Enjoy Results</h3>
+                <p>Love your beautiful new landscape with ongoing support available</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <h2>Ready to Get Started?</h2>
+        <p>Book your free consultation today and receive 25% off your first service</p>
+        <a href="contact.html" class="cta-button">Schedule Free Consultation</a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">Green Valley Landscaping</div>
+                <p style="color: rgba(255,255,255,0.7); margin-top: 1rem;">Creating beautiful outdoor spaces</p>
+            </div>
+            <div>
+                <h4 style="color: var(--lime); margin-bottom: 1rem;">Services</h4>
+                <p style="color: rgba(255,255,255,0.7);">Landscape Design<br>Lawn Maintenance<br>Tree Service</p>
+            </div>
+            <div>
+                <h4 style="color: var(--lime); margin-bottom: 1rem;">Contact</h4>
+                <p style="color: rgba(255,255,255,0.7);">(555) 847-2900<br>info@greenvalley.com</p>
+            </div>
+            <div>
+                <h4 style="color: var(--lime); margin-bottom: 1rem;">Hours</h4>
+                <p style="color: rgba(255,255,255,0.7);">Mon-Fri: 7AM-6PM<br>Sat: 8AM-4PM<br>Sun: Closed</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
