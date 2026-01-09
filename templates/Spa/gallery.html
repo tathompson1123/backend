@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gallery - Serenity Spa & Salon</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --rose-gold: #B76E79; --deep-rose: #8B4C5C; --cream: #FAF7F2; --charcoal: #2C2C2C; --white: #FFFFFF; }
+        body { font-family: 'Montserrat', sans-serif; color: var(--charcoal); background: var(--cream); line-height: 1.7; }
+        .trust-banner { background: linear-gradient(90deg, var(--rose-gold), var(--deep-rose)); color: var(--white); padding: 0.75rem 0; overflow: hidden; }
+        .reviews-track { display: flex; animation: scroll 40s linear infinite; width: max-content; }
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .review-item { display: flex; align-items: center; gap: 0.75rem; padding: 0 2rem; font-size: 0.9rem; font-weight: 500; white-space: nowrap; }
+        .stars { color: #FFD700; font-size: 0.85rem; }
+        nav { background: rgba(255, 255, 255, 0.98); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 600; color: var(--rose-gold); letter-spacing: 2px; text-decoration: none; }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { color: var(--charcoal); text-decoration: none; font-weight: 500; transition: color 0.3s; }
+        .nav-links a:hover { color: var(--rose-gold); }
+        .nav-cta { background: var(--rose-gold); color: var(--white); padding: 0.875rem 2rem; border-radius: 30px; font-weight: 600; }
+        .page-header { background: linear-gradient(135deg, rgba(250, 247, 242, 0.95), rgba(245, 245, 245, 0.9)), url('https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1920'); background-size: cover; padding: 8rem 3rem 6rem; text-align: center; }
+        .page-header h1 { font-family: 'Cormorant Garamond', serif; font-size: 4.5rem; font-weight: 400; margin-bottom: 1.5rem; }
+        .page-header p { font-size: 1.2rem; max-width: 700px; margin: 0 auto; color: #666; }
+        .transformations-section { padding: 8rem 3rem; background: var(--white); }
+        .section-title { font-family: 'Cormorant Garamond', serif; font-size: 3.5rem; text-align: center; margin-bottom: 4rem; font-weight: 400; }
+        .before-after-grid { max-width: 1200px; margin: 0 auto 8rem; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4rem; }
+        .comparison-card { background: var(--cream); border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); }
+        .comparison-images { display: grid; grid-template-columns: 1fr 1fr; position: relative; }
+        .comparison-label { position: absolute; top: 1rem; background: rgba(0, 0, 0, 0.7); color: var(--white); padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+        .before-label { left: 1rem; }
+        .after-label { right: 1rem; background: var(--rose-gold); }
+        .comparison-images img { width: 100%; height: 300px; object-fit: cover; }
+        .comparison-caption { padding: 2rem; text-align: center; }
+        .comparison-caption h4 { font-family: 'Cormorant Garamond', serif; font-size: 1.8rem; margin-bottom: 0.5rem; font-weight: 500; }
+        .comparison-caption p { color: #666; }
+        .ambiance-section { padding: 8rem 3rem; background: var(--cream); }
+        .gallery-grid { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
+        .gallery-item { border-radius: 15px; overflow: hidden; position: relative; transition: transform 0.4s ease; }
+        .gallery-item:hover { transform: scale(1.05); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15); }
+        .gallery-item img { width: 100%; height: 350px; object-fit: cover; }
+        .gallery-overlay { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent); padding: 2rem 1.5rem 1.5rem; color: var(--white); opacity: 0; transition: opacity 0.3s ease; }
+        .gallery-item:hover .gallery-overlay { opacity: 1; }
+        .gallery-overlay h4 { font-family: 'Cormorant Garamond', serif; font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .cta-section { padding: 8rem 3rem; background: linear-gradient(135deg, var(--rose-gold), var(--deep-rose)); text-align: center; color: var(--white); }
+        .cta-section h2 { font-family: 'Cormorant Garamond', serif; font-size: 4rem; margin-bottom: 1.5rem; font-weight: 400; }
+        .cta-button { display: inline-block; background: var(--white); color: var(--rose-gold); padding: 1.5rem 4rem; border-radius: 30px; text-decoration: none; font-weight: 700; font-size: 1.1rem; }
+        footer { background: var(--charcoal); color: rgba(255,255,255,0.8); padding: 5rem 3rem 2rem; }
+        .footer-content { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4rem; margin-bottom: 3rem; }
+        .footer-brand { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 600; color: var(--rose-gold); }
+        .footer h4 { color: var(--rose-gold); margin-bottom: 1.5rem; }
+        .footer a { color: rgba(255,255,255,0.7); text-decoration: none; }
+        .footer-bottom { text-align: center; padding-top: 3rem; border-top: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); }
+        @media (max-width: 768px) { .before-after-grid, .gallery-grid, .footer-content { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item"><span>"Absolutely divine experience!" - Emily R.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span>"Best facial I've ever had" - Sarah M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span>"So relaxing" - Jessica T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span>"Amazing results!" - Amanda K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span>"Absolutely divine experience!" - Emily R.</span><span class="stars">★★★★★</span></div>
+        </div>
+    </div>
+
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">Serenity Spa</a>
+            <div class="nav-links">
+                <a href="treatments.html">Treatments</a>
+                <a href="packages.html">Packages</a>
+                <a href="gallery.html">Gallery</a>
+                <a href="contact.html">Contact</a>
+                <a href="contact.html" class="nav-cta">Book Now</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="page-header">
+        <h1>Our Gallery</h1>
+        <p>See the transformative results and serene atmosphere that make Serenity Spa the premier destination for beauty and wellness</p>
+    </section>
+
+    <section class="transformations-section">
+        <h2 class="section-title">Client Transformations</h2>
+        <div class="before-after-grid">
+            <div class="comparison-card">
+                <div class="comparison-images">
+                    <span class="comparison-label before-label">Before</span>
+                    <span class="comparison-label after-label">After</span>
+                    <img src="https://images.unsplash.com/photo-1515377905703-c4788e51af15?w=600" alt="Before skincare">
+                    <img src="https://images.unsplash.com/photo-1512290923902-8a9f81dc236c?w=600" alt="After skincare">
+                </div>
+                <div class="comparison-caption">
+                    <h4>Signature Facial Series</h4>
+                    <p>4 treatments over 6 weeks</p>
+                </div>
+            </div>
+
+            <div class="comparison-card">
+                <div class="comparison-images">
+                    <span class="comparison-label before-label">Before</span>
+                    <span class="comparison-label after-label">After</span>
+                    <img src="https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600" alt="Before hair color">
+                    <img src="https://images.unsplash.com/photo-1562322140-8baeececf3df?w=600" alt="After hair color">
+                </div>
+                <div class="comparison-caption">
+                    <h4>Balayage Highlights</h4>
+                    <p>Full color transformation</p>
+                </div>
+            </div>
+
+            <div class="comparison-card">
+                <div class="comparison-images">
+                    <span class="comparison-label before-label">Before</span>
+                    <span class="comparison-label after-label">After</span>
+                    <img src="https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=600" alt="Before anti-aging">
+                    <img src="https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=600" alt="After anti-aging">
+                </div>
+                <div class="comparison-caption">
+                    <h4>Anti-Aging Treatment</h4>
+                    <p>8-week transformation program</p>
+                </div>
+            </div>
+
+            <div class="comparison-card">
+                <div class="comparison-images">
+                    <span class="comparison-label before-label">Before</span>
+                    <span class="comparison-label after-label">After</span>
+                    <img src="https://images.unsplash.com/photo-1526045431048-f857369baa09?w=600" alt="Before styling">
+                    <img src="https://images.unsplash.com/photo-1560869713-7d0a29430803?w=600" alt="After styling">
+                </div>
+                <div class="comparison-caption">
+                    <h4>Cut & Style Makeover</h4>
+                    <p>Complete hair transformation</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="ambiance-section">
+        <h2 class="section-title">Our Serene Sanctuary</h2>
+        <div class="gallery-grid">
+            <div class="gallery-item">
+                <img src="https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800" alt="Treatment room">
+                <div class="gallery-overlay">
+                    <h4>Treatment Rooms</h4>
+                    <p>Tranquil private spaces</p>
+                </div>
+            </div>
+
+            <div class="gallery-item">
+                <img src="https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800" alt="Relaxation lounge">
+                <div class="gallery-overlay">
+                    <h4>Relaxation Lounge</h4>
+                    <p>Your peaceful retreat</p>
+                </div>
+            </div>
+
+            <div class="gallery-item">
+                <img src="https://images.unsplash.com/photo-1600948836101-f9ffda59d250?w=800" alt="Spa products">
+                <div class="gallery-overlay">
+                    <h4>Premium Products</h4>
+                    <p>Professional grade skincare</p>
+                </div>
+            </div>
+
+            <div class="gallery-item">
+                <img src="https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=800" alt="Massage therapy">
+                <div class="gallery-overlay">
+                    <h4>Massage Therapy</h4>
+                    <p>Healing therapeutic touch</p>
+                </div>
+            </div>
+
+            <div class="gallery-item">
+                <img src="https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=800" alt="Hair salon">
+                <div class="gallery-overlay">
+                    <h4>Hair Salon</h4>
+                    <p>Modern styling stations</p>
+                </div>
+            </div>
+
+            <div class="gallery-item">
+                <img src="https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=800" alt="Waiting area">
+                <div class="gallery-overlay">
+                    <h4>Welcome Area</h4>
+                    <p>Your journey begins here</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <div style="max-width: 800px; margin: 0 auto;">
+            <h2>Experience It Yourself</h2>
+            <p style="font-size: 1.3rem; margin-bottom: 3rem; opacity: 0.95;">Book your appointment today and discover why our clients keep coming back. First-time guests receive 20% off.</p>
+            <a href="contact.html" class="cta-button">Book Your Visit</a>
+        </div>
+    </section>
+
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">Serenity Spa</div>
+                <p style="color: rgba(255,255,255,0.7); margin-top: 1rem;">Your sanctuary for beauty and wellness.</p>
+            </div>
+            <div><h4>Quick Links</h4><p><a href="treatments.html">Treatments</a><br><a href="packages.html">Packages</a><br><a href="gallery.html">Gallery</a></p></div>
+            <div><h4>Contact</h4><p><a href="tel:555-555-5555">(555) 555-5555</a><br><a href="mailto:hello@serenityspa.com">hello@serenityspa.com</a></p></div>
+            <div><h4>Hours</h4><p>Mon-Fri: 9AM-8PM<br>Sat: 9AM-6PM<br>Sun: 10AM-5PM</p></div>
+        </div>
+        <div class="footer-bottom"><p>&copy; 2025 Serenity Spa & Salon. All rights reserved.</p></div>
+    </footer>
+</body>
+</html>
