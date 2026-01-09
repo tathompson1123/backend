@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serenity Spa & Salon - Luxury Beauty & Wellness</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --rose-gold: #B76E79;
+            --deep-rose: #8B4C5C;
+            --cream: #FAF7F2;
+            --sage: #A8B5A0;
+            --charcoal: #2C2C2C;
+            --white: #FFFFFF;
+            --light-grey: #F5F5F5;
+        }
+
+        body { 
+            font-family: 'Montserrat', sans-serif; 
+            color: var(--charcoal); 
+            background: var(--cream); 
+            line-height: 1.7; 
+        }
+
+        /* Trust Banner */
+        .trust-banner { 
+            background: linear-gradient(90deg, var(--rose-gold), var(--deep-rose)); 
+            color: var(--white); 
+            padding: 0.75rem 0; 
+            overflow: hidden; 
+        }
+        .reviews-track { 
+            display: flex; 
+            animation: scroll 40s linear infinite; 
+            width: max-content; 
+        }
+        @keyframes scroll { 
+            0% { transform: translateX(0); } 
+            100% { transform: translateX(-50%); } 
+        }
+        .review-item { 
+            display: flex; 
+            align-items: center; 
+            gap: 0.75rem; 
+            padding: 0 2rem; 
+            font-size: 0.9rem; 
+            font-weight: 500; 
+            white-space: nowrap; 
+            flex-shrink: 0; 
+        }
+        .stars { color: #FFD700; font-size: 0.85rem; letter-spacing: 2px; }
+
+        /* Navigation */
+        nav { 
+            background: rgba(255, 255, 255, 0.98); 
+            padding: 1.5rem 0; 
+            position: sticky; 
+            top: 0; 
+            z-index: 1000; 
+            box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+        }
+        .nav-container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 0 3rem; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .logo { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-size: 2rem; 
+            font-weight: 600; 
+            color: var(--rose-gold); 
+            letter-spacing: 2px;
+            text-decoration: none;
+        }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { 
+            color: var(--charcoal); 
+            text-decoration: none; 
+            font-weight: 500; 
+            font-size: 0.95rem;
+            letter-spacing: 0.5px;
+            transition: color 0.3s; 
+            position: relative;
+        }
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--rose-gold);
+            transition: width 0.3s ease;
+        }
+        .nav-links a:hover { color: var(--rose-gold); }
+        .nav-links a:hover::after { width: 100%; }
+        .nav-cta { 
+            background: var(--rose-gold); 
+            color: var(--white); 
+            padding: 0.875rem 2rem; 
+            border-radius: 30px; 
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(183, 110, 121, 0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .nav-cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(183, 110, 121, 0.4);
+        }
+        .nav-cta::after { display: none; }
+
+        /* Hero */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            background: linear-gradient(135deg, rgba(250, 247, 242, 0.95), rgba(245, 245, 245, 0.9)),
+                        url('https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1920') center/cover;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 60%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(183, 110, 121, 0.1) 0%, transparent 70%);
+            animation: float 20s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-30px) rotate(5deg); }
+        }
+        .hero-content { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 8rem 3rem; 
+            position: relative; 
+            z-index: 1; 
+            opacity: 0; 
+            animation: fadeInUp 1s ease-out 0.3s forwards; 
+        }
+        .hero-subtitle {
+            font-size: 1rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--rose-gold);
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+        .hero h1 { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-size: 5rem; 
+            font-weight: 400; 
+            line-height: 1.2; 
+            margin-bottom: 2rem;
+            color: var(--charcoal);
+        }
+        .hero h1 span { 
+            color: var(--rose-gold); 
+            font-weight: 600;
+            font-style: italic;
+        }
+        .hero p { 
+            font-size: 1.2rem; 
+            margin-bottom: 3rem; 
+            max-width: 600px;
+            color: var(--charcoal);
+            line-height: 1.8;
+        }
+        .hero-cta {
+            display: inline-flex;
+            gap: 1.5rem;
+        }
+        .btn-primary { 
+            background: var(--rose-gold); 
+            color: var(--white); 
+            padding: 1.25rem 3rem; 
+            border-radius: 30px; 
+            text-decoration: none; 
+            font-weight: 600; 
+            display: inline-block;
+            letter-spacing: 0.5px;
+            box-shadow: 0 8px 25px rgba(183, 110, 121, 0.3);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        .btn-primary:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        .btn-primary:hover { 
+            transform: translateY(-3px); 
+            box-shadow: 0 12px 35px rgba(183, 110, 121, 0.4); 
+        }
+        .btn-secondary {
+            background: transparent;
+            color: var(--charcoal);
+            padding: 1.25rem 3rem;
+            border: 2px solid var(--charcoal);
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-block;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+        .btn-secondary:hover {
+            background: var(--charcoal);
+            color: var(--white);
+            transform: translateY(-3px);
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Divider */
+        .divider {
+            height: 80px;
+            background: var(--cream);
+            position: relative;
+        }
+        .divider svg {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 80px;
+        }
+
+        /* Services Preview */
+        .services-preview { 
+            padding: 8rem 3rem; 
+            background: var(--white); 
+            position: relative;
+        }
+        .section-header { 
+            text-align: center; 
+            margin-bottom: 5rem;
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        .section-header.animate { 
+            opacity: 1; 
+            transform: translateY(0); 
+            transition: opacity 0.8s ease-out, transform 0.8s ease-out; 
+        }
+        .section-label {
+            font-size: 0.9rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--rose-gold);
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+        .section-title { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-size: 3.5rem; 
+            font-weight: 400; 
+            color: var(--charcoal);
+            margin-bottom: 1.5rem;
+        }
+        .section-description {
+            font-size: 1.1rem;
+            color: #666;
+            max-width: 700px;
+            margin: 0 auto;
+            line-height: 1.8;
+        }
+
+        .services-grid { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 3rem; 
+            max-width: 1400px; 
+            margin: 0 auto; 
+        }
+        .service-card { 
+            background: var(--cream); 
+            border-radius: 20px; 
+            overflow: hidden;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0;
+            transform: translateY(50px);
+            position: relative;
+        }
+        .service-card.animate { 
+            opacity: 1; 
+            transform: translateY(0); 
+            transition: opacity 0.8s ease-out, transform 0.8s ease-out; 
+        }
+        .service-card:nth-child(1).animate { transition-delay: 0.1s; }
+        .service-card:nth-child(2).animate { transition-delay: 0.2s; }
+        .service-card:nth-child(3).animate { transition-delay: 0.3s; }
+        .service-card:hover { 
+            transform: translateY(-15px); 
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15); 
+        }
+        .service-image { 
+            height: 280px; 
+            overflow: hidden; 
+            position: relative;
+        }
+        .service-image::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(to bottom, transparent 40%, rgba(183, 110, 121, 0.3));
+        }
+        .service-image img { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .service-card:hover .service-image img { 
+            transform: scale(1.1); 
+        }
+        .service-content { padding: 2.5rem; text-align: center; }
+        .service-card h3 { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-size: 2rem; 
+            color: var(--charcoal); 
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+        .service-card p { 
+            margin-bottom: 1.5rem; 
+            color: #666; 
+            line-height: 1.8;
+        }
+        .price-tag { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-size: 1.8rem; 
+            font-weight: 600; 
+            color: var(--rose-gold); 
+            margin-bottom: 1.5rem;
+            display: block;
+        }
+        .service-link {
+            color: var(--rose-gold);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            position: relative;
+            display: inline-block;
+        }
+        .service-link::after {
+            content: '→';
+            margin-left: 0.5rem;
+            transition: margin-left 0.3s ease;
+        }
+        .service-link:hover::after {
+            margin-left: 1rem;
+        }
+
+        /* Why Choose Us */
+        .why-choose { 
+            padding: 8rem 3rem; 
+            background: linear-gradient(135deg, var(--cream) 0%, var(--light-grey) 100%);
+            position: relative;
+        }
+        .benefits-grid { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            margin-top: 5rem;
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 4rem; 
+        }
+        .benefit-item { 
+            text-align: center;
+            opacity: 0;
+            transform: translateY(50px);
+            background: var(--white);
+            padding: 3rem 2rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            transition: all 0.4s ease;
+        }
+        .benefit-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+        }
+        .benefit-item.animate { 
+            opacity: 1; 
+            transform: translateY(0); 
+            transition: opacity 0.8s ease-out, transform 0.8s ease-out; 
+        }
+        .benefit-item:nth-child(1).animate { transition-delay: 0.1s; }
+        .benefit-item:nth-child(2).animate { transition-delay: 0.3s; }
+        .benefit-item:nth-child(3).animate { transition-delay: 0.5s; }
+        .benefit-icon { 
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--rose-gold), var(--deep-rose));
+            color: var(--white);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin: 0 auto 1.5rem;
+            box-shadow: 0 8px 20px rgba(183, 110, 121, 0.3);
+            font-family: 'Cormorant Garamond', serif;
+            font-weight: 600;
+        }
+        .benefit-item h3 { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-size: 1.8rem; 
+            color: var(--charcoal); 
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+        .benefit-item p { 
+            color: #666; 
+            line-height: 1.8; 
+            font-size: 1rem;
+        }
+
+        /* Testimonials */
+        .testimonials { 
+            padding: 8rem 3rem; 
+            background: var(--white);
+        }
+        .testimonial-slider {
+            max-width: 900px;
+            margin: 5rem auto 0;
+            position: relative;
+        }
+        .testimonial-card {
+            background: var(--cream);
+            padding: 4rem 3rem;
+            border-radius: 25px;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+        }
+        .testimonial-card::before {
+            content: '"';
+            position: absolute;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 8rem;
+            color: var(--rose-gold);
+            opacity: 0.2;
+            font-family: 'Cormorant Garamond', serif;
+            line-height: 1;
+        }
+        .testimonial-stars {
+            color: #FFD700;
+            font-size: 1.5rem;
+            letter-spacing: 5px;
+            margin-bottom: 2rem;
+        }
+        .testimonial-text {
+            font-size: 1.2rem;
+            line-height: 1.9;
+            color: var(--charcoal);
+            margin-bottom: 2rem;
+            font-style: italic;
+        }
+        .testimonial-author {
+            font-weight: 600;
+            color: var(--rose-gold);
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+        }
+        .testimonial-service {
+            color: #999;
+            font-size: 0.95rem;
+            margin-top: 0.5rem;
+        }
+
+        /* CTA Section */
+        .cta-section { 
+            padding: 8rem 3rem; 
+            background: linear-gradient(135deg, var(--rose-gold) 0%, var(--deep-rose) 100%); 
+            text-align: center; 
+            color: var(--white); 
+            position: relative;
+            overflow: hidden;
+        }
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -20%;
+            width: 100%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            animation: float 15s ease-in-out infinite;
+        }
+        .cta-content {
+            position: relative;
+            z-index: 1;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .cta-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1.5rem;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+        }
+        .cta-section h2 { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-size: 4rem; 
+            margin-bottom: 1.5rem;
+            font-weight: 400;
+            opacity: 0; 
+            transform: translateY(30px); 
+        }
+        .cta-section h2.animate { 
+            opacity: 1; 
+            transform: translateY(0); 
+            transition: opacity 0.8s ease-out, transform 0.8s ease-out 0.2s; 
+        }
+        .cta-subtitle {
+            font-size: 1.3rem;
+            margin-bottom: 3rem;
+            opacity: 0.95;
+            line-height: 1.8;
+        }
+        .cta-button {
+            display: inline-block;
+            background: var(--white);
+            color: var(--rose-gold);
+            padding: 1.5rem 4rem;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+            transition: all 0.4s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        .cta-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Footer */
+        footer { 
+            background: var(--charcoal); 
+            color: rgba(255,255,255,0.8); 
+            padding: 5rem 3rem 2rem; 
+        }
+        .footer-content { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 4rem;
+            margin-bottom: 3rem;
+        }
+        .footer-brand { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-size: 2rem; 
+            font-weight: 600; 
+            color: var(--rose-gold); 
+            letter-spacing: 2px;
+            margin-bottom: 1rem;
+        }
+        .footer-description {
+            line-height: 1.8;
+            color: rgba(255,255,255,0.7);
+        }
+        .footer h4 {
+            color: var(--rose-gold);
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+        }
+        .footer a {
+            color: rgba(255,255,255,0.7);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        .footer a:hover {
+            color: var(--rose-gold);
+        }
+        .footer-bottom {
+            text-align: center;
+            padding-top: 3rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.5);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 3rem; }
+            .services-grid, .benefits-grid, .footer-content { grid-template-columns: 1fr; }
+            .hero-cta { flex-direction: column; gap: 1rem; }
+            .nav-links { display: none; } /* Add hamburger menu in production */
+        }
+    </style>
+</head>
+<body>
+    <!-- Trust Banner -->
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item"><span class="review-text">"Absolutely divine experience!" - Emily R.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best facial I've ever had" - Sarah M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"So relaxing and rejuvenating" - Jessica T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"My skin has never looked better!" - Amanda K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Pure luxury and bliss" - Maria S.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Absolutely divine experience!" - Emily R.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best facial I've ever had" - Sarah M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"So relaxing and rejuvenating" - Jessica T.</span><span class="stars">★★★★★</span></div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">Serenity Spa</a>
+            <div class="nav-links">
+                <a href="treatments.html">Treatments</a>
+                <a href="packages.html">Packages</a>
+                <a href="gallery.html">Gallery</a>
+                <a href="contact.html">Contact</a>
+                <a href="contact.html" class="nav-cta">Book Now</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-subtitle">Luxury Beauty & Wellness</div>
+            <h1>Your Sanctuary for<br><span>Beauty & Relaxation</span></h1>
+            <p>Experience transformative treatments in a serene atmosphere designed to restore balance, enhance beauty, and renew your spirit.</p>
+            <div class="hero-cta">
+                <a href="contact.html" class="btn-primary">Book Your Treatment</a>
+                <a href="treatments.html" class="btn-secondary">View Services</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services Preview -->
+    <section class="services-preview">
+        <div class="section-header">
+            <div class="section-label">Our Specialties</div>
+            <h2 class="section-title">Signature Treatments</h2>
+            <p class="section-description">Indulge in our carefully curated selection of premium services, each designed to bring out your natural radiance.</p>
+        </div>
+
+        <div class="services-grid">
+            <div class="service-card">
+                <div class="service-image">
+                    <img src="https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800" alt="Facial Treatments">
+                </div>
+                <div class="service-content">
+                    <h3>Facial Treatments</h3>
+                    <p>Customized skincare treatments using premium products to address your unique skin concerns and reveal a luminous complexion.</p>
+                    <span class="price-tag">From $125</span>
+                    <a href="treatments.html" class="service-link">Explore Facials</a>
+                </div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-image">
+                    <img src="https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=800" alt="Massage Therapy">
+                </div>
+                <div class="service-content">
+                    <h3>Massage Therapy</h3>
+                    <p>Melt away tension with our therapeutic massage services designed to restore balance and promote deep relaxation.</p>
+                    <span class="price-tag">From $95</span>
+                    <a href="treatments.html" class="service-link">View Massages</a>
+                </div>
+            </div>
+
+            <div class="service-card">
+                <div class="service-image">
+                    <img src="https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=800" alt="Hair Services">
+                </div>
+                <div class="service-content">
+                    <h3>Hair Services</h3>
+                    <p>From precision cuts to stunning color transformations, our expert stylists create looks that enhance your natural beauty.</p>
+                    <span class="price-tag">From $75</span>
+                    <a href="treatments.html" class="service-link">Discover Styles</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why Choose Us -->
+    <section class="why-choose">
+        <div class="section-header">
+            <div class="section-label">The Serenity Difference</div>
+            <h2 class="section-title">Why Our Clients Love Us</h2>
+            <p class="section-description">We're dedicated to providing an exceptional experience that goes beyond beauty—it's about wellness, confidence, and self-care.</p>
+        </div>
+
+        <div class="benefits-grid">
+            <div class="benefit-item">
+                <div class="benefit-icon">E</div>
+                <h3>Expert Therapists</h3>
+                <p>Our licensed professionals bring years of expertise and passion to every treatment, ensuring you receive the highest quality care.</p>
+            </div>
+
+            <div class="benefit-item">
+                <div class="benefit-icon">P</div>
+                <h3>Premium Products</h3>
+                <p>We use only the finest professional-grade products and cutting-edge techniques to deliver exceptional, lasting results.</p>
+            </div>
+
+            <div class="benefit-item">
+                <div class="benefit-icon">S</div>
+                <h3>Serene Atmosphere</h3>
+                <p>Escape the everyday in our tranquil sanctuary designed to soothe your senses and promote complete relaxation.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="testimonials">
+        <div class="section-header">
+            <div class="section-label">Client Love</div>
+            <h2 class="section-title">What Our Clients Say</h2>
+        </div>
+
+        <div class="testimonial-slider">
+            <div class="testimonial-card">
+                <div class="testimonial-stars">★★★★★</div>
+                <p class="testimonial-text">The signature facial was absolutely transformative. My skin has never looked more radiant, and the entire experience was pure bliss. The attention to detail and personalized care made me feel truly pampered.</p>
+                <div class="testimonial-author">Emily Richardson</div>
+                <div class="testimonial-service">Signature Facial Treatment</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <div class="cta-content">
+            <div class="cta-badge">SPECIAL OFFER</div>
+            <h2>First Visit? Save 20%</h2>
+            <p class="cta-subtitle">Experience the Serenity difference with 20% off your first treatment. Book today and begin your journey to radiant beauty and wellness.</p>
+            <a href="contact.html" class="cta-button">Claim Your Discount</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">Serenity Spa</div>
+                <p class="footer-description">Your sanctuary for beauty, wellness, and relaxation in the heart of the city.</p>
+            </div>
+            <div>
+                <h4>Quick Links</h4>
+                <p><a href="treatments.html">All Treatments</a><br>
+                <a href="packages.html">Spa Packages</a><br>
+                <a href="gallery.html">Gallery</a><br>
+                <a href="contact.html">Book Appointment</a></p>
+            </div>
+            <div>
+                <h4>Contact</h4>
+                <p><a href="tel:555-555-5555">(555) 555-5555</a><br>
+                <a href="mailto:hello@serenityspa.com">hello@serenityspa.com</a><br>
+                123 Wellness Lane<br>
+                Seattle, WA 98101</p>
+            </div>
+            <div>
+                <h4>Hours</h4>
+                <p>Monday - Friday: 9AM - 8PM<br>
+                Saturday: 9AM - 6PM<br>
+                Sunday: 10AM - 5PM</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 Serenity Spa & Salon. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Intersection Observer for scroll animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('animate');
+                }
+            });
+        }, observerOptions);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const animateOnScroll = document.querySelectorAll('.service-card, .section-header, .cta-section h2, .benefit-item');
+            animateOnScroll.forEach(el => observer.observe(el));
+        });
+    </script>
+</body>
+</html>
