@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Us - Green Valley Landscaping</title>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --forest: #1a3a1a;
+            --lime: #7cb342;
+            --green: #2d5016;
+            --cream: #faf8f3;
+        }
+
+        body { font-family: 'Archivo', sans-serif; color: var(--forest); line-height: 1.6; }
+
+        /* Trust Banner */
+        .trust-banner { background: var(--lime); color: white; padding: 1rem 0; overflow: hidden; }
+        .reviews-track { display: flex; animation: scroll 40s linear infinite; width: max-content; }
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .review-item { display: flex; align-items: center; gap: 0.5rem; padding: 0 1.5rem; font-size: 0.9rem; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+        .stars { color: #fbbf24; font-size: 0.85rem; letter-spacing: 1px; }
+
+        /* Nav */
+        nav { background: rgba(250, 248, 243, 0.98); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-family: 'Lora', serif; font-size: 1.8rem; font-weight: 700; color: var(--forest); text-decoration: none; }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { color: var(--forest); text-decoration: none; font-weight: 500; transition: color 0.3s; }
+        .nav-links a:hover { color: var(--lime); }
+        .nav-cta { background: var(--lime); color: white; padding: 0.875rem 2rem; border-radius: 50px; font-weight: 600; }
+
+        /* Contact Hero */
+        .contact-hero {
+            background: linear-gradient(135deg, #7cb342 0%, #2d5016 100%);
+            color: white;
+            padding: 6rem 3rem 4rem;
+            text-align: center;
+        }
+        .offer-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1.5rem;
+        }
+        .contact-hero h1 {
+            font-family: 'Lora', serif;
+            font-size: 4.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .contact-hero p {
+            font-size: 1.4rem;
+            max-width: 700px;
+            margin: 0 auto 2rem;
+            opacity: 0.95;
+        }
+        .hero-features {
+            display: flex;
+            gap: 3rem;
+            justify-content: center;
+            margin-top: 3rem;
+            font-size: 1.1rem;
+        }
+        .hero-feature {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .hero-feature::before {
+            content: "✓";
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        /* Contact Section */
+        .contact-section {
+            padding: 8rem 3rem;
+            background: var(--cream);
+        }
+        .contact-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5rem;
+        }
+
+        /* Form */
+        .contact-form {
+            background: white;
+            padding: 3rem;
+            border-radius: 25px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+        .form-title {
+            font-family: 'Lora', serif;
+            font-size: 2.5rem;
+            color: var(--forest);
+            margin-bottom: 1.5rem;
+        }
+        .form-subtitle {
+            color: #666;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--forest);
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 1rem 1.25rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-family: 'Archivo', sans-serif;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--lime);
+        }
+        .form-group textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+        .submit-button {
+            width: 100%;
+            background: var(--lime);
+            color: white;
+            padding: 1.25rem 2rem;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .submit-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(124, 179, 66, 0.4);
+        }
+        .form-note {
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        /* Contact Info */
+        .contact-info h3 {
+            font-family: 'Lora', serif;
+            font-size: 2rem;
+            color: var(--forest);
+            margin-bottom: 1.5rem;
+        }
+        .info-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+        .info-card h4 {
+            color: var(--lime);
+            font-size: 1.2rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .info-card p {
+            color: #555;
+            font-size: 1.05rem;
+            line-height: 1.8;
+        }
+        .info-card a {
+            color: var(--forest);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .info-card a:hover {
+            color: var(--lime);
+        }
+
+        .why-choose {
+            background: var(--forest);
+            color: white;
+            padding: 2rem;
+            border-radius: 20px;
+            margin-top: 2rem;
+        }
+        .why-choose h4 {
+            color: var(--lime);
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+        }
+        .why-choose ul {
+            list-style: none;
+        }
+        .why-choose li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        .why-choose li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--lime);
+            font-weight: bold;
+        }
+
+        /* Map Section */
+        .map-section {
+            padding: 0;
+            height: 400px;
+            background: #e0e0e0;
+        }
+        .map-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #e0e0e0, #c0c0c0);
+            font-size: 1.5rem;
+            color: #666;
+        }
+
+        /* Footer */
+        footer { background: var(--forest); color: white; padding: 5rem 3rem 2rem; }
+        .footer-content { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4rem; }
+        .footer-brand { font-family: 'Lora', serif; font-size: 2rem; font-weight: 700; color: var(--lime); }
+
+        @media (max-width: 768px) {
+            .contact-hero h1 { font-size: 3rem; }
+            .contact-container { grid-template-columns: 1fr; gap: 3rem; }
+            .hero-features { flex-direction: column; gap: 1rem; }
+            .footer-content { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Reviews -->
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item"><span class="review-text">"Amazing transformation!" - Jennifer M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Professional work" - Robert T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best in area" - Maria S.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Exceeded expectations!" - David K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Beautiful results" - Lisa P.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Amazing transformation!" - Jennifer M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Professional work" - Robert T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best in area" - Maria S.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Exceeded expectations!" - David K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Beautiful results" - Lisa P.</span><span class="stars">★★★★★</span></div>
+        </div>
+    </div>
+
+    <!-- Nav -->
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">Green Valley Landscaping</a>
+            <div class="nav-links">
+                <a href="services.html">Services</a>
+                <a href="recent-work.html">Recent Work</a>
+                <a href="contact.html">Contact</a>
+                <a href="contact.html" class="nav-cta">Book Here</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Contact Hero -->
+    <section class="contact-hero">
+        <div class="offer-badge">🎉 SPECIAL OFFER</div>
+        <h1>Get 25% Off Your First Service</h1>
+        <p>Transform your outdoor space this season. Fill out the form below to claim your discount and receive a free consultation!</p>
+        <div class="hero-features">
+            <div class="hero-feature">Free On-Site Consultation</div>
+            <div class="hero-feature">Same-Day Quotes</div>
+            <div class="hero-feature">No Obligation</div>
+        </div>
+    </section>
+
+    <!-- Contact Form -->
+    <section class="contact-section">
+        <div class="contact-container">
+            <!-- Form -->
+            <div class="contact-form">
+                <h2 class="form-title">Request Your Free Quote</h2>
+                <p class="form-subtitle">Tell us about your project and we'll get back to you within 24 hours</p>
+                
+                <form action="#" method="POST">
+                    <div class="form-group">
+                        <label for="name">Full Name *</label>
+                        <input type="text" id="name" name="name" required placeholder="John Smith">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Email Address *</label>
+                        <input type="email" id="email" name="email" required placeholder="john@example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">Phone Number *</label>
+                        <input type="tel" id="phone" name="phone" required placeholder="(555) 123-4567">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="address">Property Address</label>
+                        <input type="text" id="address" name="address" placeholder="123 Main St, Seattle, WA">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="service">Service Interested In *</label>
+                        <select id="service" name="service" required>
+                            <option value="">Select a service...</option>
+                            <option value="landscape-design">Landscape Design</option>
+                            <option value="lawn-maintenance">Lawn Maintenance</option>
+                            <option value="garden-design">Garden Design</option>
+                            <option value="hardscaping">Hardscaping</option>
+                            <option value="tree-services">Tree Services</option>
+                            <option value="irrigation">Irrigation Systems</option>
+                            <option value="other">Other / Not Sure</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="message">Tell Us About Your Project *</label>
+                        <textarea id="message" name="message" required placeholder="Describe your vision, timeline, budget, or any specific requirements..."></textarea>
+                    </div>
+
+                    <button type="submit" class="submit-button">Claim My 25% Discount</button>
+                    <p class="form-note">By submitting, you agree to receive communications from Green Valley Landscaping</p>
+                </form>
+            </div>
+
+            <!-- Contact Info -->
+            <div class="contact-info">
+                <h3>Get In Touch</h3>
+                
+                <div class="info-card">
+                    <h4>📞 Phone</h4>
+                    <p><a href="tel:5558472900">(555) 847-2900</a><br>
+                    Monday - Friday: 7AM - 6PM<br>
+                    Saturday: 8AM - 4PM<br>
+                    Emergency Service Available</p>
+                </div>
+
+                <div class="info-card">
+                    <h4>✉️ Email</h4>
+                    <p><a href="/cdn-cgi/l/email-protection#b7ded9d1d8f7d0c5d2d2d9c1d6dbdbd2ce99d4d8da"><span class="__cf_email__" data-cfemail="a9c0c7cfc6e9cedbccccc7dfc8c5c5ccd087cac6c4">[email&#160;protected]</span></a><br>
+                    We respond within 24 hours</p>
+                </div>
+
+                <div class="info-card">
+                    <h4>📍 Service Area</h4>
+                    <p>Serving Greater Seattle Area<br>
+                    Bellevue, Redmond, Kirkland,<br>
+                    Sammamish, Issaquah & More</p>
+                </div>
+
+                <div class="why-choose">
+                    <h4>Why Clients Choose Us</h4>
+                    <ul>
+                        <li>15+ Years of Experience</li>
+                        <li>Licensed & Fully Insured</li>
+                        <li>100% Satisfaction Guarantee</li>
+                        <li>Eco-Friendly Practices</li>
+                        <li>Competitive Pricing</li>
+                        <li>Award-Winning Results</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Map -->
+    <section class="map-section">
+        <div class="map-placeholder">
+            <p>📍 Service Area Map</p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">Green Valley Landscaping</div>
+                <p style="color: rgba(255,255,255,0.7); margin-top: 1rem;">Creating beautiful outdoor spaces</p>
+            </div>
+            <div>
+                <h4 style="color: var(--lime); margin-bottom: 1rem;">Services</h4>
+                <p style="color: rgba(255,255,255,0.7);">Landscape Design<br>Lawn Maintenance<br>Tree Service</p>
+            </div>
+            <div>
+                <h4 style="color: var(--lime); margin-bottom: 1rem;">Contact</h4>
+                <p style="color: rgba(255,255,255,0.7);">(555) 847-2900<br><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7d14131b123d1a0f1818130b1c11111804531e1210">[email&#160;protected]</a></p>
+            </div>
