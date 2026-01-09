@@ -35,9 +35,23 @@ function buildVisualSupremacyPrompt({
   
   // LOAD ACTUAL TEMPLATE HTML FILES
    const templateInfo = TEMPLATES[recommendedTemplateKey];
-  const templateDir = path.join(__dirname, templateInfo.folder);
+  // Try to find templates in the outputs directory first
+const outputsTemplateDir = path.join(__dirname, '..', 'outputs', templateInfo.folder);
+const localTemplateDir = path.join(__dirname, templateInfo.folder);
+
+// Check which path exists
+let templateDir;
+if (fs.existsSync(outputsTemplateDir)) {
+  templateDir = outputsTemplateDir;
+} else if (fs.existsSync(localTemplateDir)) {
+  templateDir = localTemplateDir;
+} else {
+  console.log(`⚠️ Template directory not found for ${recommendedTemplateKey}`);
+  templateDir = null;
+}
   
   let templateFiles = {};
+if (templateDir) {  // ADD THIS CHECK
   try {
     // Read all HTML files from template directory
     const files = fs.readdirSync(templateDir).filter(f => f.endsWith('.html'));
@@ -50,8 +64,8 @@ function buildVisualSupremacyPrompt({
     });
   } catch (error) {
     console.error('Error loading template files:', error);
-    // Continue without template files - will generate from scratch
-  }
+    }
+}  
   
   // Calculate RGB values for color effects
   const hexToRgb = (hex) => {
