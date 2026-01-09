@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detailing Services - Precision Auto Detailing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --red: #DC143C;
+            --dark-red: #8B0000;
+            --black: #0a0a0a;
+            --grey: #2a2a2a;
+            --light-grey: #4a4a4a;
+            --white: #ffffff;
+        }
+
+        body { font-family: 'Rajdhani', sans-serif; color: var(--white); background: var(--black); line-height: 1.6; }
+
+        /* Trust Banner */
+        .trust-banner { background: var(--red); color: var(--white); padding: 1rem 0; overflow: hidden; }
+        .reviews-track { display: flex; animation: scroll 40s linear infinite; width: max-content; }
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .review-item { display: flex; align-items: center; gap: 0.5rem; padding: 0 1.5rem; font-size: 0.9rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+        .stars { color: #FFD700; font-size: 0.85rem; letter-spacing: 1px; }
+
+        /* Nav */
+        nav { background: rgba(10, 10, 10, 0.95); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; backdrop-filter: blur(10px); border-bottom: 1px solid rgba(220, 20, 60, 0.2); }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-family: 'Montserrat', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--red); text-transform: uppercase; letter-spacing: 2px; text-decoration: none; }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { color: var(--white); text-decoration: none; font-weight: 600; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; transition: color 0.3s; }
+        .nav-links a:hover { color: var(--red); }
+        .nav-cta { background: var(--red); color: var(--white); padding: 0.875rem 2rem; border-radius: 50px; font-weight: 700; }
+
+        /* Page Header */
+        .page-header {
+            background: linear-gradient(135deg, rgba(10, 10, 10, 0.85), rgba(42, 42, 42, 0.75)), url('https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=1920');
+            background-size: cover;
+            background-position: center;
+            color: var(--white);
+            padding: 8rem 3rem 6rem;
+            text-align: center;
+        }
+        .page-header h1 { font-family: 'Montserrat', sans-serif; font-size: 4.5rem; font-weight: 800; margin-bottom: 1.5rem; text-transform: uppercase; letter-spacing: 3px; }
+        .page-header p { font-size: 1.4rem; max-width: 800px; margin: 0 auto; opacity: 0.95; }
+
+        /* Services Section */
+        .services-section { padding: 8rem 3rem; background: var(--grey); }
+        .section-title { font-family: 'Montserrat', sans-serif; font-size: 3.5rem; font-weight: 800; text-align: center; color: var(--white); margin-bottom: 4rem; text-transform: uppercase; letter-spacing: 2px; }
+        
+        .services-grid { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 3rem; }
+        
+        .service-card {
+            background: var(--black);
+            border: 2px solid rgba(220, 20, 60, 0.3);
+            border-radius: 20px;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+        }
+        .service-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 60px rgba(220, 20, 60, 0.4);
+            border-color: var(--red);
+        }
+        .service-image {
+            height: 300px;
+            overflow: hidden;
+            position: relative;
+        }
+        .service-image::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(to bottom, transparent, rgba(10,10,10,0.9));
+        }
+        .service-image img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
+        .service-card:hover .service-image img { transform: scale(1.1); }
+        
+        .service-content { padding: 2.5rem; }
+        .service-card h3 { font-family: 'Montserrat', sans-serif; font-size: 2rem; color: var(--white); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px; }
+        .service-card p { margin-bottom: 1.5rem; color: rgba(255,255,255,0.8); line-height: 1.8; }
+        .price-tag { font-family: 'Montserrat', sans-serif; font-size: 2rem; font-weight: 800; color: var(--red); margin-bottom: 1.5rem; display: block; }
+        
+        .service-features {
+            list-style: none;
+            margin-bottom: 2rem;
+            padding-left: 0;
+        }
+        .service-features li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .service-features li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--red);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        
+        .book-button {
+            display: block;
+            background: var(--red);
+            color: var(--white);
+            text-align: center;
+            padding: 1.25rem 2rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 800;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .book-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(220, 20, 60, 0.5);
+        }
+
+        /* Add-Ons Section */
+        .addons-section { padding: 8rem 3rem; background: var(--black); }
+        .addons-grid {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+        }
+        .addon-card {
+            background: var(--grey);
+            padding: 2rem;
+            border-radius: 15px;
+            border: 1px solid rgba(220, 20, 60, 0.2);
+            text-align: center;
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+        .addon-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--red);
+        }
+        .addon-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .addon-card h4 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .addon-price {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--red);
+            margin-top: 1rem;
+        }
+
+        /* Before/After Section */
+        .before-after-section { padding: 8rem 3rem; background: var(--grey); }
+        .comparison-grid {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 3rem;
+        }
+        .comparison-item {
+            background: var(--black);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 2px solid rgba(220, 20, 60, 0.2);
+        }
+        .comparison-images {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            position: relative;
+        }
+        .comparison-label {
+            position: absolute;
+            top: 1rem;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .before-label {
+            left: 1rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        .after-label {
+            right: 1rem;
+            color: var(--red);
+        }
+        .comparison-images img {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+        }
+        .comparison-caption {
+            padding: 1.5rem;
+            text-align: center;
+        }
+        .comparison-caption h4 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        /* CTA Section */
+        .cta-section {
+            padding: 8rem 3rem;
+            background: linear-gradient(135deg, var(--red) 0%, var(--dark-red) 100%);
+            text-align: center;
+            color: var(--white);
+        }
+        .cta-section h2 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 3.5rem;
+            margin-bottom: 1.5rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .cta-section p {
+            font-size: 1.3rem;
+            margin-bottom: 2rem;
+            opacity: 0.95;
+        }
+        .cta-button {
+            display: inline-block;
+            background: var(--white);
+            color: var(--red);
+            padding: 1.5rem 4rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 800;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Footer */
+        footer { background: var(--black); color: var(--white); padding: 5rem 3rem 2rem; }
+        .footer-content { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4rem; }
+        .footer-brand { font-family: 'Montserrat', sans-serif; font-size: 2rem; font-weight: 800; color: var(--red); text-transform: uppercase; letter-spacing: 2px; }
+
+        @media (max-width: 768px) {
+            .page-header h1 { font-size: 3rem; }
+            .services-grid, .comparison-grid { grid-template-columns: 1fr; }
+            .addons-grid { grid-template-columns: 1fr; }
+            .footer-content { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Reviews -->
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item"><span class="review-text">"Best detail ever!" - Mike T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Looks brand new!" - Sarah K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Incredible work" - James R.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Worth every penny!" - Lisa M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Highly recommend" - David P.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best detail ever!" - Mike T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Looks brand new!" - Sarah K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Incredible work" - James R.</span><span class="stars">★★★★★</span></div>
+        </div>
+    </div>
+
+    <!-- Nav -->
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">Precision Auto</a>
+            <div class="nav-links">
+                <a href="ceramic-coatings.html">Ceramic Coatings</a>
+                <a href="detailing.html">Detailing</a>
+                <a href="gift-cards.html">Gift Cards</a>
+                <a href="gallery.html">Gallery</a>
+                <a href="auto-contact.html">Contact</a>
+                <a href="auto-contact.html" class="nav-cta">Book Now</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <section class="page-header">
+        <h1>Detailing Services</h1>
+        <p>Professional auto detailing packages designed to restore and protect your vehicle's appearance inside and out</p>
+    </section>
+
+    <!-- Services Grid -->
+    <section class="services-section">
+        <h2 class="section-title">Our Detailing Packages</h2>
+        <div class="services-grid">
+            
+            <!-- Exterior Detail -->
+            <div class="service-card">
+                <div class="service-image">
+                    <img src="https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800" alt="Exterior Detail">
+                </div>
+                <div class="service-content">
+                    <h3>Exterior Detail</h3>
+                    <span class="price-tag">From $149</span>
+                    <p>Complete exterior cleaning and protection to restore your vehicle's shine and luster.</p>
+                    <ul class="service-features">
+                        <li>Hand wash and dry</li>
+                        <li>Clay bar treatment</li>
+                        <li>Polish and wax application</li>
+                        <li>Wheel and tire cleaning</li>
+                        <li>Window cleaning (exterior)</li>
+                        <li>Trim restoration</li>
+                    </ul>
+                    <a href="auto-contact.html" class="book-button">Book Exterior Detail</a>
+                </div>
+            </div>
+
+            <!-- Interior Detail -->
+            <div class="service-card">
+                <div class="service-image">
+                    <img src="https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=800" alt="Interior Detail">
+                </div>
+                <div class="service-content">
+                    <h3>Interior Detail</h3>
+                    <span class="price-tag">From $179</span>
+                    <p>Deep clean and restoration of your vehicle's interior surfaces and upholstery.</p>
+                    <ul class="service-features">
+                        <li>Vacuum all surfaces</li>
+                        <li>Leather cleaning & conditioning</li>
+                        <li>Fabric/carpet shampooing</li>
+                        <li>Dashboard and console cleaning</li>
+                        <li>Window cleaning (interior)</li>
+                        <li>Odor elimination treatment</li>
+                    </ul>
+                    <a href="auto-contact.html" class="book-button">Book Interior Detail</a>
+                </div>
+            </div>
+
+            <!-- Full Detail -->
+            <div class="service-card">
+                <div class="service-image">
+                    <img src="https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=800" alt="Full Detail">
+                </div>
+                <div class="service-content">
+                    <h3>Full Detail</h3>
+                    <span class="price-tag">From $299</span>
+                    <p>The complete package - comprehensive interior and exterior detailing for showroom results.</p>
+                    <ul class="service-features">
+                        <li>Everything in Exterior Detail</li>
+                        <li>Everything in Interior Detail</li>
+                        <li>Engine bay cleaning</li>
+                        <li>Door jamb cleaning</li>
+                        <li>Headlight restoration</li>
+                        <li>Premium tire shine</li>
+                    </ul>
+                    <a href="auto-contact.html" class="book-button">Book Full Detail</a>
+                </div>
+            </div>
+
+            <!-- Paint Correction -->
+            <div class="service-card">
+                <div class="service-image">
+                    <img src="https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=800" alt="Paint Correction">
+                </div>
+                <div class="service-content">
+                    <h3>Paint Correction</h3>
+                    <span class="price-tag">From $499</span>
+                    <p>Multi-stage polishing to remove swirls, scratches, and oxidation for a flawless finish.</p>
+                    <ul class="service-features">
+                        <li>Paint depth measurement</li>
+                        <li>2-3 stage polishing process</li>
+                        <li>Swirl mark removal</li>
+                        <li>Scratch removal (moderate)</li>
+                        <li>Paint sealant application</li>
+                        <li>Before/after photos</li>
+                    </ul>
+                    <a href="auto-contact.html" class="book-button">Book Paint Correction</a>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Add-Ons -->
+    <section class="addons-section">
+        <h2 class="section-title">Popular Add-Ons</h2>
+        <div class="addons-grid">
+            <div class="addon-card">
+                <div class="addon-icon">💎</div>
+                <h4>Headlight Restoration</h4>
+                <p>Remove oxidation and restore clarity to cloudy headlights</p>
+                <div class="addon-price">+$75</div>
+            </div>
+            <div class="addon-card">
+                <div class="addon-icon">🧼</div>
+                <h4>Engine Bay Detail</h4>
+                <p>Deep clean and dress your engine compartment</p>
+                <div class="addon-price">+$60</div>
+            </div>
+            <div class="addon-card">
+                <div class="addon-icon">🌟</div>
+                <h4>Pet Hair Removal</h4>
+                <p>Specialized treatment for stubborn pet hair</p>
+                <div class="addon-price">+$50</div>
+            </div>
+            <div class="addon-card">
+                <div class="addon-icon">🔬</div>
+                <h4>Odor Elimination</h4>
+                <p>Ozone treatment to remove stubborn odors</p>
+                <div class="addon-price">+$85</div>
+            </div>
+            <div class="addon-card">
+                <div class="addon-icon">🛡️</div>
+                <h4>Fabric Protection</h4>
+                <p>Protect upholstery from stains and spills</p>
+                <div class="addon-price">+$95</div>
+            </div>
+            <div class="addon-card">
+                <div class="addon-icon">✨</div>
+                <h4>Trim Restoration</h4>
+                <p>Restore faded plastic trim to like-new condition</p>
+                <div class="addon-price">+$65</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Before/After -->
+    <section class="before-after-section">
+        <h2 class="section-title">Before & After Results</h2>
+        <div class="comparison-grid">
+            <div class="comparison-item">
+                <div class="comparison-images">
+                    <span class="comparison-label before-label">Before</span>
+                    <span class="comparison-label after-label">After</span>
+                    <img src="https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?w=400" alt="Before">
+                    <img src="https://images.unsplash.com/photo-1552519507-22b3bf9e3b05?w=400" alt="After">
+                </div>
+                <div class="comparison-caption">
+                    <h4>Full Interior Detail</h4>
+                    <p>2018 Toyota Camry</p>
+                </div>
+            </div>
+
+            <div class="comparison-item">
+                <div class="comparison-images">
+                    <span class="comparison-label before-label">Before</span>
+                    <span class="comparison-label after-label">After</span>
+                    <img src="https://images.unsplash.com/photo-1609521263047-f8f205293f24?w=400" alt="Before">
+                    <img src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=400" alt="After">
+                </div>
+                <div class="comparison-caption">
+                    <h4>Paint Correction</h4>
+                    <p>2020 BMW M5</p>
+                </div>
+            </div>
+
+            <div class="comparison-item">
+                <div class="comparison-images">
+                    <span class="comparison-label before-label">Before</span>
+                    <span class="comparison-label after-label">After</span>
+                    <img src="https://images.unsplash.com/photo-1581540222194-0def2dda95b8?w=400" alt="Before">
+                    <img src="https://images.unsplash.com/photo-1542362567-b07e54358753?w=400" alt="After">
+                </div>
+                <div class="comparison-caption">
+                    <h4>Exterior Detail</h4>
+                    <p>2021 Audi R8</p>
+                </div>
+            </div>
+
+            <div class="comparison-item">
+                <div class="comparison-images">
+                    <span class="comparison-label before-label">Before</span>
+                    <span class="comparison-label after-label">After</span>
+                    <img src="https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=400" alt="Before">
+                    <img src="https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=400" alt="After">
+                </div>
+                <div class="comparison-caption">
+                    <h4>Full Detail Package</h4>
+                    <p>2022 Tesla Model S</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <h2>Ready To Restore Your Ride?</h2>
+        <p>Book your detailing service today and get 15% off your first visit</p>
+        <a href="auto-contact.html" class="cta-button">Schedule Your Detail</a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">Precision Auto</div>
+                <p style="color: rgba(255,255,255,0.7); margin-top: 1rem;">Premium detailing excellence</p>
+            </div>
+            <div>
+                <h4 style="color: var(--red); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Services</h4>
+                <p style="color: rgba(255,255,255,0.7);">Ceramic Coating<br>Full Detailing<br>Paint Correction</p>
+            </div>
+            <div>
+                <h4 style="color: var(--red); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Contact</h4>
+                <p style="color: rgba(255,255,255,0.7);">(555) CAR-WASH<br>info@precisionauto.com</p>
+            </div>
+            <div>
+                <h4 style="color: var(--red); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Hours</h4>
+                <p style="color: rgba(255,255,255,0.7);">Mon-Sat: 8AM-6PM<br>Sunday: By Appointment</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
