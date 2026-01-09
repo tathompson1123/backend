@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact - Precision Auto Detailing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --red: #DC143C;
+            --dark-red: #8B0000;
+            --black: #0a0a0a;
+            --grey: #2a2a2a;
+            --white: #ffffff;
+        }
+
+        body { font-family: 'Rajdhani', sans-serif; color: var(--white); background: var(--black); line-height: 1.6; }
+
+        /* Trust Banner */
+        .trust-banner { background: var(--red); color: var(--white); padding: 1rem 0; overflow: hidden; }
+        .reviews-track { display: flex; animation: scroll 40s linear infinite; width: max-content; }
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .review-item { display: flex; align-items: center; gap: 0.5rem; padding: 0 1.5rem; font-size: 0.9rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+        .stars { color: #FFD700; font-size: 0.85rem; letter-spacing: 1px; }
+
+        /* Nav */
+        nav { background: rgba(10, 10, 10, 0.95); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; backdrop-filter: blur(10px); border-bottom: 1px solid rgba(220, 20, 60, 0.2); }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-family: 'Montserrat', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--red); text-transform: uppercase; letter-spacing: 2px; text-decoration: none; }
+        .nav-links { display: flex; gap: 3rem; align-items: center; }
+        .nav-links a { color: var(--white); text-decoration: none; font-weight: 600; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; transition: color 0.3s; }
+        .nav-links a:hover { color: var(--red); }
+        .nav-cta { background: var(--red); color: var(--white); padding: 0.875rem 2rem; border-radius: 50px; font-weight: 700; }
+
+        /* Hero */
+        .contact-hero {
+            background: linear-gradient(135deg, var(--red), var(--dark-red));
+            padding: 6rem 3rem 4rem;
+            text-align: center;
+        }
+        .offer-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 1.5rem;
+        }
+        .contact-hero h1 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 4.5rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+        .contact-hero p {
+            font-size: 1.4rem;
+            max-width: 700px;
+            margin: 0 auto 2rem;
+            opacity: 0.95;
+        }
+        .hero-features {
+            display: flex;
+            gap: 3rem;
+            justify-content: center;
+            margin-top: 3rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .hero-feature {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .hero-feature::before {
+            content: "✓";
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        /* Contact Section */
+        .contact-section {
+            padding: 8rem 3rem;
+            background: var(--grey);
+        }
+        .contact-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5rem;
+        }
+
+        /* Form */
+        .contact-form {
+            background: var(--black);
+            padding: 3rem;
+            border-radius: 25px;
+            border: 1px solid rgba(220, 20, 60, 0.3);
+        }
+        .form-title {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .form-subtitle {
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 1rem 1.25rem;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1rem;
+            background: var(--grey);
+            color: var(--white);
+            transition: border-color 0.3s ease;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--red);
+        }
+        .form-group textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+        .submit-button {
+            width: 100%;
+            background: var(--red);
+            color: var(--white);
+            padding: 1.25rem 2rem;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .submit-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(220, 20, 60, 0.5);
+        }
+
+        /* Contact Info */
+        .contact-info h3 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .info-card {
+            background: var(--black);
+            padding: 2rem;
+            border-radius: 20px;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(220, 20, 60, 0.3);
+        }
+        .info-card h4 {
+            color: var(--red);
+            font-size: 1.2rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .info-card p {
+            color: rgba(255,255,255,0.8);
+            font-size: 1.05rem;
+            line-height: 1.8;
+        }
+        .info-card a {
+            color: var(--white);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .info-card a:hover {
+            color: var(--red);
+        }
+
+        .why-choose {
+            background: var(--black);
+            padding: 2rem;
+            border-radius: 20px;
+            margin-top: 2rem;
+            border: 1px solid rgba(220, 20, 60, 0.3);
+        }
+        .why-choose h4 {
+            color: var(--red);
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .why-choose ul {
+            list-style: none;
+        }
+        .why-choose li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        .why-choose li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--red);
+            font-weight: bold;
+        }
+
+        /* Footer */
+        footer { background: var(--black); color: var(--white); padding: 5rem 3rem 2rem; }
+        .footer-content { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4rem; }
+        .footer-brand { font-family: 'Montserrat', sans-serif; font-size: 2rem; font-weight: 800; color: var(--red); text-transform: uppercase; letter-spacing: 2px; }
+
+        @media (max-width: 768px) {
+            .contact-hero h1 { font-size: 3rem; }
+            .contact-container { grid-template-columns: 1fr; gap: 3rem; }
+            .hero-features { flex-direction: column; gap: 1rem; }
+            .footer-content { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="trust-banner">
+        <div class="reviews-track">
+            <div class="review-item"><span class="review-text">"Best detail ever!" - Mike T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Looks brand new!" - Sarah K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Incredible work" - James R.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Worth every penny!" - Lisa M.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Highly recommend" - David P.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Best detail ever!" - Mike T.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Looks brand new!" - Sarah K.</span><span class="stars">★★★★★</span></div>
+            <div class="review-item"><span class="review-text">"Incredible work" - James R.</span><span class="stars">★★★★★</span></div>
+        </div>
+    </div>
+
+    <nav>
+        <div class="nav-container">
+            <a href="index.html" class="logo">Precision Auto</a>
+            <div class="nav-links">
+                <a href="ceramic-coatings.html">Ceramic Coatings</a>
+                <a href="detailing.html">Detailing</a>
+                <a href="gift-cards.html">Gift Cards</a>
+                <a href="gallery.html">Gallery</a>
+                <a href="auto-contact.html">Contact</a>
+                <a href="auto-contact.html" class="nav-cta">Book Now</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="contact-hero">
+        <div class="offer-badge">🎉 SPECIAL OFFER</div>
+        <h1>Get 20% Off Your First Detail</h1>
+        <p>Transform your vehicle this season. Fill out the form below to claim your discount and receive a free quote!</p>
+        <div class="hero-features">
+            <div class="hero-feature">Mobile Service Available</div>
+            <div class="hero-feature">Same-Day Quotes</div>
+            <div class="hero-feature">No Obligation</div>
+        </div>
+    </section>
+
+    <section class="contact-section">
+        <div class="contact-container">
+            <div class="contact-form">
+                <h2 class="form-title">Request Your Free Quote</h2>
+                <p class="form-subtitle">Tell us about your vehicle and we'll get back to you within 24 hours</p>
+                
+                <form action="#" method="POST">
+                    <div class="form-group">
+                        <label for="name">Full Name *</label>
+                        <input type="text" id="name" name="name" required placeholder="John Smith">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Email Address *</label>
+                        <input type="email" id="email" name="email" required placeholder="john@example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">Phone Number *</label>
+                        <input type="tel" id="phone" name="phone" required placeholder="(555) 123-4567">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="vehicle">Vehicle Make/Model</label>
+                        <input type="text" id="vehicle" name="vehicle" placeholder="e.g., 2020 BMW M5">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="service">Service Interested In *</label>
+                        <select id="service" name="service" required>
+                            <option value="">Select a service...</option>
+                            <option value="ceramic-coating">Ceramic Coating</option>
+                            <option value="exterior-detail">Exterior Detail</option>
+                            <option value="interior-detail">Interior Detail</option>
+                            <option value="full-detail">Full Detail</option>
+                            <option value="paint-correction">Paint Correction</option>
+                            <option value="other">Other / Not Sure</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="message">Additional Details</label>
+                        <textarea id="message" name="message" placeholder="Tell us about your vehicle's condition or any specific concerns..."></textarea>
+                    </div>
+
+                    <button type="submit" class="submit-button">Claim My 20% Discount</button>
+                </form>
+            </div>
+
+            <div class="contact-info">
+                <h3>Get In Touch</h3>
+                
+                <div class="info-card">
+                    <h4>📞 Phone</h4>
+                    <p><a href="tel:555-CAR-WASH">(555) CAR-WASH</a><br>
+                    Monday - Saturday: 8AM - 6PM<br>
+                    Sunday: By Appointment<br>
+                    Emergency Service Available</p>
+                </div>
+
+                <div class="info-card">
+                    <h4>✉️ Email</h4>
+                    <p><a href="mailto:info@precisionauto.com">info@precisionauto.com</a><br>
+                    We respond within 24 hours</p>
+                </div>
+
+                <div class="info-card">
+                    <h4>📍 Service Area</h4>
+                    <p>We Come To You!<br>
+                    Mobile detailing available throughout<br>
+                    the Greater Metro Area</p>
+                </div>
+
+                <div class="why-choose">
+                    <h4>Why Choose Precision Auto?</h4>
+                    <ul>
+                        <li>Certified Detailing Professionals</li>
+                        <li>Premium Products Only</li>
+                        <li>100% Satisfaction Guarantee</li>
+                        <li>Mobile Service Available</li>
+                        <li>Competitive Pricing</li>
+                        <li>Award-Winning Results</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="footer-content">
+            <div>
+                <div class="footer-brand">Precision Auto</div>
+                <p style="color: rgba(255,255,255,0.7); margin-top: 1rem;">Premium detailing excellence</p>
+            </div>
+            <div>
+                <h4 style="color: var(--red); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Services</h4>
+                <p style="color: rgba(255,255,255,0.7);">Ceramic Coating<br>Full Detailing<br>Paint Correction</p>
+            </div>
+            <div>
+                <h4 style="color: var(--red); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Contact</h4>
+                <p style="color: rgba(255,255,255,0.7);">(555) CAR-WASH<br>info@precisionauto.com</p>
+            </div>
+            <div>
+                <h4 style="color: var(--red); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Hours</h4>
+                <p style="color: rgba(255,255,255,0.7);">Mon-Sat: 8AM-6PM<br>Sunday: By Appointment</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
