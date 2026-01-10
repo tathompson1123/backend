@@ -145,23 +145,41 @@ ${content}
 `).join('\n\n')}
 
 ═══════════════════════════════════════════════════════════════════
-🔧 YOUR TASK
+🔧 YOUR TASK - MULTI-PAGE GENERATION
 ═══════════════════════════════════════════════════════════════════
 
-1. Take the index.html (homepage) template above
-2. Replace ALL business-specific content with ${safeBusinessName}'s information
-3. Update contact details (phone, email, address)
-4. Replace services with: ${servicesInfo.services}
-5. Update business hours: ${hoursInfo.hours}
-6. Change color scheme from template colors to user's colors:
-   - Primary: ${templateInfo.colorScheme.primary} → ${primaryColor}
-   - Accent: ${templateInfo.colorScheme.accent} → ${accentColor}
-7. Generate authentic testimonials for ${safeBusinessType}
-8. Update all images to be industry-appropriate using Unsplash keywords
+Generate a COMPLETE multi-page website with the following files:
 
-**OUTPUT:** Return the COMPLETE, CUSTOMIZED HTML file with all replacements made.
+1. **index.html** - Homepage with hero, services preview, about snippet, CTA
+2. **services.html** - Full services page with all service details
+3. **gallery.html** OR **portfolio.html** - Work examples/photos showcase
+4. **contact.html** - Contact form, map, business hours, contact info
 
-` : `
+**For each page:**
+- Replace ALL placeholder content with ${safeBusinessName}'s information
+- Update contact details (phone, email, address) consistently across all pages
+- Use the same navigation structure on every page
+- Change color scheme from template to: Primary: ${templateInfo.colorScheme.primary} → ${primaryColor}, Accent: ${templateInfo.colorScheme.accent} → ${accentColor}
+- Generate authentic testimonials for ${safeBusinessType}
+- Update images appropriately for each page type
+
+**OUTPUT FORMAT:**
+Return each HTML file separated by this exact marker:
+<!-- FILE_SEPARATOR: filename.html -->
+
+Example:
+<!-- FILE_SEPARATOR: index.html -->
+<!DOCTYPE html>
+[full index.html content]
+
+<!-- FILE_SEPARATOR: services.html -->
+<!DOCTYPE html>
+[full services.html content]
+
+<!-- FILE_SEPARATOR: contact.html -->
+<!DOCTYPE html>
+[full contact.html content]
+
 ═══════════════════════════════════════════════════════════════════
 ⚠️ NO TEMPLATE FILES LOADED
 ═══════════════════════════════════════════════════════════════════
