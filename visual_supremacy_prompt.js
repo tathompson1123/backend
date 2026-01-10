@@ -31,56 +31,64 @@ function buildVisualSupremacyPrompt({
 }) {
   
   // Get recommended template based on business type
-const recommendedTemplateKey = getRecommendedTemplate(safeBusinessType);
+  const recommendedTemplateKey = getRecommendedTemplate(safeBusinessType);
 
-// LOAD ACTUAL TEMPLATE HTML FILES
-const templateInfo = TEMPLATES[recommendedTemplateKey];
-const templateDir = path.join(__dirname, templateInfo.folder);
-
-// ADD THESE DEBUG LINES:
-console.log('🔍 __dirname:', __dirname);
-console.log('🔍 templateInfo.folder:', templateInfo.folder);
-console.log('🔍 templateDir:', templateDir);
-console.log('🔍 Directory exists?', fs.existsSync(templateDir));
-
-// Try listing what's actually in __dirname
-try {
-  const filesInDir = fs.readdirSync(__dirname);
-  console.log('🔍 Files in __dirname:', filesInDir);
-} catch (e) {
-  console.log('🔍 Cannot read __dirname:', e.message);
-}
-  // Try to find templates in the outputs directory first
-const outputsTemplateDir = path.join(__dirname, '..', 'outputs', templateInfo.folder);
-const localTemplateDir = path.join(__dirname, templateInfo.folder);
-
-// Check which path exists
-let templateDir;
-if (fs.existsSync(outputsTemplateDir)) {
-  templateDir = outputsTemplateDir;
-} else if (fs.existsSync(localTemplateDir)) {
-  templateDir = localTemplateDir;
-} else {
-  console.log(`⚠️ Template directory not found for ${recommendedTemplateKey}`);
-  templateDir = null;
-}
+  // LOAD ACTUAL TEMPLATE HTML FILES
+  const templateInfo = TEMPLATES[recommendedTemplateKey];
+  
+  // Debug logging
+  console.log('🔍 __dirname:', __dirname);
+  console.log('🔍 templateInfo.folder:', templateInfo.folder);
+  console.log('🔍 recommendedTemplateKey:', recommendedTemplateKey);
+  
+  // Try listing what's actually in __dirname
+  try {
+    const filesInDir = fs.readdirSync(__dirname);
+    console.log('🔍 Files in __dirname:', filesInDir);
+  } catch (e) {
+    console.log('🔍 Cannot read __dirname:', e.message);
+  }
+  
+  // Try multiple possible template locations
+  const possiblePaths = [
+    path.join(__dirname, 'templates', templateInfo.folder),  // /app/templates/dental
+    path.join(__dirname, '..', 'templates', templateInfo.folder),  // /templates/dental (if server.js is in /app)
+    path.join(__dirname, templateInfo.folder),  // /app/dental
+  ];
+  
+  let templateDir = null;
+  for (const testPath of possiblePaths) {
+    console.log('🔍 Testing path:', testPath, '- Exists?', fs.existsSync(testPath));
+    if (fs.existsSync(testPath)) {
+      templateDir = testPath;
+      console.log('✅ Found templates at:', templateDir);
+      break;
+    }
+  }
+  
+  if (!templateDir) {
+    console.log(`⚠️ Template directory not found for ${recommendedTemplateKey}`);
+    console.log('⚠️ Tried paths:', possiblePaths);
+  }
   
   let templateFiles = {};
-if (templateDir) {  // ADD THIS CHECK
-  try {
-    // Read all HTML files from template directory
-    const files = fs.readdirSync(templateDir).filter(f => f.endsWith('.html'));
-    
-    files.forEach(file => {
-      const filePath = path.join(templateDir, file);
-      const content = fs.readFileSync(filePath, 'utf8');
-      const pageName = file.replace('.html', '');
-      templateFiles[pageName] = content;
-    });
-  } catch (error) {
-    console.error('Error loading template files:', error);
+  if (templateDir) {
+    try {
+      // Read all HTML files from template directory
+      const files = fs.readdirSync(templateDir).filter(f => f.endsWith('.html'));
+      
+      files.forEach(file => {
+        const filePath = path.join(templateDir, file);
+        const content = fs.readFileSync(filePath, 'utf8');
+        const pageName = file.replace('.html', '');
+        templateFiles[pageName] = content;
+      });
+      
+      console.log('✅ Loaded', Object.keys(templateFiles).length, 'template files');
+    } catch (error) {
+      console.error('❌ Error loading template files:', error);
     }
-}  
+  }
   
   // Calculate RGB values for color effects
   const hexToRgb = (hex) => {
@@ -146,8 +154,8 @@ ${content}
 4. Replace services with: ${servicesInfo.services}
 5. Update business hours: ${hoursInfo.hours}
 6. Change color scheme from template colors to user's colors:
-   - Primary: ${templateInfo.colors.primary} → ${primaryColor}
-   - Accent: ${templateInfo.colors.accent} → ${accentColor}
+   - Primary: ${templateInfo.colorScheme.primary} → ${primaryColor}
+   - Accent: ${templateInfo.colorScheme.accent} → ${accentColor}
 7. Generate authentic testimonials for ${safeBusinessType}
 8. Update all images to be industry-appropriate using Unsplash keywords
 
