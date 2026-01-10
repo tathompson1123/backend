@@ -145,46 +145,30 @@ ${content}
 `).join('\n\n')}
 
 ═══════════════════════════════════════════════════════════════════
-🔧 YOUR TASK - MULTI-PAGE GENERATION
+🔧 YOUR TASK
 ═══════════════════════════════════════════════════════════════════
 
-Generate a COMPLETE multi-page website with the following files:
+1. Take the index.html (homepage) template above
+2. Replace ALL business-specific content with ${safeBusinessName}'s information
+3. Update contact details (phone, email, address)
+4. Replace services with: ${servicesInfo.services}
+5. Update business hours: ${hoursInfo.hours}
+6. Change color scheme from template colors to user's colors:
+   - Primary: ${templateInfo.colorScheme.primary} → ${primaryColor}
+   - Accent: ${templateInfo.colorScheme.accent} → ${accentColor}
+7. Generate authentic testimonials for ${safeBusinessType}
+8. Update all images to be industry-appropriate using Unsplash keywords
 
-1. **index.html** - Homepage with hero, services preview, about snippet, CTA
-2. **services.html** - Full services page with all service details
-3. **gallery.html** OR **portfolio.html** - Work examples/photos showcase
-4. **contact.html** - Contact form, map, business hours, contact info
+**OUTPUT:** Return the COMPLETE, CUSTOMIZED HTML file with all replacements made.
 
-**For each page:**
-- Replace ALL placeholder content with ${safeBusinessName}'s information
-- Update contact details (phone, email, address) consistently across all pages
-- Use the same navigation structure on every page
-- Change color scheme from template to: Primary: ${templateInfo.colorScheme.primary} → ${primaryColor}, Accent: ${templateInfo.colorScheme.accent} → ${accentColor}
-- Generate authentic testimonials for ${safeBusinessType}
-- Update images appropriately for each page type
-
-**OUTPUT FORMAT:**
-Return each HTML file separated by this exact marker:
-<!-- FILE_SEPARATOR: filename.html -->
-
-Example:
-<!-- FILE_SEPARATOR: index.html -->
-<!DOCTYPE html>
-[full index.html content]
-
-<!-- FILE_SEPARATOR: services.html -->
-<!DOCTYPE html>
-[full services.html content]
-
-<!-- FILE_SEPARATOR: contact.html -->
-<!DOCTYPE html>
-[full contact.html content]
-
+` : `
 ═══════════════════════════════════════════════════════════════════
 ⚠️ NO TEMPLATE FILES LOADED
 ═══════════════════════════════════════════════════════════════════
 
 Template files could not be loaded. Generate website from scratch following ${templateInfo.name} design specifications below.
+
+`;
 
   return `You are an elite web designer creating a VISUALLY STUNNING, premium service business website.
 
@@ -246,12 +230,22 @@ ${teamInfo.instruction}` : ''}
 - About section should show the team/equipment/facility
 
 ═══════════════════════════════════════════════════════════════════
-📋 OUTPUT
+📋 OUTPUT - MULTI-PAGE FORMAT
 ═══════════════════════════════════════════════════════════════════
 
-Return the COMPLETE, CUSTOMIZED HTML file based on the template provided above.
+Return ALL pages using the FILE_SEPARATOR format shown above.
 
-**START WITH:** <!DOCTYPE html>`;
+**CRITICAL:** Each page must be preceded by: <!-- FILE_SEPARATOR: filename.html -->
+
+**Required pages:**
+1. index.html (homepage)
+2. services.html (all services detailed)
+3. gallery.html or portfolio.html (work showcase)
+4. contact.html (contact form + info)
+
+**START FIRST PAGE WITH:** 
+<!-- FILE_SEPARATOR: index.html -->
+<!DOCTYPE html>`;
 }
 
 module.exports = { buildVisualSupremacyPrompt };
