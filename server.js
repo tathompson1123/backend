@@ -2525,13 +2525,52 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
       return res.status(500).json({ error: 'Failed to generate website', details: error });
     }
 
-    const data = await response.json();
-    const htmlContent = data.content?.[0]?.text;
+   const data = await response.json();
+const fullResponse = data.content?.[0]?.text;
+
+if (!fullResponse) {
+  console.error('❌ No HTML content in response');
+  return res.status(500).json({ error: 'No content generated' });
+}
+
+// Parse multiple files
+const files = {};
+const fileSeparator = /<!-- FILE_SEPARATOR: (.+?) -->/g;
+const parts = fullResponse.split(fileSeparator);
+
+if (parts.length > 1) {
+  // Multi-file response
+  for (let i = 1; i < parts.length; i += 2) {
+    const filename = parts[i].trim();
+    const content = parts[i + 1]?.trim()
+      .replace(/```html\n?/g, '')
+      .replace(/```\n?$/g, '')
+      .replace(/```/g, '') || '';
     
-    if (!htmlContent) {
-      console.error('❌ No HTML content in response');
-      return res.status(500).json({ error: 'No content generated' });
+    if (filename && content) {
+      files[filename] = content;
     }
+  }
+  console.log('✅ Generated', Object.keys(files).length, 'pages:', Object.keys(files));
+} else {
+  // Single file (fallback) - clean up markdown
+  const cleanContent = fullResponse.trim()
+    .replace(/```html\n?/g, '')
+    .replace(/```\n?$/g, '')
+    .replace(/```/g, '');
+  files['index.html'] = cleanContent;
+  console.log('✅ Generated single-page website');
+}
+
+// Use index.html as the primary content
+const htmlContent = files['index.html'];
+
+if (!htmlContent) {
+  console.error('❌ No index.html generated');
+  return res.status(500).json({ error: 'No homepage content generated' });
+}
+
+// Clean up markdown formatting if present (already done above, but kept for consistency)
 
     // Clean up markdown formatting if present
     let cleanHtml = htmlContent.trim()
@@ -2723,32 +2762,78 @@ app.post('/api/auth/logout', async (req, res) => {
 
 console.log('✅ Auth endpoints loaded (signup, login, verify, logout)');
 
-// ============================================
-// WEBSITE ENDPOINTS (SECURED)
+/// ============================================
+// WEBSITE PAGE SERVING ENDPOINT (SECURED)
 // ============================================
 
-app.get('/api/website', authenticateToken, async (req, res) => {
+app.get('/api/website/page/:pageName', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-
+    const { pageName } = req.params;
+    
     const result = await pool.query(
-      'SELECT * FROM websites WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+      'SELECT pages FROM websites WHERE user_id = $1',
       [userId]
     );
-
-    res.json({ 
-      website: result.rows[0] || null 
-    });
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+    
+    const pages = result.rows[0].pages || {};
+    
+    // If no pages object, this is an old single-page website
+    if (Object.keys(pages).length === 0) {
+      return res.status(404).json({ error: 'No pages found. Please regenerate your website.' });
+    }
+    
+    // Get requested page or fall back to index
+    const pageContent = pages[pageName] || pages['index.html'];
+    
+    if (!pageContent) {
+      return res.status(404).json({ error: 'Page not found' });
+    }
+    
+    res.send(pageContent);
   } catch (error) {
-    console.error('Error fetching website:', error);
-    res.status(500).json({ error: 'Failed to fetch website' });
+    console.error('Error serving page:', error);
+    res.status(500).json({ error: 'Failed to serve page' });
   }
 });
+
+// Get list of all pages for a website
+app.get('/api/website/pages', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      'SELECT pages FROM websites WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (result.rows.length === 0 || !result.rows[0].pages) {
+      return res.json({ pages: [] });
+    }
+    
+    const pages = result.rows[0].pages;
+    const pageList = Object.keys(pages).map(name => ({
+      name: name,
+      displayName: name.replace('.html', '').replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
+    }));
+    
+    res.json({ pages: pageList });
+  } catch (error) {
+    console.error('Error fetching pages:', error);
+    res.status(500).json({ error: 'Failed to fetch pages' });
+  }
+});
+
+console.log('✅ Multi-page website endpoints loaded');
 
 app.post('/api/website', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { htmlContent } = req.body;
+    const { htmlContent, pages } = req.body; // Add pages parameter
 
     if (!htmlContent) {
       return res.status(400).json({ error: 'htmlContent required' });
@@ -2763,29 +2848,19 @@ app.post('/api/website', authenticateToken, async (req, res) => {
     if (existing.rows.length > 0) {
       result = await pool.query(
         `UPDATE websites 
-         SET html_content = $1, updated_at = CURRENT_TIMESTAMP
-         WHERE user_id = $2
+         SET html_content = $1, pages = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $3
          RETURNING *`,
-        [htmlContent, userId]
+        [htmlContent, pages ? JSON.stringify(pages) : null, userId]
       );
     } else {
       result = await pool.query(
-        `INSERT INTO websites (user_id, html_content, is_published, created_at, updated_at)
-         VALUES ($1, $2, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `INSERT INTO websites (user_id, html_content, pages, is_published, created_at, updated_at)
+         VALUES ($1, $2, $3, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
-        [userId, htmlContent]
+        [userId, htmlContent, pages ? JSON.stringify(pages) : null]
       );
     }
-
-    res.json({ 
-      success: true,
-      website: result.rows[0] 
-    });
-  } catch (error) {
-    console.error('Error saving website:', error);
-    res.status(500).json({ error: 'Failed to save website' });
-  }
-});
 
 app.post('/api/website/publish', authenticateToken, async (req, res) => {
   try {
@@ -3136,6 +3211,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
