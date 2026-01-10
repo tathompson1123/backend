@@ -2862,6 +2862,16 @@ app.post('/api/website', authenticateToken, async (req, res) => {
       );
     }
 
+    res.json({ 
+      success: true,
+      website: result.rows[0] 
+    });
+  } catch (error) {
+    console.error('Error saving website:', error);
+    res.status(500).json({ error: 'Failed to save website' });
+  }
+});
+
 app.post('/api/website/publish', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -3211,6 +3221,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
