@@ -186,8 +186,6 @@ Example:
 
 Template files could not be loaded. Generate website from scratch following ${templateInfo.name} design specifications below.
 
-`;
-
   return `You are an elite web designer creating a VISUALLY STUNNING, premium service business website.
 
 ${templateHTMLSection}
