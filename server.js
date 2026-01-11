@@ -113,6 +113,279 @@ app.use('/api/website/ai-edit', aiLimiter);
 // HELPER FUNCTIONS
 // ============================================
 
+// Generate incentive code
+function generateIncentiveCode() {
+  return 'REVIEW' + Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+// Create review link
+function createReviewLink(placeId, incentiveCode) {
+  return `https://search.google.com/local/writereview?placeid=${placeId}`;
+}
+
+// Initialize review request sequence when booking is completed
+async function initializeReviewSequence(booking) {
+  try {
+    const userResult = await pool.query(
+      'SELECT google_place_id, business_name FROM users WHERE id = $1',
+      [booking.user_id]
+    );
+
+    if (userResult.rows.length === 0) {
+      console.log('User not found for booking:', booking.id);
+      return;
+    }
+
+    const user = userResult.rows[0];
+    
+    if (!user.google_place_id) {
+      console.log('No Google Place ID set for user:', booking.user_id);
+      return;
+    }
+
+    // Calculate end time of booking
+    const bookingDateTime = new Date(`${booking.booking_date}T${booking.start_time}`);
+    const [endHour, endMin] = booking.end_time.split(':').map(Number);
+    const bookingEndTime = new Date(bookingDateTime);
+    bookingEndTime.setHours(endHour, endMin, 0, 0);
+
+    // Calculate all schedule times
+    const step1Time = new Date(bookingEndTime.getTime() + (2 * 60 * 60 * 1000)); // +2 hours
+    const step2Time = new Date(bookingEndTime.getTime() + (26 * 60 * 60 * 1000)); // +26 hours
+    const step3Time = new Date(bookingEndTime.getTime() + (50 * 60 * 60 * 1000)); // +50 hours
+    const step4Time = new Date(bookingEndTime.getTime() + (74 * 60 * 60 * 1000)); // +74 hours
+    const step5Time = new Date(bookingEndTime.getTime() + (7 * 24 * 60 * 60 * 1000)); // +7 days
+
+    const incentiveCode = generateIncentiveCode();
+
+    await pool.query(
+      `INSERT INTO review_request_sequences (
+        user_id, booking_id, customer_id, incentive_code,
+        step1_scheduled_time, step1_status,
+        step2_scheduled_time, step2_status,
+        step3_scheduled_time, step3_status,
+        step4_scheduled_time, step4_status,
+        step5_scheduled_time, step5_status,
+        sequence_status
+      )
+      VALUES ($1, $2, $3, $4, $5, 'pending', $6, 'pending', $7, 'pending', $8, 'pending', $9, 'pending', 'active')`,
+      [
+        booking.user_id,
+        booking.id,
+        booking.customer_id,
+        incentiveCode,
+        step1Time,
+        step2Time,
+        step3Time,
+        step4Time,
+        step5Time
+      ]
+    );
+
+    console.log(`✅ Review sequence initialized for booking ${booking.id}`);
+    console.log(`   Step 1 (SMS): ${step1Time}`);
+    console.log(`   Step 2 (SMS): ${step2Time}`);
+    console.log(`   Step 3 (Email): ${step3Time}`);
+    console.log(`   Step 4 (Email): ${step4Time}`);
+    console.log(`   Step 5 (Email): ${step5Time}`);
+
+  } catch (error) {
+    console.error('Error initializing review sequence:', error);
+  }
+}
+
+// Send individual review request step
+async function sendReviewRequestStep(sequence, step) {
+  try {
+    // Get full data
+    const result = await pool.query(
+      `SELECT 
+        s.*,
+        b.booking_date, b.start_time,
+        c.name as customer_name, c.email, c.phone,
+        u.business_name, u.google_place_id, u.review_incentive, 
+        u.twilio_phone, u.sms_enabled, u.email_enabled
+       FROM review_request_sequences s
+       JOIN bookings b ON s.booking_id = b.id
+       JOIN customers c ON s.customer_id = c.id
+       JOIN users u ON s.user_id = u.id
+       WHERE s.id = $1`,
+      [sequence.id]
+    );
+
+    if (result.rows.length === 0) {
+      console.error('Sequence not found:', sequence.id);
+      return;
+    }
+
+    const data = result.rows[0];
+    const reviewLink = createReviewLink(data.google_place_id, data.incentive_code);
+
+    let success = false;
+    let errorMessage = null;
+
+    // Determine if this step is SMS or Email
+    const isSMS = step === 1 || step === 2;
+    const isEmail = step === 3 || step === 4 || step === 5;
+
+    // Send SMS
+    if (isSMS && data.sms_enabled && data.phone && twilioClient) {
+      try {
+        let smsMessage = '';
+        
+        if (step === 1) {
+          smsMessage = `Hi ${data.customer_name}! Thanks for choosing ${data.business_name}! 🌟\n\nLoved our service? Leave a quick Google review & get ${data.review_incentive || '10% off your next visit'}:\n${reviewLink}`;
+        } else if (step === 2) {
+          smsMessage = `Hi ${data.customer_name}, it's ${data.business_name} again! We'd really appreciate your Google review 🙏\n\nLeave a review to claim ${data.review_incentive || '10% off'}:\n${reviewLink}`;
+        }
+
+        await twilioClient.messages.create({
+          body: smsMessage,
+          from: data.twilio_phone,
+          to: data.phone
+        });
+
+        success = true;
+        console.log(`📱 Step ${step} SMS sent to ${data.customer_name}`);
+      } catch (error) {
+        errorMessage = error.message;
+        console.error(`SMS error for step ${step}:`, error);
+      }
+    }
+
+    // Send Email
+    if (isEmail && data.email_enabled && data.email && sgMail) {
+      try {
+        let subject = '';
+        let heading = '';
+        let bodyText = '';
+
+        if (step === 3) {
+          subject = `We'd love your feedback! - ${data.business_name}`;
+          heading = `How was your experience, ${data.customer_name}?`;
+          bodyText = `We hope you enjoyed our service! Your feedback means the world to us, and it only takes a minute to leave a Google review.`;
+        } else if (step === 4) {
+          subject = `Quick reminder: Share your experience - ${data.business_name}`;
+          heading = `Still time to share your thoughts!`;
+          bodyText = `We wanted to follow up and see if you'd be willing to leave us a quick Google review. Your feedback helps us improve and helps others find great service!`;
+        } else if (step === 5) {
+          subject = `Last chance for your special offer! - ${data.business_name}`;
+          heading = `Don't miss out, ${data.customer_name}!`;
+          bodyText = `This is your final reminder to leave a Google review and claim your special offer. We'd love to hear from you!`;
+        }
+
+        const emailHtml = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f3f4f6;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+              <!-- Header -->
+              <div style="background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%); padding: 40px 20px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px;">${heading}</h1>
+              </div>
+              
+              <!-- Body -->
+              <div style="padding: 40px 30px;">
+                <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+                  ${bodyText}
+                </p>
+                
+                <!-- Incentive Box -->
+                <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); padding: 30px; border-radius: 12px; margin: 30px 0; text-align: center; border: 2px solid #10b981;">
+                  <p style="color: #059669; font-size: 14px; margin: 0 0 10px 0; font-weight: 600;">YOUR REWARD</p>
+                  <h2 style="color: #047857; margin: 0; font-size: 32px; font-weight: bold;">${data.review_incentive || '10% Off Next Visit'}</h2>
+                  <p style="color: #059669; font-size: 14px; margin: 10px 0 0 0;">Use code: <strong>${data.incentive_code}</strong></p>
+                </div>
+                
+                <!-- CTA Button -->
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${reviewLink}" style="display: inline-block; background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%); color: #ffffff; padding: 18px 50px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    Leave Your Review ⭐
+                  </a>
+                </div>
+                
+                <p style="color: #6b7280; font-size: 14px; line-height: 1.6; text-align: center; margin-top: 30px;">
+                  It only takes 60 seconds and helps us serve you better!
+                </p>
+              </div>
+              
+              <!-- Footer -->
+              <div style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0; font-weight: 600;">
+                  ${data.business_name}
+                </p>
+                <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                  This is an automated message. Please don't reply to this email.
+                </p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `;
+
+        await sgMail.send({
+          to: data.email,
+          from: process.env.SENDGRID_FROM_EMAIL || 'noreply@yourbusiness.com',
+          subject: subject,
+          html: emailHtml
+        });
+
+        success = true;
+        console.log(`📧 Step ${step} Email sent to ${data.customer_name}`);
+      } catch (error) {
+        errorMessage = error.message;
+        console.error(`Email error for step ${step}:`, error);
+      }
+    }
+
+    // Update database
+    const updateFields = {
+      sent_time: 'CURRENT_TIMESTAMP',
+      status: success ? 'sent' : 'failed',
+      error: errorMessage || null
+    };
+
+    if (isSMS) {
+      updateFields.sms_sent = success;
+    }
+    if (isEmail) {
+      updateFields.email_sent = success;
+    }
+
+    const setClause = Object.keys(updateFields)
+      .map((key, idx) => {
+        if (key === 'sent_time') {
+          return `step${step}_sent_time = ${updateFields[key]}`;
+        } else if (key === 'status') {
+          return `step${step}_status = $${idx + 1}`;
+        } else if (key === 'error') {
+          return `step${step}_error = $${idx + 1}`;
+        } else if (key === 'sms_sent') {
+          return `step${step}_sms_sent = $${idx + 1}`;
+        } else if (key === 'email_sent') {
+          return `step${step}_email_sent = $${idx + 1}`;
+        }
+      })
+      .join(', ');
+
+    const values = Object.values(updateFields).filter(v => v !== 'CURRENT_TIMESTAMP');
+
+    await pool.query(
+      `UPDATE review_request_sequences SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $${values.length + 1}`,
+      [...values, sequence.id]
+    );
+
+    console.log(`✅ Step ${step} processed for sequence ${sequence.id}`);
+
+  } catch (error) {
+    console.error(`Error sending step ${step}:`, error);
+  }
+}
+
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -1782,11 +2055,46 @@ app.post('/api/bookings/create', authenticateToken, async (req, res) => {
   }
 });
 
+// PUT - Mark booking as completed
+app.put('/api/bookings/:id/complete', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE bookings 
+       SET status = 'completed', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const booking = result.rows[0];
+
+    // Initialize automated review request sequence
+    await initializeReviewSequence(booking);
+
+    res.json({ 
+      success: true,
+      booking,
+      message: 'Booking completed and review sequence started'
+    });
+  } catch (error) {
+    console.error('Error completing booking:', error);
+    res.status(500).json({ error: 'Failed to complete booking' });
+  }
+});
+
+// Find your existing PUT /api/bookings/:id endpoint and replace it with this:
 app.put('/api/bookings/:id', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const { serviceId, bookingDate, startTime, customerInfo, notes, employeeId, groupId } = req.body;
+    const { serviceId, bookingDate, startTime, customerInfo, notes, employeeId, groupId, status } = req.body;
 
     const serviceResult = await pool.query(
       'SELECT duration_hours, price, name FROM services WHERE id = $1',
@@ -1815,23 +2123,25 @@ app.put('/api/bookings/:id', authenticateToken, async (req, res) => {
            customer_email = $5,
            customer_phone = $6,
            customer_address = $7,
-           job_notes = $8,
+           customer_notes = $8,
            employee_id = $9,
            group_id = $10,
+           status = $11,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $11 AND user_id = $12
+       WHERE id = $12 AND user_id = $13
        RETURNING *`,
       [
         bookingDate,
         startTime,
         endTime,
-        customerInfo.name,
-        customerInfo.email,
-        customerInfo.phone,
-        customerInfo.address,
+        customerInfo?.name,
+        customerInfo?.email,
+        customerInfo?.phone,
+        customerInfo?.address,
         notes,
         employeeId,
         groupId || null,
+        status || 'confirmed',
         id,
         userId
       ]
@@ -1841,12 +2151,19 @@ app.put('/api/bookings/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    if (bookingResult.rows[0].customer_id) {
+    const booking = bookingResult.rows[0];
+
+    // If status changed to 'completed', initialize review sequence
+    if (status === 'completed') {
+      await initializeReviewSequence(booking);
+    }
+
+    if (booking.customer_id && customerInfo) {
       await pool.query(
         `UPDATE customers 
          SET name = $1, email = $2, phone = $3
          WHERE id = $4`,
-        [customerInfo.name, customerInfo.email, customerInfo.phone, bookingResult.rows[0].customer_id]
+        [customerInfo.name, customerInfo.email, customerInfo.phone, booking.customer_id]
       );
     }
 
@@ -1864,7 +2181,7 @@ app.put('/api/bookings/:id', authenticateToken, async (req, res) => {
     res.json({ 
       success: true,
       booking: bookingResult.rows[0],
-      message: 'Booking updated successfully'
+      message: status === 'completed' ? 'Booking completed and review sequence started' : 'Booking updated successfully'
     });
 
   } catch (error) {
@@ -3228,22 +3545,44 @@ app.get('/api/health', (req, res) => {
 // ============================================
 
 // Process review requests every minute
+// Update the existing cron job in server.js
 cron.schedule('* * * * *', async () => {
   try {
-    const result = await pool.query(
-      `SELECT * FROM review_requests
-       WHERE status = 'pending'
-       AND scheduled_send_time <= CURRENT_TIMESTAMP
-       LIMIT 10`
+    // Process each step of active sequences
+    for (let step = 1; step <= 5; step++) {
+      const result = await pool.query(
+        `SELECT * FROM review_request_sequences
+         WHERE sequence_status = 'active'
+         AND step${step}_status = 'pending'
+         AND step${step}_scheduled_time <= CURRENT_TIMESTAMP
+         AND (review_completed = false OR review_completed IS NULL)
+         LIMIT 10`
+      );
+
+      for (const sequence of result.rows) {
+        await sendReviewRequestStep(sequence, step);
+      }
+
+      if (result.rows.length > 0) {
+        console.log(`✅ Processed ${result.rows.length} step ${step} review requests`);
+      }
+    }
+
+    // Mark sequences as completed if review was left or all steps are done
+    await pool.query(
+      `UPDATE review_request_sequences
+       SET sequence_status = 'completed'
+       WHERE sequence_status = 'active'
+       AND (
+         review_completed = true
+         OR (
+           step1_status != 'pending' AND step2_status != 'pending' 
+           AND step3_status != 'pending' AND step4_status != 'pending' 
+           AND step5_status != 'pending'
+         )
+       )`
     );
 
-    for (const reviewRequest of result.rows) {
-      await sendReviewRequest(reviewRequest);
-    }
-
-    if (result.rows.length > 0) {
-      console.log(`✅ Processed ${result.rows.length} review requests`);
-    }
   } catch (error) {
     console.error('Cron job error:', error);
   }
@@ -3301,6 +3640,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
