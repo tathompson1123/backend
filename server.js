@@ -1173,6 +1173,40 @@ app.get('/api/google-business/review-requests', authenticateToken, async (req, r
   }
 });
 
+// PUT - Mark booking as completed (add this after your other booking endpoints)
+app.put('/api/bookings/:id/complete', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE bookings 
+       SET status = 'completed', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const booking = result.rows[0];
+
+    // Initialize automated review request sequence
+    await initializeReviewSequence(booking);
+
+    res.json({ 
+      success: true,
+      booking,
+      message: 'Booking completed and review sequence started'
+    });
+  } catch (error) {
+    console.error('Error completing booking:', error);
+    res.status(500).json({ error: 'Failed to complete booking' });
+  }
+});
+
 // GET - Fetch Google Business Profile for a user
 app.get('/api/google-business/profile', authenticateToken, async (req, res) => {
   try {
@@ -3640,6 +3674,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
