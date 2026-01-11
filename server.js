@@ -869,11 +869,36 @@ app.post('/api/public/bookings/create', async (req, res) => {
 
 console.log('✅ Public booking endpoints loaded');
 
-// Google Business Profile API Endpoints
+// GET - Fetch review requests for a user
+app.get('/api/google-business/review-requests', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
 
-// ============================================
-// GOOGLE BUSINESS PROFILE ENDPOINTS (SECURED)
-// ============================================
+    const result = await pool.query(
+      `SELECT 
+        rr.*,
+        j.service_name,
+        c.name as customer_name,
+        c.email as customer_email,
+        c.phone as customer_phone
+       FROM review_requests rr
+       LEFT JOIN jobs j ON rr.job_id = j.id
+       LEFT JOIN customers c ON rr.customer_id = c.id
+       WHERE rr.user_id = $1
+       ORDER BY rr.scheduled_send_time DESC
+       LIMIT 100`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      requests: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching review requests:', error);
+    res.status(500).json({ error: 'Failed to fetch review requests' });
+  }
+});
 
 // GET - Fetch Google Business Profile for a user
 app.get('/api/google-business/profile', authenticateToken, async (req, res) => {
@@ -3276,6 +3301,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
