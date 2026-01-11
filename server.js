@@ -508,151 +508,6 @@ function hasConflict(slot, existingBookings, buffer) {
   return false;
 }
 
-async function createReviewRequest(job) {
-  try {
-    const userResult = await pool.query(
-      'SELECT review_buffer_hours, google_place_id FROM users WHERE id = $1',
-      [job.user_id]
-    );
-
-    if (userResult.rows.length === 0) return;
-
-    const user = userResult.rows[0];
-    const bufferHours = user.review_buffer_hours || 1;
-    const scheduledSendTime = new Date(job.calculated_end.getTime() + (bufferHours * 60 * 60 * 1000));
-    const incentiveCode = generateIncentiveCode();
-
-    await pool.query(
-      `INSERT INTO review_requests (job_id, user_id, customer_id, scheduled_send_time, incentive_code, status)
-       VALUES ($1, $2, $3, $4, $5, 'pending')`,
-      [job.id, job.user_id, job.customer_id, scheduledSendTime, incentiveCode]
-    );
-
-    console.log(`✅ Review request scheduled for job ${job.id} at ${scheduledSendTime}`);
-  } catch (error) {
-    console.error('Error creating review request:', error);
-  }
-}
-
-async function sendReviewRequest(reviewRequest) {
-  try {
-    const result = await pool.query(
-      `SELECT 
-        rr.*, 
-        j.service_name,
-        c.name as customer_name, c.email, c.phone,
-        u.business_name, u.google_place_id, u.review_incentive, u.sms_enabled, u.email_enabled, u.twilio_phone
-       FROM review_requests rr
-       JOIN jobs j ON rr.job_id = j.id
-       JOIN customers c ON rr.customer_id = c.id
-       JOIN users u ON rr.user_id = u.id
-       WHERE rr.id = $1`,
-      [reviewRequest.id]
-    );
-
-    if (result.rows.length === 0) {
-      console.error('Review request not found:', reviewRequest.id);
-      return;
-    }
-
-    const data = result.rows[0];
-    const reviewLink = createReviewLink(data.google_place_id, data.incentive_code);
-
-    let smsSent = false;
-    let emailSent = false;
-    let smsError = null;
-    let emailError = null;
-
-    if (data.sms_enabled && data.phone && twilioClient) {
-      try {
-        const smsMessage = `Hi ${data.customer_name}! Thanks for choosing ${data.business_name} for ${data.service_name}!\n\nLove our work? Leave a Google review & get ${data.review_incentive}:\n${reviewLink}`;
-
-        await twilioClient.messages.create({
-          body: smsMessage,
-          from: data.twilio_phone,
-          to: data.phone
-        });
-
-        smsSent = true;
-        console.log(`📱 SMS sent to ${data.customer_name}`);
-      } catch (error) {
-        smsError = error.message;
-        console.error('SMS error:', error);
-      }
-    }
-
-    if (data.email_enabled && data.email && sgMail) {
-      try {
-        const emailHtml = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h1 style="color: #10b981;">Thank You, ${data.customer_name}!</h1>
-            <p>We hope you loved our ${data.service_name} service!</p>
-            <p>Would you mind taking a moment to leave us a Google review? As a thank you, we'll give you:</p>
-            <div style="background: #f0fdf4; padding: 20px; border-radius: 10px; margin: 20px 0;">
-              <h2 style="color: #059669; margin: 0;">${data.review_incentive}</h2>
-            </div>
-            <p style="text-align: center;">
-              <a href="${reviewLink}" style="display: inline-block; background: #10b981; color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px;">
-                Leave a Review
-              </a>
-            </p>
-            <p style="font-size: 14px; color: #666; margin-top: 30px;">
-              Use code: <strong>${data.incentive_code}</strong> on your next booking!
-            </p>
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-            <p style="font-size: 12px; color: #666;">
-              ${data.business_name}<br>
-              This is an automated message. Please don't reply to this email.
-            </p>
-          </div>
-        `;
-
-        await sgMail.send({
-          to: data.email,
-          from: process.env.SENDGRID_FROM_EMAIL || 'noreply@sorce.com',
-          subject: `Thanks for choosing ${data.business_name}! 🌟`,
-          html: emailHtml
-        });
-
-        emailSent = true;
-        console.log(`📧 Email sent to ${data.customer_name}`);
-      } catch (error) {
-        emailError = error.message;
-        console.error('Email error:', error);
-      }
-    }
-
-    await pool.query(
-      `UPDATE review_requests
-       SET actual_send_time = CURRENT_TIMESTAMP,
-           sms_sent = $1,
-           sms_sent_at = CASE WHEN $1 THEN CURRENT_TIMESTAMP ELSE NULL END,
-           sms_error = $2,
-           email_sent = $3,
-           email_sent_at = CASE WHEN $3 THEN CURRENT_TIMESTAMP ELSE NULL END,
-           email_error = $4,
-           status = CASE WHEN $1 OR $3 THEN 'sent' ELSE 'failed' END
-       WHERE id = $5`,
-      [smsSent, smsError, emailSent, emailError, reviewRequest.id]
-    );
-
-    const today = new Date().toISOString().split('T')[0];
-    await pool.query(
-      `INSERT INTO review_analytics (user_id, date, requests_sent, sms_sent, emails_sent)
-       VALUES ($1, $2, 1, $3, $4)
-       ON CONFLICT (user_id, date) 
-       DO UPDATE SET 
-         requests_sent = review_analytics.requests_sent + 1,
-         sms_sent = review_analytics.sms_sent + $3,
-         emails_sent = review_analytics.emails_sent + $4`,
-      [data.user_id, today, smsSent ? 1 : 0, emailSent ? 1 : 0]
-    );
-
-  } catch (error) {
-    console.error('Error sending review request:', error);
-  }
-}
-
 // ============================================
 // PUBLIC BOOKING ENDPOINTS (No auth required)
 // ============================================
@@ -1565,12 +1420,73 @@ app.post('/api/jobs', authenticateToken, async (req, res) => {
       [userId, customerId, serviceId, service.name, scheduledStart, service.duration_hours, calculatedEnd, service.price, notes]
     );
 
-    await createReviewRequest(result.rows[0]);
-
     res.json({ job: result.rows[0] });
   } catch (error) {
     console.error('Error creating job:', error);
     res.status(500).json({ error: 'Failed to create job' });
+  }
+});
+
+// POST - Save user's Google review link
+app.post('/api/user/google-review-link', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { reviewLink } = req.body;
+
+    if (!reviewLink || !reviewLink.trim()) {
+      return res.status(400).json({ error: 'Review link is required' });
+    }
+
+    // Validate it's a Google link
+    if (!reviewLink.includes('google.com') || !reviewLink.includes('review')) {
+      return res.status(400).json({ 
+        error: 'Invalid link. Must be a Google review link.' 
+      });
+    }
+
+    const result = await pool.query(
+      'UPDATE users SET google_review_link = $1 WHERE id = $2 RETURNING id, google_review_link',
+      [reviewLink.trim(), userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log(`✅ Google review link saved for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Google review link saved successfully',
+      reviewLink: result.rows[0].google_review_link
+    });
+  } catch (error) {
+    console.error('Error saving Google review link:', error);
+    res.status(500).json({ error: 'Failed to save Google review link' });
+  }
+});
+
+// GET - Fetch user profile (including review link)
+app.get('/api/user/profile', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      'SELECT id, email, business_name, google_review_link FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      success: true,
+      user: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({ error: 'Failed to fetch user profile' });
   }
 });
 
@@ -3711,6 +3627,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
