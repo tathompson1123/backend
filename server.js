@@ -123,11 +123,12 @@ function createReviewLink(placeId, incentiveCode) {
   return `https://search.google.com/local/writereview?placeid=${placeId}`;
 }
 
-// Initialize review request sequence when booking is completed
+// OPTIMIZED: Initialize review request sequence when booking is completed
+// 1 SMS (immediate) + 4 Emails (follow-ups) = 50% cost savings
 async function initializeReviewSequence(booking) {
   try {
     const userResult = await pool.query(
-      'SELECT google_place_id, business_name FROM users WHERE id = $1',
+      'SELECT google_review_link, business_name FROM users WHERE id = $1',
       [booking.user_id]
     );
 
@@ -138,25 +139,27 @@ async function initializeReviewSequence(booking) {
 
     const user = userResult.rows[0];
     
-const reviewLink = user.google_review_link;
-if (!reviewLink) {
-  console.log('⚠️ No Google review link set for user:', booking.user_id);
-  console.log('   Review sequence skipped. Please add review link in Google Business Settings.');
-  return;
-}
-    
+    const reviewLink = user.google_review_link;
+    if (!reviewLink) {
+      console.log('⚠️ No Google review link set for user:', booking.user_id);
+      console.log('   Review sequence skipped. Please add review link in Google Business Settings.');
+      return;
+    }
+
     // Calculate end time of booking
     const bookingDateTime = new Date(`${booking.booking_date}T${booking.start_time}`);
     const [endHour, endMin] = booking.end_time.split(':').map(Number);
     const bookingEndTime = new Date(bookingDateTime);
     bookingEndTime.setHours(endHour, endMin, 0, 0);
 
-    // Calculate all schedule times
-    const step1Time = new Date(bookingEndTime.getTime() + (2 * 60 * 60 * 1000)); // +2 hours
-    const step2Time = new Date(bookingEndTime.getTime() + (26 * 60 * 60 * 1000)); // +26 hours
-    const step3Time = new Date(bookingEndTime.getTime() + (50 * 60 * 60 * 1000)); // +50 hours
-    const step4Time = new Date(bookingEndTime.getTime() + (74 * 60 * 60 * 1000)); // +74 hours
-    const step5Time = new Date(bookingEndTime.getTime() + (7 * 24 * 60 * 60 * 1000)); // +7 days
+    // OPTIMIZED SCHEDULE:
+    // Step 1: SMS at 2 hours (immediate, high engagement)
+    // Step 2-5: All emails (free, professional)
+    const step1Time = new Date(bookingEndTime.getTime() + (2 * 60 * 60 * 1000)); // +2 hours - SMS
+    const step2Time = new Date(bookingEndTime.getTime() + (24 * 60 * 60 * 1000)); // +24 hours - Email
+    const step3Time = new Date(bookingEndTime.getTime() + (3 * 24 * 60 * 60 * 1000)); // +3 days - Email
+    const step4Time = new Date(bookingEndTime.getTime() + (5 * 24 * 60 * 60 * 1000)); // +5 days - Email
+    const step5Time = new Date(bookingEndTime.getTime() + (7 * 24 * 60 * 60 * 1000)); // +7 days - Final Email
 
     const incentiveCode = generateIncentiveCode();
 
@@ -184,19 +187,20 @@ if (!reviewLink) {
       ]
     );
 
-    console.log(`✅ Review sequence initialized for booking ${booking.id}`);
-    console.log(`   Step 1 (SMS): ${step1Time}`);
-    console.log(`   Step 2 (SMS): ${step2Time}`);
-    console.log(`   Step 3 (Email): ${step3Time}`);
-    console.log(`   Step 4 (Email): ${step4Time}`);
-    console.log(`   Step 5 (Email): ${step5Time}`);
+    console.log(`✅ OPTIMIZED Review sequence initialized for booking ${booking.id}`);
+    console.log(`   💰 Cost Savings: 50% (1 SMS instead of 2)`);
+    console.log(`   Step 1 (SMS): ${step1Time} - 2 hours after completion`);
+    console.log(`   Step 2 (Email): ${step2Time} - 24 hours after`);
+    console.log(`   Step 3 (Email): ${step3Time} - 3 days after`);
+    console.log(`   Step 4 (Email): ${step4Time} - 5 days after`);
+    console.log(`   Step 5 (Email): ${step5Time} - 7 days after (final)`);
 
   } catch (error) {
     console.error('Error initializing review sequence:', error);
   }
 }
 
-// Send individual review request step
+// OPTIMIZED: Send individual review request step
 async function sendReviewRequestStep(sequence, step) {
   try {
     // Get full data
@@ -205,7 +209,7 @@ async function sendReviewRequestStep(sequence, step) {
         s.*,
         b.booking_date, b.start_time,
         c.name as customer_name, c.email, c.phone,
-        u.business_name, u.google_place_id, u.review_incentive, 
+        u.business_name, u.google_review_link, u.review_incentive, 
         u.twilio_phone, u.sms_enabled, u.email_enabled
        FROM review_request_sequences s
        JOIN bookings b ON s.booking_id = b.id
@@ -221,25 +225,32 @@ async function sendReviewRequestStep(sequence, step) {
     }
 
     const data = result.rows[0];
-    const reviewLink = createReviewLink(data.google_place_id, data.incentive_code);
+    const reviewLink = data.google_review_link;
+
+    if (!reviewLink) {
+      console.error('No review link for user:', data.user_id);
+      return;
+    }
 
     let success = false;
     let errorMessage = null;
 
-    // Determine if this step is SMS or Email
-    const isSMS = step === 1 || step === 2;
-    const isEmail = step === 3 || step === 4 || step === 5;
+    // OPTIMIZED FLOW:
+    // Step 1 = SMS (immediate impact)
+    // Steps 2-5 = Email (free, professional)
+    const isSMS = step === 1;
+    const isEmail = step >= 2 && step <= 5;
 
-    // Send SMS
+    // Send SMS (ONLY STEP 1)
     if (isSMS && data.sms_enabled && data.phone && twilioClient) {
       try {
-        let smsMessage = '';
-        
-        if (step === 1) {
-          smsMessage = `Hi ${data.customer_name}! Thanks for choosing ${data.business_name}! 🌟\n\nLoved our service? Leave a quick Google review & get ${data.review_incentive || '10% off your next visit'}:\n${reviewLink}`;
-        } else if (step === 2) {
-          smsMessage = `Hi ${data.customer_name}, it's ${data.business_name} again! We'd really appreciate your Google review 🙏\n\nLeave a review to claim ${data.review_incentive || '10% off'}:\n${reviewLink}`;
-        }
+        const smsMessage = `Hi ${data.customer_name}! Thanks for choosing ${data.business_name}! 🌟
+
+Loved our service? Leave a quick Google review & get ${data.review_incentive || '10% off your next visit'}!
+
+${reviewLink}
+
+Reply STOP to opt out`;
 
         await twilioClient.messages.create({
           body: smsMessage,
@@ -248,32 +259,41 @@ async function sendReviewRequestStep(sequence, step) {
         });
 
         success = true;
-        console.log(`📱 Step ${step} SMS sent to ${data.customer_name}`);
+        console.log(`📱 Step ${step} SMS sent to ${data.customer_name} - Strike while iron is hot!`);
       } catch (error) {
         errorMessage = error.message;
         console.error(`SMS error for step ${step}:`, error);
       }
     }
 
-    // Send Email
+    // Send Email (STEPS 2-5)
     if (isEmail && data.email_enabled && data.email && sgMail) {
       try {
         let subject = '';
         let heading = '';
         let bodyText = '';
+        let urgency = '';
 
-        if (step === 3) {
+        if (step === 2) {
           subject = `We'd love your feedback! - ${data.business_name}`;
           heading = `How was your experience, ${data.customer_name}?`;
-          bodyText = `We hope you enjoyed our service! Your feedback means the world to us, and it only takes a minute to leave a Google review.`;
-        } else if (step === 4) {
+          bodyText = `We hope you enjoyed our service! Your feedback means the world to us. It only takes 60 seconds to leave a Google review, and you'll get a special thank you from us!`;
+          urgency = 'Take a moment today to share your thoughts! ⭐';
+        } else if (step === 3) {
           subject = `Quick reminder: Share your experience - ${data.business_name}`;
-          heading = `Still time to share your thoughts!`;
-          bodyText = `We wanted to follow up and see if you'd be willing to leave us a quick Google review. Your feedback helps us improve and helps others find great service!`;
+          heading = `Still time to claim your reward!`;
+          bodyText = `We wanted to follow up and see if you'd be willing to leave us a quick Google review. Your feedback helps us improve and helps others find great service like you did!`;
+          urgency = 'Leave a review this week and save on your next visit! 💰';
+        } else if (step === 4) {
+          subject = `Don't miss out on your special offer! - ${data.business_name}`;
+          heading = `Your reward is waiting, ${data.customer_name}!`;
+          bodyText = `We noticed you haven't left a review yet. No worries! You still have time to share your experience and claim your special offer. We'd genuinely love to hear from you.`;
+          urgency = 'Offer expires soon - review today! ⏰';
         } else if (step === 5) {
-          subject = `Last chance for your special offer! - ${data.business_name}`;
-          heading = `Don't miss out, ${data.customer_name}!`;
-          bodyText = `This is your final reminder to leave a Google review and claim your special offer. We'd love to hear from you!`;
+          subject = `Final chance: Your exclusive discount expires soon! - ${data.business_name}`;
+          heading = `Last call, ${data.customer_name}! 🔔`;
+          bodyText = `This is your final reminder to leave a Google review and claim your exclusive offer. We truly appreciate your business and would love to hear your thoughts. After this, the offer expires!`;
+          urgency = '⚠️ FINAL REMINDER - Claim your reward today!';
         }
 
         const emailHtml = `
@@ -296,6 +316,15 @@ async function sendReviewRequestStep(sequence, step) {
                   ${bodyText}
                 </p>
                 
+                <!-- Urgency Banner -->
+                ${step >= 4 ? `
+                <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; border-left: 4px solid #f59e0b;">
+                  <p style="color: #92400e; font-size: 15px; margin: 0; font-weight: 600;">
+                    ${urgency}
+                  </p>
+                </div>
+                ` : ''}
+                
                 <!-- Incentive Box -->
                 <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); padding: 30px; border-radius: 12px; margin: 30px 0; text-align: center; border: 2px solid #10b981;">
                   <p style="color: #059669; font-size: 14px; margin: 0 0 10px 0; font-weight: 600;">YOUR REWARD</p>
@@ -311,8 +340,17 @@ async function sendReviewRequestStep(sequence, step) {
                 </div>
                 
                 <p style="color: #6b7280; font-size: 14px; line-height: 1.6; text-align: center; margin-top: 30px;">
-                  It only takes 60 seconds and helps us serve you better!
+                  ${step === 5 ? '⚠️ This is your last chance to claim this exclusive offer!' : 'It only takes 60 seconds and helps us serve you better!'}
                 </p>
+
+                ${step >= 3 ? `
+                <div style="margin-top: 30px; padding: 20px; background-color: #f9fafb; border-radius: 8px; text-align: center;">
+                  <p style="color: #6b7280; font-size: 13px; margin: 0;">
+                    <strong>Prefer to chat instead?</strong><br>
+                    Reply to this email or text us at ${data.twilio_phone || 'our business number'}
+                  </p>
+                </div>
+                ` : ''}
               </div>
               
               <!-- Footer -->
@@ -321,7 +359,8 @@ async function sendReviewRequestStep(sequence, step) {
                   ${data.business_name}
                 </p>
                 <p style="color: #9ca3af; font-size: 12px; margin: 0;">
-                  This is an automated message. Please don't reply to this email.
+                  You're receiving this because you recently used our services.<br>
+                  <a href="#" style="color: #9ca3af; text-decoration: underline;">Unsubscribe</a>
                 </p>
               </div>
             </div>
@@ -337,7 +376,7 @@ async function sendReviewRequestStep(sequence, step) {
         });
 
         success = true;
-        console.log(`📧 Step ${step} Email sent to ${data.customer_name}`);
+        console.log(`📧 Step ${step} Email sent to ${data.customer_name} - ${subject}`);
       } catch (error) {
         errorMessage = error.message;
         console.error(`Email error for step ${step}:`, error);
@@ -381,12 +420,17 @@ async function sendReviewRequestStep(sequence, step) {
       [...values, sequence.id]
     );
 
-    console.log(`✅ Step ${step} processed for sequence ${sequence.id}`);
+    console.log(`✅ Step ${step} processed for sequence ${sequence.id} (${isSMS ? 'SMS' : 'Email'})`);
 
   } catch (error) {
     console.error(`Error sending step ${step}:`, error);
   }
 }
+
+module.exports = {
+  initializeReviewSequence,
+  sendReviewRequestStep
+};
 
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -792,6 +836,362 @@ app.get('/api/public/availability', async (req, res) => {
     res.status(500).json({ error: 'Failed to calculate availability' });
   }
 });
+
+// ============================================
+// EMAIL-FIRST LEAD QUALIFICATION SYSTEM
+// Cost: $0 (uses SendGrid free tier)
+// ============================================
+
+// Add these endpoints to your server.js
+
+// POST - Handle incoming lead from website form
+app.post('/api/leads/submit', async (req, res) => {
+  try {
+    const { 
+      businessId, 
+      customerName, 
+      customerEmail, 
+      customerPhone,
+      preferredContact, // 'email' or 'sms'
+      serviceInterest,
+      message 
+    } = req.body;
+
+    if (!businessId || !customerName || (!customerEmail && !customerPhone)) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Create lead record
+    const leadResult = await pool.query(
+      `INSERT INTO leads (
+        user_id, name, email, phone, preferred_contact, 
+        service_interest, message, status, source, created_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', 'website', CURRENT_TIMESTAMP)
+      RETURNING *`,
+      [
+        businessId, 
+        customerName, 
+        customerEmail, 
+        customerPhone,
+        preferredContact || 'email',
+        serviceInterest,
+        message
+      ]
+    );
+
+    const lead = leadResult.rows[0];
+
+    // Get business info
+    const businessResult = await pool.query(
+      'SELECT business_name, email as business_email, twilio_phone FROM users WHERE id = $1',
+      [businessId]
+    );
+
+    const business = businessResult.rows[0];
+
+    // SEND INITIAL RESPONSE - EMAIL FIRST (FREE!)
+    if (customerEmail && sgMail) {
+      try {
+        const emailHtml = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f3f4f6;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+              <!-- Header -->
+              <div style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 40px 20px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px;">Thanks for your interest! 🎉</h1>
+              </div>
+              
+              <!-- Body -->
+              <div style="padding: 40px 30px;">
+                <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+                  Hi ${customerName},
+                </p>
+                
+                <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+                  Thank you for reaching out to <strong>${business.business_name}</strong>! We're excited to help you with ${serviceInterest || 'your needs'}.
+                </p>
+
+                <!-- Quick Response Options -->
+                <div style="background: #f0f9ff; padding: 25px; border-radius: 12px; margin: 30px 0; border-left: 4px solid #3b82f6;">
+                  <h3 style="color: #1e40af; margin: 0 0 15px 0; font-size: 18px;">How would you like to continue?</h3>
+                  
+                  <div style="margin: 20px 0;">
+                    <a href="mailto:${business.business_email}?subject=Re: Service Inquiry&body=Hi, I'd like to continue our conversation about ${serviceInterest || 'my inquiry'}..." 
+                       style="display: inline-block; background: #3b82f6; color: #ffffff; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 5px;">
+                      📧 Continue via Email (Recommended)
+                    </a>
+                  </div>
+
+                  ${customerPhone ? `
+                  <div style="margin: 20px 0;">
+                    <a href="sms:${business.twilio_phone}?body=Hi ${business.business_name}, I'd like to discuss ${serviceInterest || 'my inquiry'}" 
+                       style="display: inline-block; background: #10b981; color: #ffffff; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 5px;">
+                      💬 Switch to Text Message
+                    </a>
+                  </div>
+                  ` : ''}
+                </div>
+
+                <div style="background: #fefce8; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #eab308;">
+                  <p style="color: #713f12; font-size: 14px; margin: 0; line-height: 1.6;">
+                    <strong>💡 Why email?</strong><br>
+                    Email lets us share photos, detailed quotes, and scheduling options more easily. Plus, you'll have everything in writing for your records!
+                  </p>
+                </div>
+
+                <!-- Quick Questions -->
+                <div style="margin: 30px 0;">
+                  <h3 style="color: #374151; font-size: 18px; margin-bottom: 15px;">
+                    To help us serve you better, please share:
+                  </h3>
+                  <ul style="color: #6b7280; line-height: 1.8;">
+                    <li>What specific service are you interested in?</li>
+                    <li>When would you like us to start?</li>
+                    <li>What's your location/address?</li>
+                    <li>Any specific requirements or questions?</li>
+                  </ul>
+                </div>
+
+                <!-- CTA -->
+                <div style="text-align: center; margin: 40px 0;">
+                  <a href="mailto:${business.business_email}?subject=Service Inquiry - ${serviceInterest || 'General'}&body=Hi ${business.business_name},%0D%0A%0D%0AService needed: ${serviceInterest || ''}%0D%0AWhen: %0D%0ALocation: %0D%0ADetails: ${message || ''}%0D%0A%0D%0AThanks!" 
+                     style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: #ffffff; padding: 18px 50px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    Reply Now →
+                  </a>
+                </div>
+
+                <p style="color: #9ca3af; font-size: 13px; text-align: center; margin-top: 30px;">
+                  We typically respond within 2 hours during business hours.
+                </p>
+              </div>
+              
+              <!-- Footer -->
+              <div style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0; font-weight: 600;">
+                  ${business.business_name}
+                </p>
+                ${business.twilio_phone ? `
+                <p style="color: #9ca3af; font-size: 13px; margin: 5px 0;">
+                  📞 ${business.twilio_phone}
+                </p>
+                ` : ''}
+                <p style="color: #9ca3af; font-size: 13px; margin: 5px 0;">
+                  📧 ${business.business_email}
+                </p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `;
+
+        await sgMail.send({
+          to: customerEmail,
+          from: process.env.SENDGRID_FROM_EMAIL || business.business_email,
+          subject: `Thanks for contacting ${business.business_name}! 🎉`,
+          html: emailHtml
+        });
+
+        console.log(`✅ Email-first response sent to ${customerName} (FREE)`);
+
+        // Update lead status
+        await pool.query(
+          `UPDATE leads SET status = 'contacted_email', last_contact = CURRENT_TIMESTAMP WHERE id = $1`,
+          [lead.id]
+        );
+
+      } catch (error) {
+        console.error('Error sending email response:', error);
+      }
+    }
+
+    // FALLBACK: If no email or they prefer SMS
+    if (preferredContact === 'sms' && customerPhone && twilioClient) {
+      try {
+        await twilioClient.messages.create({
+          body: `Hi ${customerName}! Thanks for your interest in ${business.business_name}! 
+
+We'd love to help with ${serviceInterest || 'your request'}. 
+
+For the best experience, would you prefer to:
+1. Continue via text (charges may apply)
+2. Email us at ${business.business_email} (FREE & easier for quotes/photos)
+
+Reply 1 or 2!`,
+          from: business.twilio_phone,
+          to: customerPhone
+        });
+
+        console.log(`📱 SMS preference offer sent to ${customerName} ($0.0079)`);
+
+        await pool.query(
+          `UPDATE leads SET status = 'contacted_sms', last_contact = CURRENT_TIMESTAMP WHERE id = $1`,
+          [lead.id]
+        );
+
+      } catch (error) {
+        console.error('Error sending SMS:', error);
+      }
+    }
+
+    // Notify business owner
+    if (business.business_email && sgMail) {
+      try {
+        await sgMail.send({
+          to: business.business_email,
+          from: process.env.SENDGRID_FROM_EMAIL || business.business_email,
+          subject: `🔔 New Lead: ${customerName}`,
+          html: `
+            <h2>New Lead Received!</h2>
+            <p><strong>Name:</strong> ${customerName}</p>
+            <p><strong>Email:</strong> ${customerEmail || 'Not provided'}</p>
+            <p><strong>Phone:</strong> ${customerPhone || 'Not provided'}</p>
+            <p><strong>Preferred Contact:</strong> ${preferredContact || 'email'}</p>
+            <p><strong>Interest:</strong> ${serviceInterest || 'Not specified'}</p>
+            <p><strong>Message:</strong> ${message || 'None'}</p>
+            <hr>
+            <p><em>Customer has been sent an email-first response to save on SMS costs.</em></p>
+          `
+        });
+      } catch (error) {
+        console.error('Error notifying business:', error);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      lead,
+      message: 'Thank you! We\'ll be in touch shortly.',
+      contactMethod: customerEmail ? 'email' : 'sms'
+    });
+
+  } catch (error) {
+    console.error('Error handling lead submission:', error);
+    res.status(500).json({ error: 'Failed to process inquiry' });
+  }
+});
+
+// POST - Handle incoming SMS (Twilio webhook)
+app.post('/api/sms-webhook', async (req, res) => {
+  try {
+    const customerMessage = req.body.Body;
+    const customerPhone = req.body.From;
+    const businessPhone = req.body.To;
+
+    // Find which business this belongs to
+    const businessResult = await pool.query(
+      'SELECT id, business_name, email FROM users WHERE twilio_phone = $1',
+      [businessPhone]
+    );
+
+    if (businessResult.rows.length === 0) {
+      return res.status(404).send('Business not found');
+    }
+
+    const business = businessResult.rows[0];
+
+    // Check if this is a response to "1 or 2" choice
+    const trimmedMessage = customerMessage.trim().toLowerCase();
+    
+    if (trimmedMessage === '1') {
+      // Customer chose SMS
+      await twilioClient.messages.create({
+        body: `Great! We'll continue via text. What service are you interested in?`,
+        from: businessPhone,
+        to: customerPhone
+      });
+
+      // Update lead
+      await pool.query(
+        `UPDATE leads 
+         SET preferred_contact = 'sms', status = 'sms_conversation'
+         WHERE phone = $1 AND user_id = $2`,
+        [customerPhone, business.id]
+      );
+
+      return res.status(200).send('OK');
+    }
+
+    if (trimmedMessage === '2') {
+      // Customer chose email - send them the email address
+      await twilioClient.messages.create({
+        body: `Perfect! Please email us at ${business.email} - we'll send you photos, quotes, and details there. Looking forward to hearing from you! 📧`,
+        from: businessPhone,
+        to: customerPhone
+      });
+
+      // Update lead
+      await pool.query(
+        `UPDATE leads 
+         SET preferred_contact = 'email', status = 'email_preferred'
+         WHERE phone = $1 AND user_id = $2`,
+        [customerPhone, business.id]
+      );
+
+      return res.status(200).send('OK');
+    }
+
+    // For any other SMS, ask if they'd prefer email
+    await twilioClient.messages.create({
+      body: `Hi! Thanks for texting ${business.business_name}! 
+
+For the fastest response with photos & detailed quotes, would you prefer email? 
+
+Reply YES for email address, or NO to continue via text.`,
+      from: businessPhone,
+      to: customerPhone
+    });
+
+    // Log the interaction
+    await pool.query(
+      `INSERT INTO lead_messages (user_id, phone, message, direction, created_at)
+       VALUES ($1, $2, $3, 'inbound', CURRENT_TIMESTAMP)`,
+      [business.id, customerPhone, customerMessage]
+    );
+
+    res.status(200).send('OK');
+
+  } catch (error) {
+    console.error('Error handling SMS webhook:', error);
+    res.status(500).send('Error');
+  }
+});
+
+// GET - Check lead preferences
+app.get('/api/leads/stats', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      `SELECT 
+        COUNT(*) as total_leads,
+        COUNT(*) FILTER (WHERE preferred_contact = 'email') as email_leads,
+        COUNT(*) FILTER (WHERE preferred_contact = 'sms') as sms_leads,
+        COUNT(*) FILTER (WHERE status = 'email_preferred') as email_conversions
+       FROM leads
+       WHERE user_id = $1
+       AND created_at >= CURRENT_DATE - INTERVAL '30 days'`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      stats: result.rows[0],
+      costSavings: `Email leads save you $${(result.rows[0].email_leads * 5 * 0.0079).toFixed(2)}/month!`
+    });
+
+  } catch (error) {
+    console.error('Error fetching lead stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+console.log('✅ Email-first lead qualification system loaded');
 
 // POST - Create public booking
 app.post('/api/public/bookings/create', async (req, res) => {
@@ -3631,6 +4031,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
