@@ -2828,6 +2828,41 @@ app.get('/api/website/pages', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/website', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      'SELECT * FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ 
+        success: true,
+        website: null 
+      });
+    }
+
+    // Parse pages JSON if it exists
+    const website = result.rows[0];
+    if (website.pages && typeof website.pages === 'string') {
+      website.pages = JSON.parse(website.pages);
+    }
+
+    res.json({ 
+      success: true,
+      website: website
+    });
+  } catch (error) {
+    console.error('Error fetching website:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch website' 
+    });
+  }
+});
+
 console.log('✅ Multi-page website endpoints loaded');
 
 app.post('/api/website', authenticateToken, async (req, res) => {
@@ -3221,6 +3256,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
