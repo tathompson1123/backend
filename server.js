@@ -2587,14 +2587,15 @@ if (!htmlContent) {
     console.log(`✅ Phone displays: ${phoneCount}`);
 
     res.json({ 
-      success: true, 
-      html: cleanHtml,
-      businessName: safeBusinessName,
-      bookingUrl,
-      phoneNumber,
-      address: fullAddress || null,
-      serviceArea: serviceAreaText || null,
-      pages: ['Home', 'Services', 'Gift Cards', 'Contact'],
+  success: true, 
+  html: cleanHtml,
+  pages: files,  // Add this - the actual page files!
+  businessName: safeBusinessName,
+  bookingUrl,
+  phoneNumber,
+  address: fullAddress || null,
+  serviceArea: serviceAreaText || null,
+  pageNames: Object.keys(files),
       usedRealData: {
         services: servicesInfo.hasData,
         hours: hoursInfo.hasData,
@@ -3256,6 +3257,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
