@@ -964,9 +964,9 @@ app.get('/api/google-business/stats', authenticateToken, async (req, res) => {
       return res.json({
         success: true,
         stats: {
-          repliesToday: 0,
-          repliesWeek: 0,
-          repliesMonth: 0,
+          today: 0,
+          week: 0,
+          month: 0,
           lastReplyDate: null
         }
       });
@@ -975,9 +975,9 @@ app.get('/api/google-business/stats', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       stats: {
-        repliesToday: result.rows[0].replies_generated_today || 0,
-        repliesWeek: result.rows[0].replies_generated_week || 0,
-        repliesMonth: result.rows[0].replies_generated_month || 0,
+        today: result.rows[0].replies_generated_today || 0,
+        week: result.rows[0].replies_generated_week || 0,
+        month: result.rows[0].replies_generated_month || 0,
         lastReplyDate: result.rows[0].last_reply_date
       }
     });
@@ -3148,7 +3148,26 @@ Return ONLY the reply text, no quotes or formatting.`
     const data = await response.json();
     const reply = data.content[0].text.trim();
     
-    console.log(`✅ Generated review reply for user ${userId}`);
+    // **NEW: Increment the stats in the database**
+    await pool.query(
+      `INSERT INTO google_business_profiles (
+        user_id, 
+        replies_generated_today, 
+        replies_generated_week, 
+        replies_generated_month,
+        last_reply_date
+      )
+      VALUES ($1, 1, 1, 1, CURRENT_DATE)
+      ON CONFLICT (user_id) 
+      DO UPDATE SET
+        replies_generated_today = google_business_profiles.replies_generated_today + 1,
+        replies_generated_week = google_business_profiles.replies_generated_week + 1,
+        replies_generated_month = google_business_profiles.replies_generated_month + 1,
+        last_reply_date = CURRENT_DATE`,
+      [userId]
+    );
+    
+    console.log(`✅ Generated review reply for user ${userId} and incremented stats`);
     
     res.json({
       success: true,
@@ -3257,6 +3276,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
