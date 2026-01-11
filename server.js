@@ -144,10 +144,7 @@ if (!reviewLink) {
   console.log('   Review sequence skipped. Please add review link in Google Business Settings.');
   return;
 }
-
-// Then later when creating the review link, change from:
-const reviewLink = createReviewLink(data.google_place_id, data.incentive_code);
-
+    
     // Calculate end time of booking
     const bookingDateTime = new Date(`${booking.booking_date}T${booking.start_time}`);
     const [endHour, endMin] = booking.end_time.split(':').map(Number);
@@ -3634,6 +3631,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
