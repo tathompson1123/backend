@@ -1142,30 +1142,67 @@ app.post('/api/public/bookings/create', async (req, res) => {
 
 console.log('✅ Public booking endpoints loaded');
 
-// GET - Fetch review requests for a user
+// GET - Fetch review request sequences (UPDATED VERSION)
 app.get('/api/google-business/review-requests', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
 
     const result = await pool.query(
       `SELECT 
-        rr.*,
-        j.service_name,
-        c.name as customer_name,
-        c.email as customer_email,
-        c.phone as customer_phone
-       FROM review_requests rr
-       LEFT JOIN jobs j ON rr.job_id = j.id
-       LEFT JOIN customers c ON rr.customer_id = c.id
-       WHERE rr.user_id = $1
-       ORDER BY rr.scheduled_send_time DESC
+        s.*,
+        b.booking_date, b.start_time, b.end_time,
+        c.name as customer_name, c.email as customer_email, c.phone as customer_phone,
+        (SELECT name FROM services WHERE id = (
+          SELECT service_id FROM booking_items WHERE booking_id = b.id LIMIT 1
+        )) as service_name
+       FROM review_request_sequences s
+       LEFT JOIN bookings b ON s.booking_id = b.id
+       LEFT JOIN customers c ON s.customer_id = c.id
+       WHERE s.user_id = $1
+       ORDER BY s.created_at DESC
        LIMIT 100`,
       [userId]
     );
 
+    // Transform data to match frontend expectations
+    const requests = result.rows.map(row => ({
+      id: row.id,
+      customer_name: row.customer_name,
+      customer_email: row.customer_email,
+      customer_phone: row.customer_phone,
+      service_name: row.service_name,
+      incentive_code: row.incentive_code,
+      
+      // Determine overall status
+      status: row.review_completed ? 'completed' : 
+              (row.step1_status === 'sent' || row.step2_status === 'sent' || 
+               row.step3_status === 'sent' || row.step4_status === 'sent' || 
+               row.step5_status === 'sent') ? 'sent' : 'pending',
+      
+      scheduled_send_time: row.step1_scheduled_time,
+      actual_send_time: row.step1_sent_time || row.step2_sent_time || row.step3_sent_time,
+      
+      sms_sent: row.step1_sms_sent || row.step2_sms_sent,
+      email_sent: row.step3_email_sent || row.step4_email_sent || row.step5_email_sent,
+      
+      link_clicked: row.link_clicked,
+      link_clicked_at: row.link_clicked_at,
+      review_completed: row.review_completed,
+      review_completed_at: row.review_completed_at,
+      
+      // Include step details
+      steps: {
+        step1: { scheduled: row.step1_scheduled_time, sent: row.step1_sent_time, status: row.step1_status, type: 'SMS' },
+        step2: { scheduled: row.step2_scheduled_time, sent: row.step2_sent_time, status: row.step2_status, type: 'SMS' },
+        step3: { scheduled: row.step3_scheduled_time, sent: row.step3_sent_time, status: row.step3_status, type: 'Email' },
+        step4: { scheduled: row.step4_scheduled_time, sent: row.step4_sent_time, status: row.step4_status, type: 'Email' },
+        step5: { scheduled: row.step5_scheduled_time, sent: row.step5_sent_time, status: row.step5_status, type: 'Email' }
+      }
+    }));
+
     res.json({
       success: true,
-      requests: result.rows
+      requests
     });
   } catch (error) {
     console.error('Error fetching review requests:', error);
@@ -3674,6 +3711,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
