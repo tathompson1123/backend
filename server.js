@@ -1163,6 +1163,297 @@ Reply YES for email address, or NO to continue via text.`,
   }
 });
 
+app.get('/api/leads', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      `SELECT * FROM leads 
+       WHERE user_id = $1 
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    res.json({ 
+      success: true,
+      leads: result.rows 
+    });
+  } catch (error) {
+    console.error('Error fetching leads:', error);
+    res.status(500).json({ error: 'Failed to fetch leads' });
+  }
+});
+
+// POST - Generate AI response for lead
+app.post('/api/leads/generate-response', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { leadName, serviceInterest, leadMessage, preferredContact } = req.body;
+
+    if (!leadName) {
+      return res.status(400).json({ error: 'Lead name required' });
+    }
+
+    // Get business info
+    const businessResult = await pool.query(
+      'SELECT business_name FROM users WHERE id = $1',
+      [userId]
+    );
+
+    const businessName = businessResult.rows[0]?.business_name || 'our business';
+
+    // Call Claude API to generate response
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 300,
+        temperature: 0.7,
+        messages: [{
+          role: 'user',
+          content: `You are a friendly customer service representative for ${businessName}.
+
+A potential customer named ${leadName} has contacted us with interest in: ${serviceInterest || 'our services'}.
+
+${leadMessage ? `Their message: "${leadMessage}"` : ''}
+
+They prefer ${preferredContact === 'sms' ? 'text messages' : 'email'} communication.
+
+Write a warm, professional, personalized response that:
+1. Thanks them for their interest
+2. Acknowledges their specific service interest
+3. Asks 1-2 relevant questions to better understand their needs
+4. Encourages them to book or continue the conversation
+5. Keeps it conversational and friendly (not corporate)
+6. Is appropriate for ${preferredContact === 'sms' ? 'SMS (keep under 160 characters)' : 'email (2-3 short paragraphs)'}
+
+Return ONLY the message text, no quotes or formatting.`
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const aiResponse = data.content[0].text.trim();
+
+    console.log(`✅ Generated AI response for lead ${leadName}`);
+
+    res.json({
+      success: true,
+      response: aiResponse
+    });
+
+  } catch (error) {
+    console.error('Error generating AI response:', error);
+    res.status(500).json({ error: 'Failed to generate response' });
+  }
+});
+
+// POST - Send SMS to lead
+app.post('/api/leads/send-sms', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { leadId, phone, message } = req.body;
+
+    if (!phone || !message) {
+      return res.status(400).json({ error: 'Phone and message required' });
+    }
+
+    if (!twilioClient) {
+      return res.status(500).json({ error: 'SMS not configured' });
+    }
+
+    // Get business Twilio phone
+    const businessResult = await pool.query(
+      'SELECT twilio_phone FROM users WHERE id = $1',
+      [userId]
+    );
+
+    const twilioPhone = businessResult.rows[0]?.twilio_phone || process.env.TWILIO_PHONE_NUMBER;
+
+    // Send SMS
+    await twilioClient.messages.create({
+      body: message,
+      from: twilioPhone,
+      to: phone
+    });
+
+    // Update lead status
+    await pool.query(
+      `UPDATE leads 
+       SET status = 'contacted_sms', last_contact = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [leadId]
+    );
+
+    // Log message
+    await pool.query(
+      `INSERT INTO lead_messages (user_id, lead_id, phone, message, direction, created_at)
+       VALUES ($1, $2, $3, $4, 'outbound', CURRENT_TIMESTAMP)`,
+      [userId, leadId, phone, message]
+    );
+
+    console.log(`✅ SMS sent to lead ${leadId}`);
+
+    res.json({
+      success: true,
+      message: 'SMS sent successfully'
+    });
+
+  } catch (error) {
+    console.error('Error sending SMS:', error);
+    res.status(500).json({ error: 'Failed to send SMS' });
+  }
+});
+
+// POST - Send email to lead
+app.post('/api/leads/send-email', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { leadId, email, subject, message } = req.body;
+
+    if (!email || !message) {
+      return res.status(400).json({ error: 'Email and message required' });
+    }
+
+    if (!sgMail) {
+      return res.status(500).json({ error: 'Email not configured' });
+    }
+
+    // Get business info
+    const businessResult = await pool.query(
+      'SELECT business_name, email as business_email FROM users WHERE id = $1',
+      [userId]
+    );
+
+    const businessName = businessResult.rows[0]?.business_name || 'Our Business';
+    const fromEmail = process.env.SENDGRID_FROM_EMAIL || businessResult.rows[0]?.business_email;
+
+    // Send email
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f3f4f6;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+          <div style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 30px 20px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 24px;">${businessName}</h1>
+          </div>
+          
+          <div style="padding: 40px 30px;">
+            <div style="color: #374151; font-size: 16px; line-height: 1.6; white-space: pre-wrap;">
+${message}
+            </div>
+          </div>
+          
+          <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+            <p style="color: #6b7280; font-size: 14px; margin: 0;">
+              ${businessName}
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await sgMail.send({
+      to: email,
+      from: fromEmail,
+      subject: subject || `Message from ${businessName}`,
+      html: emailHtml
+    });
+
+    // Update lead status
+    await pool.query(
+      `UPDATE leads 
+       SET status = 'contacted_email', last_contact = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [leadId]
+    );
+
+    console.log(`✅ Email sent to lead ${leadId}`);
+
+    res.json({
+      success: true,
+      message: 'Email sent successfully'
+    });
+
+  } catch (error) {
+    console.error('Error sending email:', error);
+    res.status(500).json({ error: 'Failed to send email' });
+  }
+});
+
+// POST - Convert lead to customer
+app.post('/api/leads/:id/convert', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    // Get lead info
+    const leadResult = await pool.query(
+      'SELECT * FROM leads WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+
+    if (leadResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    const lead = leadResult.rows[0];
+
+    // Check if customer already exists
+    const existingCustomer = await pool.query(
+      'SELECT id FROM customers WHERE user_id = $1 AND email = $2',
+      [userId, lead.email]
+    );
+
+    let customerId;
+
+    if (existingCustomer.rows.length > 0) {
+      customerId = existingCustomer.rows[0].id;
+    } else {
+      // Create new customer
+      const customerResult = await pool.query(
+        `INSERT INTO customers (user_id, name, email, phone, notes, created_at)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+         RETURNING id`,
+        [userId, lead.name, lead.email, lead.phone, lead.message]
+      );
+      customerId = customerResult.rows[0].id;
+    }
+
+    // Update lead status
+    await pool.query(
+      `UPDATE leads 
+       SET status = 'converted', customer_id = $1
+       WHERE id = $2`,
+      [customerId, id]
+    );
+
+    console.log(`✅ Lead ${id} converted to customer ${customerId}`);
+
+    res.json({
+      success: true,
+      customerId,
+      message: 'Lead converted to customer'
+    });
+
+  } catch (error) {
+    console.error('Error converting lead:', error);
+    res.status(500).json({ error: 'Failed to convert lead' });
+  }
+});
+
+console.log('✅ Leads endpoints loaded');
+
 // GET - Check lead preferences
 app.get('/api/leads/stats', authenticateToken, async (req, res) => {
   try {
@@ -4032,6 +4323,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
