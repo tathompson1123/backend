@@ -163,6 +163,7 @@ async function initializeReviewSequence(booking) {
 
     const incentiveCode = generateIncentiveCode();
 
+    // Create ONE sequence with all 5 steps
     await pool.query(
       `INSERT INTO review_request_sequences (
         user_id, booking_id, customer_id, incentive_code,
@@ -189,11 +190,11 @@ async function initializeReviewSequence(booking) {
 
     console.log(`✅ OPTIMIZED Review sequence initialized for booking ${booking.id}`);
     console.log(`   💰 Cost Savings: 50% (1 SMS instead of 2)`);
-    console.log(`   Step 1 (SMS): ${step1Time} - 2 hours after completion`);
-    console.log(`   Step 2 (Email): ${step2Time} - 24 hours after`);
-    console.log(`   Step 3 (Email): ${step3Time} - 3 days after`);
-    console.log(`   Step 4 (Email): ${step4Time} - 5 days after`);
-    console.log(`   Step 5 (Email): ${step5Time} - 7 days after (final)`);
+    console.log(`   Step 1 (SMS): ${step1Time.toLocaleString()} - 2 hours after completion`);
+    console.log(`   Step 2 (Email): ${step2Time.toLocaleString()} - 24 hours after`);
+    console.log(`   Step 3 (Email): ${step3Time.toLocaleString()} - 3 days after`);
+    console.log(`   Step 4 (Email): ${step4Time.toLocaleString()} - 5 days after`);
+    console.log(`   Step 5 (Email): ${step5Time.toLocaleString()} - 7 days after (final)`);
 
   } catch (error) {
     console.error('Error initializing review sequence:', error);
@@ -4031,6 +4032,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
