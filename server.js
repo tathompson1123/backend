@@ -1433,6 +1433,7 @@ app.post('/api/jobs', authenticateToken, async (req, res) => {
 });
 
 // POST - Save user's Google review link
+// POST - Save user's Google review link
 app.post('/api/user/google-review-link', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -1442,10 +1443,11 @@ app.post('/api/user/google-review-link', authenticateToken, async (req, res) => 
       return res.status(400).json({ error: 'Review link is required' });
     }
 
-    // Validate it's a Google link
-    if (!reviewLink.includes('google.com') || !reviewLink.includes('review')) {
+    // Validate it's a Google link (accepts g.page short links and google.com links)
+    const link = reviewLink.toLowerCase();
+    if (!link.includes('g.page') && !link.includes('google.com')) {
       return res.status(400).json({ 
-        error: 'Invalid link. Must be a Google review link.' 
+        error: 'Invalid link. Must be a Google review link (g.page or google.com)' 
       });
     }
 
@@ -3632,6 +3634,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
