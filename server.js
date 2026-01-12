@@ -113,6 +113,115 @@ app.use('/api/website/ai-edit', aiLimiter);
 // HELPER FUNCTIONS
 // ============================================
 
+// Add this function to handle customer creation/update
+async function updateCustomerFromBooking(booking, userId) {
+  try {
+    // Check if customer exists
+    let customer = await pool.query(
+      'SELECT * FROM customers WHERE user_id = $1 AND (email = $2 OR phone = $3)',
+      [userId, booking.customer_email, booking.customer_phone]
+    );
+
+    if (customer.rows.length === 0) {
+      // Create new customer
+      await pool.query(
+        `INSERT INTO customers (user_id, name, email, phone, last_service, last_service_date, total_jobs, lifetime_value, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 1, $7, CURRENT_TIMESTAMP)`,
+        [
+          userId,
+          booking.customer_name,
+          booking.customer_email,
+          booking.customer_phone,
+          booking.items?.[0]?.service_name || 'Service',
+          booking.booking_date,
+          booking.total_amount
+        ]
+      );
+      console.log(`✅ New customer created: ${booking.customer_name}`);
+    } else {
+      // Update existing customer
+      const customerId = customer.rows[0].id;
+      const newTotalJobs = (customer.rows[0].total_jobs || 0) + 1;
+      const newLifetimeValue = (customer.rows[0].lifetime_value || 0) + parseFloat(booking.total_amount || 0);
+
+      await pool.query(
+        `UPDATE customers 
+         SET last_service = $1, 
+             last_service_date = $2, 
+             total_jobs = $3, 
+             lifetime_value = $4,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5`,
+        [
+          booking.items?.[0]?.service_name || 'Service',
+          booking.booking_date,
+          newTotalJobs,
+          newLifetimeValue,
+          customerId
+        ]
+      );
+      console.log(`✅ Customer updated: ${booking.customer_name}`);
+    }
+  } catch (error) {
+    console.error('Error updating customer from booking:', error);
+  }
+}
+
+// Add this to your POST /api/bookings endpoint (after booking is created)
+app.post('/api/bookings', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const bookingData = req.body;
+
+    // ... existing booking creation code ...
+
+    const result = await pool.query(/* your insert query */);
+    const newBooking = result.rows[0];
+
+    // 🆕 ADD THIS: Automatically create/update customer
+    await updateCustomerFromBooking(newBooking, userId);
+
+    res.json({ success: true, booking: newBooking });
+  } catch (error) {
+    console.error('Error creating booking:', error);
+    res.status(500).json({ error: 'Failed to create booking' });
+  }
+});
+
+// Also add to PUT /api/bookings/:id/complete endpoint
+app.put('/api/bookings/:id/complete', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    // Get booking details
+    const bookingResult = await pool.query(
+      'SELECT * FROM bookings WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+
+    if (bookingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const booking = bookingResult.rows[0];
+
+    // Update booking status
+    await pool.query(
+      'UPDATE bookings SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      ['completed', id]
+    );
+
+    // 🆕 ADD THIS: Update customer when booking is completed
+    await updateCustomerFromBooking(booking, userId);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error completing booking:', error);
+    res.status(500).json({ error: 'Failed to complete booking' });
+  }
+});
+
 // Generate incentive code
 function generateIncentiveCode() {
   return 'REVIEW' + Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -4323,6 +4432,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
