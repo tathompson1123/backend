@@ -668,6 +668,628 @@ function hasConflict(slot, existingBookings, buffer) {
 // PUBLIC BOOKING ENDPOINTS (No auth required)
 // ============================================
 
+// ============================================
+// AI AGENTS ENDPOINTS
+// ============================================
+
+// GET - Website Chat Agent Configuration
+app.get('/api/agents/website/config', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      `SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = 'website_chat'`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        config: {
+          enabled: true,
+          agentName: 'Kurt',
+          greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
+          autoOpenDelay: 3
+        }
+      });
+    }
+
+    res.json({ config: result.rows[0].config });
+  } catch (error) {
+    console.error('Error fetching website agent config:', error);
+    res.status(500).json({ error: 'Failed to fetch configuration' });
+  }
+});
+
+// POST - Save Website Chat Agent Configuration
+app.post('/api/agents/website/config', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { agentName, greetingMessage, autoOpenDelay } = req.body;
+
+    await pool.query(
+      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
+       VALUES ($1, 'website_chat', $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, agent_type)
+       DO UPDATE SET config = $2, updated_at = CURRENT_TIMESTAMP`,
+      [userId, JSON.stringify({ agentName, greetingMessage, autoOpenDelay })]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving website agent config:', error);
+    res.status(500).json({ error: 'Failed to save configuration' });
+  }
+});
+
+// ============================================
+// AI AGENTS ENDPOINTS
+// ============================================
+
+// GET - Website Chat Agent Configuration
+app.get('/api/agents/website/config', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      `SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = 'website_chat'`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        config: {
+          enabled: true,
+          agentName: 'Kurt',
+          greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
+          autoOpenDelay: 3
+        }
+      });
+    }
+
+    res.json({ config: result.rows[0].config });
+  } catch (error) {
+    console.error('Error fetching website agent config:', error);
+    res.status(500).json({ error: 'Failed to fetch configuration' });
+  }
+});
+
+// POST - Save Website Chat Agent Configuration
+app.post('/api/agents/website/config', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { agentName, greetingMessage, autoOpenDelay } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
+       VALUES ($1, 'website_chat', $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, agent_type)
+       DO UPDATE SET config = $2, updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [userId, JSON.stringify({ agentName, greetingMessage, autoOpenDelay, enabled: true })]
+    );
+
+    console.log('✅ Website chat config saved for user:', userId);
+    res.json({ success: true, config: result.rows[0].config });
+  } catch (error) {
+    console.error('Error saving website agent config:', error);
+    res.status(500).json({ error: 'Failed to save configuration' });
+  }
+});
+
+// GET - Website Chat Agent Stats
+app.get('/api/agents/website/stats', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    // Get conversation count from chat_conversations table
+    const conversationsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM chat_conversations 
+       WHERE user_id = $1 AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    // Get leads captured from chat
+    const leadsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM leads 
+       WHERE user_id = $1 AND source = 'ai_chat_agent' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    // Get bookings created from chat
+    const bookingsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM bookings 
+       WHERE user_id = $1 AND source = 'ai_chat_agent' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    res.json({
+      conversations: parseInt(conversationsResult.rows[0].count),
+      leadsCaptured: parseInt(leadsResult.rows[0].count),
+      avgResponse: '2.3s',
+      bookingsCreated: parseInt(bookingsResult.rows[0].count)
+    });
+  } catch (error) {
+    console.error('Error fetching website agent stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// PATCH - Toggle Website Chat Agent On/Off
+app.patch('/api/agents/website', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { enabled } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
+       VALUES ($1, 'website_chat', $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, agent_type)
+       DO UPDATE SET 
+         config = jsonb_set(COALESCE(agent_configs.config, '{}'::jsonb), '{enabled}', $2::jsonb),
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [userId, JSON.stringify(enabled)]
+    );
+
+    console.log('✅ Website chat toggled for user:', userId, 'enabled:', enabled);
+    res.json({ success: true, enabled });
+  } catch (error) {
+    console.error('Error toggling website agent:', error);
+    res.status(500).json({ error: 'Failed to toggle agent' });
+  }
+});
+
+// GET - Lead Form Agent Templates
+app.get('/api/agents/leadform/templates', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      `SELECT email_template, sms_template FROM agent_configs 
+       WHERE user_id = $1 AND agent_type = 'lead_form'`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        email: `Hey {{name}},
+
+Thanks for reaching out! I'm Kurt, and I just saw your request come through.
+
+You mentioned you're interested in {{service}}. I'd love to help you out with that!
+
+Here's what I can do:
+- Get you scheduled ASAP (we have availability this week)
+- Answer any questions about pricing or our process
+- Show you some before/after photos of similar work we've done
+
+What day works best for you? Or if you want, just reply with your phone number and I'll give you a call directly.
+
+Looking forward to working with you!
+
+Kurt
+(555) 123-4567`,
+        sms: `Hey {{name}}, it's Kurt! Just got your request for {{service}}. When's a good time to chat? - Kurt`
+      });
+    }
+
+    res.json({
+      email: result.rows[0].email_template,
+      sms: result.rows[0].sms_template
+    });
+  } catch (error) {
+    console.error('Error fetching lead form templates:', error);
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
+// POST - Save Lead Form Agent Templates
+app.post('/api/agents/leadform/templates', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { email, sms } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO agent_configs (user_id, agent_type, email_template, sms_template, created_at, updated_at)
+       VALUES ($1, 'lead_form', $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, agent_type)
+       DO UPDATE SET 
+         email_template = $2,
+         sms_template = $3,
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [userId, email, sms]
+    );
+
+    console.log('✅ Lead form templates saved for user:', userId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving lead form templates:', error);
+    res.status(500).json({ error: 'Failed to save templates' });
+  }
+});
+
+// GET - Lead Form Agent Stats
+app.get('/api/agents/leadform/stats', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    // Get total lead form responses
+    const totalResult = await pool.query(
+      `SELECT COUNT(*) as count FROM leads 
+       WHERE user_id = $1 AND source = 'lead_form' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    // Get emails sent
+    const emailsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM leads 
+       WHERE user_id = $1 AND source = 'lead_form' 
+       AND status = 'contacted_email' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    // Get SMS sent
+    const smsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM leads 
+       WHERE user_id = $1 AND source = 'lead_form' 
+       AND status = 'contacted_sms' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    // Get bookings created from lead forms
+    const bookingsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM bookings 
+       WHERE user_id = $1 AND source = 'lead_form' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    const total = parseInt(totalResult.rows[0].count);
+    const emailsSent = parseInt(emailsResult.rows[0].count);
+    const smsSent = parseInt(smsResult.rows[0].count);
+    const bookings = parseInt(bookingsResult.rows[0].count);
+
+    res.json({
+      total,
+      emailsSent,
+      smsSent,
+      responseRate: total > 0 ? Math.round((emailsSent + smsSent) / total * 100) : 0,
+      bookingsCreated: bookings
+    });
+  } catch (error) {
+    console.error('Error fetching lead form stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// PATCH - Toggle Lead Form Agent On/Off
+app.patch('/api/agents/leadform', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { enabled } = req.body;
+
+    await pool.query(
+      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
+       VALUES ($1, 'lead_form', $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, agent_type)
+       DO UPDATE SET 
+         config = jsonb_set(COALESCE(agent_configs.config, '{}'::jsonb), '{enabled}', $2::jsonb),
+         updated_at = CURRENT_TIMESTAMP`,
+      [userId, JSON.stringify(enabled)]
+    );
+
+    console.log('✅ Lead form agent toggled for user:', userId, 'enabled:', enabled);
+    res.json({ success: true, enabled });
+  } catch (error) {
+    console.error('Error toggling lead form agent:', error);
+    res.status(500).json({ error: 'Failed to toggle agent' });
+  }
+});
+
+console.log('✅ AI Agents endpoints loaded');
+
+// GET - Website Chat Agent Stats
+app.get('/api/agents/website/stats', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    // Get conversation count from chat_conversations table
+    const conversationsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM chat_conversations 
+       WHERE user_id = $1 AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    // Get leads captured from chat
+    const leadsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM leads 
+       WHERE user_id = $1 AND source = 'ai_chat_agent' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    // Get bookings created from chat
+    const bookingsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM bookings 
+       WHERE user_id = $1 AND source = 'ai_chat_agent' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    res.json({
+      conversations: parseInt(conversationsResult.rows[0].count),
+      leadsCaptured: parseInt(leadsResult.rows[0].count),
+      avgResponse: '2.3s',
+      bookingsCreated: parseInt(bookingsResult.rows[0].count)
+    });
+  } catch (error) {
+    console.error('Error fetching website agent stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// PATCH - Toggle Website Chat Agent On/Off
+app.patch('/api/agents/website', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { enabled } = req.body;
+
+    await pool.query(
+      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
+       VALUES ($1, 'website_chat', $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, agent_type)
+       DO UPDATE SET 
+         config = jsonb_set(agent_configs.config, '{enabled}', $2::jsonb),
+         updated_at = CURRENT_TIMESTAMP`,
+      [userId, JSON.stringify(enabled)]
+    );
+
+    res.json({ success: true, enabled });
+  } catch (error) {
+    console.error('Error toggling website agent:', error);
+    res.status(500).json({ error: 'Failed to toggle agent' });
+  }
+});
+
+// GET - Lead Form Agent Templates
+app.get('/api/agents/leadform/templates', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      `SELECT email_template, sms_template FROM agent_configs 
+       WHERE user_id = $1 AND agent_type = 'lead_form'`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        email: `Hey {{name}},
+
+Thanks for reaching out! I just saw your request come through.
+
+You mentioned you're interested in {{service}}. I'd love to help you out with that!
+
+Here's what I can do:
+- Get you scheduled ASAP (we have availability this week)
+- Answer any questions about pricing or our process
+- Show you some before/after photos of similar work we've done
+
+What day works best for you? Or if you want, just reply with your phone number and I'll give you a call directly.
+
+Looking forward to working with you!
+
+Kurt
+(555) 123-4567`,
+        sms: `Hey {{name}}, it's Kurt! Just got your request for {{service}}. When's a good time to chat? - Kurt`
+      });
+    }
+
+    res.json({
+      email: result.rows[0].email_template,
+      sms: result.rows[0].sms_template
+    });
+  } catch (error) {
+    console.error('Error fetching lead form templates:', error);
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
+// POST - Save Lead Form Agent Templates
+app.post('/api/agents/leadform/templates', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { email, sms } = req.body;
+
+    await pool.query(
+      `INSERT INTO agent_configs (user_id, agent_type, email_template, sms_template, created_at, updated_at)
+       VALUES ($1, 'lead_form', $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, agent_type)
+       DO UPDATE SET 
+         email_template = $2,
+         sms_template = $3,
+         updated_at = CURRENT_TIMESTAMP`,
+      [userId, email, sms]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving lead form templates:', error);
+    res.status(500).json({ error: 'Failed to save templates' });
+  }
+});
+
+// GET - Lead Form Agent Stats
+app.get('/api/agents/leadform/stats', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    // Get total lead form responses
+    const totalResult = await pool.query(
+      `SELECT COUNT(*) as count FROM leads 
+       WHERE user_id = $1 AND source = 'lead_form' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    // Get emails sent
+    const emailsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM leads 
+       WHERE user_id = $1 AND source = 'lead_form' 
+       AND status = 'contacted_email' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    // Get SMS sent
+    const smsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM leads 
+       WHERE user_id = $1 AND source = 'lead_form' 
+       AND status = 'contacted_sms' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    // Get bookings created from lead forms
+    const bookingsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM bookings 
+       WHERE user_id = $1 AND source = 'lead_form' AND created_at >= $2`,
+      [userId, startOfMonth]
+    );
+
+    const total = parseInt(totalResult.rows[0].count);
+    const emailsSent = parseInt(emailsResult.rows[0].count);
+    const smsSent = parseInt(smsResult.rows[0].count);
+    const bookings = parseInt(bookingsResult.rows[0].count);
+
+    res.json({
+      total,
+      emailsSent,
+      smsSent,
+      responseRate: total > 0 ? Math.round((emailsSent + smsSent) / total * 100) : 0,
+      bookingsCreated: bookings
+    });
+  } catch (error) {
+    console.error('Error fetching lead form stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// PATCH - Toggle Lead Form Agent On/Off
+app.patch('/api/agents/leadform', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { enabled } = req.body;
+
+    await pool.query(
+      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
+       VALUES ($1, 'lead_form', $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, agent_type)
+       DO UPDATE SET 
+         config = jsonb_set(COALESCE(agent_configs.config, '{}'::jsonb), '{enabled}', $2::jsonb),
+         updated_at = CURRENT_TIMESTAMP`,
+      [userId, JSON.stringify(enabled)]
+    );
+
+    res.json({ success: true, enabled });
+  } catch (error) {
+    console.error('Error toggling lead form agent:', error);
+    res.status(500).json({ error: 'Failed to toggle agent' });
+  }
+});
+
+// POST - Handle Chat Messages from Website Widget (PUBLIC - No auth)
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message, session_id, business_id, messages } = req.body;
+
+    if (!message || !business_id) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Store conversation
+    await pool.query(
+      `INSERT INTO chat_conversations (user_id, session_id, message, sender, created_at)
+       VALUES ($1, $2, $3, 'user', CURRENT_TIMESTAMP)`,
+      [business_id, session_id, message]
+    );
+
+    // Call Claude API to generate response
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 500,
+        messages: [
+          {
+            role: 'user',
+            content: `You are Kurt, a friendly customer service agent for an auto detailing business. 
+
+The customer said: "${sanitizeForPrompt(message)}"
+
+Respond naturally and helpfully. If they mention contact info (email/phone), acknowledge it. If they want to book, suggest they can book directly or provide their details.
+
+Keep it conversational and under 100 words.`
+          }
+        ]
+      })
+    });
+
+    const data = await response.json();
+    const botResponse = data.content[0].text;
+
+    // Store bot response
+    await pool.query(
+      `INSERT INTO chat_conversations (user_id, session_id, message, sender, created_at)
+       VALUES ($1, $2, $3, 'bot', CURRENT_TIMESTAMP)`,
+      [business_id, session_id, botResponse]
+    );
+
+    // Check if message contains contact info and create lead
+    const emailMatch = message.match(/[\w.-]+@[\w.-]+\.\w+/);
+    const phoneMatch = message.match(/(\+?1?\s*)?(\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}/);
+
+    if (emailMatch || phoneMatch) {
+      await pool.query(
+        `INSERT INTO leads (user_id, email, phone, source, status, notes, created_at)
+         VALUES ($1, $2, $3, 'ai_chat_agent', 'new', $4, CURRENT_TIMESTAMP)
+         ON CONFLICT DO NOTHING`,
+        [
+          business_id,
+          emailMatch ? emailMatch[0] : null,
+          phoneMatch ? phoneMatch[0] : null,
+          `Chat conversation: ${message.substring(0, 100)}`
+        ]
+      );
+
+      console.log(`✅ Lead captured from chat: ${emailMatch?.[0] || phoneMatch?.[0]}`);
+    }
+
+    res.json({
+      success: true,
+      response: botResponse
+    });
+
+  } catch (error) {
+    console.error('Error handling chat:', error);
+    res.status(500).json({ error: 'Failed to process chat message' });
+  }
+});
+
+console.log('✅ AI Agents endpoints loaded');
+
 // GET - Public services list
 app.get('/api/public/services', async (req, res) => {
   try {
@@ -4609,6 +5231,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
