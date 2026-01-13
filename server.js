@@ -3954,21 +3954,21 @@ app.post('/api/auth/signup', async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO users (email, password_hash, name, business_name, plan, created_at)
-       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+       VALUES ($1, $2, $3, $4, NULL, CURRENT_TIMESTAMP)
        RETURNING id, email, name, business_name, plan`,
       [
         email.toLowerCase(), 
         hashedPassword, 
         fullName || businessName || 'User',
-        businessName || 'My Business', 
-        'basic'  // ← Changed from 'free' to 'basic'
+        businessName || 'My Business'
+        // No plan assigned - they must choose and pay
       ]
     );
 
     const user = result.rows[0];
     const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
 
-    console.log('✅ New user:', email);
+    console.log('✅ New user (no plan):', email);
 
     res.json({
       success: true,
@@ -3977,7 +3977,7 @@ app.post('/api/auth/signup', async (req, res) => {
         id: user.id,
         email: user.email,
         businessName: user.business_name,
-        plan: user.plan
+        plan: user.plan // Will be null
       }
     });
 
@@ -4643,6 +4643,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
