@@ -168,7 +168,7 @@ async function updateCustomerFromBooking(booking, userId) {
 }
 
 // ============================================
-// WEBSITE DEPLOYMENT & DOMAIN ENDPOINTS
+// WEBSITE DEPLOYMENT & DOMAIN ENDPOINTS (NAMESERVER VERSION)
 // ============================================
 
 // POST - Deploy website to Vercel
@@ -221,12 +221,7 @@ app.post('/api/website/deploy', authenticateToken, async (req, res) => {
     
     // Save deployment info
     await pool.query(
-      `UPDATE websites 
-       SET vercel_url = $1, 
-           vercel_deployment_id = $2,
-           is_published = true,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $3`,
+      'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2, is_published = true, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
       [`https://${deployment.url}`, deployment.id, userId]
     );
     
@@ -244,7 +239,7 @@ app.post('/api/website/deploy', authenticateToken, async (req, res) => {
   }
 });
 
-// POST - Add custom domain to Vercel project
+// POST - Add custom domain (Nameserver version)
 app.post('/api/website/add-domain', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -254,19 +249,17 @@ app.post('/api/website/add-domain', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Domain is required' });
     }
     
-    // Clean domain (remove http://, www., trailing slashes)
+    // Clean domain
     const cleanDomain = domain
       .replace(/^https?:\/\//, '')
       .replace(/^www\./, '')
       .replace(/\/$/, '')
       .toLowerCase();
     
-    // Validate domain format
     if (!cleanDomain.includes('.')) {
       return res.status(400).json({ error: 'Invalid domain format' });
     }
     
-    // Get Vercel project name
     const projectName = `client-${userId}`;
     
     // Add domain to Vercel project
@@ -295,20 +288,21 @@ app.post('/api/website/add-domain', authenticateToken, async (req, res) => {
     
     // Save domain to database
     await pool.query(
-      `UPDATE websites 
-       SET custom_domain = $1, 
-           domain_verified = false,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $2`,
+      'UPDATE websites SET custom_domain = $1, domain_verified = false, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
       [cleanDomain, userId]
     );
     
     console.log(`✅ Domain ${cleanDomain} added for user ${userId}`);
     
+    // Return nameservers (Vercel's default nameservers)
     res.json({
       success: true,
       domain: cleanDomain,
-      verification: result.verification || null
+      nameservers: [
+        'ns1.vercel-dns.com',
+        'ns2.vercel-dns.com'
+      ],
+      instructions: 'Point your domain nameservers to the provided Vercel nameservers'
     });
     
   } catch (error) {
@@ -367,8 +361,10 @@ app.get('/api/website/domain-status', authenticateToken, async (req, res) => {
       configured: true,
       verified: verified,
       domain: domain,
-      apexVerified: domainInfo.apexVerified || false,
-      nameservers: domainInfo.nameservers || null
+      nameservers: [
+        'ns1.vercel-dns.com',
+        'ns2.vercel-dns.com'
+      ]
     });
     
   } catch (error) {
@@ -407,9 +403,7 @@ app.delete('/api/website/remove-domain', authenticateToken, async (req, res) => 
     
     // Remove from database
     await pool.query(
-      `UPDATE websites 
-       SET custom_domain = NULL, domain_verified = false
-       WHERE user_id = $1`,
+      'UPDATE websites SET custom_domain = NULL, domain_verified = false WHERE user_id = $1',
       [userId]
     );
     
@@ -5159,6 +5153,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
