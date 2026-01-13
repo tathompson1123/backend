@@ -571,6 +571,19 @@ function requirePlan(requiredPlan) {
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'User not found' });
       }
+
+      const userPlan = result.rows[0].plan;
+
+      // If user has no plan, they must subscribe
+      if (!userPlan) {
+        return res.status(403).json({ 
+          error: 'Subscription required',
+          message: 'Please choose a plan to access this feature.',
+          requiredPlan: requiredPlan,
+          currentPlan: null,
+          upgradeUrl: '/dashboard?view=billing'
+        });
+      }
       
       // Plan hierarchy: basic < pro < expert
       const planLevels = { 
@@ -579,15 +592,15 @@ function requirePlan(requiredPlan) {
         'expert': 2 
       };
       
-      const userLevel = planLevels[result.rows[0].plan] || 0;
+      const userLevel = planLevels[userPlan] || 0;
       const requiredLevel = planLevels[requiredPlan] || 0;
       
       if (userLevel < requiredLevel) {
         return res.status(403).json({ 
           error: 'Upgrade required',
-          message: 'This feature requires a ' + requiredPlan + ' plan. You are currently on ' + result.rows[0].plan + '.',
+          message: 'This feature requires a ' + requiredPlan + ' plan. You are currently on ' + userPlan + '.',
           requiredPlan: requiredPlan,
-          currentPlan: result.rows[0].plan,
+          currentPlan: userPlan,
           upgradeUrl: '/dashboard?view=billing'
         });
       }
@@ -599,7 +612,6 @@ function requirePlan(requiredPlan) {
     }
   };
 }
-
      // XSS Prevention - use this when outputting user data to HTML
 function escapeHtml(str) {
   if (!str) return '';
@@ -4643,6 +4655,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
