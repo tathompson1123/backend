@@ -4239,6 +4239,36 @@ app.post('/api/website/domain', authenticateToken, async (req, res) => {
   }
 });
 
+// POST - Upgrade/Change Plan
+app.post('/api/billing/upgrade', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { plan } = req.body;
+
+    const validPlans = ['basic', 'pro', 'expert'];
+    if (!validPlans.includes(plan)) {
+      return res.status(400).json({ error: 'Invalid plan' });
+    }
+
+    const result = await pool.query(
+      'UPDATE users SET plan = $1 WHERE id = $2 RETURNING id, email, plan',
+      [plan, userId]
+    );
+
+    console.log(`✅ User ${userId} upgraded to ${plan}`);
+
+    res.json({
+      success: true,
+      plan: result.rows[0].plan,
+      message: `Successfully upgraded to ${plan}!`
+    });
+
+  } catch (error) {
+    console.error('Error upgrading plan:', error);
+    res.status(500).json({ error: 'Failed to upgrade plan' });
+  }
+});
+
 // ============================================
 // WEBSITE EDITOR ENDPOINT (SECURED)
 // ============================================
@@ -4575,6 +4605,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
