@@ -562,6 +562,44 @@ function authenticateToken(req, res, next) {
   }
 }
 
+function requirePlan(requiredPlan) {
+  return async (req, res, next) => {
+    try {
+      const userId = req.user.userId;
+      const result = await pool.query('SELECT plan FROM users WHERE id = $1', [userId]);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Plan hierarchy: basic < pro < expert
+      const planLevels = { 
+        'basic': 0, 
+        'pro': 1, 
+        'expert': 2 
+      };
+      
+      const userLevel = planLevels[result.rows[0].plan] || 0;
+      const requiredLevel = planLevels[requiredPlan] || 0;
+      
+      if (userLevel < requiredLevel) {
+        return res.status(403).json({ 
+          error: 'Upgrade required',
+          message: 'This feature requires a ' + requiredPlan + ' plan. You are currently on ' + result.rows[0].plan + '.',
+          requiredPlan: requiredPlan,
+          currentPlan: result.rows[0].plan,
+          upgradeUrl: '/dashboard?view=billing'
+        });
+      }
+      
+      next();
+    } catch (error) {
+      console.error('Plan check error:', error);
+      res.status(500).json({ error: 'Failed to verify plan' });
+    }
+  };
+}
+
      // XSS Prevention - use this when outputting user data to HTML
 function escapeHtml(str) {
   if (!str) return '';
@@ -3923,7 +3961,7 @@ app.post('/api/auth/signup', async (req, res) => {
         hashedPassword, 
         fullName || businessName || 'User',
         businessName || 'My Business', 
-        'free'
+        'basic'  // ← Changed from 'free' to 'basic'
       ]
     );
 
@@ -4605,6 +4643,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
