@@ -489,7 +489,10 @@ function createReviewLink(placeId, incentiveCode) {
 async function initializeReviewSequence(booking) {
   try {
     const userResult = await pool.query(
-      'SELECT google_review_link, business_name FROM users WHERE id = $1',
+      `SELECT u.google_review_link, u.business_name, rc.send_delay
+       FROM users u
+       LEFT JOIN review_configs rc ON rc.user_id = u.id
+       WHERE u.id = $1`,
       [booking.user_id]
     );
 
@@ -507,6 +510,9 @@ async function initializeReviewSequence(booking) {
       return;
     }
 
+    // Get custom delay from settings (default 24 hours)
+    const customDelay = user.send_delay || 24;
+
     // Calculate end time of booking
     const bookingDateTime = new Date(`${booking.booking_date}T${booking.start_time}`);
     const [endHour, endMin] = booking.end_time.split(':').map(Number);
@@ -514,13 +520,14 @@ async function initializeReviewSequence(booking) {
     bookingEndTime.setHours(endHour, endMin, 0, 0);
 
     // OPTIMIZED SCHEDULE:
-    // Step 1: SMS at 2 hours (immediate, high engagement)
-    // Step 2-5: All emails (free, professional)
-    const step1Time = new Date(bookingEndTime.getTime() + (2 * 60 * 60 * 1000)); // +2 hours - SMS
-    const step2Time = new Date(bookingEndTime.getTime() + (24 * 60 * 60 * 1000)); // +24 hours - Email
-    const step3Time = new Date(bookingEndTime.getTime() + (3 * 24 * 60 * 60 * 1000)); // +3 days - Email
-    const step4Time = new Date(bookingEndTime.getTime() + (5 * 24 * 60 * 60 * 1000)); // +5 days - Email
-    const step5Time = new Date(bookingEndTime.getTime() + (7 * 24 * 60 * 60 * 1000)); // +7 days - Final Email
+    // Step 1: SMS at 2 hours (ALWAYS - immediate, high engagement)
+    // Step 2: Email at custom delay (user configurable)
+    // Step 3-5: Follow-up emails
+    const step1Time = new Date(bookingEndTime.getTime() + (2 * 60 * 60 * 1000)); // FIXED: +2 hours - SMS
+    const step2Time = new Date(bookingEndTime.getTime() + (customDelay * 60 * 60 * 1000)); // CUSTOM: User setting - Email
+    const step3Time = new Date(bookingEndTime.getTime() + ((customDelay + 48) * 60 * 60 * 1000)); // +2 days after step2
+    const step4Time = new Date(bookingEndTime.getTime() + ((customDelay + 96) * 60 * 60 * 1000)); // +4 days after step2
+    const step5Time = new Date(bookingEndTime.getTime() + ((customDelay + 144) * 60 * 60 * 1000)); // +6 days after step2
 
     const incentiveCode = generateIncentiveCode();
 
@@ -551,32 +558,34 @@ async function initializeReviewSequence(booking) {
 
     console.log(`✅ OPTIMIZED Review sequence initialized for booking ${booking.id}`);
     console.log(`   💰 Cost Savings: 50% (1 SMS instead of 2)`);
-    console.log(`   Step 1 (SMS): ${step1Time.toLocaleString()} - 2 hours after completion`);
-    console.log(`   Step 2 (Email): ${step2Time.toLocaleString()} - 24 hours after`);
-    console.log(`   Step 3 (Email): ${step3Time.toLocaleString()} - 3 days after`);
-    console.log(`   Step 4 (Email): ${step4Time.toLocaleString()} - 5 days after`);
-    console.log(`   Step 5 (Email): ${step5Time.toLocaleString()} - 7 days after (final)`);
+    console.log(`   Step 1 (SMS): ${step1Time.toLocaleString()} - FIXED at 2 hours after completion`);
+    console.log(`   Step 2 (Email): ${step2Time.toLocaleString()} - ${customDelay} hours after (USER SETTING)`);
+    console.log(`   Step 3 (Email): ${step3Time.toLocaleString()} - 2 days after step 2`);
+    console.log(`   Step 4 (Email): ${step4Time.toLocaleString()} - 4 days after step 2`);
+    console.log(`   Step 5 (Email): ${step5Time.toLocaleString()} - 6 days after step 2 (final)`);
 
   } catch (error) {
     console.error('Error initializing review sequence:', error);
   }
 }
 
-// OPTIMIZED: Send individual review request step
+// Around line 2230, replace the hardcoded messages with this:
 async function sendReviewRequestStep(sequence, step) {
   try {
-    // Get full data
+    // Get full data INCLUDING review config
     const result = await pool.query(
       `SELECT 
         s.*,
         b.booking_date, b.start_time,
         c.name as customer_name, c.email, c.phone,
         u.business_name, u.google_review_link, u.review_incentive, 
-        u.twilio_phone, u.sms_enabled, u.email_enabled
+        u.twilio_phone, u.sms_enabled, u.email_enabled,
+        rc.message_template, rc.incentive, rc.incentive_enabled, rc.send_delay
        FROM review_request_sequences s
        JOIN bookings b ON s.booking_id = b.id
        JOIN customers c ON s.customer_id = c.id
        JOIN users u ON s.user_id = u.id
+       LEFT JOIN review_configs rc ON rc.user_id = u.id
        WHERE s.id = $1`,
       [sequence.id]
     );
@@ -594,21 +603,28 @@ async function sendReviewRequestStep(sequence, step) {
       return;
     }
 
+    // Use custom message template or fallback to default
+    const messageTemplate = data.message_template || "Hi {name}! Thank you for choosing {business}. We'd love to hear about your experience! Could you take a moment to leave us a review?";
+    const incentive = data.incentive_enabled && data.incentive ? data.incentive : (data.review_incentive || '10% off your next visit');
+
     let success = false;
     let errorMessage = null;
 
-    // OPTIMIZED FLOW:
-    // Step 1 = SMS (immediate impact)
-    // Steps 2-5 = Email (free, professional)
     const isSMS = step === 1;
     const isEmail = step >= 2 && step <= 5;
 
-    // Send SMS (ONLY STEP 1)
+    // Send SMS (ONLY STEP 1) - Use custom template
     if (isSMS && data.sms_enabled && data.phone && twilioClient) {
       try {
-        const smsMessage = `Hi ${data.customer_name}! Thanks for choosing ${data.business_name}! 🌟
+        // Replace template variables
+        const personalizedMessage = messageTemplate
+          .replace(/{name}/g, data.customer_name)
+          .replace(/{business}/g, data.business_name)
+          .replace(/{service}/g, 'your recent service');
 
-Loved our service? Leave a quick Google review & get ${data.review_incentive || '10% off your next visit'}!
+        const smsMessage = `${personalizedMessage}
+
+${data.incentive_enabled ? `🎁 ${incentive} when you leave a review!` : ''}
 
 ${reviewLink}
 
@@ -621,40 +637,41 @@ Reply STOP to opt out`;
         });
 
         success = true;
-        console.log(`📱 Step ${step} SMS sent to ${data.customer_name} - Strike while iron is hot!`);
+        console.log(`📱 Step ${step} SMS sent to ${data.customer_name} (Custom Template)`);
       } catch (error) {
         errorMessage = error.message;
         console.error(`SMS error for step ${step}:`, error);
       }
     }
 
-    // Send Email (STEPS 2-5)
+    // Send Email (STEPS 2-5) - Use custom template
     if (isEmail && data.email_enabled && data.email && sgMail) {
       try {
+        // Replace template variables
+        const personalizedMessage = messageTemplate
+          .replace(/{name}/g, data.customer_name)
+          .replace(/{business}/g, data.business_name)
+          .replace(/{service}/g, 'your recent service');
+
         let subject = '';
         let heading = '';
-        let bodyText = '';
         let urgency = '';
 
         if (step === 2) {
           subject = `We'd love your feedback! - ${data.business_name}`;
           heading = `How was your experience, ${data.customer_name}?`;
-          bodyText = `We hope you enjoyed our service! Your feedback means the world to us. It only takes 60 seconds to leave a Google review, and you'll get a special thank you from us!`;
           urgency = 'Take a moment today to share your thoughts! ⭐';
         } else if (step === 3) {
           subject = `Quick reminder: Share your experience - ${data.business_name}`;
           heading = `Still time to claim your reward!`;
-          bodyText = `We wanted to follow up and see if you'd be willing to leave us a quick Google review. Your feedback helps us improve and helps others find great service like you did!`;
           urgency = 'Leave a review this week and save on your next visit! 💰';
         } else if (step === 4) {
           subject = `Don't miss out on your special offer! - ${data.business_name}`;
           heading = `Your reward is waiting, ${data.customer_name}!`;
-          bodyText = `We noticed you haven't left a review yet. No worries! You still have time to share your experience and claim your special offer. We'd genuinely love to hear from you.`;
           urgency = 'Offer expires soon - review today! ⏰';
         } else if (step === 5) {
           subject = `Final chance: Your exclusive discount expires soon! - ${data.business_name}`;
           heading = `Last call, ${data.customer_name}! 🔔`;
-          bodyText = `This is your final reminder to leave a Google review and claim your exclusive offer. We truly appreciate your business and would love to hear your thoughts. After this, the offer expires!`;
           urgency = '⚠️ FINAL REMINDER - Claim your reward today!';
         }
 
@@ -675,7 +692,7 @@ Reply STOP to opt out`;
               <!-- Body -->
               <div style="padding: 40px 30px;">
                 <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
-                  ${bodyText}
+                  ${personalizedMessage}
                 </p>
                 
                 <!-- Urgency Banner -->
@@ -687,12 +704,14 @@ Reply STOP to opt out`;
                 </div>
                 ` : ''}
                 
-                <!-- Incentive Box -->
+                <!-- Incentive Box (only if enabled) -->
+                ${data.incentive_enabled ? `
                 <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); padding: 30px; border-radius: 12px; margin: 30px 0; text-align: center; border: 2px solid #10b981;">
                   <p style="color: #059669; font-size: 14px; margin: 0 0 10px 0; font-weight: 600;">YOUR REWARD</p>
-                  <h2 style="color: #047857; margin: 0; font-size: 32px; font-weight: bold;">${data.review_incentive || '10% Off Next Visit'}</h2>
+                  <h2 style="color: #047857; margin: 0; font-size: 32px; font-weight: bold;">${incentive}</h2>
                   <p style="color: #059669; font-size: 14px; margin: 10px 0 0 0;">Use code: <strong>${data.incentive_code}</strong></p>
                 </div>
+                ` : ''}
                 
                 <!-- CTA Button -->
                 <div style="text-align: center; margin: 30px 0;">
@@ -738,13 +757,14 @@ Reply STOP to opt out`;
         });
 
         success = true;
-        console.log(`📧 Step ${step} Email sent to ${data.customer_name} - ${subject}`);
+        console.log(`📧 Step ${step} Email sent to ${data.customer_name} (Custom Template) - ${subject}`);
       } catch (error) {
         errorMessage = error.message;
         console.error(`Email error for step ${step}:`, error);
       }
     }
 
+    // ... rest of the function stays the same
     // Update database
     const updateFields = {
       sent_time: 'CURRENT_TIMESTAMP',
@@ -5153,6 +5173,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
