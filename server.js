@@ -167,6 +167,264 @@ async function updateCustomerFromBooking(booking, userId) {
   }
 }
 
+// ============================================
+// WEBSITE DEPLOYMENT & DOMAIN ENDPOINTS
+// ============================================
+
+// POST - Deploy website to Vercel
+app.post('/api/website/deploy', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Get website content
+    const websiteResult = await pool.query(
+      'SELECT html_content, pages FROM websites WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (websiteResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No website to deploy' });
+    }
+    
+    const website = websiteResult.rows[0];
+    const pages = website.pages || { 'index.html': website.html_content };
+    
+    // Create Vercel deployment
+    const vercelResponse = await fetch('https://api.vercel.com/v13/deployments', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: `client-${userId}`,
+        files: Object.entries(pages).map(([name, content]) => ({
+          file: name,
+          data: Buffer.from(content).toString('base64')
+        })),
+        projectSettings: {
+          framework: null,
+          buildCommand: null,
+          outputDirectory: null
+        },
+        target: 'production'
+      })
+    });
+    
+    if (!vercelResponse.ok) {
+      const error = await vercelResponse.json();
+      console.error('Vercel deployment error:', error);
+      return res.status(500).json({ error: 'Deployment failed' });
+    }
+    
+    const deployment = await vercelResponse.json();
+    
+    // Save deployment info
+    await pool.query(
+      `UPDATE websites 
+       SET vercel_url = $1, 
+           vercel_deployment_id = $2,
+           is_published = true,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $3`,
+      [`https://${deployment.url}`, deployment.id, userId]
+    );
+    
+    console.log(`✅ Deployed website for user ${userId}: ${deployment.url}`);
+    
+    res.json({
+      success: true,
+      url: `https://${deployment.url}`,
+      deploymentId: deployment.id
+    });
+    
+  } catch (error) {
+    console.error('Deployment error:', error);
+    res.status(500).json({ error: 'Failed to deploy website' });
+  }
+});
+
+// POST - Add custom domain to Vercel project
+app.post('/api/website/add-domain', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { domain } = req.body;
+    
+    if (!domain) {
+      return res.status(400).json({ error: 'Domain is required' });
+    }
+    
+    // Clean domain (remove http://, www., trailing slashes)
+    const cleanDomain = domain
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/\/$/, '')
+      .toLowerCase();
+    
+    // Validate domain format
+    if (!cleanDomain.includes('.')) {
+      return res.status(400).json({ error: 'Invalid domain format' });
+    }
+    
+    // Get Vercel project name
+    const projectName = `client-${userId}`;
+    
+    // Add domain to Vercel project
+    const vercelResponse = await fetch(
+      `https://api.vercel.com/v9/projects/${projectName}/domains`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: cleanDomain
+        })
+      }
+    );
+    
+    const result = await vercelResponse.json();
+    
+    if (!vercelResponse.ok) {
+      console.error('Vercel domain error:', result);
+      return res.status(400).json({ 
+        error: result.error?.message || 'Failed to add domain'
+      });
+    }
+    
+    // Save domain to database
+    await pool.query(
+      `UPDATE websites 
+       SET custom_domain = $1, 
+           domain_verified = false,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $2`,
+      [cleanDomain, userId]
+    );
+    
+    console.log(`✅ Domain ${cleanDomain} added for user ${userId}`);
+    
+    res.json({
+      success: true,
+      domain: cleanDomain,
+      verification: result.verification || null
+    });
+    
+  } catch (error) {
+    console.error('Add domain error:', error);
+    res.status(500).json({ error: 'Failed to add domain' });
+  }
+});
+
+// GET - Check domain verification status
+app.get('/api/website/domain-status', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      'SELECT custom_domain, domain_verified FROM websites WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (result.rows.length === 0 || !result.rows[0].custom_domain) {
+      return res.json({ configured: false });
+    }
+    
+    const domain = result.rows[0].custom_domain;
+    const projectName = `client-${userId}`;
+    
+    // Check Vercel domain status
+    const vercelResponse = await fetch(
+      `https://api.vercel.com/v9/projects/${projectName}/domains/${domain}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`
+        }
+      }
+    );
+    
+    if (!vercelResponse.ok) {
+      return res.json({ 
+        configured: true,
+        verified: false,
+        domain: domain
+      });
+    }
+    
+    const domainInfo = await vercelResponse.json();
+    const verified = domainInfo.verified === true;
+    
+    // Update verification status if changed
+    if (verified !== result.rows[0].domain_verified) {
+      await pool.query(
+        'UPDATE websites SET domain_verified = $1 WHERE user_id = $2',
+        [verified, userId]
+      );
+    }
+    
+    res.json({
+      configured: true,
+      verified: verified,
+      domain: domain,
+      apexVerified: domainInfo.apexVerified || false,
+      nameservers: domainInfo.nameservers || null
+    });
+    
+  } catch (error) {
+    console.error('Domain status error:', error);
+    res.status(500).json({ error: 'Failed to check domain status' });
+  }
+});
+
+// DELETE - Remove custom domain
+app.delete('/api/website/remove-domain', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      'SELECT custom_domain FROM websites WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (result.rows.length === 0 || !result.rows[0].custom_domain) {
+      return res.json({ success: true });
+    }
+    
+    const domain = result.rows[0].custom_domain;
+    const projectName = `client-${userId}`;
+    
+    // Remove from Vercel
+    await fetch(
+      `https://api.vercel.com/v9/projects/${projectName}/domains/${domain}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`
+        }
+      }
+    );
+    
+    // Remove from database
+    await pool.query(
+      `UPDATE websites 
+       SET custom_domain = NULL, domain_verified = false
+       WHERE user_id = $1`,
+      [userId]
+    );
+    
+    console.log(`✅ Domain ${domain} removed for user ${userId}`);
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('Remove domain error:', error);
+    res.status(500).json({ error: 'Failed to remove domain' });
+  }
+});
+
+console.log('✅ Website deployment & domain endpoints loaded');
+
 // Add this to your POST /api/bookings endpoint (after booking is created)
 app.post('/api/bookings', authenticateToken, async (req, res) => {
   try {
@@ -4901,6 +5159,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
