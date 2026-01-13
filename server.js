@@ -1906,14 +1906,14 @@ app.get('/api/agents/leadform/templates', authenticateToken, requirePlan('pro'),
 
 Thanks for reaching out! I'm Kurt, and I just saw your request come through.
 
-You mentioned you're interested in {{service}}. I'd love to help you out with that!
+You mentioned you are interested in {{service}}. I would love to help you out with that!
 
-Here's what I can do:
+Here is what I can do:
 - Get you scheduled ASAP (we have availability this week)
 - Answer any questions about pricing or our process
-- Show you some before/after photos of similar work we've done
+- Show you some before/after photos of similar work we have done
 
-What day works best for you? Or if you want, just reply with your phone number and I'll give you a call directly.
+What day works best for you? Or if you want, just reply with your phone number and I will give you a call directly.
 
 Looking forward to working with you!
 
@@ -4891,6 +4891,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
