@@ -1807,13 +1807,15 @@ app.post('/api/agents/website/config', authenticateToken, requirePlan('pro'), as
     const userId = req.user.userId;
     const { agentName, greetingMessage, autoOpenDelay } = req.body;
 
+    const config = { agentName, greetingMessage, autoOpenDelay, enabled: true };
+
     const result = await pool.query(
       `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
-       VALUES ($1, 'website_chat', $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        ON CONFLICT (user_id, agent_type)
-       DO UPDATE SET config = $2, updated_at = CURRENT_TIMESTAMP
+       DO UPDATE SET config = $3, updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
-      [userId, JSON.stringify({ agentName, greetingMessage, autoOpenDelay, enabled: true })]
+      [userId, 'website_chat', JSON.stringify(config)]
     );
 
     console.log('✅ Website chat config saved for user:', userId);
@@ -4889,6 +4891,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
