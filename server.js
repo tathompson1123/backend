@@ -2027,45 +2027,7 @@ app.get('/api/agents/leadform/stats', authenticateToken, requirePlan('pro'), asy
   }
 });
 
-// PATCH - Toggle Lead Form Agent On/Off
-app.patch('/api/agents/leadform', authenticateToken, requirePlan('pro'), async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { enabled } = req.body;
-
-    await pool.query(
-      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
-       VALUES ($1, 'lead_form', $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-       ON CONFLICT (user_id,
-
-// GET - Check lead preferences
-app.get('/api/leads/stats', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-
-    const result = await pool.query(
-      `SELECT 
-        COUNT(*) as total_leads,
-        COUNT(*) FILTER (WHERE preferred_contact = 'email') as email_leads,
-        COUNT(*) FILTER (WHERE preferred_contact = 'sms') as sms_leads,
-        COUNT(*) FILTER (WHERE status = 'email_preferred') as email_conversions
-       FROM leads
-       WHERE user_id = $1
-       AND created_at >= CURRENT_DATE - INTERVAL '30 days'`,
-      [userId]
-    );
-
-    res.json({
-      success: true,
-      stats: result.rows[0],
-      costSavings: `Email leads save you $${(result.rows[0].email_leads * 5 * 0.0079).toFixed(2)}/month!`
-    });
-
-  } catch (error) {
-    console.error('Error fetching lead stats:', error);
-    res.status(500).json({ error: 'Failed to fetch stats' });
-  }
-});
+app.patch('/api/agents/leadform
 
 console.log('✅ Email-first lead qualification system loaded');
 
@@ -4907,6 +4869,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
