@@ -2535,8 +2535,6 @@ console.log('✅ AI Agents endpoints loaded');
 
 // Twilio SMS Webhook Handler - Add to your server.js
 
-const twilio = require('twilio');
-
 // POST - Twilio Webhook for Incoming SMS
 app.post('/api/twilio/sms/incoming', async (req, res) => {
   try {
@@ -5667,6 +5665,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
