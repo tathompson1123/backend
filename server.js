@@ -113,6 +113,256 @@ app.use('/api/website/ai-edit', aiLimiter);
 // HELPER FUNCTIONS
 // ============================================
 
+// Form Detection Function
+function processLeadForms(htmlContent, websiteId, userId, apiUrl) {
+  const formPatterns = [
+    // Contact forms
+    /<form[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi,
+    /<form[^>]*id=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi,
+    // Lead forms
+    /<form[^>]*class=["'][^"']*lead[^"']*["'][^>]*>[\s\S]*?<\/form>/gi,
+    /<form[^>]*id=["'][^"']*lead[^"']*["'][^>]*>[\s\S]*?<\/form>/gi,
+    // Quote forms
+    /<form[^>]*class=["'][^"']*quote[^"']*["'][^>]*>[\s\S]*?<\/form>/gi,
+    /<form[^>]*id=["'][^"']*quote[^"']*["'][^>]*>[\s\S]*?<\/form>/gi,
+  ];
+  
+  let modifiedHtml = htmlContent;
+  let formsReplaced = 0;
+  
+  // Find all forms
+  const foundForms = [];
+  formPatterns.forEach(pattern => {
+    const matches = htmlContent.match(pattern);
+    if (matches) {
+      matches.forEach(form => {
+        if (!foundForms.includes(form)) {
+          foundForms.push(form);
+        }
+      });
+    }
+  });
+  
+  // Replace each form
+  foundForms.forEach(originalForm => {
+    const classMatch = originalForm.match(/class=["']([^"']*)["']/);
+    const idMatch = originalForm.match(/id=["']([^"']*)["']/);
+    
+    const formClass = classMatch ? classMatch[1] : 'lead-form';
+    const formId = idMatch ? idMatch[1] : `lead-form-${formsReplaced}`;
+    
+    const hasNameInput = originalForm.includes('name');
+    const hasEmailInput = originalForm.includes('email');
+    const hasPhoneInput = originalForm.includes('phone');
+    const hasMessageInput = originalForm.includes('message') || originalForm.includes('textarea');
+    
+    const replacementForm = generateAIPoweredForm({
+      websiteId,
+      userId,
+      formClass,
+      formId,
+      hasName: hasNameInput,
+      hasEmail: hasEmailInput,
+      hasPhone: hasPhoneInput,
+      hasMessage: hasMessageInput,
+      apiUrl
+    });
+    
+    modifiedHtml = modifiedHtml.replace(originalForm, replacementForm);
+    formsReplaced++;
+  });
+  
+  console.log(`✅ Replaced ${formsReplaced} lead forms with AI-powered versions`);
+  return modifiedHtml;
+}
+
+console.log('✅ Form detection function loaded');
+
+// Generate AI-Powered Form
+function generateAIPoweredForm(options) {
+  const { websiteId, userId, formClass, formId, hasName, hasEmail, hasPhone, hasMessage, apiUrl } = options;
+  
+  return `
+<!-- AI-Powered Lead Form - Auto-generated -->
+<form 
+  id="${formId}" 
+  class="${formClass} ai-lead-form" 
+  data-website-id="${websiteId}"
+  data-user-id="${userId}"
+>
+  ${hasName ? `
+  <div class="form-group">
+    <label for="${formId}-name">Name</label>
+    <input 
+      type="text" 
+      id="${formId}-name" 
+      name="name" 
+      class="form-control"
+      placeholder="Your Name" 
+      required
+    />
+  </div>` : ''}
+  
+  ${hasEmail ? `
+  <div class="form-group">
+    <label for="${formId}-email">Email</label>
+    <input 
+      type="email" 
+      id="${formId}-email" 
+      name="email" 
+      class="form-control"
+      placeholder="your.email@example.com" 
+      required
+    />
+  </div>` : ''}
+  
+  ${hasPhone ? `
+  <div class="form-group">
+    <label for="${formId}-phone">Phone</label>
+    <input 
+      type="tel" 
+      id="${formId}-phone" 
+      name="phone" 
+      class="form-control"
+      placeholder="(555) 123-4567"
+    />
+  </div>` : ''}
+  
+  <div class="form-group">
+    <label for="${formId}-service">Service Interested In</label>
+    <select 
+      id="${formId}-service" 
+      name="service" 
+      class="form-control"
+    >
+      <option value="">Select a service...</option>
+    </select>
+  </div>
+  
+  ${hasMessage ? `
+  <div class="form-group">
+    <label for="${formId}-message">Message</label>
+    <textarea 
+      id="${formId}-message" 
+      name="message" 
+      class="form-control"
+      placeholder="Tell us about your project..."
+      rows="4"
+    ></textarea>
+  </div>` : ''}
+  
+  <div class="form-group">
+    <button type="submit" class="btn btn-primary submit-btn">
+      <span class="btn-text">Get Free Quote</span>
+      <span class="btn-loading" style="display: none;">
+        <span class="spinner"></span> Sending...
+      </span>
+    </button>
+  </div>
+  
+  <div class="form-message" style="display: none;"></div>
+</form>
+
+<script>
+(function() {
+  const form = document.getElementById('${formId}');
+  if (!form) return;
+  
+  const websiteId = form.dataset.websiteId;
+  const userId = form.dataset.userId;
+  const API_URL = '${apiUrl}';
+  
+  // Load services
+  async function loadServices() {
+    try {
+      const response = await fetch(API_URL + '/api/public/services?userId=' + userId);
+      const data = await response.json();
+      
+      const serviceSelect = form.querySelector('select[name="service"]');
+      if (serviceSelect && data.services) {
+        data.services.forEach(service => {
+          const option = document.createElement('option');
+          option.value = service.name;
+          option.textContent = service.name + ' - $' + service.price;
+          serviceSelect.appendChild(option);
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load services:', error);
+    }
+  }
+  
+  loadServices();
+  
+  // Handle submission
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(form);
+    const submitBtn = form.querySelector('.submit-btn');
+    const btnText = submitBtn.querySelector('.btn-text');
+    const btnLoading = submitBtn.querySelector('.btn-loading');
+    const messageDiv = form.querySelector('.form-message');
+    
+    btnText.style.display = 'none';
+    btnLoading.style.display = 'inline-flex';
+    submitBtn.disabled = true;
+    messageDiv.style.display = 'none';
+    
+    try {
+      const response = await fetch(API_URL + '/api/leadform/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.get('name'),
+          email: formData.get('email'),
+          phone: formData.get('phone'),
+          service: formData.get('service'),
+          message: formData.get('message'),
+          websiteId: websiteId
+        })
+      });
+      
+      if (response.ok) {
+        messageDiv.textContent = '✅ Thanks! We will be in touch soon. Check your phone for a text!';
+        messageDiv.className = 'form-message success';
+        messageDiv.style.display = 'block';
+        form.reset();
+      } else {
+        throw new Error('Submission failed');
+      }
+    } catch (error) {
+      messageDiv.textContent = '❌ Something went wrong. Please try again or call us directly.';
+      messageDiv.className = 'form-message error';
+      messageDiv.style.display = 'block';
+    } finally {
+      btnText.style.display = 'inline';
+      btnLoading.style.display = 'none';
+      submitBtn.disabled = false;
+    }
+  });
+})();
+</script>
+
+<style>
+.ai-lead-form .form-group { margin-bottom: 1rem; }
+.ai-lead-form label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+.ai-lead-form .form-control { width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 0.5rem; font-size: 1rem; }
+.ai-lead-form .form-control:focus { outline: none; border-color: #8b5cf6; }
+.ai-lead-form .submit-btn { width: 100%; padding: 0.875rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer; }
+.ai-lead-form .submit-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
+.ai-lead-form .submit-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+.ai-lead-form .spinner { width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, 0.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ai-lead-form .form-message { margin-top: 1rem; padding: 1rem; border-radius: 0.5rem; text-align: center; font-weight: 500; }
+.ai-lead-form .form-message.success { background: #d1fae5; color: #065f46; border: 2px solid #10b981; }
+.ai-lead-form .form-message.error { background: #fee2e2; color: #991b1b; border: 2px solid #ef4444; }
+</style>
+  `.trim();
+}
+
+console.log('✅ Form generator function loaded');
+
 // Add this function to handle customer creation/update
 async function updateCustomerFromBooking(booking, userId) {
   try {
@@ -171,14 +421,14 @@ async function updateCustomerFromBooking(booking, userId) {
 // WEBSITE DEPLOYMENT & DOMAIN ENDPOINTS (NAMESERVER VERSION)
 // ============================================
 
-// POST - Deploy website to Vercel
+// POST - Deploy website to Vercel with AI agents
 app.post('/api/website/deploy', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     
     // Get website content
     const websiteResult = await pool.query(
-      'SELECT html_content, pages FROM websites WHERE user_id = $1',
+      'SELECT id, html_content, pages FROM websites WHERE user_id = $1',
       [userId]
     );
     
@@ -187,9 +437,30 @@ app.post('/api/website/deploy', authenticateToken, async (req, res) => {
     }
     
     const website = websiteResult.rows[0];
-    const pages = website.pages || { 'index.html': website.html_content };
+    const websiteId = website.id;
+    let pages = website.pages || { 'index.html': website.html_content };
+    const apiUrl = process.env.API_URL || 'https://your-railway-domain.railway.app';
     
-    // Create Vercel deployment
+    // 🔥 PROCESS EACH PAGE: Replace forms + inject chat widget
+    const processedPages = {};
+    for (const [pageName, pageContent] of Object.entries(pages)) {
+      let processedHtml = pageContent;
+      
+      // Step 1: Replace lead forms with AI-powered versions
+      processedHtml = processLeadForms(processedHtml, websiteId, userId, apiUrl);
+      
+      // Step 2: Inject chat widget (only if page has </body>)
+      if (processedHtml.includes('</body>')) {
+        const chatWidgetScript = `
+<script src="${apiUrl}/chat-widget.js?websiteId=${websiteId}&userId=${userId}"></script>
+        `;
+        processedHtml = processedHtml.replace('</body>', `${chatWidgetScript}</body>`);
+      }
+      
+      processedPages[pageName] = processedHtml;
+    }
+    
+    // Create Vercel deployment with processed pages
     const vercelResponse = await fetch('https://api.vercel.com/v13/deployments', {
       method: 'POST',
       headers: {
@@ -198,7 +469,7 @@ app.post('/api/website/deploy', authenticateToken, async (req, res) => {
       },
       body: JSON.stringify({
         name: `client-${userId}`,
-        files: Object.entries(pages).map(([name, content]) => ({
+        files: Object.entries(processedPages).map(([name, content]) => ({
           file: name,
           data: Buffer.from(content).toString('base64')
         })),
@@ -225,12 +496,13 @@ app.post('/api/website/deploy', authenticateToken, async (req, res) => {
       [`https://${deployment.url}`, deployment.id, userId]
     );
     
-    console.log(`✅ Deployed website for user ${userId}: ${deployment.url}`);
+    console.log(`✅ Deployed website for user ${userId}: ${deployment.url} with AI agents`);
     
     res.json({
       success: true,
       url: `https://${deployment.url}`,
-      deploymentId: deployment.id
+      deploymentId: deployment.id,
+      aiAgentsEnabled: true
     });
     
   } catch (error) {
@@ -5665,6 +5937,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
