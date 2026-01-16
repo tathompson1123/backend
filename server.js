@@ -2304,6 +2304,271 @@ app.patch('/api/agents/leadform', authenticateToken, requirePlan('pro'), async (
 
 console.log('✅ AI Agents endpoints loaded');
 
+// Twilio SMS Webhook Handler - Add to your server.js
+
+const twilio = require('twilio');
+
+// POST - Twilio Webhook for Incoming SMS
+app.post('/api/twilio/sms/incoming', async (req, res) => {
+  try {
+    const { From, To, Body, MessageSid } = req.body;
+    
+    console.log('Incoming SMS from:', From, 'Message:', Body);
+    
+    // Find the lead by phone number
+    const leadResult = await pool.query(
+      `SELECT id, user_id, name, email 
+       FROM leads 
+       WHERE phone = $1 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [From]
+    );
+    
+    if (leadResult.rows.length === 0) {
+      console.log('No lead found for phone:', From);
+      // Optionally create a new lead
+      return res.status(200).send('<Response></Response>');
+    }
+    
+    const lead = leadResult.rows[0];
+    
+    // Store the incoming message
+    await pool.query(
+      `INSERT INTO sms_messages 
+       (lead_id, user_id, direction, from_number, to_number, message, twilio_sid, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+      [lead.id, lead.user_id, 'incoming', From, To, Body, MessageSid]
+    );
+    
+    // Update lead status
+    await pool.query(
+      `UPDATE leads 
+       SET status = $1, last_contact_at = CURRENT_TIMESTAMP 
+       WHERE id = $2`,
+      ['replied', lead.id]
+    );
+    
+    // Get agent config
+    const configResult = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [lead.user_id, 'lead_form']
+    );
+    
+    const agentEnabled = configResult.rows[0]?.config?.enabled !== false;
+    
+    if (!agentEnabled) {
+      console.log('Lead form agent disabled');
+      return res.status(200).send('<Response></Response>');
+    }
+    
+    // Generate AI response using Claude
+    const aiResponse = await generateSMSResponse(lead, Body);
+    
+    if (aiResponse) {
+      // Send AI reply via Twilio
+      const twiml = `
+        <Response>
+          <Message>${aiResponse}</Message>
+        </Response>
+      `;
+      
+      // Store outgoing message
+      await pool.query(
+        `INSERT INTO sms_messages 
+         (lead_id, user_id, direction, from_number, to_number, message, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+        [lead.id, lead.user_id, 'outgoing', To, From, aiResponse]
+      );
+      
+      res.type('text/xml');
+      res.send(twiml);
+    } else {
+      res.status(200).send('<Response></Response>');
+    }
+    
+  } catch (error) {
+    console.error('Error handling incoming SMS:', error);
+    res.status(200).send('<Response></Response>');
+  }
+});
+
+// Generate AI response for SMS
+async function generateSMSResponse(lead, userMessage) {
+  try {
+    const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    
+    if (!ANTHROPIC_API_KEY) {
+      console.error('ANTHROPIC_API_KEY not set');
+      return null;
+    }
+    
+    // Get conversation history
+    const historyResult = await pool.query(
+      `SELECT direction, message 
+       FROM sms_messages 
+       WHERE lead_id = $1 
+       ORDER BY created_at ASC 
+       LIMIT 10`,
+      [lead.id]
+    );
+    
+    // Get business services
+    const servicesResult = await pool.query(
+      `SELECT name, price, duration_hours, description 
+       FROM services 
+       WHERE user_id = $1 AND active = true`,
+      [lead.user_id]
+    );
+    
+    const services = servicesResult.rows.map(s => 
+      `${s.name} - $${s.price} - ${s.duration_hours}hrs${s.description ? ': ' + s.description : ''}`
+    ).join('\n');
+    
+    // Get business hours
+    const hoursResult = await pool.query(
+      `SELECT day_of_week, is_open, open_time, close_time 
+       FROM business_hours 
+       WHERE user_id = $1 
+       ORDER BY day_of_week`,
+      [lead.user_id]
+    );
+    
+    const businessHours = hoursResult.rows
+      .filter(h => h.is_open)
+      .map(h => {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return `${days[h.day_of_week]}: ${h.open_time}-${h.close_time}`;
+      })
+      .join(', ');
+    
+    // Build conversation history for Claude
+    const conversationHistory = historyResult.rows.map(msg => ({
+      role: msg.direction === 'incoming' ? 'user' : 'assistant',
+      content: msg.message
+    }));
+    
+    const systemPrompt = `You are Kurt, a friendly service business owner responding to customer SMS messages. 
+
+Your goal is to:
+1. Qualify the lead by understanding their needs
+2. Answer questions about services and pricing
+3. Schedule appointments when they're ready
+4. Keep responses SHORT (SMS-length, under 160 characters when possible)
+5. Sound natural and conversational, like texting a friend
+
+Available services:
+${services}
+
+Business hours:
+${businessHours}
+
+Lead info:
+Name: ${lead.name || 'Unknown'}
+Email: ${lead.email || 'Not provided'}
+
+When customer is ready to book, respond with:
+BOOKING: {service: "service name", date: "YYYY-MM-DD", time: "HH:MM"}
+
+Keep it casual and brief. Don't be overly formal. This is SMS, not email.`;
+    
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 200,
+        system: systemPrompt,
+        messages: [
+          ...conversationHistory,
+          { role: 'user', content: userMessage }
+        ]
+      })
+    });
+    
+    const data = await response.json();
+    let aiReply = data.content[0].text;
+    
+    // Check for booking
+    if (aiReply.includes('BOOKING:')) {
+      const match = aiReply.match(/BOOKING:\s*({.*?})/);
+      if (match) {
+        try {
+          const booking = JSON.parse(match[1]);
+          // Get service ID
+          const serviceResult = await pool.query(
+            'SELECT id FROM services WHERE user_id = $1 AND name ILIKE $2 AND active = true LIMIT 1',
+            [lead.user_id, `%${booking.service}%`]
+          );
+          
+          if (serviceResult.rows.length > 0) {
+            const startTime = `${booking.date} ${booking.time}`;
+            await pool.query(
+              `INSERT INTO bookings 
+               (user_id, service_id, customer_name, customer_phone, date, start_time, source, status, created_at) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+              [lead.user_id, serviceResult.rows[0].id, lead.name, lead.phone, booking.date, startTime, 'lead_form', 'confirmed']
+            );
+            
+            // Update lead
+            await pool.query(
+              'UPDATE leads SET status = $1 WHERE id = $2',
+              ['converted', lead.id]
+            );
+          }
+          aiReply = aiReply.replace(/BOOKING:.*?\n?/g, '').trim();
+        } catch (e) {
+          console.error('Error creating booking:', e);
+        }
+      }
+    }
+    
+    return aiReply;
+    
+  } catch (error) {
+    console.error('Error generating AI response:', error);
+    return null;
+  }
+}
+
+// GET - Get SMS conversation for a lead
+app.get('/api/leads/:leadId/sms-conversation', authenticateToken, async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const userId = req.user.userId;
+    
+    // Verify lead belongs to user
+    const leadResult = await pool.query(
+      'SELECT id FROM leads WHERE id = $1 AND user_id = $2',
+      [leadId, userId]
+    );
+    
+    if (leadResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    
+    // Get SMS messages
+    const messagesResult = await pool.query(
+      `SELECT direction, from_number, to_number, message, created_at 
+       FROM sms_messages 
+       WHERE lead_id = $1 
+       ORDER BY created_at ASC`,
+      [leadId]
+    );
+    
+    res.json({ messages: messagesResult.rows });
+  } catch (error) {
+    console.error('Error fetching SMS conversation:', error);
+    res.status(500).json({ error: 'Failed to fetch conversation' });
+  }
+});
+
+console.log('✅ Twilio SMS webhook endpoints loaded');
+
 // Middleware to check for Pro plan
 // POST - Create public booking
 app.post('/api/public/bookings/create', async (req, res) => {
@@ -5173,6 +5438,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
