@@ -1857,62 +1857,291 @@ Return ONLY the message text, no quotes or formatting.`
   }
 });
 
-// POST - Send SMS to lead
-app.post('/api/leads/send-sms', authenticateToken, async (req, res) => {
+// POST - Handle lead form submission
+app.post('/api/leadform/submit', async (req, res) => {
   try {
+    const { name, email, phone, service, message, websiteId } = req.body;
+    
+    // Get website owner
+    const websiteResult = await pool.query(
+      'SELECT user_id FROM websites WHERE id = $1',
+      [websiteId]
+    );
+    
+    if (websiteResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+    
+    const userId = websiteResult.rows[0].user_id;
+    
+    // Save lead
+    const leadResult = await pool.query(
+      `INSERT INTO leads 
+       (user_id, name, email, phone, service_interested, message, source, status, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP) 
+       RETURNING id`,
+      [userId, name, email, phone, service, message, 'lead_form', 'new']
+    );
+    
+    const leadId = leadResult.rows[0].id;
+    
+    // Check if agent is enabled
+    const agentResult = await pool.query(
+      'SELECT config, email_template, sms_template FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
+    );
+    
+    const agentEnabled = agentResult.rows[0]?.config?.enabled !== false;
+    
+    if (!agentEnabled) {
+      console.log('Lead form agent disabled for user:', userId);
+      return res.json({ success: true, leadId });
+    }
+    
+    // Get templates
+    const emailTemplate = agentResult.rows[0]?.email_template || getDefaultEmailTemplate();
+    const smsTemplate = agentResult.rows[0]?.sms_template || getDefaultSmsTemplate();
+    
+    // Replace variables in templates
+    const variables = {
+      name: name || 'there',
+      email: email || '',
+      phone: phone || '',
+      service: service || 'our services',
+      message: message || ''
+    };
+    
+    const personalizedEmail = replaceVariables(emailTemplate, variables);
+    const personalizedSms = replaceVariables(smsTemplate, variables);
+    
+    // Send Email
+    if (email) {
+      try {
+        await sendEmail(userId, email, personalizedEmail);
+        console.log('Email sent to:', email);
+      } catch (error) {
+        console.error('Failed to send email:', error);
+      }
+    }
+    
+    // Send SMS
+    if (phone) {
+      try {
+        const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+        const smsResult = await sendSMS(userId, phone, personalizedSms);
+        
+        // Store outgoing SMS in database
+        await pool.query(
+          `INSERT INTO sms_messages 
+           (lead_id, user_id, direction, from_number, to_number, message, twilio_sid, created_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+          [leadId, userId, 'outgoing', twilioPhone, phone, personalizedSms, smsResult.sid]
+        );
+        
+        await pool.query(
+          'UPDATE leads SET status = $1 WHERE id = $2',
+          ['contacted_sms', leadId]
+        );
+        
+        console.log('SMS sent to:', phone);
+      } catch (error) {
+        console.error('Failed to send SMS:', error);
+      }
+    }
+    
+    res.json({ success: true, leadId });
+    
+  } catch (error) {
+    console.error('Error handling lead form submission:', error);
+    res.status(500).json({ error: 'Failed to process submission' });
+  }
+});
+
+// Helper function - Replace template variables
+function replaceVariables(template, variables) {
+  let result = template;
+  for (const [key, value] of Object.entries(variables)) {
+    const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
+    result = result.replace(regex, value);
+  }
+  return result;
+}
+
+// Helper function - Default email template
+function getDefaultEmailTemplate() {
+  return `Hey {{name}},
+
+Thanks for reaching out! I'm Kurt, and I just saw your request come through.
+
+You mentioned you're interested in {{service}}. I'd love to help you out with that!
+
+Here's what I can do:
+- Get you scheduled ASAP (we have availability this week)
+- Answer any questions about pricing or our process
+- Show you some before/after photos of similar work we've done
+
+What day works best for you? Or if you want, just reply with your phone number and I'll give you a call directly.
+
+Looking forward to working with you!
+
+Kurt
+(555) 123-4567`;
+}
+
+// Helper function - Default SMS template
+function getDefaultSmsTemplate() {
+  return `Hey {{name}}, it's Kurt! Just got your request for {{service}}. When's a good time to chat? - Kurt`;
+}
+
+// Helper function - Send Email
+async function sendEmail(userId, toEmail, body) {
+  const nodemailer = require('nodemailer');
+  
+  // Get business info for "from" details
+  const businessResult = await pool.query(
+    'SELECT email FROM business_info WHERE user_id = $1',
+    [userId]
+  );
+  
+  const fromEmail = businessResult.rows[0]?.email || process.env.SMTP_USER;
+  
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: process.env.SMTP_PORT || 587,
+    secure: false,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
+  
+  await transporter.sendMail({
+    from: fromEmail,
+    to: toEmail,
+    subject: 'Thanks for reaching out!',
+    text: body,
+    html: body.replace(/\n/g, '<br>')
+  });
+}
+
+// Helper function - Send SMS
+async function sendSMS(userId, toPhone, message) {
+  const twilio = require('twilio');
+  
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+  
+  if (!accountSid || !authToken || !twilioPhone) {
+    throw new Error('Twilio credentials not configured');
+  }
+  
+  const client = twilio(accountSid, authToken);
+  
+  const smsResult = await client.messages.create({
+    body: message,
+    from: twilioPhone,
+    to: toPhone
+  });
+  
+  return smsResult;
+}
+
+console.log('✅ Lead form submission endpoint loaded');
+
+// POST - Send manual SMS to lead
+app.post('/api/leads/:leadId/send-sms', authenticateToken, async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const { message } = req.body;
     const userId = req.user.userId;
-    const { leadId, phone, message } = req.body;
-
-    if (!phone || !message) {
-      return res.status(400).json({ error: 'Phone and message required' });
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message required' });
     }
-
+    
+    // Get lead
+    const leadResult = await pool.query(
+      'SELECT phone, name FROM leads WHERE id = $1 AND user_id = $2',
+      [leadId, userId]
+    );
+    
+    if (leadResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    
+    const lead = leadResult.rows[0];
+    
+    if (!lead.phone) {
+      return res.status(400).json({ error: 'Lead has no phone number' });
+    }
+    
+    // Check Twilio config
     if (!twilioClient) {
-      return res.status(500).json({ error: 'SMS not configured' });
+      return res.status(500).json({ error: 'Twilio not configured' });
     }
-
+    
     // Get business Twilio phone
     const businessResult = await pool.query(
       'SELECT twilio_phone FROM users WHERE id = $1',
       [userId]
     );
-
     const twilioPhone = businessResult.rows[0]?.twilio_phone || process.env.TWILIO_PHONE_NUMBER;
-
-    // Send SMS
-    await twilioClient.messages.create({
+    
+    // Send SMS via Twilio
+    const smsResult = await twilioClient.messages.create({
       body: message,
       from: twilioPhone,
-      to: phone
+      to: lead.phone
     });
-
+    
+    // Store outgoing message in sms_messages table
+    await pool.query(
+      `INSERT INTO sms_messages 
+       (lead_id, user_id, direction, from_number, to_number, message, twilio_sid, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+      [leadId, userId, 'outgoing', twilioPhone, lead.phone, message, smsResult.sid]
+    );
+    
     // Update lead status
     await pool.query(
       `UPDATE leads 
-       SET status = 'contacted_sms', last_contact = CURRENT_TIMESTAMP
+       SET status = 'contacted_sms', last_contact_at = CURRENT_TIMESTAMP 
        WHERE id = $1`,
       [leadId]
     );
-
-    // Log message
-    await pool.query(
-      `INSERT INTO lead_messages (user_id, lead_id, phone, message, direction, created_at)
-       VALUES ($1, $2, $3, $4, 'outbound', CURRENT_TIMESTAMP)`,
-      [userId, leadId, phone, message]
-    );
-
+    
     console.log(`✅ SMS sent to lead ${leadId}`);
-
-    res.json({
-      success: true,
-      message: 'SMS sent successfully'
-    });
-
+    res.json({ success: true, messageSid: smsResult.sid });
+    
   } catch (error) {
     console.error('Error sending SMS:', error);
     res.status(500).json({ error: 'Failed to send SMS' });
   }
 });
+
+// GET - Public services (no auth required for website forms)
+app.get('/api/public/services', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+    
+    const result = await pool.query(
+      'SELECT name, price, duration_hours FROM services WHERE user_id = $1 AND active = true ORDER BY name',
+      [userId]
+    );
+    
+    res.json({ services: result.rows });
+  } catch (error) {
+    console.error('Error fetching public services:', error);
+    res.status(500).json({ error: 'Failed to fetch services' });
+  }
+});
+
+console.log('✅ Public services endpoint loaded');
 
 // POST - Send email to lead
 app.post('/api/leads/send-email', authenticateToken, async (req, res) => {
@@ -5438,6 +5667,7 @@ app.listen(PORT, () => {
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`⏰ Cron scheduler: Active (checking every minute)`);
 });
+
 
 
 
