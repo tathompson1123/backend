@@ -221,140 +221,22 @@ ${teamInfo.team}
 ${teamInfo.instruction}` : ''}
 
 ═══════════════════════════════════════════════════════════════════
-📸 IMAGES
-═══════════════════════════════════════════════════════════════════
-
-**Note:** The template includes placeholder image URLs. Users will replace these with their own business photos.
-- Hero images should showcase the business service/results
-- Service cards should show specific services being performed
-- About section should show the team/equipment/facility
-
-═══════════════════════════════════════════════════════════════════
 📝 CONTACT FORM - CRITICAL REQUIREMENTS
 ═══════════════════════════════════════════════════════════════════
 
-**MANDATORY CONTACT FORM STRUCTURE:**
-
-Every website MUST include a contact form with these EXACT elements:
-
-### Required Form Fields:
-1. **Name** (required) - ID: "contactName"
-2. **Email** (required) - ID: "contactEmail"  
-3. **Phone** (required) - ID: "contactPhone"
-4. **Service Interest** (required) - ID: "contactService" (dropdown with actual services)
-5. **Message** (optional) - ID: "contactMessage"
-
-### MANDATORY SMS CONSENT CHECKBOX (CRITICAL - LEGAL REQUIREMENT):
-
-**This is NON-NEGOTIABLE and MUST be included:**
-
-\`\`\`html
-<!-- SMS CONSENT - MANDATORY -->
-<div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 12px; padding: 20px; margin: 25px 0;">
-  <label style="display: flex; align-items: flex-start; cursor: pointer; margin: 0;">
-    <input 
-      type="checkbox" 
-      id="smsConsent" 
-      name="smsConsent" 
-      required
-      style="width: 22px; height: 22px; margin-right: 12px; margin-top: 2px; cursor: pointer; flex-shrink: 0; accent-color: #f59e0b;"
-    >
-    <span style="color: #92400e; font-size: 14px; line-height: 1.6;">
-      <strong style="display: block; margin-bottom: 8px; font-size: 15px;">SMS Consent Required *</strong>
-      I consent to receive text messages from this business at the phone number provided above. 
-      I understand that message and data rates may apply, and I can opt out at any time by replying STOP.
-    </span>
-  </label>
-  <div id="consentError" style="color: #dc2626; font-size: 13px; margin-top: 10px; padding: 10px; background: #fee2e2; border-radius: 8px; display: none;">
-    ⚠️ You must consent to receive text messages to submit this form
-  </div>
-</div>
-\`\`\`
-
-### Contact Preference Selection:
-
-\`\`\`html
-<div style="background: #f0f9ff; padding: 25px; border-radius: 12px; margin: 25px 0; border-left: 4px solid #3b82f6;">
-  <h4 style="color: #1e40af; margin: 0 0 15px 0;">How would you prefer to be contacted?</h4>
-  <div style="display: flex; gap: 15px;">
-    <div style="flex: 1;">
-      <input type="radio" id="preferEmail" name="preferredContact" value="email" checked style="position: absolute; opacity: 0;">
-      <label for="preferEmail" style="display: block; padding: 15px; background: white; border: 2px solid #e5e7eb; border-radius: 10px; cursor: pointer; text-align: center; font-weight: 600;">
-        📧 Email<br><small>Recommended</small>
-      </label>
-    </div>
-    <div style="flex: 1;">
-      <input type="radio" id="preferSMS" name="preferredContact" value="sms" style="position: absolute; opacity: 0;">
-      <label for="preferSMS" style="display: block; padding: 15px; background: white; border: 2px solid #e5e7eb; border-radius: 10px; cursor: pointer; text-align: center; font-weight: 600;">
-        💬 Text<br><small>Fast response</small>
-      </label>
-    </div>
-  </div>
-</div>
-\`\`\`
-
-### JavaScript Validation (REQUIRED):
-
-\`\`\`javascript
-// Contact form SMS consent validation
-const contactForm = document.getElementById('contactForm');
-const smsConsentCheckbox = document.getElementById('smsConsent');
-const consentError = document.getElementById('consentError');
-
-smsConsentCheckbox.addEventListener('change', () => {
-  if (smsConsentCheckbox.checked) {
-    consentError.style.display = 'none';
-  }
-});
-
-contactForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  
-  // VALIDATE SMS CONSENT - MANDATORY
-  if (!smsConsentCheckbox.checked) {
-    consentError.style.display = 'block';
-    smsConsentCheckbox.focus();
-    smsConsentCheckbox.parentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return;
-  }
-  
-  consentError.style.display = 'none';
-  
-  const formData = new FormData(contactForm);
-  const data = {
-    businessId: 'BUSINESS_ID_PLACEHOLDER',
-    customerName: formData.get('name'),
-    customerEmail: formData.get('email'),
-    customerPhone: formData.get('phone'),
-    preferredContact: formData.get('preferredContact'),
-    serviceInterest: formData.get('service'),
-    message: formData.get('message'),
-    smsConsent: true
-  };
-  
-  alert('Thank you! We\\'ll be in touch soon.');
-  contactForm.reset();
-});
-\`\`\`
-
-**⚠️ CRITICAL:** The SMS consent checkbox MUST be:
-- ✅ Visible and prominent (yellow background)
-- ✅ Required to submit
-- ✅ NOT pre-checked
-- ✅ Validated before form submission
-- ✅ Include exact legal text provided above
+Every website MUST include a contact form with these EXACT elements.
 
 ═══════════════════════════════════════════════════════════════════
 📋 OUTPUT - MULTI-PAGE FORMAT
 ═══════════════════════════════════════════════════════════════════
 
-Return ALL pages using the FILE_SEPARATOR format shown above.
+Return ALL pages using the FILE_SEPARATOR format.
 
 **CRITICAL:** Each page must be preceded by: <!-- FILE_SEPARATOR: filename.html -->
 
 **Required pages:**
 1. index.html (homepage)
-2. services.html (all services detailed)
+2. services.html (all services detailed)  
 3. gallery.html or portfolio.html (work showcase)
 4. contact.html (contact form + info)
 
