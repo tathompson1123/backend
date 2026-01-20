@@ -1,7 +1,6 @@
 // ============================================
 // WEBSITE TEMPLATES LIBRARY
 // Professional templates for different industries
-// Updated with 13 complete templates
 // ============================================
 
 const TEMPLATES = {
