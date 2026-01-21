@@ -1,33 +1,25 @@
 const axios = require('axios');
 
 /**
- * PORKBUN DOMAIN SERVICE
- * Simpler alternative to Namecheap
- * 
- * Why Porkbun?
- * - Simpler API than Namecheap
- * - No IP whitelisting required
- * - Cheaper domains (~$9/year .com)
- * - Good API documentation
+ * DYNADOT DOMAIN SERVICE
+ * No IP whitelisting required!
  * 
  * Setup:
- * 1. Create account at https://porkbun.com
- * 2. Enable API access in account settings
- * 3. Get API key and secret key
- * 4. Add to .env:
- *    PORKBUN_API_KEY=pk1_xxx
- *    PORKBUN_SECRET_KEY=sk1_xxx
+ * 1. Create account at https://www.dynadot.com
+ * 2. Go to Account → API Settings
+ * 3. Enable API access (no IP restrictions!)
+ * 4. Get your API key
+ * 5. Add to .env: DYNADOT_API_KEY=your_key_here
  */
 
-const PORKBUN_API_KEY = process.env.PORKBUN_API_KEY;
-const PORKBUN_SECRET_KEY = process.env.PORKBUN_SECRET_KEY;
-const PORKBUN_API_URL = 'https://porkbun.com/api/json/v3';
+const DYNADOT_API_KEY = process.env.DYNADOT_API_KEY;
+const DYNADOT_API_URL = 'https://api.dynadot.com/api3.xml';
 
 // Log configuration status on startup
-if (PORKBUN_API_KEY && PORKBUN_SECRET_KEY) {
-  console.log('✅ Porkbun API configured - real domain purchases enabled');
+if (DYNADOT_API_KEY) {
+  console.log('✅ Dynadot API configured - real domain purchases enabled');
 } else {
-  console.warn('⚠️  Porkbun API NOT configured - using mock mode (add PORKBUN_API_KEY and PORKBUN_SECRET_KEY)');
+  console.warn('⚠️  Dynadot API NOT configured - using mock mode (add DYNADOT_API_KEY)');
 }
 
 /**
@@ -43,14 +35,13 @@ async function searchDomains(query) {
 
     const extensions = ['com', 'net', 'org'];
     
-    // If using Porkbun API
-    if (PORKBUN_API_KEY && PORKBUN_SECRET_KEY) {
-      return await searchDomainsPorkbun(cleanQuery, extensions);
+    // If using Dynadot API
+    if (DYNADOT_API_KEY) {
+      return await searchDomainsDynadot(cleanQuery, extensions);
     }
     
-    // Mock data for testing - but warn user
-    console.warn('⚠️  Using mock domain data - configure PORKBUN API keys for production');
-    console.warn('⚠️  Mock availability checks are NOT accurate - domains may not actually be available');
+    // Mock data for testing
+    console.warn('⚠️  Using mock domain data - configure DYNADOT_API_KEY for production');
     return mockDomainSearch(cleanQuery, extensions);
     
   } catch (error) {
@@ -60,57 +51,41 @@ async function searchDomains(query) {
 }
 
 /**
- * Search domains using Porkbun API
+ * Search domains using Dynadot API
  */
-async function searchDomainsPorkbun(query, extensions) {
+async function searchDomainsDynadot(query, extensions) {
   try {
     const domains = [];
     
-    console.log('🔍 Checking availability with Porkbun API for:', query);
+    console.log('🔍 Checking availability with Dynadot API for:', query);
     
     for (const ext of extensions) {
       const domainName = `${query}.${ext}`;
       
       try {
-        // Check availability
         console.log(`  Checking ${domainName}...`);
-        const response = await axios.post(
-          `${PORKBUN_API_URL}/domain/checkAvailability/${domainName}`,
-          {
-            apikey: PORKBUN_API_KEY,
-            secretapikey: PORKBUN_SECRET_KEY
+        
+        // Check availability using Dynadot API
+        const response = await axios.get(DYNADOT_API_URL, {
+          params: {
+            key: DYNADOT_API_KEY,
+            command: 'search',
+            domain: domainName
           }
-        );
+        });
 
-        console.log(`  Porkbun response for ${domainName}:`, response.data);
-
-        const available = response.data.status === 'SUCCESS' && 
-                         response.data.availability === 'available';
+        // Parse XML response (simple check)
+        const xmlData = response.data;
+        const available = xmlData.includes('<Available>yes</Available>');
+        
+        // Extract price from XML
+        let price = 15; // Default
+        const priceMatch = xmlData.match(/<Price>([\d.]+)<\/Price>/);
+        if (priceMatch) {
+          price = Math.ceil(parseFloat(priceMatch[1])); // Round up
+        }
 
         console.log(`  ${domainName} is ${available ? 'AVAILABLE ✅' : 'NOT AVAILABLE ❌'}`);
-
-        // Get pricing
-        let price = 15; // Default $15/year
-        try {
-          const pricingResponse = await axios.post(
-            `${PORKBUN_API_URL}/pricing/get`,
-            {
-              apikey: PORKBUN_API_KEY,
-              secretapikey: PORKBUN_SECRET_KEY
-            }
-          );
-          
-          if (pricingResponse.data.status === 'SUCCESS') {
-            const tldPricing = pricingResponse.data.pricing[ext];
-            if (tldPricing && tldPricing.registration) {
-              // Get yearly price and add small markup
-              // Porkbun charges ~$9-11/year, we charge $15/year
-              price = 15; // Fixed $15/year
-            }
-          }
-        } catch (pricingError) {
-          console.warn('Could not fetch pricing:', pricingError.message);
-        }
 
         domains.push({
           name: domainName,
@@ -120,12 +95,11 @@ async function searchDomainsPorkbun(query, extensions) {
         });
         
       } catch (error) {
-        console.error(`  ❌ Error checking ${domainName}:`, error.response?.data || error.message);
-        // If domain check fails, assume not available
+        console.error(`  ❌ Error checking ${domainName}:`, error.message);
         domains.push({
           name: domainName,
           available: false,
-          price: 15, // $15/year
+          price: 15,
           extension: ext
         });
       }
@@ -133,7 +107,7 @@ async function searchDomainsPorkbun(query, extensions) {
     
     return domains;
   } catch (error) {
-    console.error('Porkbun API error:', error.response?.data || error.message);
+    console.error('Dynadot API error:', error.message);
     throw error;
   }
 }
@@ -145,90 +119,95 @@ function mockDomainSearch(query, extensions) {
   return extensions.map(ext => ({
     name: `${query}.${ext}`,
     available: true,
-    price: 15, // $15/year
+    price: 15,
     extension: ext
   }));
 }
 
 /**
- * Purchase domain through Porkbun
+ * Purchase domain through Dynadot
  */
 async function purchaseDomain(domain, userInfo) {
   try {
-    if (!PORKBUN_API_KEY || !PORKBUN_SECRET_KEY) {
-      throw new Error('Domain purchasing is not configured. Please add PORKBUN_API_KEY and PORKBUN_SECRET_KEY to environment variables.');
+    if (!DYNADOT_API_KEY) {
+      throw new Error('Domain purchasing is not configured. Please add DYNADOT_API_KEY to environment variables.');
     }
 
-    // Register domain with Porkbun
-    const response = await axios.post(
-      `${PORKBUN_API_URL}/domain/create/${domain}`,
-      {
-        apikey: PORKBUN_API_KEY,
-        secretapikey: PORKBUN_SECRET_KEY,
-        
-        // Contact information
-        name: userInfo.businessName || 'Business Owner',
-        email: userInfo.email,
-        
-        // Use Porkbun's privacy service
-        privacyEnabled: true,
-        
+    console.log('💳 Purchasing domain via Dynadot:', domain);
+
+    // Register domain
+    const response = await axios.get(DYNADOT_API_URL, {
+      params: {
+        key: DYNADOT_API_KEY,
+        command: 'register',
+        domain: domain,
+        duration: 1, // 1 year
+        // Contact info
+        'contact0.name': userInfo.businessName || 'Business Owner',
+        'contact0.email': userInfo.email,
+        'contact0.phone': '+1.2065551234', // Default phone
+        // Use Dynadot privacy service
+        privacy: 'full',
         // Set nameservers to Vercel
-        nameservers: [
-          'ns1.vercel-dns.com',
-          'ns2.vercel-dns.com'
-        ]
+        'ns0': 'ns1.vercel-dns.com',
+        'ns1': 'ns2.vercel-dns.com'
       }
-    );
+    });
 
-    if (response.data.status !== 'SUCCESS') {
-      throw new Error(response.data.message || 'Domain registration failed');
-    }
-
-    console.log(`✅ Domain ${domain} purchased via Porkbun`);
+    const xmlData = response.data;
     
-    return {
-      success: true,
-      domain,
-      orderId: response.data.orderId || 'PORKBUN-' + Date.now(),
-      message: 'Domain purchased successfully'
-    };
+    // Check if successful
+    if (xmlData.includes('<Status>success</Status>')) {
+      console.log(`✅ Domain ${domain} purchased via Dynadot`);
+      
+      return {
+        success: true,
+        domain,
+        orderId: 'DYNADOT-' + Date.now(),
+        message: 'Domain purchased successfully'
+      };
+    } else {
+      // Extract error message from XML
+      const errorMatch = xmlData.match(/<Error>(.+?)<\/Error>/);
+      const errorMessage = errorMatch ? errorMatch[1] : 'Domain registration failed';
+      throw new Error(errorMessage);
+    }
     
   } catch (error) {
-    console.error('Porkbun purchase error:', error.response?.data || error.message);
-    throw new Error(error.response?.data?.message || error.message || 'Failed to purchase domain');
+    console.error('Dynadot purchase error:', error.message);
+    throw new Error(error.message || 'Failed to purchase domain');
   }
 }
 
 /**
- * Update domain nameservers (if not set during purchase)
+ * Update domain nameservers
  */
 async function updateNameservers(domain) {
   try {
-    if (!PORKBUN_API_KEY || !PORKBUN_SECRET_KEY) {
-      console.warn('⚠️  Skipping nameserver update - API keys not configured');
+    if (!DYNADOT_API_KEY) {
+      console.warn('⚠️  Skipping nameserver update - API key not configured');
       return;
     }
 
-    const response = await axios.post(
-      `${PORKBUN_API_URL}/domain/updateNameservers/${domain}`,
-      {
-        apikey: PORKBUN_API_KEY,
-        secretapikey: PORKBUN_SECRET_KEY,
-        nameservers: [
-          'ns1.vercel-dns.com',
-          'ns2.vercel-dns.com'
-        ]
+    const response = await axios.get(DYNADOT_API_URL, {
+      params: {
+        key: DYNADOT_API_KEY,
+        command: 'set_ns',
+        domain: domain,
+        'ns0': 'ns1.vercel-dns.com',
+        'ns1': 'ns2.vercel-dns.com'
       }
-    );
+    });
 
-    if (response.data.status !== 'SUCCESS') {
+    const xmlData = response.data;
+    
+    if (xmlData.includes('<Status>success</Status>')) {
+      console.log(`✅ Updated nameservers for ${domain}`);
+    } else {
       throw new Error('Failed to update nameservers');
     }
-
-    console.log(`✅ Updated nameservers for ${domain}`);
   } catch (error) {
-    console.error('Nameserver update error:', error.response?.data || error.message);
+    console.error('Nameserver update error:', error.message);
     throw error;
   }
 }
@@ -238,22 +217,19 @@ async function updateNameservers(domain) {
  */
 async function getDomainInfo(domain) {
   try {
-    const response = await axios.post(
-      `${PORKBUN_API_URL}/domain/listAll`,
-      {
-        apikey: PORKBUN_API_KEY,
-        secretapikey: PORKBUN_SECRET_KEY
-      }
-    );
+    if (!DYNADOT_API_KEY) return null;
 
-    if (response.data.status === 'SUCCESS') {
-      const domainInfo = response.data.domains?.find(d => d.domain === domain);
-      return domainInfo || null;
-    }
-    
-    return null;
+    const response = await axios.get(DYNADOT_API_URL, {
+      params: {
+        key: DYNADOT_API_KEY,
+        command: 'domain_info',
+        domain: domain
+      }
+    });
+
+    return response.data;
   } catch (error) {
-    console.error('Get domain info error:', error);
+    console.error('Get domain info error:', error.message);
     return null;
   }
 }
