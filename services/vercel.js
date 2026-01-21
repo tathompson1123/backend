@@ -89,6 +89,14 @@ async function checkDomainVerification(domain, userId) {
   try {
     const projectName = `website-${userId}`;
 
+    // First ensure project exists
+    try {
+      await ensureProject(projectName);
+    } catch (error) {
+      console.warn('Could not ensure project exists:', error.message);
+      return false;
+    }
+
     const response = await axios.get(
       `https://api.vercel.com/v9/projects/${projectName}/domains/${domain}`,
       {
@@ -105,6 +113,10 @@ async function checkDomainVerification(domain, userId) {
     
     return isVerified;
   } catch (error) {
+    if (error.response?.status === 404) {
+      console.log(`Domain ${domain} not found on Vercel (not added yet)`);
+      return false;
+    }
     console.error('Vercel check domain error:', error.response?.data || error.message);
     return false;
   }
@@ -117,6 +129,26 @@ async function removeDomainFromVercel(domain, userId) {
   try {
     const projectName = `website-${userId}`;
 
+    // Check if project exists first
+    try {
+      await axios.get(
+        `https://api.vercel.com/v9/projects/${projectName}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${VERCEL_TOKEN}`
+          },
+          params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
+        }
+      );
+    } catch (error) {
+      if (error.response?.status === 404) {
+        console.log(`Project ${projectName} doesn't exist - nothing to remove`);
+        return true; // Not an error - project doesn't exist
+      }
+      throw error;
+    }
+
+    // Project exists, try to remove domain
     await axios.delete(
       `https://api.vercel.com/v9/projects/${projectName}/domains/${domain}`,
       {
@@ -130,6 +162,10 @@ async function removeDomainFromVercel(domain, userId) {
     console.log(`✅ Domain ${domain} removed from Vercel`);
     return true;
   } catch (error) {
+    if (error.response?.status === 404) {
+      console.log(`Domain ${domain} not found on project - already removed`);
+      return true; // Not an error - domain already removed
+    }
     console.error('Vercel remove domain error:', error.response?.data || error.message);
     throw new Error('Failed to remove domain from Vercel');
   }
@@ -151,27 +187,35 @@ async function ensureProject(projectName) {
       }
     );
     
-    console.log(`Project ${projectName} exists`);
+    console.log(`✅ Project ${projectName} exists`);
+    return true;
   } catch (error) {
     if (error.response?.status === 404) {
       // Project doesn't exist, create it
-      await axios.post(
-        'https://api.vercel.com/v9/projects',
-        {
-          name: projectName,
-          framework: null
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${VERCEL_TOKEN}`,
-            'Content-Type': 'application/json'
+      try {
+        await axios.post(
+          'https://api.vercel.com/v9/projects',
+          {
+            name: projectName,
+            framework: null
           },
-          params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
-        }
-      );
-      
-      console.log(`✅ Created Vercel project: ${projectName}`);
+          {
+            headers: {
+              'Authorization': `Bearer ${VERCEL_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
+          }
+        );
+        
+        console.log(`✅ Created Vercel project: ${projectName}`);
+        return true;
+      } catch (createError) {
+        console.error('Failed to create project:', createError.response?.data || createError.message);
+        throw new Error('Failed to create Vercel project');
+      }
     } else {
+      console.error('Error checking project:', error.response?.data || error.message);
       throw error;
     }
   }
