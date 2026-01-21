@@ -43,17 +43,7 @@ async function searchDomains(query) {
     
     // If using Dynadot API
     if (DYNADOT_API_KEY) {
-      const results = await searchDomainsDynadot(cleanQuery, extensions);
-      
-      // If all domains are taken, suggest alternatives
-      const allTaken = results.every(d => !d.available);
-      if (allTaken) {
-        console.log('⚠️  All primary domains taken, generating alternatives...');
-        const alternatives = await generateAlternatives(cleanQuery, extensions);
-        return [...results, ...alternatives];
-      }
-      
-      return results;
+      return await searchDomainsDynadot(cleanQuery, extensions);
     }
     
     // Mock data for testing
@@ -210,22 +200,26 @@ async function searchDomainsDynadot(query, extensions) {
 async function generateDomainSuggestions(query, extensions) {
   const suggestions = [];
   
-  // Create variations
+  // Create more unique variations
+  const currentYear = new Date().getFullYear();
   const variations = [
-    `get${query}`,
-    `${query}online`,
-    `${query}pro`,
-    `${query}hq`,
-    `${query}official`,
-    `the${query}`,
-    `${query}site`
+    `${query}${currentYear}`,  // thompsonsauto2026
+    `${query}hq`,              // thompsonsautohq
+    `${query}official`,        // thompsonsautoofficial
+    `my${query}`,              // mythompsonsauto
+    `${query}pro`,             // thompsonsautopro
+    `get${query}`,             // getthompsonsauto
+    `${query}online`,          // thompsonsautoonline
+    `the${query}`,             // thethompsonsauto
+    `${query}now`,             // thompsonsautonow
+    `${query}site`             // thompsonsautosite
   ];
   
-  console.log('  Checking variations:', variations.slice(0, 3).join(', '), '...');
+  console.log('  Checking variations:', variations.slice(0, 4).join(', '), '...');
   
-  // Check first 3 variations for .com only
-  for (let i = 0; i < Math.min(3, variations.length); i++) {
-    const variation = variations[i];
+  // Check variations - try to find at least 3 available
+  for (const variation of variations) {
+    // Try .com first
     const domainName = `${variation}.com`;
     
     try {
@@ -246,18 +240,21 @@ async function generateDomainSuggestions(query, extensions) {
       let available = false;
       
       if (isSuccess) {
-        if (xmlData.includes('<Available>yes</Available>') || 
-            xmlData.includes('<available>yes</available>')) {
+        // Check if available
+        if (xmlData.includes('<Available>yes</Available>')) {
           available = true;
         }
         
-        if (!xmlData.includes('unavailable') && 
-            !xmlData.includes('not available') &&
-            xmlData.includes(domainName)) {
+        // If no explicit unavailable marker, check further
+        if (!xmlData.includes('<Available>no</Available>') &&
+            !xmlData.includes('unavailable') && 
+            !xmlData.includes('not available')) {
+          // Likely available
           available = true;
         }
       }
       
+      // Explicit unavailable markers
       if (xmlData.includes('<Available>no</Available>') ||
           xmlData.includes('unavailable')) {
         available = false;
@@ -272,101 +269,20 @@ async function generateDomainSuggestions(query, extensions) {
           extension: 'com',
           isSuggestion: true
         });
+        
+        // Stop after finding 4 suggestions
+        if (suggestions.length >= 4) break;
+      } else {
+        console.log(`  ❌ ${domainName} is taken`);
       }
-      
-      // Limit to 3 suggestions
-      if (suggestions.length >= 3) break;
       
     } catch (error) {
-      console.error(`  Error checking ${domainName}:`, error.message);
+      console.error(`  ⚠️  Error checking ${domainName}:`, error.message);
     }
   }
   
+  console.log(`  Found ${suggestions.length} available suggestions`);
   return suggestions;
-}
-
-/**
- * Generate alternative domain suggestions when primary domains are taken
- */
-async function generateAlternatives(query, extensions) {
-  const alternatives = [];
-  const suggestions = [
-    `get${query}`,
-    `${query}online`,
-    `${query}pro`,
-    `my${query}`,
-    `${query}hq`,
-    `the${query}`,
-    `${query}now`,
-    `${query}site`
-  ];
-  
-  console.log('🔍 Checking alternatives for suggestions...');
-  
-  // Check availability of alternatives (limit to avoid too many API calls)
-  for (let i = 0; i < Math.min(4, suggestions.length); i++) {
-    const altQuery = suggestions[i];
-    
-    for (const ext of extensions) {
-      const domainName = `${altQuery}.${ext}`;
-      
-      try {
-        const params = {
-          key: DYNADOT_API_KEY,
-          command: 'search',
-          domain0: domainName
-        };
-        
-        if (DYNADOT_SECRET_KEY) {
-          params.secret = DYNADOT_SECRET_KEY;
-        }
-        
-        const response = await axios.get(DYNADOT_API_URL, { params });
-        const xmlData = response.data;
-        
-        const isSuccess = xmlData.includes('<SuccessCode>0</SuccessCode>');
-        let available = false;
-        
-        if (isSuccess) {
-          if (!xmlData.includes('unavailable') && 
-              !xmlData.includes('<Available>no</Available>') &&
-              !xmlData.includes('not available') &&
-              !xmlData.includes('already registered')) {
-            available = true;
-          }
-        }
-        
-        if (xmlData.includes('<Available>no</Available>') ||
-            xmlData.includes('unavailable') ||
-            xmlData.includes('not available') ||
-            xmlData.includes('already registered')) {
-          available = false;
-        }
-        
-        if (available) {
-          alternatives.push({
-            name: domainName,
-            available: true,
-            price: 15,
-            extension: ext,
-            isSuggestion: true
-          });
-          
-          console.log(`  ✅ Alternative available: ${domainName}`);
-          
-          // Stop after finding 6 available alternatives
-          if (alternatives.length >= 6) {
-            return alternatives;
-          }
-        }
-        
-      } catch (error) {
-        console.error(`  ⚠️  Error checking ${domainName}:`, error.message);
-      }
-    }
-  }
-  
-  return alternatives;
 }
 
 /**
