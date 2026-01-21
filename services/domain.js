@@ -1,35 +1,48 @@
 const axios = require('axios');
 
-// You can use Namecheap, GoDaddy, or a domain registrar API
-// For this example, I'll show Namecheap API structure
-const NAMECHEAP_API_USER = process.env.NAMECHEAP_API_USER;
-const NAMECHEAP_API_KEY = process.env.NAMECHEAP_API_KEY;
-const NAMECHEAP_USERNAME = process.env.NAMECHEAP_USERNAME;
+/**
+ * PORKBUN DOMAIN SERVICE
+ * Simpler alternative to Namecheap
+ * 
+ * Why Porkbun?
+ * - Simpler API than Namecheap
+ * - No IP whitelisting required
+ * - Cheaper domains (~$9/year .com)
+ * - Good API documentation
+ * 
+ * Setup:
+ * 1. Create account at https://porkbun.com
+ * 2. Enable API access in account settings
+ * 3. Get API key and secret key
+ * 4. Add to .env:
+ *    PORKBUN_API_KEY=pk1_xxx
+ *    PORKBUN_SECRET_KEY=sk1_xxx
+ */
+
+const PORKBUN_API_KEY = process.env.PORKBUN_API_KEY;
+const PORKBUN_SECRET_KEY = process.env.PORKBUN_SECRET_KEY;
+const PORKBUN_API_URL = 'https://porkbun.com/api/json/v3';
 
 /**
  * Search for available domains
- * This checks .com, .net, .org availability
  */
 async function searchDomains(query) {
   try {
-    // Clean the query - remove spaces, special chars
     const cleanQuery = query.toLowerCase().replace(/[^a-z0-9-]/g, '');
     
     if (!cleanQuery) {
       throw new Error('Invalid domain query');
     }
 
-    // Extensions to check
     const extensions = ['com', 'net', 'org'];
     
-    // If using Namecheap API:
-    if (NAMECHEAP_API_KEY) {
-      return await searchDomainsNamecheap(cleanQuery, extensions);
+    // If using Porkbun API
+    if (PORKBUN_API_KEY && PORKBUN_SECRET_KEY) {
+      return await searchDomainsPorkbun(cleanQuery, extensions);
     }
     
-    // Otherwise, return mock data for testing
-    // In production, you MUST use a real domain registrar API
-    console.warn('⚠️  Using mock domain data - configure NAMECHEAP_API_KEY for production');
+    // Mock data for testing
+    console.warn('⚠️  Using mock domain data - configure PORKBUN API keys for production');
     return mockDomainSearch(cleanQuery, extensions);
     
   } catch (error) {
@@ -39,50 +52,78 @@ async function searchDomains(query) {
 }
 
 /**
- * Search domains using Namecheap API
+ * Search domains using Porkbun API
  */
-async function searchDomainsNamecheap(query, extensions) {
+async function searchDomainsPorkbun(query, extensions) {
   try {
     const domains = [];
     
     for (const ext of extensions) {
       const domainName = `${query}.${ext}`;
       
-      // Namecheap API check
-      const response = await axios.get('https://api.namecheap.com/xml.response', {
-        params: {
-          ApiUser: NAMECHEAP_API_USER,
-          ApiKey: NAMECHEAP_API_KEY,
-          UserName: NAMECHEAP_USERNAME,
-          Command: 'namecheap.domains.check',
-          ClientIp: '0.0.0.0', // Your server IP
-          DomainList: domainName
-        }
-      });
+      try {
+        // Check availability
+        const response = await axios.post(
+          `${PORKBUN_API_URL}/domain/checkAvailability/${domainName}`,
+          {
+            apikey: PORKBUN_API_KEY,
+            secretapikey: PORKBUN_SECRET_KEY
+          }
+        );
 
-      // Parse XML response (you'll need xml2js or similar)
-      // For simplicity, assuming parsed response
-      const available = true; // Parse from XML
-      const price = ext === 'com' ? 15 : 15; // $15/year for all
-      
-      domains.push({
-        name: domainName,
-        available,
-        price,
-        extension: ext
-      });
+        const available = response.data.status === 'SUCCESS' && 
+                         response.data.availability === 'available';
+
+        // Get pricing
+        let price = 15; // Default $15/year
+        try {
+          const pricingResponse = await axios.post(
+            `${PORKBUN_API_URL}/pricing/get`,
+            {
+              apikey: PORKBUN_API_KEY,
+              secretapikey: PORKBUN_SECRET_KEY
+            }
+          );
+          
+          if (pricingResponse.data.status === 'SUCCESS') {
+            const tldPricing = pricingResponse.data.pricing[ext];
+            if (tldPricing && tldPricing.registration) {
+              // Get yearly price and add small markup
+              // Porkbun charges ~$9-11/year, we charge $15/year
+              price = 15; // Fixed $15/year
+            }
+          }
+        } catch (pricingError) {
+          console.warn('Could not fetch pricing:', pricingError.message);
+        }
+
+        domains.push({
+          name: domainName,
+          available,
+          price,
+          extension: ext
+        });
+        
+      } catch (error) {
+        // If domain check fails, assume not available
+        domains.push({
+          name: domainName,
+          available: false,
+          price: 15, // $15/year
+          extension: ext
+        });
+      }
     }
     
     return domains;
   } catch (error) {
-    console.error('Namecheap API error:', error);
+    console.error('Porkbun API error:', error.response?.data || error.message);
     throw error;
   }
 }
 
 /**
- * Mock domain search for development/testing
- * Replace with real API in production
+ * Mock domain search for development
  */
 function mockDomainSearch(query, extensions) {
   return extensions.map(ext => ({
@@ -94,147 +135,122 @@ function mockDomainSearch(query, extensions) {
 }
 
 /**
- * Purchase domain through registrar
+ * Purchase domain through Porkbun
  */
 async function purchaseDomain(domain, userInfo) {
   try {
-    // If using Namecheap API:
-    if (NAMECHEAP_API_KEY) {
-      return await purchaseDomainNamecheap(domain, userInfo);
+    if (!PORKBUN_API_KEY || !PORKBUN_SECRET_KEY) {
+      console.warn('⚠️  Mock domain purchase - configure PORKBUN API keys for production');
+      return {
+        success: true,
+        domain,
+        orderId: 'MOCK-' + Date.now(),
+        message: 'Domain purchased successfully (MOCK)'
+      };
     }
-    
-    // Mock purchase for testing
-    console.warn('⚠️  Mock domain purchase - configure NAMECHEAP_API_KEY for production');
-    return {
-      success: true,
-      domain,
-      orderId: 'MOCK-' + Date.now(),
-      message: 'Domain purchased successfully (MOCK)'
-    };
-    
-  } catch (error) {
-    console.error('Domain purchase error:', error);
-    throw new Error('Failed to purchase domain');
-  }
-}
 
-/**
- * Purchase domain using Namecheap API
- */
-async function purchaseDomainNamecheap(domain, userInfo) {
-  try {
-    const [domainName, extension] = domain.split('.');
-    
-    const response = await axios.get('https://api.namecheap.com/xml.response', {
-      params: {
-        ApiUser: NAMECHEAP_API_USER,
-        ApiKey: NAMECHEAP_API_KEY,
-        UserName: NAMECHEAP_USERNAME,
-        Command: 'namecheap.domains.create',
-        ClientIp: '0.0.0.0', // Your server IP
-        DomainName: domainName,
-        Years: 1,
+    // Register domain with Porkbun
+    const response = await axios.post(
+      `${PORKBUN_API_URL}/domain/create/${domain}`,
+      {
+        apikey: PORKBUN_API_KEY,
+        secretapikey: PORKBUN_SECRET_KEY,
         
-        // Registrant contact info
-        RegistrantFirstName: userInfo.businessName || 'Business',
-        RegistrantLastName: 'Owner',
-        RegistrantAddress1: '123 Business St',
-        RegistrantCity: 'Seattle',
-        RegistrantStateProvince: 'WA',
-        RegistrantPostalCode: '98101',
-        RegistrantCountry: 'US',
-        RegistrantPhone: '+1.2065551234',
-        RegistrantEmailAddress: userInfo.email,
+        // Contact information
+        name: userInfo.businessName || 'Business Owner',
+        email: userInfo.email,
         
-        // Use same info for all contact types
-        TechFirstName: userInfo.businessName || 'Business',
-        TechLastName: 'Owner',
-        TechAddress1: '123 Business St',
-        TechCity: 'Seattle',
-        TechStateProvince: 'WA',
-        TechPostalCode: '98101',
-        TechCountry: 'US',
-        TechPhone: '+1.2065551234',
-        TechEmailAddress: userInfo.email,
+        // Use Porkbun's privacy service
+        privacyEnabled: true,
         
-        AdminFirstName: userInfo.businessName || 'Business',
-        AdminLastName: 'Owner',
-        AdminAddress1: '123 Business St',
-        AdminCity: 'Seattle',
-        AdminStateProvince: 'WA',
-        AdminPostalCode: '98101',
-        AdminCountry: 'US',
-        AdminPhone: '+1.2065551234',
-        AdminEmailAddress: userInfo.email,
-        
-        AuxBillingFirstName: userInfo.businessName || 'Business',
-        AuxBillingLastName: 'Owner',
-        AuxBillingAddress1: '123 Business St',
-        AuxBillingCity: 'Seattle',
-        AuxBillingStateProvince: 'WA',
-        AuxBillingPostalCode: '98101',
-        AuxBillingCountry: 'US',
-        AuxBillingPhone: '+1.2065551234',
-        AuxBillingEmailAddress: userInfo.email,
-        
-        // Nameservers - point to Vercel
-        Nameservers: 'ns1.vercel-dns.com,ns2.vercel-dns.com',
-        
-        // Add WhoisGuard (privacy protection) - usually free
-        AddFreeWhoisguard: 'yes',
-        WGEnabled: 'yes'
+        // Set nameservers to Vercel
+        nameservers: [
+          'ns1.vercel-dns.com',
+          'ns2.vercel-dns.com'
+        ]
       }
-    });
+    );
 
-    // Parse XML response
-    // Return success
+    if (response.data.status !== 'SUCCESS') {
+      throw new Error(response.data.message || 'Domain registration failed');
+    }
+
+    console.log(`✅ Domain ${domain} purchased via Porkbun`);
+    
     return {
       success: true,
       domain,
-      orderId: 'ORDER-' + Date.now(), // Parse from XML response
+      orderId: response.data.orderId || 'PORKBUN-' + Date.now(),
       message: 'Domain purchased successfully'
     };
     
   } catch (error) {
-    console.error('Namecheap purchase error:', error);
-    throw new Error('Failed to purchase domain through Namecheap');
+    console.error('Porkbun purchase error:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || 'Failed to purchase domain');
   }
 }
 
 /**
- * Configure domain nameservers to point to Vercel
+ * Update domain nameservers (if not set during purchase)
  */
-async function configureDomainNameservers(domain) {
+async function updateNameservers(domain) {
   try {
-    if (!NAMECHEAP_API_KEY) {
-      console.warn('⚠️  Skipping nameserver config - NAMECHEAP_API_KEY not set');
+    if (!PORKBUN_API_KEY || !PORKBUN_SECRET_KEY) {
+      console.warn('⚠️  Skipping nameserver update - API keys not configured');
       return;
     }
 
-    const [domainName, extension] = domain.split('.');
-    
-    await axios.get('https://api.namecheap.com/xml.response', {
-      params: {
-        ApiUser: NAMECHEAP_API_USER,
-        ApiKey: NAMECHEAP_API_KEY,
-        UserName: NAMECHEAP_USERNAME,
-        Command: 'namecheap.domains.dns.setCustom',
-        ClientIp: '0.0.0.0',
-        SLD: domainName,
-        TLD: extension,
-        Nameservers: 'ns1.vercel-dns.com,ns2.vercel-dns.com'
+    const response = await axios.post(
+      `${PORKBUN_API_URL}/domain/updateNameservers/${domain}`,
+      {
+        apikey: PORKBUN_API_KEY,
+        secretapikey: PORKBUN_SECRET_KEY,
+        nameservers: [
+          'ns1.vercel-dns.com',
+          'ns2.vercel-dns.com'
+        ]
       }
-    });
+    );
 
-    console.log(`✅ Configured nameservers for ${domain}`);
+    if (response.data.status !== 'SUCCESS') {
+      throw new Error('Failed to update nameservers');
+    }
+
+    console.log(`✅ Updated nameservers for ${domain}`);
   } catch (error) {
-    console.error('Nameserver config error:', error);
-    throw new Error('Failed to configure nameservers');
+    console.error('Nameserver update error:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get domain info
+ */
+async function getDomainInfo(domain) {
+  try {
+    const response = await axios.post(
+      `${PORKBUN_API_URL}/domain/listAll`,
+      {
+        apikey: PORKBUN_API_KEY,
+        secretapikey: PORKBUN_SECRET_KEY
+      }
+    );
+
+    if (response.data.status === 'SUCCESS') {
+      const domainInfo = response.data.domains?.find(d => d.domain === domain);
+      return domainInfo || null;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Get domain info error:', error);
+    return null;
   }
 }
 
 module.exports = {
   searchDomains,
   purchaseDomain,
-  configureDomainNameservers
+  updateNameservers,
+  getDomainInfo
 };
