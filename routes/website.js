@@ -475,8 +475,12 @@ router.post('/search-domains', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Search query required' });
     }
 
+    console.log('🔍 Searching domains for:', query.trim());
+
     // Search for available domains
     const domains = await searchDomains(query.trim());
+
+    console.log('📋 Search results:', domains);
 
     res.json({ success: true, domains });
   } catch (error) {
