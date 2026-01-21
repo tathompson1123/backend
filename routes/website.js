@@ -640,8 +640,13 @@ router.delete('/remove-domain', authenticateToken, async (req, res) => {
     const domain = result.rows[0].custom_domain;
     const managedByUs = result.rows[0].domain_managed_by_us;
 
-    // Remove from Vercel
-    await removeDomainFromVercel(domain, userId);
+    // Try to remove from Vercel (don't fail if project doesn't exist)
+    try {
+      await removeDomainFromVercel(domain, userId);
+    } catch (error) {
+      console.warn('Could not remove from Vercel (continuing anyway):', error.message);
+      // Don't fail the whole operation - just log it
+    }
 
     // If we manage the domain, cancel subscription
     if (managedByUs) {
