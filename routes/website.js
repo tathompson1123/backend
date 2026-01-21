@@ -3,6 +3,8 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { buildVisualSupremacyPrompt } = require('../utils/visual-supremacy-prompt');
+const { deployToVercel, addDomainToVercel, checkDomainVerification, removeDomainFromVercel } = require('../services/vercel');
+const { searchDomains, purchaseDomain } = require('../services/domain');
 
 // Helper functions
 function sanitizeForPrompt(str) {
@@ -428,6 +430,244 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
   } catch (error) {
     console.error('❌ Error generating website:', error);
     res.status(500).json({ error: 'Server error', message: error.message });
+  }
+});
+
+// POST - Deploy website to Vercel
+router.post('/deploy', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Get website content
+    const websiteResult = await pool.query(
+      'SELECT html_content FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (websiteResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const htmlContent = websiteResult.rows[0].html_content;
+
+    // Deploy to Vercel
+    const deploymentUrl = await deployToVercel(userId, htmlContent);
+
+    // Save Vercel URL to database
+    await pool.query(
+      'UPDATE websites SET vercel_url = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+      [deploymentUrl, userId]
+    );
+
+    res.json({ success: true, url: deploymentUrl });
+  } catch (error) {
+    console.error('Error deploying website:', error);
+    res.status(500).json({ error: 'Failed to deploy website' });
+  }
+});
+
+// POST - Search for available domains
+router.post('/search-domains', authenticateToken, async (req, res) => {
+  try {
+    const { query } = req.body;
+
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({ error: 'Search query required' });
+    }
+
+    // Search for available domains
+    const domains = await searchDomains(query.trim());
+
+    res.json({ success: true, domains });
+  } catch (error) {
+    console.error('Error searching domains:', error);
+    res.status(500).json({ error: 'Failed to search domains' });
+  }
+});
+
+// POST - Purchase domain (managed by us)
+router.post('/purchase-domain', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { domain } = req.body;
+
+    if (!domain) {
+      return res.status(400).json({ error: 'Domain required' });
+    }
+
+    // Get user info
+    const userResult = await pool.query(
+      'SELECT email, business_name FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Purchase domain through domain registrar
+    const purchaseResult = await purchaseDomain(domain, {
+      email: user.email,
+      businessName: user.business_name
+    });
+
+    // Add domain to Vercel
+    await addDomainToVercel(domain, userId);
+
+    // Save to database
+    await pool.query(
+      `UPDATE websites 
+       SET custom_domain = $1, 
+           domain_verified = true, 
+           domain_managed_by_us = true,
+           domain_purchase_date = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE user_id = $2`,
+      [domain, userId]
+    );
+
+    // Create subscription record for $15/year billing
+    await pool.query(
+      `INSERT INTO domain_subscriptions (user_id, domain, price_yearly, status, next_billing_date)
+       VALUES ($1, $2, 15.00, 'active', CURRENT_DATE + INTERVAL '1 year')`,
+      [userId, domain]
+    );
+
+    res.json({ 
+      success: true, 
+      domain,
+      message: 'Domain purchased and configured successfully'
+    });
+  } catch (error) {
+    console.error('Error purchasing domain:', error);
+    res.status(500).json({ error: error.message || 'Failed to purchase domain' });
+  }
+});
+
+// POST - Add custom domain (user already owns it)
+router.post('/add-domain', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { domain } = req.body;
+
+    if (!domain) {
+      return res.status(400).json({ error: 'Domain required' });
+    }
+
+    // Validate domain format
+    const domainRegex = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
+    if (!domainRegex.test(domain.toLowerCase())) {
+      return res.status(400).json({ error: 'Invalid domain format' });
+    }
+
+    // Add domain to Vercel
+    await addDomainToVercel(domain, userId);
+
+    // Save to database
+    await pool.query(
+      `UPDATE websites 
+       SET custom_domain = $1, 
+           domain_verified = false, 
+           domain_managed_by_us = false,
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE user_id = $2`,
+      [domain, userId]
+    );
+
+    res.json({ success: true, domain });
+  } catch (error) {
+    console.error('Error adding domain:', error);
+    res.status(500).json({ error: 'Failed to add domain' });
+  }
+});
+
+// GET - Check domain verification status
+router.get('/domain-status', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      'SELECT custom_domain, domain_verified FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].custom_domain) {
+      return res.json({ verified: false });
+    }
+
+    const domain = result.rows[0].custom_domain;
+    
+    // If already verified in DB, return true
+    if (result.rows[0].domain_verified) {
+      return res.json({ verified: true });
+    }
+
+    // Check with Vercel
+    const isVerified = await checkDomainVerification(domain, userId);
+
+    // Update database if now verified
+    if (isVerified) {
+      await pool.query(
+        'UPDATE websites SET domain_verified = true, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1',
+        [userId]
+      );
+    }
+
+    res.json({ verified: isVerified });
+  } catch (error) {
+    console.error('Error checking domain status:', error);
+    res.status(500).json({ error: 'Failed to check domain status' });
+  }
+});
+
+// DELETE - Remove domain
+router.delete('/remove-domain', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Get current domain
+    const result = await pool.query(
+      'SELECT custom_domain, domain_managed_by_us FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].custom_domain) {
+      return res.status(404).json({ error: 'No domain found' });
+    }
+
+    const domain = result.rows[0].custom_domain;
+    const managedByUs = result.rows[0].domain_managed_by_us;
+
+    // Remove from Vercel
+    await removeDomainFromVercel(domain, userId);
+
+    // If we manage the domain, cancel subscription
+    if (managedByUs) {
+      await pool.query(
+        `UPDATE domain_subscriptions 
+         SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP 
+         WHERE user_id = $1 AND domain = $2`,
+        [userId, domain]
+      );
+    }
+
+    // Clear domain from database
+    await pool.query(
+      `UPDATE websites 
+       SET custom_domain = NULL, 
+           domain_verified = false, 
+           domain_managed_by_us = false,
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE user_id = $1`,
+      [userId]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error removing domain:', error);
+    res.status(500).json({ error: 'Failed to remove domain' });
   }
 });
 
