@@ -76,10 +76,11 @@ async function searchDomainsDynadot(query, extensions) {
         console.log(`  Checking ${domainName}...`);
         
         // Check availability using Dynadot API
+        // Dynadot expects 'domain0', 'domain1', etc. not 'domain'
         const params = {
           key: DYNADOT_API_KEY,
           command: 'search',
-          domain: domainName
+          domain0: domainName  // Changed from 'domain' to 'domain0'
         };
         
         // Add secret key if provided
@@ -87,6 +88,7 @@ async function searchDomainsDynadot(query, extensions) {
           params.secret = DYNADOT_SECRET_KEY;
         }
         
+        console.log(`  API params:`, params);
         const response = await axios.get(DYNADOT_API_URL, { params });
 
         console.log(`  ✅ Got response from Dynadot`);
