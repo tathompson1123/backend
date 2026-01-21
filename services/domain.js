@@ -43,7 +43,17 @@ async function searchDomains(query) {
     
     // If using Dynadot API
     if (DYNADOT_API_KEY) {
-      return await searchDomainsDynadot(cleanQuery, extensions);
+      const results = await searchDomainsDynadot(cleanQuery, extensions);
+      
+      // If all domains are taken, suggest alternatives
+      const allTaken = results.every(d => !d.available);
+      if (allTaken) {
+        console.log('⚠️  All primary domains taken, generating alternatives...');
+        const alternatives = await generateAlternatives(cleanQuery, extensions);
+        return [...results, ...alternatives];
+      }
+      
+      return results;
     }
     
     // Mock data for testing
@@ -179,11 +189,184 @@ async function searchDomainsDynadot(query, extensions) {
       }
     }
     
+    // If all main domains are taken, suggest alternatives
+    const allTaken = domains.every(d => !d.available);
+    if (allTaken) {
+      console.log('💡 All main domains taken, generating suggestions...');
+      const suggestions = await generateDomainSuggestions(query, extensions);
+      domains.push(...suggestions);
+    }
+    
     return domains;
   } catch (error) {
     console.error('Dynadot API error:', error.message);
     throw error;
   }
+}
+
+/**
+ * Generate alternative domain suggestions
+ */
+async function generateDomainSuggestions(query, extensions) {
+  const suggestions = [];
+  
+  // Create variations
+  const variations = [
+    `get${query}`,
+    `${query}online`,
+    `${query}pro`,
+    `${query}hq`,
+    `${query}official`,
+    `the${query}`,
+    `${query}site`
+  ];
+  
+  console.log('  Checking variations:', variations.slice(0, 3).join(', '), '...');
+  
+  // Check first 3 variations for .com only
+  for (let i = 0; i < Math.min(3, variations.length); i++) {
+    const variation = variations[i];
+    const domainName = `${variation}.com`;
+    
+    try {
+      const params = {
+        key: DYNADOT_API_KEY,
+        command: 'search',
+        domain0: domainName
+      };
+      
+      if (DYNADOT_SECRET_KEY) {
+        params.secret = DYNADOT_SECRET_KEY;
+      }
+      
+      const response = await axios.get(DYNADOT_API_URL, { params });
+      const xmlData = response.data;
+      
+      const isSuccess = xmlData.includes('<SuccessCode>0</SuccessCode>');
+      let available = false;
+      
+      if (isSuccess) {
+        if (xmlData.includes('<Available>yes</Available>') || 
+            xmlData.includes('<available>yes</available>')) {
+          available = true;
+        }
+        
+        if (!xmlData.includes('unavailable') && 
+            !xmlData.includes('not available') &&
+            xmlData.includes(domainName)) {
+          available = true;
+        }
+      }
+      
+      if (xmlData.includes('<Available>no</Available>') ||
+          xmlData.includes('unavailable')) {
+        available = false;
+      }
+      
+      if (available) {
+        console.log(`  ✅ Found available suggestion: ${domainName}`);
+        suggestions.push({
+          name: domainName,
+          available: true,
+          price: 15,
+          extension: 'com',
+          isSuggestion: true
+        });
+      }
+      
+      // Limit to 3 suggestions
+      if (suggestions.length >= 3) break;
+      
+    } catch (error) {
+      console.error(`  Error checking ${domainName}:`, error.message);
+    }
+  }
+  
+  return suggestions;
+}
+
+/**
+ * Generate alternative domain suggestions when primary domains are taken
+ */
+async function generateAlternatives(query, extensions) {
+  const alternatives = [];
+  const suggestions = [
+    `get${query}`,
+    `${query}online`,
+    `${query}pro`,
+    `my${query}`,
+    `${query}hq`,
+    `the${query}`,
+    `${query}now`,
+    `${query}site`
+  ];
+  
+  console.log('🔍 Checking alternatives for suggestions...');
+  
+  // Check availability of alternatives (limit to avoid too many API calls)
+  for (let i = 0; i < Math.min(4, suggestions.length); i++) {
+    const altQuery = suggestions[i];
+    
+    for (const ext of extensions) {
+      const domainName = `${altQuery}.${ext}`;
+      
+      try {
+        const params = {
+          key: DYNADOT_API_KEY,
+          command: 'search',
+          domain0: domainName
+        };
+        
+        if (DYNADOT_SECRET_KEY) {
+          params.secret = DYNADOT_SECRET_KEY;
+        }
+        
+        const response = await axios.get(DYNADOT_API_URL, { params });
+        const xmlData = response.data;
+        
+        const isSuccess = xmlData.includes('<SuccessCode>0</SuccessCode>');
+        let available = false;
+        
+        if (isSuccess) {
+          if (!xmlData.includes('unavailable') && 
+              !xmlData.includes('<Available>no</Available>') &&
+              !xmlData.includes('not available') &&
+              !xmlData.includes('already registered')) {
+            available = true;
+          }
+        }
+        
+        if (xmlData.includes('<Available>no</Available>') ||
+            xmlData.includes('unavailable') ||
+            xmlData.includes('not available') ||
+            xmlData.includes('already registered')) {
+          available = false;
+        }
+        
+        if (available) {
+          alternatives.push({
+            name: domainName,
+            available: true,
+            price: 15,
+            extension: ext,
+            isSuggestion: true
+          });
+          
+          console.log(`  ✅ Alternative available: ${domainName}`);
+          
+          // Stop after finding 6 available alternatives
+          if (alternatives.length >= 6) {
+            return alternatives;
+          }
+        }
+        
+      } catch (error) {
+        console.error(`  ⚠️  Error checking ${domainName}:`, error.message);
+      }
+    }
+  }
+  
+  return alternatives;
 }
 
 /**
