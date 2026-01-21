@@ -489,6 +489,36 @@ router.post('/search-domains', authenticateToken, async (req, res) => {
   }
 });
 
+// TEST - Check Porkbun API connection
+router.get('/test-porkbun', authenticateToken, async (req, res) => {
+  try {
+    const axios = require('axios');
+    
+    // Test API connection
+    const response = await axios.post(
+      'https://porkbun.com/api/json/v3/ping',
+      {
+        apikey: process.env.PORKBUN_API_KEY,
+        secretapikey: process.env.PORKBUN_SECRET_KEY
+      }
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'Porkbun API is accessible',
+      data: response.data,
+      serverIp: req.ip
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'Porkbun API blocked',
+      message: error.message,
+      serverIp: req.ip,
+      hint: 'You need to whitelist your Railway IP in Porkbun settings'
+    });
+  }
+});
+
 // POST - Purchase domain (managed by us)
 router.post('/purchase-domain', authenticateToken, async (req, res) => {
   try {
