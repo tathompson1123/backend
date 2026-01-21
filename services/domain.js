@@ -66,11 +66,14 @@ async function searchDomainsPorkbun(query, extensions) {
   try {
     const domains = [];
     
+    console.log('🔍 Checking availability with Porkbun API for:', query);
+    
     for (const ext of extensions) {
       const domainName = `${query}.${ext}`;
       
       try {
         // Check availability
+        console.log(`  Checking ${domainName}...`);
         const response = await axios.post(
           `${PORKBUN_API_URL}/domain/checkAvailability/${domainName}`,
           {
@@ -79,8 +82,12 @@ async function searchDomainsPorkbun(query, extensions) {
           }
         );
 
+        console.log(`  Porkbun response for ${domainName}:`, response.data);
+
         const available = response.data.status === 'SUCCESS' && 
                          response.data.availability === 'available';
+
+        console.log(`  ${domainName} is ${available ? 'AVAILABLE ✅' : 'NOT AVAILABLE ❌'}`);
 
         // Get pricing
         let price = 15; // Default $15/year
@@ -113,6 +120,7 @@ async function searchDomainsPorkbun(query, extensions) {
         });
         
       } catch (error) {
+        console.error(`  ❌ Error checking ${domainName}:`, error.response?.data || error.message);
         // If domain check fails, assume not available
         domains.push({
           name: domainName,
