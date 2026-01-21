@@ -17,15 +17,15 @@ const DYNADOT_SECRET_KEY = process.env.DYNADOT_SECRET_KEY; // Optional
 const DYNADOT_API_URL = 'https://api.dynadot.com/api3.xml';
 
 // Log configuration status on startup
-if (DYNADOT_API_KEY) {
+if (DYNADOT_API_KEY && DYNADOT_SECRET_KEY) {
   console.log('✅ Dynadot API configured - real domain purchases enabled');
-  if (DYNADOT_SECRET_KEY) {
-    console.log('   Using API Key + Secret Key authentication');
-  } else {
-    console.log('   Using API Key only authentication');
-  }
+  console.log('   Using API Key + Secret Key authentication');
+} else if (DYNADOT_API_KEY) {
+  console.warn('⚠️  Dynadot API Key found but Secret Key missing');
+  console.warn('   Add DYNADOT_SECRET_KEY to environment variables');
 } else {
-  console.warn('⚠️  Dynadot API NOT configured - using mock mode (add DYNADOT_API_KEY)');
+  console.warn('⚠️  Dynadot API NOT configured - using mock mode');
+  console.warn('   Add DYNADOT_API_KEY and DYNADOT_SECRET_KEY');
 }
 
 /**
@@ -61,6 +61,10 @@ async function searchDomains(query) {
  */
 async function searchDomainsDynadot(query, extensions) {
   try {
+    if (!DYNADOT_API_KEY || !DYNADOT_SECRET_KEY) {
+      throw new Error('Both DYNADOT_API_KEY and DYNADOT_SECRET_KEY are required');
+    }
+    
     const domains = [];
     
     console.log('🔍 Checking availability with Dynadot API for:', query);
@@ -85,18 +89,55 @@ async function searchDomainsDynadot(query, extensions) {
         
         const response = await axios.get(DYNADOT_API_URL, { params });
 
-        // Parse XML response (simple check)
+        console.log(`  ✅ Got response from Dynadot`);
         const xmlData = response.data;
-        const available = xmlData.includes('<Available>yes</Available>');
+        console.log(`  Raw XML:`, xmlData.substring(0, 800)); // First 800 chars
+
+        // Dynadot returns different XML formats, check all possibilities
+        let available = false;
         
-        // Extract price from XML
+        // Method 1: Check for <Available>yes</Available>
+        if (xmlData.includes('<Available>yes</Available>')) {
+          available = true;
+        }
+        
+        // Method 2: Check for <Status>available</Status>
+        if (xmlData.includes('<Status>available</Status>')) {
+          available = true;
+        }
+        
+        // Method 3: Check if response has error or unavailable
+        if (xmlData.includes('<Available>no</Available>') || 
+            xmlData.includes('<Status>unavailable</Status>') ||
+            xmlData.includes('not available') ||
+            xmlData.includes('already registered')) {
+          available = false;
+        }
+        
+        // Method 4: Check SearchResponse - if successful and has domain, it's available
+        if (xmlData.includes('SearchResponse') && xmlData.includes('SuccessCode') && xmlData.includes(domainName)) {
+          available = true;
+        }
+        
+        // Extract price from XML (try multiple patterns)
         let price = 15; // Default
-        const priceMatch = xmlData.match(/<Price>([\d.]+)<\/Price>/);
-        if (priceMatch) {
-          price = Math.ceil(parseFloat(priceMatch[1])); // Round up
+        const pricePatterns = [
+          /<Price>([\d.]+)<\/Price>/,
+          /<price>([\d.]+)<\/price>/,
+          /<registration>([\d.]+)<\/registration>/,
+          /<Registration>([\d.]+)<\/Registration>/
+        ];
+        
+        for (const pattern of pricePatterns) {
+          const match = xmlData.match(pattern);
+          if (match) {
+            price = Math.ceil(parseFloat(match[1]));
+            break;
+          }
         }
 
         console.log(`  ${domainName} is ${available ? 'AVAILABLE ✅' : 'NOT AVAILABLE ❌'}`);
+        console.log(`  Price: $${price}/year`);
 
         domains.push({
           name: domainName,
@@ -106,7 +147,12 @@ async function searchDomainsDynadot(query, extensions) {
         });
         
       } catch (error) {
-        console.error(`  ❌ Error checking ${domainName}:`, error.message);
+        console.error(`  ❌ ERROR checking ${domainName}:`);
+        console.error(`     Message:`, error.message);
+        console.error(`     Status:`, error.response?.status);
+        console.error(`     Response:`, error.response?.data?.substring(0, 500));
+        console.error(`     Full error:`, error.toString());
+        
         domains.push({
           name: domainName,
           available: false,
