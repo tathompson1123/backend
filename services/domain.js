@@ -13,11 +13,17 @@ const axios = require('axios');
  */
 
 const DYNADOT_API_KEY = process.env.DYNADOT_API_KEY;
+const DYNADOT_SECRET_KEY = process.env.DYNADOT_SECRET_KEY; // Optional
 const DYNADOT_API_URL = 'https://api.dynadot.com/api3.xml';
 
 // Log configuration status on startup
 if (DYNADOT_API_KEY) {
   console.log('✅ Dynadot API configured - real domain purchases enabled');
+  if (DYNADOT_SECRET_KEY) {
+    console.log('   Using API Key + Secret Key authentication');
+  } else {
+    console.log('   Using API Key only authentication');
+  }
 } else {
   console.warn('⚠️  Dynadot API NOT configured - using mock mode (add DYNADOT_API_KEY)');
 }
@@ -66,13 +72,18 @@ async function searchDomainsDynadot(query, extensions) {
         console.log(`  Checking ${domainName}...`);
         
         // Check availability using Dynadot API
-        const response = await axios.get(DYNADOT_API_URL, {
-          params: {
-            key: DYNADOT_API_KEY,
-            command: 'search',
-            domain: domainName
-          }
-        });
+        const params = {
+          key: DYNADOT_API_KEY,
+          command: 'search',
+          domain: domainName
+        };
+        
+        // Add secret key if provided
+        if (DYNADOT_SECRET_KEY) {
+          params.secret = DYNADOT_SECRET_KEY;
+        }
+        
+        const response = await axios.get(DYNADOT_API_URL, { params });
 
         // Parse XML response (simple check)
         const xmlData = response.data;
@@ -135,24 +146,30 @@ async function purchaseDomain(domain, userInfo) {
 
     console.log('💳 Purchasing domain via Dynadot:', domain);
 
+    // Build request params
+    const params = {
+      key: DYNADOT_API_KEY,
+      command: 'register',
+      domain: domain,
+      duration: 1, // 1 year
+      // Contact info
+      'contact0.name': userInfo.businessName || 'Business Owner',
+      'contact0.email': userInfo.email,
+      'contact0.phone': '+1.2065551234', // Default phone
+      // Use Dynadot privacy service
+      privacy: 'full',
+      // Set nameservers to Vercel
+      'ns0': 'ns1.vercel-dns.com',
+      'ns1': 'ns2.vercel-dns.com'
+    };
+    
+    // Add secret key if provided
+    if (DYNADOT_SECRET_KEY) {
+      params.secret = DYNADOT_SECRET_KEY;
+    }
+
     // Register domain
-    const response = await axios.get(DYNADOT_API_URL, {
-      params: {
-        key: DYNADOT_API_KEY,
-        command: 'register',
-        domain: domain,
-        duration: 1, // 1 year
-        // Contact info
-        'contact0.name': userInfo.businessName || 'Business Owner',
-        'contact0.email': userInfo.email,
-        'contact0.phone': '+1.2065551234', // Default phone
-        // Use Dynadot privacy service
-        privacy: 'full',
-        // Set nameservers to Vercel
-        'ns0': 'ns1.vercel-dns.com',
-        'ns1': 'ns2.vercel-dns.com'
-      }
-    });
+    const response = await axios.get(DYNADOT_API_URL, { params });
 
     const xmlData = response.data;
     
@@ -189,15 +206,20 @@ async function updateNameservers(domain) {
       return;
     }
 
-    const response = await axios.get(DYNADOT_API_URL, {
-      params: {
-        key: DYNADOT_API_KEY,
-        command: 'set_ns',
-        domain: domain,
-        'ns0': 'ns1.vercel-dns.com',
-        'ns1': 'ns2.vercel-dns.com'
-      }
-    });
+    const params = {
+      key: DYNADOT_API_KEY,
+      command: 'set_ns',
+      domain: domain,
+      'ns0': 'ns1.vercel-dns.com',
+      'ns1': 'ns2.vercel-dns.com'
+    };
+    
+    // Add secret key if provided
+    if (DYNADOT_SECRET_KEY) {
+      params.secret = DYNADOT_SECRET_KEY;
+    }
+
+    const response = await axios.get(DYNADOT_API_URL, { params });
 
     const xmlData = response.data;
     
@@ -219,13 +241,18 @@ async function getDomainInfo(domain) {
   try {
     if (!DYNADOT_API_KEY) return null;
 
-    const response = await axios.get(DYNADOT_API_URL, {
-      params: {
-        key: DYNADOT_API_KEY,
-        command: 'domain_info',
-        domain: domain
-      }
-    });
+    const params = {
+      key: DYNADOT_API_KEY,
+      command: 'domain_info',
+      domain: domain
+    };
+    
+    // Add secret key if provided
+    if (DYNADOT_SECRET_KEY) {
+      params.secret = DYNADOT_SECRET_KEY;
+    }
+
+    const response = await axios.get(DYNADOT_API_URL, { params });
 
     return response.data;
   } catch (error) {
