@@ -28,6 +28,19 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+router.get('/my-ip', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const ipResponse = await axios.get('https://api.ipify.org?format=json');
+    res.json({ 
+      railwayIp: ipResponse.data.ip,
+      message: 'Add this IP to Porkbun: https://porkbun.com/account/api'
+    });
+  } catch (error) {
+    res.json({ error: 'Could not get IP' });
+  }
+});
+
 // GET - Fetch user's website
 router.get('/', authenticateToken, async (req, res) => {
   try {
