@@ -23,6 +23,13 @@ const PORKBUN_API_KEY = process.env.PORKBUN_API_KEY;
 const PORKBUN_SECRET_KEY = process.env.PORKBUN_SECRET_KEY;
 const PORKBUN_API_URL = 'https://porkbun.com/api/json/v3';
 
+// Log configuration status on startup
+if (PORKBUN_API_KEY && PORKBUN_SECRET_KEY) {
+  console.log('✅ Porkbun API configured - real domain purchases enabled');
+} else {
+  console.warn('⚠️  Porkbun API NOT configured - using mock mode (add PORKBUN_API_KEY and PORKBUN_SECRET_KEY)');
+}
+
 /**
  * Search for available domains
  */
@@ -41,8 +48,9 @@ async function searchDomains(query) {
       return await searchDomainsPorkbun(cleanQuery, extensions);
     }
     
-    // Mock data for testing
+    // Mock data for testing - but warn user
     console.warn('⚠️  Using mock domain data - configure PORKBUN API keys for production');
+    console.warn('⚠️  Mock availability checks are NOT accurate - domains may not actually be available');
     return mockDomainSearch(cleanQuery, extensions);
     
   } catch (error) {
@@ -140,13 +148,7 @@ function mockDomainSearch(query, extensions) {
 async function purchaseDomain(domain, userInfo) {
   try {
     if (!PORKBUN_API_KEY || !PORKBUN_SECRET_KEY) {
-      console.warn('⚠️  Mock domain purchase - configure PORKBUN API keys for production');
-      return {
-        success: true,
-        domain,
-        orderId: 'MOCK-' + Date.now(),
-        message: 'Domain purchased successfully (MOCK)'
-      };
+      throw new Error('Domain purchasing is not configured. Please add PORKBUN_API_KEY and PORKBUN_SECRET_KEY to environment variables.');
     }
 
     // Register domain with Porkbun
@@ -186,7 +188,7 @@ async function purchaseDomain(domain, userInfo) {
     
   } catch (error) {
     console.error('Porkbun purchase error:', error.response?.data || error.message);
-    throw new Error(error.response?.data?.message || 'Failed to purchase domain');
+    throw new Error(error.response?.data?.message || error.message || 'Failed to purchase domain');
   }
 }
 
