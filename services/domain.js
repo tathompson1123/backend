@@ -95,30 +95,44 @@ async function searchDomainsDynadot(query, extensions) {
         const xmlData = response.data;
         console.log(`  Raw XML:`, xmlData.substring(0, 800)); // First 800 chars
 
-        // Dynadot returns different XML formats, check all possibilities
+        // Parse Dynadot XML response
         let available = false;
         
-        // Method 1: Check for <Available>yes</Available>
-        if (xmlData.includes('<Available>yes</Available>')) {
-          available = true;
+        // Check if request was successful first
+        const isSuccess = xmlData.includes('<SuccessCode>0</SuccessCode>');
+        
+        if (isSuccess) {
+          // Look for domain availability in the response
+          // Dynadot returns <SearchResponse> with domain status
+          
+          // Method 1: Check for explicit available/unavailable status
+          if (xmlData.includes('<Available>yes</Available>') || 
+              xmlData.includes('<available>yes</available>')) {
+            available = true;
+          }
+          
+          // Method 2: Check if domain is in "available" section
+          if (xmlData.match(new RegExp(`<Domain[^>]*>${domainName.replace('.', '\\.')}</Domain>.*?<Status>available</Status>`, 'i'))) {
+            available = true;
+          }
+          
+          // Method 3: If no explicit "unavailable" or "taken" message, assume available
+          if (!xmlData.includes('unavailable') && 
+              !xmlData.includes('not available') &&
+              !xmlData.includes('already registered') &&
+              !xmlData.includes('taken') &&
+              xmlData.includes(domainName)) {
+            available = true;
+          }
         }
         
-        // Method 2: Check for <Status>available</Status>
-        if (xmlData.includes('<Status>available</Status>')) {
-          available = true;
-        }
-        
-        // Method 3: Check if response has error or unavailable
-        if (xmlData.includes('<Available>no</Available>') || 
-            xmlData.includes('<Status>unavailable</Status>') ||
+        // If response contains explicit unavailable indicators, mark as unavailable
+        if (xmlData.includes('<Available>no</Available>') ||
+            xmlData.includes('<available>no</available>') ||
+            xmlData.includes('unavailable') ||
             xmlData.includes('not available') ||
             xmlData.includes('already registered')) {
           available = false;
-        }
-        
-        // Method 4: Check SearchResponse - if successful and has domain, it's available
-        if (xmlData.includes('SearchResponse') && xmlData.includes('SuccessCode') && xmlData.includes(domainName)) {
-          available = true;
         }
         
         // Extract price from XML (try multiple patterns)
@@ -140,6 +154,7 @@ async function searchDomainsDynadot(query, extensions) {
 
         console.log(`  ${domainName} is ${available ? 'AVAILABLE ✅' : 'NOT AVAILABLE ❌'}`);
         console.log(`  Price: $${price}/year`);
+        console.log(`  Success: ${isSuccess}`);
 
         domains.push({
           name: domainName,
