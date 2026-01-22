@@ -479,6 +479,60 @@ router.post('/deploy', authenticateToken, async (req, res) => {
   }
 });
 
+// POST - Connect existing website
+router.post('/connect-existing', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { url } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: 'URL is required' });
+    }
+
+    // Validate URL format
+    let websiteUrl;
+    try {
+      websiteUrl = new URL(url);
+    } catch (error) {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    // Fetch the website HTML
+    const response = await fetch(websiteUrl.href);
+    if (!response.ok) {
+      return res.status(400).json({ error: 'Failed to fetch website. Make sure the URL is accessible.' });
+    }
+
+    const htmlContent = await response.text();
+
+    // Save to database
+    const result = await pool.query(
+      `INSERT INTO websites (user_id, html_content, url, created_at, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id)
+       DO UPDATE SET 
+         html_content = $2,
+         url = $3,
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING id, html_content, url`,
+      [userId, htmlContent, websiteUrl.href]
+    );
+
+    console.log('✅ Connected existing website for user:', userId);
+
+    res.json({
+      success: true,
+      html_content: result.rows[0].html_content,
+      url: result.rows[0].url,
+      website_id: result.rows[0].id
+    });
+
+  } catch (error) {
+    console.error('❌ Connect website error:', error);
+    res.status(500).json({ error: 'Failed to connect website' });
+  }
+});
+
 // POST - Search for available domains
 router.post('/search-domains', authenticateToken, async (req, res) => {
   try {
