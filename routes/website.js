@@ -6,6 +6,11 @@ const { buildVisualSupremacyPrompt } = require('../utils/visual-supremacy-prompt
 const { deployToVercel, addDomainToVercel, checkDomainVerification, removeDomainFromVercel } = require('../services/vercel');
 const { searchDomains, purchaseDomain } = require('../services/domain');
 
+router.use((req, res, next) => {
+  console.log('🔍 Website route hit:', req.method, req.path);
+  next();
+});
+
 // Helper functions
 function sanitizeForPrompt(str) {
   if (!str) return '';
