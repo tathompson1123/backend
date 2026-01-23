@@ -15,7 +15,7 @@ app.use(cors({
     const allowedOrigins = [
       /\.vercel\.app$/,
       'http://localhost:5173',
-      'http://localhost:3000'
+      'http://localhost:3000',
       'https://sorceintegrations.com',
       'https://www.sorceintegrations.com'
     ];
@@ -116,6 +116,7 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
 
 
 
