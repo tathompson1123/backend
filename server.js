@@ -82,6 +82,12 @@ app.use('/api/website', websiteRoutes);
 app.use('/api/agents', aiAgentRoutes);
 app.use('/api/google-business', reviewRoutes);
 app.use('/api/sendblue', sendblueWebhook);
+app.get('/api/business-hours', (req, res) => {
+  res.json({ success: true, hours: [] });
+});
+app.get('/api/groups', (req, res) => {
+  res.json({ success: true, groups: [] });
+});
 
 // 404 handler
 app.use((req, res) => {
@@ -103,4 +109,3 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
-
