@@ -6,8 +6,10 @@ const { buildVisualSupremacyPrompt } = require('../utils/visual-supremacy-prompt
 const { deployToVercel, addDomainToVercel, checkDomainVerification, removeDomainFromVercel } = require('../services/vercel');
 const { searchDomains, purchaseDomain } = require('../services/domain');
 
+console.log('✅ Website routes module loaded');
+
 router.use((req, res, next) => {
-  console.log('🔍 Website route hit:', req.method, req.path);
+  console.log('🌐 Website route hit:', req.method, req.path);
   next();
 });
 
