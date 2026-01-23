@@ -79,7 +79,6 @@ app.use('/api/leads', leadRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/website', websiteRoutes);
-app.use('/api/generate', websiteRoutes);
 app.use('/api/agents', aiAgentRoutes);
 app.use('/api/google-business', reviewRoutes);
 app.use('/api/sendblue', sendblueWebhook);
@@ -115,5 +114,6 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
 
 
