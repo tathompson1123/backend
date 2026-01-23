@@ -46,18 +46,19 @@ const result = await pool.query(
     console.log('✅ New user signed up (no plan, onboarding pending):', email);
 
     res.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        businessName: user.business_name,
-        plan: user.plan,
-        onboarding_completed: user.onboarding_completed,
-        onboarding_current_step: user.onboarding_current_step,
-        onboarding_steps_completed: user.onboarding_steps_completed
-      }
-    });
+  success: true,
+  token,
+  user: {
+    id: user.id,
+    email: user.email,
+    businessName: user.business_name,
+    plan: user.plan,
+    onboarding_completed: user.onboarding_completed,
+    onboarding_current_step: user.onboarding_current_step,
+    onboarding_steps_completed: user.onboarding_steps_completed,
+    hasSeenWelcome: user.has_seen_welcome  // ADD THIS LINE
+  }
+});
 
   } catch (error) {
     console.error('❌ Signup error:', error);
@@ -96,18 +97,19 @@ router.post('/login', async (req, res) => {
     console.log('✅ User logged in:', email);
 
     res.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        businessName: user.business_name,
-        plan: user.plan,
-        onboarding_completed: user.onboarding_completed,
-        onboarding_current_step: user.onboarding_current_step,
-        onboarding_steps_completed: user.onboarding_steps_completed
-      }
-    });
+  success: true,
+  token,
+  user: {
+    id: user.id,
+    email: user.email,
+    businessName: user.business_name,
+    plan: user.plan,
+    onboarding_completed: user.onboarding_completed,
+    onboarding_current_step: user.onboarding_current_step,
+    onboarding_steps_completed: user.onboarding_steps_completed,
+    hasSeenWelcome: user.has_seen_welcome  // ADD THIS LINE
+  }
+});
 
   } catch (error) {
     console.error('❌ Login error:', error);
@@ -127,11 +129,11 @@ router.post('/verify', async (req, res) => {
     const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET);
 
     const result = await pool.query(
-      `SELECT id, email, business_name, plan,
-              onboarding_completed, onboarding_current_step, onboarding_steps_completed
-       FROM users WHERE id = $1`,
-      [decoded.userId]
-    );
+  `SELECT id, email, business_name, plan,
+          onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome
+   FROM users WHERE id = $1`,
+  [decoded.userId]
+);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'User not found' });
@@ -140,17 +142,18 @@ router.post('/verify', async (req, res) => {
     const user = result.rows[0];
 
     res.json({
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        businessName: user.business_name,
-        plan: user.plan,
-        onboarding_completed: user.onboarding_completed,
-        onboarding_current_step: user.onboarding_current_step,
-        onboarding_steps_completed: user.onboarding_steps_completed
-      }
-    });
+  success: true,
+  user: {
+    id: user.id,
+    email: user.email,
+    businessName: user.business_name,
+    plan: user.plan,
+    onboarding_completed: user.onboarding_completed,
+    onboarding_current_step: user.onboarding_current_step,
+    onboarding_steps_completed: user.onboarding_steps_completed,
+    hasSeenWelcome: user.has_seen_welcome  // ADD THIS LINE
+  }
+});
 
   } catch (error) {
     console.error('❌ Verify error:', error);
@@ -164,6 +167,25 @@ router.post('/logout', async (req, res) => {
     success: true, 
     message: 'Logged out successfully' 
   });
+});
+
+// POST - Mark welcome as seen
+router.post('/welcome-seen', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    await pool.query(
+      `UPDATE users 
+       SET has_seen_welcome = true
+       WHERE id = $1`,
+      [userId]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking welcome as seen:', error);
+    res.status(500).json({ error: 'Failed to mark welcome as seen' });
+  }
 });
 
 // Onboarding Routes
