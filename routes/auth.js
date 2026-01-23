@@ -25,23 +25,20 @@ router.post('/signup', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const result = await pool.query(
-      `INSERT INTO users (
-        email, password_hash, name, business_name, plan, 
-        onboarding_completed, onboarding_current_step, 
-        onboarding_steps_completed, created_at
-      )
-       VALUES ($1, $2, $3, $4, NULL, false, 1, $5, CURRENT_TIMESTAMP)
-       RETURNING id, email, name, business_name, plan, 
-                 onboarding_completed, onboarding_current_step, onboarding_steps_completed`,
-      [
-        email.toLowerCase(), 
-        hashedPassword, 
-        fullName || businessName || 'User',
-        businessName || 'My Business',
-        JSON.stringify({step1: false, step2: false, step3: false, step4: false, step5: false, step6: false})
-      ]
-    );
+   // In your signup route (POST /api/auth/signup)
+const result = await pool.query(
+  `INSERT INTO users (email, password_hash, name, business_name, plan, onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome, created_at)
+   VALUES ($1, $2, $3, $4, NULL, false, 1, $5, false, CURRENT_TIMESTAMP)
+   RETURNING id, email, name, business_name, plan, 
+             onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome`,
+  [
+    email.toLowerCase(), 
+    hashedPassword, 
+    fullName || businessName || 'User',
+    businessName || 'My Business',
+    JSON.stringify({step1: false, step2: false, step3: false, step4: false, step5: false, step6: false})
+  ]
+);
 
     const user = result.rows[0];
     const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
@@ -77,13 +74,12 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const result = await pool.query(
-      `SELECT id, email, password_hash, business_name, plan,
-              onboarding_completed, onboarding_current_step, onboarding_steps_completed
-       FROM users WHERE email = $1`,
-      [email.toLowerCase()]
-    );
-
+   const result = await pool.query(
+  `SELECT id, email, password_hash, business_name, plan,
+          onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome
+   FROM users WHERE email = $1`,
+  [email.toLowerCase()]
+);
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
