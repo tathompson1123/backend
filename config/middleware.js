@@ -132,6 +132,7 @@ function setupMiddleware(app) {
   // Generous limits for authenticated dashboard API calls
   app.use('/api/bookings', authenticatedLimiter);
   app.use('/api/customers', authenticatedLimiter);
+  app.use('/api/agents', authenticatedLimiter);
   app.use('/api/leads', authenticatedLimiter);
   app.use('/api/services', authenticatedLimiter);
   app.use('/api/employees', authenticatedLimiter);
