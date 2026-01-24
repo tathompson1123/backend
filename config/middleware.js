@@ -39,7 +39,7 @@ const publicApiLimiter = rateLimit({
 // Generous limiter for authenticated dashboard requests
 const authenticatedLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute for logged-in users
+  max: 1000, // 100 requests per minute for logged-in users
   skip: (req) => {
     // Skip rate limiting if request has valid auth token
     const authHeader = req.headers['authorization'];
