@@ -128,6 +128,49 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // ============================================
+// GET - Check if contact form is properly configured
+// ============================================
+router.get('/check-contact-form', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const websiteResult = await pool.query(
+      'SELECT html_content FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (websiteResult.rows.length === 0) {
+      return res.json({ hasWebsite: false, isValid: false });
+    }
+
+    const html = websiteResult.rows[0].html_content;
+
+    // Check if form has required elements
+    const hasContactForm = html.includes('id="contact-form"');
+    const hasSMSConsent = html.includes('sms-consent') || html.includes('sms_consent');
+    const hasMetaTag = html.includes('meta name="user-id"');
+    const hasSubmitScript = html.includes('/api/leads/public/');
+
+    const isValid = hasContactForm && hasSMSConsent && hasMetaTag && hasSubmitScript;
+
+    res.json({
+      hasWebsite: true,
+      isValid,
+      details: {
+        hasContactForm,
+        hasSMSConsent,
+        hasMetaTag,
+        hasSubmitScript
+      }
+    });
+
+  } catch (error) {
+    console.error('Error checking contact form:', error);
+    res.status(500).json({ error: 'Failed to check contact form' });
+  }
+});
+
+// ============================================
 // POST - Fix/Update Contact Form in Existing Website
 // ============================================
 router.post('/fix-contact-form', authenticateToken, async (req, res) => {
