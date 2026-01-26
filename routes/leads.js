@@ -33,30 +33,124 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// Add after your imports, before the routes
+async function triggerLeadFormAgent(userId, lead) {
+  try {
+    // Get agent config
+    const agentConfig = await pool.query(
+      'SELECT config, email_template, sms_template FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
+    );
+
+    if (agentConfig.rows.length === 0 || !agentConfig.rows[0].config?.enabled) {
+      console.log('Lead form agent not enabled for user', userId);
+      return;
+    }
+
+    const config = agentConfig.rows[0].config;
+    const emailTemplate = agentConfig.rows[0].email_template;
+    const smsTemplate = agentConfig.rows[0].sms_template;
+
+    // Send email if enabled and email exists
+    if (config.emailEnabled && lead.email && emailTemplate) {
+      try {
+        const personalizedEmail = emailTemplate
+          .replace(/\{\{name\}\}/g, lead.name || 'there')
+          .replace(/\{\{email\}\}/g, lead.email)
+          .replace(/\{\{phone\}\}/g, lead.phone || 'N/A')
+          .replace(/\{\{service\}\}/g, lead.service || 'our services')
+          .replace(/\{\{message\}\}/g, lead.message || '');
+
+        await sgMail.send({
+          to: lead.email,
+          from: process.env.SENDGRID_FROM_EMAIL,
+          subject: 'Thanks for reaching out!',
+          text: personalizedEmail,
+          html: personalizedEmail.replace(/\n/g, '<br>')
+        });
+
+        await pool.query(
+          `UPDATE leads SET status = 'contacted_email', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [lead.id]
+        );
+
+        console.log(`✅ Lead form agent: Email sent to ${lead.email}`);
+      } catch (error) {
+        console.error('Error sending email:', error);
+      }
+    }
+
+    // Send SMS if enabled and phone exists
+    if (config.smsEnabled && lead.phone && smsTemplate) {
+      try {
+        const personalizedSms = smsTemplate
+          .replace(/\{\{name\}\}/g, lead.name || 'there')
+          .replace(/\{\{email\}\}/g, lead.email || '')
+          .replace(/\{\{phone\}\}/g, lead.phone)
+          .replace(/\{\{service\}\}/g, lead.service || 'our services')
+          .replace(/\{\{message\}\}/g, lead.message || '');
+
+        const smsResult = await sendSMS(lead.phone, personalizedSms);
+
+        // Store the message
+        await pool.query(
+          `INSERT INTO sms_messages 
+           (lead_id, user_id, direction, to_number, message, sendblue_message_id, created_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+          [lead.id, userId, 'outgoing', lead.phone, personalizedSms, smsResult.message_handle]
+        );
+
+        await pool.query(
+          `UPDATE leads SET status = 'contacted_sms', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [lead.id]
+        );
+
+        console.log(`✅ Lead form agent: SMS sent to ${lead.phone}`);
+      } catch (error) {
+        console.error('Error sending SMS:', error);
+      }
+    }
+
+    console.log(`✅ Lead form agent triggered for lead ${lead.id}`);
+  } catch (error) {
+    console.error('Error in triggerLeadFormAgent:', error);
+  }
+}
+
+
 // ============================================
 // POST - Create new lead
 // ============================================
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { name, email, phone, status, source, notes } = req.body;
+    const { name, email, phone, status, source, notes, service, message } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
     }
 
     const result = await pool.query(
-      `INSERT INTO leads (user_id, name, email, phone, status, source, notes, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+      `INSERT INTO leads (user_id, name, email, phone, status, source, notes, service, message, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
        RETURNING *`,
-      [userId, name, email, phone, status || 'new', source || 'manual', notes]
+      [userId, name, email, phone, status || 'new', source || 'manual', notes, service, message]
     );
 
+    const newLead = result.rows[0];
     console.log(`✅ Lead created: ${name}`);
+
+    // Trigger Lead Form Agent if source is 'lead_form'
+    if (source === 'lead_form') {
+      // Don't await - let it run in background
+      triggerLeadFormAgent(userId, newLead).catch(err => 
+        console.error('Error triggering lead form agent:', err)
+      );
+    }
 
     res.json({
       success: true,
-      lead: result.rows[0]
+      lead: newLead
     });
   } catch (error) {
     console.error('Error creating lead:', error);
