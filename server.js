@@ -78,6 +78,7 @@ const websiteRoutes = require('./routes/website');
 const aiAgentRoutes = require('./routes/ai-agents');
 const reviewRoutes = require('./routes/reviews');
 const sendblueWebhook = require('./routes/sendblue-webhook');
+const marketResearchRoutes = require('./routes/market-research');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -90,7 +91,17 @@ app.use('/api/website', websiteRoutes);
 app.use('/api/agents', aiAgentRoutes);
 app.use('/api/google-business', reviewRoutes);
 app.use('/api/sendblue', sendblueWebhook);
-app.use('/api/billing', billingRoutes); // Add billing routes
+app.use('/api/billing', billingRoutes); //
+app.use('/api/market-research', marketResearchRoutes);
+
+// Protect market research endpoint (Expert only)
+app.get('/api/market-research', authenticateToken, requirePlan('expert'), (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Market research endpoint - Expert plan only',
+    data: {} 
+  });
+});
 
 app.get('/api/business-hours', (req, res) => {
   res.json({ success: true, hours: [] });
@@ -125,3 +136,4 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
