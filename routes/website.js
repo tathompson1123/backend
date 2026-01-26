@@ -148,7 +148,7 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
     }
 
     const website = websiteResult.rows[0];
-    let pages = website.pages ? JSON.parse(website.pages) : {};
+    let pages = website.pages || {};
 
     // Get expected API URL
     const expectedApiUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
@@ -564,104 +564,76 @@ ${workingContactFormScript}`;
 
     // AUTO-REDEPLOY TO VERCEL
     let redeploySuccess = false;
-    let deployUrl = null;
+let deployUrl = null;
 
-    try {
-      console.log('🚀 Starting auto-redeploy process...');
-      
-      const vercelToken = process.env.VERCEL_TOKEN;
-      
-      console.log('🔑 Vercel token exists:', !!vercelToken);
-      
-      if (!vercelToken) {
-        console.log('⚠️ VERCEL_TOKEN not set, skipping auto-redeploy');
-      } else {
-        // Prepare files for deployment
-        const files = [];
-        
-        // Add all pages
-        if (updatedPages && Object.keys(updatedPages).length > 0) {
-          Object.keys(updatedPages).forEach(pageKey => {
-            console.log(`📄 Adding file: ${pageKey}`);
-            files.push({
-              file: pageKey,
-              data: Buffer.from(updatedPages[pageKey]).toString('base64')
-            });
-          });
-        }
-        
-        // Add main index.html if it exists
-        if (updatedHtmlContent) {
-          console.log(`📄 Adding file: index.html`);
+try {
+  const vercelToken = process.env.VERCEL_TOKEN;
+  
+  if (vercelToken) {
+    const files = [];
+    const addedFiles = new Set(); // Track which files we've added
+    
+    // Add all pages from the pages object
+    if (updatedPages && Object.keys(updatedPages).length > 0) {
+      Object.keys(updatedPages).forEach(pageKey => {
+        if (!addedFiles.has(pageKey)) {
           files.push({
-            file: 'index.html',
-            data: Buffer.from(updatedHtmlContent).toString('base64')
+            file: pageKey,
+            data: Buffer.from(updatedPages[pageKey]).toString('base64')
           });
+          addedFiles.add(pageKey);
         }
-
-        console.log(`📦 Total files to deploy: ${files.length}`);
-
-        if (files.length > 0) {
-          console.log('🌐 Calling Vercel API...');
-          
-          // Deploy to Vercel
-          const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${vercelToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              name: `website-${userId}`,
-              files: files,
-              projectSettings: {
-                framework: null
-              }
-            })
-          });
-
-          console.log('📡 Vercel API response status:', deployResponse.status);
-
-          if (deployResponse.ok) {
-            const deployData = await deployResponse.json();
-            deployUrl = `https://${deployData.url}`;
-            
-            console.log('✅ Vercel deployment successful:', deployUrl);
-            
-            // Update database with new deployment info
-            await pool.query(
-              'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
-              [deployUrl, deployData.id, userId]
-            );
-            
-            redeploySuccess = true;
-          } else {
-            const errorText = await deployResponse.text();
-            console.error('❌ Vercel deploy failed:', errorText);
-          }
-        }
-      }
-    } catch (deployError) {
-      console.error('Error auto-redeploying:', deployError);
+      });
+    }
+    
+    // Only add index.html from html_content if it wasn't already added from pages
+    if (updatedHtmlContent && !addedFiles.has('index.html')) {
+      files.push({
+        file: 'index.html',
+        data: Buffer.from(updatedHtmlContent).toString('base64')
+      });
+      addedFiles.add('index.html');
     }
 
-    res.json({
-      success: true,
-      message: redeploySuccess 
-        ? `Contact forms updated on ${pagesFixed.length} page(s) and redeployed! Live in 1-2 minutes.` 
-        : `Contact forms updated on ${pagesFixed.length} page(s). Please manually redeploy to see changes.`,
-      redeployed: redeploySuccess,
-      deployUrl,
-      apiUrl,
-      pagesFixed
-    });
+    console.log(`📦 Total files to deploy: ${files.length}`);
 
-  } catch (error) {
-    console.error('Error fixing contact form:', error);
-    res.status(500).json({ error: 'Failed to fix contact form' });
+    if (files.length > 0) {
+      const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${vercelToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: `website-${userId}`,
+          files: files,
+          projectSettings: {
+            framework: null
+          }
+        })
+      });
+
+      if (deployResponse.ok) {
+        const deployData = await deployResponse.json();
+        deployUrl = `https://${deployData.url}`;
+        
+        await pool.query(
+          'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
+          [deployUrl, deployData.id, userId]
+        );
+        
+        redeploySuccess = true;
+        console.log(`✅ Deployed to ${deployUrl}`);
+      } else {
+        const errorText = await deployResponse.text();
+        console.error('❌ Vercel deploy failed:', errorText);
+      }
+    }
   }
-});
-
+} catch (deployError) {
+  console.error('Deploy error:', deployError.message);
+}
+    
 // Helper function to generate working contact form
 function getWorkingContactForm(userId) {
   const apiUrl = process.env.API_URL || 'https://your-backend.railway.app';
