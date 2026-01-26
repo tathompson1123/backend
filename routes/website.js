@@ -454,13 +454,14 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
 });
 
 // POST - Deploy website to Vercel
+// POST - Deploy website to Vercel
 router.post('/deploy', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    // Get website content
+    // Get website content AND pages
     const websiteResult = await pool.query(
-      'SELECT html_content FROM websites WHERE user_id = $1',
+      'SELECT html_content, pages FROM websites WHERE user_id = $1',
       [userId]
     );
 
@@ -469,9 +470,16 @@ router.post('/deploy', authenticateToken, async (req, res) => {
     }
 
     const htmlContent = websiteResult.rows[0].html_content;
+    const pagesJson = websiteResult.rows[0].pages;
+    
+    // Parse pages if they exist
+    let pages = null;
+    if (pagesJson) {
+      pages = typeof pagesJson === 'string' ? JSON.parse(pagesJson) : pagesJson;
+    }
 
-    // Deploy to Vercel
-    const deploymentUrl = await deployToVercel(userId, htmlContent);
+    // Deploy to Vercel with all pages
+    const deploymentUrl = await deployToVercel(userId, htmlContent, pages);
 
     // Save Vercel URL to database
     await pool.query(
@@ -485,7 +493,6 @@ router.post('/deploy', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to deploy website' });
   }
 });
-
 // POST - Connect existing website
 router.post('/connect-existing', authenticateToken, async (req, res) => {
   try {
