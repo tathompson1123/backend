@@ -129,17 +129,6 @@ function setupMiddleware(app) {
   app.use('/api/website/generate', aiLimiter);
   app.use('/api/website/ai-edit', aiLimiter);
   
-  // Generous limits for authenticated dashboard API calls
-  app.use('/api/bookings', authenticatedLimiter);
-  app.use('/api/customers', authenticatedLimiter);
-  app.use('/api/agents', authenticatedLimiter);
-  app.use('/api/leads', authenticatedLimiter);
-  app.use('/api/services', authenticatedLimiter);
-  app.use('/api/employees', authenticatedLimiter);
-  app.use('/api/business-hours', authenticatedLimiter);
-  app.use('/api/website', authenticatedLimiter);
-  app.use('/api/google-business', authenticatedLimiter);
-  
   // Moderate limits for any other public endpoints
   app.use('/api/', publicApiLimiter);
 }
