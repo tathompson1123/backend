@@ -365,56 +365,87 @@ ${workingContactFormScript}
 
     console.log(`✅ Contact form fixed for user ${userId} with API URL: ${apiUrl}`);
 
-   // STEP 5: AUTO-REDEPLOY TO VERCEL
-    let redeploySuccess = false;
-    try {
-      // Get Vercel project info for this user
-      const vercelResult = await pool.query(
-        'SELECT vercel_project_id, vercel_url FROM websites WHERE user_id = $1',
-        [userId]
-      );
+  // STEP 5: AUTO-REDEPLOY TO VERCEL
+let redeploySuccess = false;
+let deployUrl = null;
 
-      if (vercelResult.rows.length > 0 && vercelResult.rows[0].vercel_project_id) {
-        const vercelProjectId = vercelResult.rows[0].vercel_project_id;
-        
-        // Trigger redeploy using existing deploy endpoint
-        const deployUrl = `${process.env.API_URL || 'http://localhost:5000'}/api/website/deploy`;
-        const deployResponse = await fetch(deployUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': req.headers.authorization // Pass through auth
+try {
+  console.log('🚀 Attempting auto-redeploy...');
+  
+  // Import or require your deploy function (adjust path as needed)
+  const { deployToVercel } = require('../utils/vercel-deploy'); // If you have a separate file
+  
+  // OR call your existing deploy endpoint internally
+  // We'll do internal function call to avoid auth issues
+  
+  // Get website data for deployment
+  const websiteForDeploy = await pool.query(
+    'SELECT * FROM websites WHERE user_id = $1',
+    [userId]
+  );
+
+  if (websiteForDeploy.rows.length > 0) {
+    const website = websiteForDeploy.rows[0];
+    
+    // Call Vercel API directly (same logic as your deploy endpoint)
+    const vercelToken = process.env.VERCEL_TOKEN;
+    
+    if (!vercelToken) {
+      console.log('⚠️ VERCEL_TOKEN not set, skipping auto-redeploy');
+    } else {
+      // Deploy to Vercel
+      const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${vercelToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: `website-${userId}`,
+          files: [
+            {
+              file: 'index.html',
+              data: Buffer.from(html).toString('base64')
+            }
+          ],
+          projectSettings: {
+            framework: null
           }
-        });
+        })
+      });
 
-        if (deployResponse.ok) {
-          const deployData = await deployResponse.json();
-          console.log('✅ Auto-redeployed to Vercel:', deployData.url);
-          redeploySuccess = true;
-        } else {
-          console.log('⚠️ Vercel redeploy failed, user will need to manually redeploy');
-        }
+      if (deployResponse.ok) {
+        const deployData = await deployResponse.json();
+        deployUrl = deployData.url;
+        
+        // Update database with new deployment info
+        await pool.query(
+          'UPDATE websites SET vercel_url = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+          [`https://${deployData.url}`, userId]
+        );
+        
+        console.log('✅ Auto-redeployed to Vercel:', deployUrl);
+        redeploySuccess = true;
       } else {
-        console.log('⚠️ No Vercel project found for user');
+        const errorData = await deployResponse.json();
+        console.error('❌ Vercel deploy failed:', errorData);
       }
-    } catch (deployError) {
-      console.error('Error auto-redeploying:', deployError);
     }
-
-    res.json({
-      success: true,
-      message: redeploySuccess 
-        ? 'Contact form updated and website redeployed! Changes will be live in 1-2 minutes.' 
-        : 'Contact form updated in database. Please redeploy from My Website to see changes.',
-      redeployed: redeploySuccess,
-      apiUrl
-    });
-
-  } catch (error) {
-    console.error('Error fixing contact form:', error);
-    res.status(500).json({ error: 'Failed to fix contact form' });
   }
+} catch (deployError) {
+  console.error('Error auto-redeploying:', deployError);
+}
+
+res.json({
+  success: true,
+  message: redeploySuccess 
+    ? 'Contact form updated and redeployed! Live in 1-2 minutes.' 
+    : 'Contact form updated. Please manually redeploy to see changes.',
+  redeployed: redeploySuccess,
+  deployUrl,
+  apiUrl
 });
+
 // Helper function to generate working contact form
 function getWorkingContactForm(userId) {
   const apiUrl = process.env.API_URL || 'https://your-backend.railway.app';
