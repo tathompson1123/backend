@@ -117,8 +117,11 @@ function setupMiddleware(app) {
   app.use('/api/website/generate', aiLimiter);
   app.use('/api/website/ai-edit', aiLimiter);
   
-  // Moderate limits for any other public endpoints
-  app.use('/api/', publicApiLimiter);
+  // Public endpoints that need rate limiting (SPECIFIC PATHS ONLY)
+  app.use('/api/leads/public', publicApiLimiter);
+  
+  // DON'T apply publicApiLimiter to all /api/ routes
+  // app.use('/api/', publicApiLimiter); // ❌ REMOVE THIS LINE
 }
 
 module.exports = {
