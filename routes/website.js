@@ -156,35 +156,37 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
       : process.env.API_URL || 'https://backend-production-ab50.up.railway.app';
 
     // Helper to check a single HTML string
-    function checkHTML(html) {
-      if (!html) return { isValid: false, issues: ['No HTML content'] };
-      
-      const hasContactForm = html.includes('id="contact-form"');
-      const hasSMSConsent = html.includes('id="sms-consent"') && html.includes('name="sms_consent"');
-      const hasMetaTag = html.includes(`meta name="user-id" content="${userId}"`);
-      const hasSubmitScript = html.includes('/api/leads/public/');
-      const hasCorrectApiUrl = html.includes(expectedApiUrl);
-      const hasPhoneRequired = html.includes('name="phone" placeholder="Phone Number" required');
-      
-      const scriptMatches = html.match(/<script>\s*\(function\(\) {[\s\S]*?contact-form[\s\S]*?}\)\(\);\s*<\/script>/g);
-      const hasDuplicateScripts = scriptMatches && scriptMatches.length > 1;
-      const hasPlaceholderUrl = html.includes('https://your-backend.railway.app');
+function checkHTML(html) {
+  if (!html) return { isValid: false, issues: ['No HTML content'] };
+  
+  const hasContactForm = html.includes('id="contact-form"');
+  
+  // STRICT SMS consent check - must have checkbox with required attribute
+  const hasSMSConsentCheckbox = (html.includes('id="sms-consent"') || html.includes('name="sms_consent"')) && 
+                                 html.includes('type="checkbox"');
+  const isSMSConsentRequired = html.match(/<input[^>]*name=["']sms_consent["'][^>]*required/i) || 
+                               html.match(/<input[^>]*id=["']sms-consent["'][^>]*required/i);
+  const hasSMSConsent = hasSMSConsentCheckbox && isSMSConsentRequired;
+  
+  const hasMetaTag = html.includes(`meta name="user-id" content="${userId}"`);
+  const hasSubmitScript = html.includes('/api/leads/public/');
+  const hasCorrectApiUrl = html.includes(expectedApiUrl);
+  const hasPhoneField = html.includes('name="phone"') || html.includes('name="phone_number"') || html.includes('name="tel"');
 
-      const issues = [];
-      if (!hasContactForm) issues.push('Missing contact form');
-      if (!hasSMSConsent) issues.push('Missing SMS consent');
-      if (!hasMetaTag) issues.push('Missing user-id meta tag');
-      if (!hasSubmitScript) issues.push('Missing submission script');
-      if (!hasCorrectApiUrl) issues.push('Wrong API URL');
-      if (!hasPhoneRequired) issues.push('Phone not required');
-      if (hasDuplicateScripts) issues.push('Duplicate scripts');
-      if (hasPlaceholderUrl) issues.push('Placeholder URL');
+  const issues = [];
+  if (!hasContactForm) issues.push('Missing contact form');
+  if (!hasSMSConsentCheckbox) issues.push('Missing SMS consent checkbox');
+  if (!isSMSConsentRequired) issues.push('SMS consent must be required');
+  if (!hasMetaTag) issues.push('Missing user-id meta tag');
+  if (!hasSubmitScript) issues.push('Missing submission script');
+  if (!hasCorrectApiUrl) issues.push('Wrong API URL');
+  if (!hasPhoneField) issues.push('Missing phone field');
 
-      const isValid = hasContactForm && hasSMSConsent && hasMetaTag && hasSubmitScript && hasCorrectApiUrl && hasPhoneRequired && !hasDuplicateScripts && !hasPlaceholderUrl;
+  // Form is valid ONLY if SMS consent is present AND required
+  const isValid = hasContactForm && hasSMSConsent && hasMetaTag && hasSubmitScript && hasCorrectApiUrl && hasPhoneField;
 
-      return { isValid, issues };
-    }
-
+  return { isValid, issues };
+}
     // Check all pages that have contact forms
     let anyFormValid = false;
     const allIssues = [];
