@@ -125,7 +125,15 @@ async function triggerLeadFormAgent(userId, lead) {
   }
 }
 
+router.options('/public/:userId', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.sendStatus(200);
+});
+
 router.post('/public/:userId', async (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
   try {
     const { userId } = req.params;
     const { name, email, phone, service, message, sms_consent } = req.body;
