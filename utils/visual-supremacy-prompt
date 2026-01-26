@@ -51,10 +51,10 @@ function buildVisualSupremacyPrompt({
   
   // Try multiple possible template locations
   const possiblePaths = [
-    path.join(__dirname, 'templates', templateInfo.folder),  // /app/templates/dental
-    path.join(__dirname, '..', 'templates', templateInfo.folder),  // /templates/dental (if server.js is in /app)
-    path.join(__dirname, templateInfo.folder),  // /app/dental
-  ];
+  path.join(__dirname, '..', 'templates', templateInfo.folder),  // /app/templates/auto-detailing-template ✅
+  path.join(__dirname, 'templates', templateInfo.folder),  // /app/utils/templates/auto-detailing-template
+  path.join(__dirname, '..', '..', 'templates', templateInfo.folder),  // /templates/auto-detailing-template
+];
   
   let templateDir = null;
   for (const testPath of possiblePaths) {
