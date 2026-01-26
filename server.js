@@ -31,6 +31,11 @@ app.use(cors({
   credentials: true
 }));
 
+// IMPORTANT: Stripe webhook MUST use raw body, so it comes BEFORE express.json()
+const billingRoutes = require('./routes/billing');
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), billingRoutes);
+
+// Regular JSON parsing for all other routes
 app.use(express.json({ limit: '50mb' }));
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
@@ -56,7 +61,8 @@ app.get('/api/health', (req, res) => {
     services: {
       database: pool ? 'connected' : 'disconnected',
       sendblue: process.env.SENDBLUE_API_KEY ? 'configured' : 'not configured',
-      sendgrid: process.env.SENDGRID_API_KEY ? 'configured' : 'not configured'
+      sendgrid: process.env.SENDGRID_API_KEY ? 'configured' : 'not configured',
+      stripe: process.env.STRIPE_SECRET_KEY ? 'configured' : 'not configured'
     }
   });
 });
@@ -84,6 +90,8 @@ app.use('/api/website', websiteRoutes);
 app.use('/api/agents', aiAgentRoutes);
 app.use('/api/google-business', reviewRoutes);
 app.use('/api/sendblue', sendblueWebhook);
+app.use('/api/billing', billingRoutes); // Add billing routes
+
 app.get('/api/business-hours', (req, res) => {
   res.json({ success: true, hours: [] });
 });
@@ -113,11 +121,7 @@ app.listen(PORT, () => {
   console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected'}`);
   console.log(`📱 SendBlue: ${process.env.SENDBLUE_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
+  console.log(`💳 Stripe: ${process.env.STRIPE_SECRET_KEY ? 'Ready' : 'Not configured'}`);
 });
 
 module.exports = app;
-
-
-
-
-
