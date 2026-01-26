@@ -223,7 +223,7 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 
     // Get website with pages
     const websiteResult = await pool.query(
-      'SELECT html_content, pages FROM websites WHERE user_id = $1',
+      'SELECT html_content, pages, vercel_url FROM websites WHERE user_id = $1',
       [userId]
     );
 
@@ -380,6 +380,8 @@ ${workingContactFormScript}
     }
 
     const pagesFixed = [];
+    let updatedPages = pages;
+    let updatedHtmlContent = website.html_content;
 
     // Fix contact forms in ALL pages
     if (pages && Object.keys(pages).length > 0) {
@@ -388,7 +390,7 @@ ${workingContactFormScript}
         const fixedHTML = fixContactFormHTML(originalHTML, pageKey);
         
         if (fixedHTML !== originalHTML) {
-          pages[pageKey] = fixedHTML;
+          updatedPages[pageKey] = fixedHTML;
           pagesFixed.push(pageKey);
         }
       });
@@ -397,7 +399,7 @@ ${workingContactFormScript}
         // Update pages in database
         await pool.query(
           'UPDATE websites SET pages = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
-          [JSON.stringify(pages), userId]
+          [JSON.stringify(updatedPages), userId]
         );
 
         console.log(`✅ Fixed contact forms on ${pagesFixed.length} page(s): ${pagesFixed.join(', ')}`);
@@ -413,6 +415,7 @@ ${workingContactFormScript}
           'UPDATE websites SET html_content = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
           [fixedMainPage, userId]
         );
+        updatedHtmlContent = fixedMainPage;
         pagesFixed.push('index.html');
         console.log(`✅ Fixed contact form in main html_content`);
       }
@@ -425,9 +428,85 @@ ${workingContactFormScript}
       });
     }
 
+    // AUTO-REDEPLOY TO VERCEL
+    let redeploySuccess = false;
+    let deployUrl = null;
+
+    try {
+      console.log('🚀 Attempting auto-redeploy to Vercel...');
+      
+      const vercelToken = process.env.VERCEL_TOKEN;
+      
+      if (!vercelToken) {
+        console.log('⚠️ VERCEL_TOKEN not set, skipping auto-redeploy');
+      } else {
+        // Prepare files for deployment
+        const files = [];
+        
+        // Add all pages
+        if (updatedPages && Object.keys(updatedPages).length > 0) {
+          Object.keys(updatedPages).forEach(pageKey => {
+            files.push({
+              file: pageKey,
+              data: Buffer.from(updatedPages[pageKey]).toString('base64')
+            });
+          });
+        }
+        
+        // Add main index.html if it exists
+        if (updatedHtmlContent) {
+          files.push({
+            file: 'index.html',
+            data: Buffer.from(updatedHtmlContent).toString('base64')
+          });
+        }
+
+        console.log(`📦 Deploying ${files.length} files to Vercel...`);
+
+        // Deploy to Vercel
+        const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${vercelToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: `website-${userId}`,
+            files: files,
+            projectSettings: {
+              framework: null
+            }
+          })
+        });
+
+        if (deployResponse.ok) {
+          const deployData = await deployResponse.json();
+          deployUrl = `https://${deployData.url}`;
+          
+          // Update database with new deployment info
+          await pool.query(
+            'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
+            [deployUrl, deployData.id, userId]
+          );
+          
+          console.log('✅ Auto-redeployed to Vercel:', deployUrl);
+          redeploySuccess = true;
+        } else {
+          const errorData = await deployResponse.json();
+          console.error('❌ Vercel deploy failed:', errorData);
+        }
+      }
+    } catch (deployError) {
+      console.error('Error auto-redeploying:', deployError);
+    }
+
     res.json({
       success: true,
-      message: `Contact forms updated on ${pagesFixed.length} page(s). Redeploy to see changes.`,
+      message: redeploySuccess 
+        ? `Contact forms updated on ${pagesFixed.length} page(s) and redeployed! Live in 1-2 minutes.` 
+        : `Contact forms updated on ${pagesFixed.length} page(s). Please manually redeploy to see changes.`,
+      redeployed: redeploySuccess,
+      deployUrl,
       apiUrl,
       pagesFixed
     });
