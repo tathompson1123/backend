@@ -245,4 +245,111 @@ router.patch('/leadform', authenticateToken, requirePlan('pro'), async (req, res
   }
 });
 
+// Add these two routes to your agents.js file
+
+// Website Chat Agent - Deploy
+router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Get existing config or use defaults
+    const existing = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'website_chat']
+    );
+
+    let config = {
+      enabled: true,
+      agentName: 'Kurt',
+      greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
+      autoOpenDelay: 3
+    };
+
+    if (existing.rows.length > 0 && existing.rows[0].config) {
+      config = { ...existing.rows[0].config, enabled: true };
+    }
+
+    await pool.query(
+      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at) 
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+       ON CONFLICT (user_id, agent_type) 
+       DO UPDATE SET config = $3, updated_at = CURRENT_TIMESTAMP`,
+      [userId, 'website_chat', JSON.stringify(config)]
+    );
+
+    res.json({ success: true, message: 'Website chat agent deployed successfully' });
+  } catch (error) {
+    console.error('Error deploying website agent:', error);
+    res.status(500).json({ error: 'Failed to deploy agent' });
+  }
+});
+
+// Lead Form Agent - Deploy
+router.post('/leadform/deploy', authenticateToken, requirePlan('pro'), async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Get existing config or use defaults
+    const existing = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
+    );
+
+    let config = { enabled: true };
+
+    if (existing.rows.length > 0 && existing.rows[0].config) {
+      config = { ...existing.rows[0].config, enabled: true };
+    }
+
+    await pool.query(
+      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at) 
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+       ON CONFLICT (user_id, agent_type) 
+       DO UPDATE SET config = $3, updated_at = CURRENT_TIMESTAMP`,
+      [userId, 'lead_form', JSON.stringify(config)]
+    );
+
+    res.json({ success: true, message: 'Lead form agent deployed successfully' });
+  } catch (error) {
+    console.error('Error deploying lead form agent:', error);
+    res.status(500).json({ error: 'Failed to deploy agent' });
+  }
+});
+
+// Website Chat Agent - Get deployment status
+router.get('/website/status', authenticateToken, requirePlan('pro'), async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'website_chat']
+    );
+
+    const isDeployed = result.rows.length > 0 && result.rows[0].config?.enabled === true;
+    res.json({ isDeployed });
+  } catch (error) {
+    console.error('Error checking website agent status:', error);
+    res.status(500).json({ error: 'Failed to check status' });
+  }
+});
+
+// Lead Form Agent - Get deployment status
+router.get('/leadform/status', authenticateToken, requirePlan('pro'), async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
+    );
+
+    const isDeployed = result.rows.length > 0 && result.rows[0].config?.enabled === true;
+    res.json({ isDeployed });
+  } catch (error) {
+    console.error('Error checking lead form agent status:', error);
+    res.status(500).json({ error: 'Failed to check status' });
+  }
+});
+
 module.exports = router;
