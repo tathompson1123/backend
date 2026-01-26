@@ -94,15 +94,6 @@ app.use('/api/sendblue', sendblueWebhook);
 app.use('/api/billing', billingRoutes); //
 app.use('/api/market-research', marketResearchRoutes);
 
-// Protect market research endpoint (Expert only)
-app.get('/api/market-research', authenticateToken, requirePlan('expert'), (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Market research endpoint - Expert plan only',
-    data: {} 
-  });
-});
-
 app.get('/api/business-hours', (req, res) => {
   res.json({ success: true, hours: [] });
 });
@@ -136,4 +127,5 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
 
