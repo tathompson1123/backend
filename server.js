@@ -42,17 +42,6 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false 
 // Apply rate limiting
 setupMiddleware(app);
 
-app.use((req, res, next) => {
-  console.log('═══════════════════════════════════════');
-  console.log('📍 INCOMING REQUEST');
-  console.log('Method:', req.method);
-  console.log('URL:', req.url);
-  console.log('Path:', req.path);
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('═══════════════════════════════════════');
-  next();
-});
-
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -127,5 +116,6 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
 
 
