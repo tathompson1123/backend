@@ -355,46 +355,163 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
              /<form[^>]*>[\s\S]*?(contact|email|phone|message)[\s\S]*?<\/form>/i.test(html);
     }
 
-    // Helper function to fix HTML with contact form
-    function fixContactFormHTML(html, pageName) {
-      console.log(`🔍 Checking ${pageName} for contact forms...`);
-      
-      if (!hasContactForm(html)) {
-        console.log(`⏭️  No contact form found in ${pageName}, skipping`);
-        return html;
-      }
+   function fixContactFormHTML(html, pageName) {
+  if (!hasContactForm(html)) return html;
 
-      console.log(`🔧 Fixing contact form in ${pageName}`);
+  console.log(`🔧 Fixing contact form in ${pageName}`);
 
-      // Remove ALL existing contact sections and scripts
-      html = html.replace(/<section[^>]*id=["']contact["'][^>]*>[\s\S]*?<\/section>/gi, '');
-      html = html.replace(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/gi, '');
-      html = html.replace(/<form[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi, '');
-      html = html.replace(/<script>\s*\(function\(\) {[\s\S]*?contact-form[\s\S]*?}\)\(\);\s*<\/script>/gi, '');
+  // First, detect the existing form's styling/theme
+  const isDarkTheme = html.includes('background: #0a0a0a') || html.includes('background: black') || html.includes('bg-black');
+  
+  // Remove ALL existing forms and contact sections MORE AGGRESSIVELY
+  // Remove forms first
+  html = html.replace(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/gi, '');
+  html = html.replace(/<form[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi, '');
+  html = html.replace(/<form[^>]*name=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi, '');
+  
+  // Remove any form with contact-related fields
+  html = html.replace(/<form[^>]*>[\s\S]*?(email|phone|message)[\s\S]*?<\/form>/gi, '');
+  
+  // Remove contact sections
+  html = html.replace(/<section[^>]*id=["']contact["'][^>]*>[\s\S]*?<\/section>/gi, '');
+  html = html.replace(/<section[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/section>/gi, '');
+  
+  // Remove any div with contact-form class or id
+  html = html.replace(/<div[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/div>/gi, '');
+  html = html.replace(/<div[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '');
+  
+  // Remove scripts
+  html = html.replace(/<script>\s*\(function\(\) {[\s\S]*?contact-form[\s\S]*?}\)\(\);\s*<\/script>/gi, '');
+  html = html.replace(/<script[^>]*>[\s\S]*?contact-form[\s\S]*?<\/script>/gi, '');
 
-      // Ensure meta tag
-      if (!html.includes('meta name="user-id"')) {
-        html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
-      } else {
-        html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
-      }
+  // Ensure meta tag
+  if (!html.includes('meta name="user-id"')) {
+    html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
+  } else {
+    html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
+  }
 
-      // Add new contact form section before </body>
-      const newContactSection = `
-        <section id="contact" style="padding: 80px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-          <div style="max-width: 600px; margin: 0 auto;">
-            <h2 style="text-align: center; color: white; font-size: 36px; margin-bottom: 40px;">Get In Touch</h2>
-            ${workingContactFormHTML}
-          </div>
-        </section>
-${workingContactFormScript}
-      </body>`;
+  // Create styled form that matches the theme
+  const workingContactFormHTML = `
+<form id="contact-form" style="background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 450px; margin: 0 auto;">
+  <input type="text" name="name" placeholder="Your Name" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; box-sizing: border-box;">
+  <input type="email" name="email" placeholder="Email Address" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; box-sizing: border-box;">
+  <input type="tel" name="phone" placeholder="Phone Number" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; box-sizing: border-box;">
+  <input type="text" name="service" placeholder="Service Interested In" style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; box-sizing: border-box;">
+  <textarea name="message" rows="4" placeholder="Tell us about your project..." style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; resize: vertical; box-sizing: border-box;"></textarea>
+  
+  <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
+    <input type="checkbox" id="sms-consent" name="sms_consent" required style="width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
+    <label for="sms-consent" style="font-size: 14px; line-height: 1.5; color: #374151; cursor: pointer;">
+      I agree to receive text messages at the number provided. Message and data rates may apply. Reply STOP to opt out.
+    </label>
+  </div>
+  
+  <button type="submit" style="width: 100%; padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer; transition: transform 0.2s;">
+    Send Message
+  </button>
+  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>
+</form>`;
 
-      html = html.replace('</body>', newContactSection);
-      
-      console.log(`✅ Fixed contact form in ${pageName}`);
-      return html;
+  const workingContactFormScript = `
+<script>
+(function() {
+  const form = document.getElementById('contact-form');
+  if (!form) return;
+  
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const button = e.target.querySelector('button[type="submit"]');
+    const statusEl = document.getElementById('form-status');
+    
+    const smsConsent = formData.get('sms_consent') === 'on';
+    if (!smsConsent) {
+      statusEl.textContent = '⚠️ Please agree to receive text messages to continue.';
+      statusEl.style.display = 'block';
+      statusEl.style.background = '#fef3c7';
+      statusEl.style.color = '#92400e';
+      statusEl.style.border = '2px solid #fbbf24';
+      return;
     }
+    
+    button.textContent = 'Sending...';
+    button.disabled = true;
+    
+    try {
+      const userId = document.querySelector('meta[name="user-id"]')?.content || '${userId}';
+      
+      const response = await fetch('${apiUrl}/api/leads/public/' + userId, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.get('name'),
+          email: formData.get('email'),
+          phone: formData.get('phone') || '',
+          service: formData.get('service') || '',
+          message: formData.get('message') || '',
+          sms_consent: true,
+          source: 'lead_form'
+        })
+      });
+      
+      if (response.ok) {
+        statusEl.textContent = '✅ Thanks! We\\'ll be in touch soon.';
+        statusEl.style.display = 'block';
+        statusEl.style.background = '#d1fae5';
+        statusEl.style.color = '#065f46';
+        statusEl.style.border = '2px solid #6ee7b7';
+        e.target.reset();
+      } else {
+        throw new Error('Submission failed');
+      }
+    } catch (error) {
+      statusEl.textContent = '❌ Something went wrong. Please call us directly.';
+      statusEl.style.display = 'block';
+      statusEl.style.background = '#fee2e2';
+      statusEl.style.color = '#991b1b';
+      statusEl.style.border = '2px solid #fca5a5';
+    } finally {
+      button.textContent = 'Send Message';
+      button.disabled = false;
+    }
+  });
+})();
+</script>`;
+
+  // Find where to insert the new form
+  // Look for an existing contact section or create one
+  const contactSectionPattern = /<section[^>]*>[\s\S]*?(get in touch|contact|reach out)[\s\S]*?<\/section>/gi;
+  
+  if (contactSectionPattern.test(html)) {
+    // Replace the existing contact section
+    html = html.replace(contactSectionPattern, (match) => {
+      return `
+<section id="contact" style="padding: 80px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+  <div style="max-width: 600px; margin: 0 auto;">
+    <h2 style="text-align: center; color: white; font-size: 36px; margin-bottom: 40px;">Get In Touch</h2>
+    ${workingContactFormHTML}
+  </div>
+</section>
+${workingContactFormScript}`;
+    });
+  } else {
+    // Add before closing body tag if no contact section exists
+    const newContactSection = `
+<section id="contact" style="padding: 80px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+  <div style="max-width: 600px; margin: 0 auto;">
+    <h2 style="text-align: center; color: white; font-size: 36px; margin-bottom: 40px;">Get In Touch</h2>
+    ${workingContactFormHTML}
+  </div>
+</section>
+${workingContactFormScript}`;
+    
+    html = html.replace('</body>', newContactSection + '\n</body>');
+  }
+
+  return html;
+}
 
     const pagesFixed = [];
     let updatedPages = { ...pages }; // Create a copy
