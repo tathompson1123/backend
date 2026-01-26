@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { authenticateToken } = require('../config/middleware');
-const { pool } = require('../database');
+const { pool } = require('../config/database');
 
 // Create Checkout Session
 router.post('/create-checkout-session', authenticateToken, async (req, res) => {
