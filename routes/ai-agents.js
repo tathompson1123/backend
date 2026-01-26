@@ -155,26 +155,75 @@ router.get('/leadform/templates', authenticateToken, requirePlan('pro'), async (
 });
 
 // Lead Form Agent - Save templates
-router.post('/leadform/templates', authenticateToken, requirePlan('pro'), async (req, res) => {
+router.post('/leadform/deploy', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { email, sms } = req.body;
 
-    await pool.query(
-      `INSERT INTO agent_configs (user_id, agent_type, email_template, sms_template, created_at, updated_at) 
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
-       ON CONFLICT (user_id, agent_type) 
-       DO UPDATE SET email_template = $3, sms_template = $4, updated_at = CURRENT_TIMESTAMP`,
-      [userId, 'lead_form', email, sms]
+    // Check if config exists
+    const existing = await pool.query(
+      'SELECT * FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
     );
 
-    res.json({ success: true });
+    const defaultSmsTemplate = `Hi {{name}}! Thanks for reaching out to Thompsons Auto Detailing. We received your inquiry about {{service}} and will get back to you within 24 hours. Reply STOP to opt out.`;
+
+    const defaultEmailTemplate = `Hi {{name}},
+
+Thank you for contacting Thompsons Auto Detailing! We received your message about {{service}}.
+
+We'll review your request and get back to you within 24 hours.
+
+Best regards,
+Thompsons Auto Detailing
+{{phone}}
+{{email}}`;
+
+    if (existing.rows.length > 0) {
+      // Update existing - enable it and set templates if they're null
+      const currentConfig = existing.rows[0].config || {};
+      const currentSmsTemplate = existing.rows[0].sms_template;
+      const currentEmailTemplate = existing.rows[0].email_template;
+
+      await pool.query(
+        `UPDATE agent_configs 
+         SET config = $1, 
+             sms_template = COALESCE($2, sms_template, $3),
+             email_template = COALESCE($4, email_template, $5),
+             updated_at = CURRENT_TIMESTAMP 
+         WHERE user_id = $6 AND agent_type = $7`,
+        [
+          { ...currentConfig, enabled: true, smsEnabled: true, emailEnabled: true },
+          currentSmsTemplate,
+          defaultSmsTemplate,
+          currentEmailTemplate,
+          defaultEmailTemplate,
+          userId,
+          'lead_form'
+        ]
+      );
+    } else {
+      // Create new with defaults
+      await pool.query(
+        `INSERT INTO agent_configs (user_id, agent_type, config, sms_template, email_template, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [
+          userId,
+          'lead_form',
+          { enabled: true, smsEnabled: true, emailEnabled: true },
+          defaultSmsTemplate,
+          defaultEmailTemplate
+        ]
+      );
+    }
+
+    console.log(`✅ Lead form agent deployed for user ${userId}`);
+
+    res.json({ success: true, message: 'Lead form agent deployed successfully' });
   } catch (error) {
-    console.error('Error saving lead form templates:', error);
-    res.status(500).json({ error: 'Failed to save templates' });
+    console.error('Error deploying lead form agent:', error);
+    res.status(500).json({ error: 'Failed to deploy agent' });
   }
 });
-
 // Lead Form Agent - Get stats
 router.get('/leadform/stats', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {
