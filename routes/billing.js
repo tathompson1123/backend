@@ -7,8 +7,13 @@ const { pool } = require('../config/database');
 // Create Checkout Session
 router.post('/create-checkout-session', authenticateToken, async (req, res) => {
   try {
-    const { plan } = req.body; // 'basic', 'pro', or 'expert'
+    const { plan } = req.body;
     const userId = req.user.userId;
+    
+    console.log('🔍 Environment check:', {
+      FRONTEND_URL: process.env.FRONTEND_URL,
+      NODE_ENV: process.env.NODE_ENV
+    });
     
     // Get user email
     const userResult = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
