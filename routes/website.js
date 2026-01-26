@@ -238,9 +238,52 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 
     console.log(`✅ Contact form fixed for user ${userId}`);
 
+  // IMPORTANT: Trigger Vercel redeployment
+    try {
+      const vercelToken = process.env.VERCEL_TOKEN;
+      const vercelProjectId = process.env.VERCEL_PROJECT_ID;
+      
+      if (vercelToken && vercelProjectId) {
+        const deployResponse = await fetch(`https://api.vercel.com/v13/deployments`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${vercelToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: `website-${userId}`,
+            project: vercelProjectId,
+            target: 'production',
+            files: [
+              {
+                file: 'index.html',
+                data: Buffer.from(html).toString('base64')
+              }
+            ],
+            gitSource: null
+          })
+        });
+
+        if (deployResponse.ok) {
+          const deployData = await deployResponse.json();
+          console.log('✅ Vercel redeployment triggered:', deployData.url);
+          
+          await pool.query(
+            'UPDATE websites SET vercel_deployment_id = $1 WHERE user_id = $2',
+            [deployData.id, userId]
+          );
+        }
+      } else {
+        console.log('⚠️ Vercel credentials not found, skipping auto-redeploy');
+      }
+    } catch (vercelError) {
+      console.error('Error redeploying to Vercel:', vercelError);
+      // Don't fail the whole request if Vercel deploy fails
+    }
+
     res.json({
       success: true,
-      message: 'Contact form updated successfully'
+      message: 'Contact form updated successfully. Changes will appear on your live site in 1-2 minutes.'
     });
 
   } catch (error) {
