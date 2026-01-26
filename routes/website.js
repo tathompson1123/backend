@@ -362,23 +362,24 @@ const bookingUrl = `${frontendUrl}/book/${userId}`;
     });
 
     // Call Claude API
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 40000,
-        temperature: 0.5,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      })
-    });
+   const response = await fetch('https://api.anthropic.com/v1/messages', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': process.env.ANTHROPIC_API_KEY,
+    'anthropic-version': '2023-06-01'
+  },
+  body: JSON.stringify({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 40000,
+    temperature: 0.5,
+    messages: [{
+      role: 'user',
+      content: prompt
+    }]
+  }),
+  signal: AbortSignal.timeout(300000) // 5 minutes timeout
+});
     
     if (!response.ok) {
       const error = await response.text();
