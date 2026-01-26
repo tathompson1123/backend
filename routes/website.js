@@ -247,7 +247,9 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     }
 
     const website = websiteResult.rows[0];
-    let pages = website.pages ? JSON.parse(website.pages) : {};
+    
+    // pages is already an object (PostgreSQL returns jsonb/json as objects)
+    let pages = website.pages || {};
 
     // Get REAL API URL
     const apiUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
@@ -395,7 +397,7 @@ ${workingContactFormScript}
     }
 
     const pagesFixed = [];
-    let updatedPages = pages;
+    let updatedPages = { ...pages }; // Create a copy
     let updatedHtmlContent = website.html_content;
 
     // Fix contact forms in ALL pages
@@ -411,10 +413,10 @@ ${workingContactFormScript}
       });
 
       if (pagesFixed.length > 0) {
-        // Update pages in database
+        // Update pages in database - NO JSON.stringify needed
         await pool.query(
           'UPDATE websites SET pages = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
-          [JSON.stringify(updatedPages), userId]
+          [updatedPages, userId]
         );
 
         console.log(`✅ Fixed contact forms on ${pagesFixed.length} page(s): ${pagesFixed.join(', ')}`);
@@ -448,9 +450,11 @@ ${workingContactFormScript}
     let deployUrl = null;
 
     try {
-      console.log('🚀 Attempting auto-redeploy to Vercel...');
+      console.log('🚀 Starting auto-redeploy process...');
       
       const vercelToken = process.env.VERCEL_TOKEN;
+      
+      console.log('🔑 Vercel token exists:', !!vercelToken);
       
       if (!vercelToken) {
         console.log('⚠️ VERCEL_TOKEN not set, skipping auto-redeploy');
@@ -461,6 +465,7 @@ ${workingContactFormScript}
         // Add all pages
         if (updatedPages && Object.keys(updatedPages).length > 0) {
           Object.keys(updatedPages).forEach(pageKey => {
+            console.log(`📄 Adding file: ${pageKey}`);
             files.push({
               file: pageKey,
               data: Buffer.from(updatedPages[pageKey]).toString('base64')
@@ -470,45 +475,53 @@ ${workingContactFormScript}
         
         // Add main index.html if it exists
         if (updatedHtmlContent) {
+          console.log(`📄 Adding file: index.html`);
           files.push({
             file: 'index.html',
             data: Buffer.from(updatedHtmlContent).toString('base64')
           });
         }
 
-        console.log(`📦 Deploying ${files.length} files to Vercel...`);
+        console.log(`📦 Total files to deploy: ${files.length}`);
 
-        // Deploy to Vercel
-        const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${vercelToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            name: `website-${userId}`,
-            files: files,
-            projectSettings: {
-              framework: null
-            }
-          })
-        });
+        if (files.length > 0) {
+          console.log('🌐 Calling Vercel API...');
+          
+          // Deploy to Vercel
+          const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${vercelToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: `website-${userId}`,
+              files: files,
+              projectSettings: {
+                framework: null
+              }
+            })
+          });
 
-        if (deployResponse.ok) {
-          const deployData = await deployResponse.json();
-          deployUrl = `https://${deployData.url}`;
-          
-          // Update database with new deployment info
-          await pool.query(
-            'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
-            [deployUrl, deployData.id, userId]
-          );
-          
-          console.log('✅ Auto-redeployed to Vercel:', deployUrl);
-          redeploySuccess = true;
-        } else {
-          const errorData = await deployResponse.json();
-          console.error('❌ Vercel deploy failed:', errorData);
+          console.log('📡 Vercel API response status:', deployResponse.status);
+
+          if (deployResponse.ok) {
+            const deployData = await deployResponse.json();
+            deployUrl = `https://${deployData.url}`;
+            
+            console.log('✅ Vercel deployment successful:', deployUrl);
+            
+            // Update database with new deployment info
+            await pool.query(
+              'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
+              [deployUrl, deployData.id, userId]
+            );
+            
+            redeploySuccess = true;
+          } else {
+            const errorText = await deployResponse.text();
+            console.error('❌ Vercel deploy failed:', errorText);
+          }
         }
       }
     } catch (deployError) {
