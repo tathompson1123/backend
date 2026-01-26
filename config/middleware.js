@@ -36,18 +36,6 @@ const publicApiLimiter = rateLimit({
   message: { error: 'Too many requests from this IP' }
 });
 
-// Generous limiter for authenticated dashboard requests
-const authenticatedLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 1000, // 100 requests per minute for logged-in users
-  skip: (req) => {
-    // Skip rate limiting if request has valid auth token
-    const authHeader = req.headers['authorization'];
-    return authHeader && authHeader.startsWith('Bearer ');
-  },
-  message: { error: 'Too many requests, please slow down' }
-});
-
 // Authentication middleware
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
