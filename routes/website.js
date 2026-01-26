@@ -361,6 +361,9 @@ const bookingUrl = `${frontendUrl}/book/${userId}`;
       accentColor
     });
 
+    console.log('📏 Prompt size:', prompt.length, 'characters');
+console.log('📏 Prompt size:', (prompt.length / 1024).toFixed(2), 'KB');
+
     // Call Claude API
    const response = await fetch('https://api.anthropic.com/v1/messages', {
   method: 'POST',
