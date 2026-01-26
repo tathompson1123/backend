@@ -150,43 +150,42 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
     const website = websiteResult.rows[0];
     let pages = website.pages || {};
 
-    // Get expected API URL
     const expectedApiUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
       : process.env.API_URL || 'https://backend-production-ab50.up.railway.app';
 
     // Helper to check a single HTML string
-function checkHTML(html) {
-  if (!html) return { isValid: false, issues: ['No HTML content'] };
-  
-  const hasContactForm = html.includes('id="contact-form"');
-  
-  // STRICT SMS consent check - must have checkbox with required attribute
-  const hasSMSConsentCheckbox = (html.includes('id="sms-consent"') || html.includes('name="sms_consent"')) && 
-                                 html.includes('type="checkbox"');
-  const isSMSConsentRequired = html.match(/<input[^>]*name=["']sms_consent["'][^>]*required/i) || 
-                               html.match(/<input[^>]*id=["']sms-consent["'][^>]*required/i);
-  const hasSMSConsent = hasSMSConsentCheckbox && isSMSConsentRequired;
-  
-  const hasMetaTag = html.includes(`meta name="user-id" content="${userId}"`);
-  const hasSubmitScript = html.includes('/api/leads/public/');
-  const hasCorrectApiUrl = html.includes(expectedApiUrl);
-  const hasPhoneField = html.includes('name="phone"') || html.includes('name="phone_number"') || html.includes('name="tel"');
+    function checkHTML(html) {
+      if (!html) return { isValid: false, issues: ['No HTML content'] };
+      
+      const hasContactForm = html.includes('id="contact-form"');
+      
+      // STRICT SMS consent check - must have checkbox with required attribute
+      const hasSMSConsentCheckbox = (html.includes('id="sms-consent"') || html.includes('name="sms_consent"')) && 
+                                     html.includes('type="checkbox"');
+      const isSMSConsentRequired = html.match(/<input[^>]*name=["']sms_consent["'][^>]*required/i) || 
+                                   html.match(/<input[^>]*id=["']sms-consent["'][^>]*required/i);
+      const hasSMSConsent = hasSMSConsentCheckbox && isSMSConsentRequired;
+      
+      const hasMetaTag = html.includes(`meta name="user-id" content="${userId}"`);
+      const hasSubmitScript = html.includes('/api/leads/public/');
+      const hasCorrectApiUrl = html.includes(expectedApiUrl);
+      const hasPhoneField = html.includes('name="phone"') || html.includes('name="phone_number"') || html.includes('name="tel"');
 
-  const issues = [];
-  if (!hasContactForm) issues.push('Missing contact form');
-  if (!hasSMSConsentCheckbox) issues.push('Missing SMS consent checkbox');
-  if (!isSMSConsentRequired) issues.push('SMS consent must be required');
-  if (!hasMetaTag) issues.push('Missing user-id meta tag');
-  if (!hasSubmitScript) issues.push('Missing submission script');
-  if (!hasCorrectApiUrl) issues.push('Wrong API URL');
-  if (!hasPhoneField) issues.push('Missing phone field');
+      const issues = [];
+      if (!hasContactForm) issues.push('Missing contact form');
+      if (!hasSMSConsentCheckbox) issues.push('Missing SMS consent checkbox');
+      if (!isSMSConsentRequired) issues.push('SMS consent must be required');
+      if (!hasMetaTag) issues.push('Missing user-id meta tag');
+      if (!hasSubmitScript) issues.push('Missing submission script');
+      if (!hasCorrectApiUrl) issues.push('Wrong API URL');
+      if (!hasPhoneField) issues.push('Missing phone field');
 
-  // Form is valid ONLY if SMS consent is present AND required
-  const isValid = hasContactForm && hasSMSConsent && hasMetaTag && hasSubmitScript && hasCorrectApiUrl && hasPhoneField;
+      const isValid = hasContactForm && hasSMSConsent && hasMetaTag && hasSubmitScript && hasCorrectApiUrl && hasPhoneField;
 
-  return { isValid, issues };
-}
+      return { isValid, issues };
+    }
+
     // Check all pages that have contact forms
     let anyFormValid = false;
     const allIssues = [];
@@ -195,7 +194,8 @@ function checkHTML(html) {
     if (pages && Object.keys(pages).length > 0) {
       Object.keys(pages).forEach(pageKey => {
         const html = pages[pageKey];
-        if (html && (html.includes('id="contact-form"') || html.includes('contact'))) {
+        // Only check pages that actually have forms
+        if (html && html.includes('id="contact-form"')) {
           const result = checkHTML(html);
           if (result.isValid) {
             anyFormValid = true;
@@ -207,7 +207,7 @@ function checkHTML(html) {
     }
 
     // Check main html_content
-    if (website.html_content && (website.html_content.includes('id="contact-form"') || website.html_content.includes('contact'))) {
+    if (website.html_content && website.html_content.includes('id="contact-form"')) {
       const result = checkHTML(website.html_content);
       if (result.isValid) {
         anyFormValid = true;
@@ -220,7 +220,7 @@ function checkHTML(html) {
       hasWebsite: true,
       isValid: anyFormValid,
       message: anyFormValid 
-        ? 'Contact form is properly configured in database (may take 1-2 min to deploy)' 
+        ? 'Contact form is properly configured' 
         : 'Contact form needs fixing',
       issues: allIssues.length > 0 ? allIssues : null
     });
