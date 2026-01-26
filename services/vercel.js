@@ -10,21 +10,38 @@ if (!VERCEL_TOKEN) {
 /**
  * Deploy website to Vercel
  */
-async function deployToVercel(userId, htmlContent) {
+/**
+ * Deploy website to Vercel (supports multi-page websites)
+ */
+async function deployToVercel(userId, htmlContent, pages = null) {
   try {
     const projectName = `website-${userId}`;
+    
+    // Build files array - support both single page and multi-page
+    let files = [];
+    
+    if (pages && typeof pages === 'object' && Object.keys(pages).length > 0) {
+      // Multi-page website - deploy all pages
+      console.log(`📄 Deploying ${Object.keys(pages).length} pages`);
+      files = Object.entries(pages).map(([filename, content]) => ({
+        file: filename,
+        data: content
+      }));
+    } else {
+      // Single page website - just index.html
+      console.log('📄 Deploying single-page website');
+      files = [{
+        file: 'index.html',
+        data: htmlContent
+      }];
+    }
     
     // Create deployment
     const response = await axios.post(
       'https://api.vercel.com/v13/deployments',
       {
         name: projectName,
-        files: [
-          {
-            file: 'index.html',
-            data: htmlContent
-          }
-        ],
+        files: files,
         projectSettings: {
           framework: null,
           buildCommand: null,
@@ -50,7 +67,6 @@ async function deployToVercel(userId, htmlContent) {
     throw new Error('Failed to deploy to Vercel');
   }
 }
-
 /**
  * Add custom domain to Vercel project
  */
