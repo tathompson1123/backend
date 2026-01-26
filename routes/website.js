@@ -5,6 +5,7 @@ const { authenticateToken } = require('../config/middleware');
 const { buildVisualSupremacyPrompt } = require('../utils/visual-supremacy-prompt');
 const { deployToVercel, addDomainToVercel, checkDomainVerification, removeDomainFromVercel } = require('../services/vercel');
 const { searchDomains, purchaseDomain } = require('../services/domain');
+const axios = require('axios');
 
 console.log('✅ Website routes module loaded');
 
@@ -364,15 +365,10 @@ const bookingUrl = `${frontendUrl}/book/${userId}`;
     console.log('📏 Prompt size:', prompt.length, 'characters');
 console.log('📏 Prompt size:', (prompt.length / 1024).toFixed(2), 'KB');
 
-    // Call Claude API
-   const response = await fetch('https://api.anthropic.com/v1/messages', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'x-api-key': process.env.ANTHROPIC_API_KEY,
-    'anthropic-version': '2023-06-01'
-  },
-  body: JSON.stringify({
+    // Call Claude API using axios (no timeout limits)
+const response = await axios.post(
+  'https://api.anthropic.com/v1/messages',
+  {
     model: 'claude-sonnet-4-20250514',
     max_tokens: 40000,
     temperature: 0.5,
@@ -380,17 +376,18 @@ console.log('📏 Prompt size:', (prompt.length / 1024).toFixed(2), 'KB');
       role: 'user',
       content: prompt
     }]
-  }),
-  signal: AbortSignal.timeout(300000) // 5 minutes timeout
-});
-    
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('❌ Anthropic API error:', error);
-      return res.status(500).json({ error: 'Failed to generate website', details: error });
-    }
+  },
+  {
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    timeout: 0
+  }
+);
 
-    const data = await response.json();
+const data = response.data;
     const fullResponse = data.content?.[0]?.text;
 
     if (!fullResponse) {
