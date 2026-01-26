@@ -134,26 +134,23 @@ router.options('/public/:userId', (req, res) => {
 
 router.post('/public/:userId', async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
+  
   try {
     const { userId } = req.params;
-    const { name, email, phone, service, message, sms_consent } = req.body;
+    const { name, email, phone, service, message, sms_consent, source } = req.body;
 
-    if (!name || !email) {
-      return res.status(400).json({ error: 'Name and email are required' });
-    }
+    console.log('📝 Public lead submission:', { userId, name, email, phone, sms_consent, source });
 
-    if (!phone) {
-      return res.status(400).json({ error: 'Phone number is required' });
-    }
-
-    if (!sms_consent) {
+    // CRITICAL: SMS consent MUST be true
+    if (sms_consent !== true) {
+      console.error('❌ SMS consent not provided');
       return res.status(400).json({ error: 'SMS consent is required' });
     }
 
-    // Verify user exists
-    const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
-    if (userCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+    // Validate required fields
+    if (!name || !email || !phone) {
+      console.error('❌ Missing required fields');
+      return res.status(400).json({ error: 'Name, email, and phone are required' });
     }
 
     const result = await pool.query(
