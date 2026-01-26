@@ -221,9 +221,9 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    // Get current website
+    // Get website with pages
     const websiteResult = await pool.query(
-      'SELECT html_content FROM websites WHERE user_id = $1',
+      'SELECT html_content, pages FROM websites WHERE user_id = $1',
       [userId]
     );
 
@@ -231,16 +231,17 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'No website found' });
     }
 
-    let html = websiteResult.rows[0].html_content;
+    const website = websiteResult.rows[0];
+    let pages = website.pages ? JSON.parse(website.pages) : {};
 
-    // Get REAL API URL - CRITICAL!
+    // Get REAL API URL
     const apiUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
-      : process.env.API_URL || 'https://sorce-backend-production.up.railway.app';
+      : process.env.API_URL || 'https://backend-production-ab50.up.railway.app';
 
     console.log('🔧 Using API URL:', apiUrl);
 
-    // Generate working contact form with REAL API URL
+    // Working contact form HTML
     const workingContactFormHTML = `
 <form id="contact-form" style="background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
   <input type="text" name="name" placeholder="Your Name" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
@@ -330,22 +331,39 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 })();
 </script>`;
 
-    // STEP 1: Remove ALL existing contact form sections and scripts
-    html = html.replace(/<section[^>]*id=["']contact["'][^>]*>[\s\S]*?<\/section>/gi, '');
-    html = html.replace(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/gi, '');
-    
-    // Remove all duplicate scripts (there are 3 of them!)
-    html = html.replace(/<script>\s*\(function\(\) {[\s\S]*?contact-form[\s\S]*?}\)\(\);\s*<\/script>/gi, '');
-
-    // STEP 2: Ensure meta tag exists with correct userId
-    if (!html.includes('meta name="user-id"')) {
-      html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
-    } else {
-      html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
+    // Helper function to check if page has a contact form
+    function hasContactForm(html) {
+      return html.includes('id="contact-form"') || 
+             html.includes('class="contact-form"') ||
+             /<form[^>]*>[\s\S]*?(contact|email|phone|message)[\s\S]*?<\/form>/i.test(html);
     }
 
-    // STEP 3: Add NEW contact form section before closing </body>
-    const newContactSection = `
+    // Helper function to fix HTML with contact form
+    function fixContactFormHTML(html, pageName) {
+      console.log(`🔍 Checking ${pageName} for contact forms...`);
+      
+      if (!hasContactForm(html)) {
+        console.log(`⏭️  No contact form found in ${pageName}, skipping`);
+        return html;
+      }
+
+      console.log(`🔧 Fixing contact form in ${pageName}`);
+
+      // Remove ALL existing contact sections and scripts
+      html = html.replace(/<section[^>]*id=["']contact["'][^>]*>[\s\S]*?<\/section>/gi, '');
+      html = html.replace(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/gi, '');
+      html = html.replace(/<form[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi, '');
+      html = html.replace(/<script>\s*\(function\(\) {[\s\S]*?contact-form[\s\S]*?}\)\(\);\s*<\/script>/gi, '');
+
+      // Ensure meta tag
+      if (!html.includes('meta name="user-id"')) {
+        html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
+      } else {
+        html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
+      }
+
+      // Add new contact form section before </body>
+      const newContactSection = `
         <section id="contact" style="padding: 80px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
           <div style="max-width: 600px; margin: 0 auto;">
             <h2 style="text-align: center; color: white; font-size: 36px; margin-bottom: 40px;">Get In Touch</h2>
@@ -355,95 +373,69 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 ${workingContactFormScript}
       </body>`;
 
-    html = html.replace('</body>', newContactSection);
+      html = html.replace('</body>', newContactSection);
+      
+      console.log(`✅ Fixed contact form in ${pageName}`);
+      return html;
+    }
 
-    // STEP 4: Save updated website
-    await pool.query(
-      'UPDATE websites SET html_content = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
-      [html, userId]
-    );
+    const pagesFixed = [];
 
-    console.log(`✅ Contact form fixed for user ${userId} with API URL: ${apiUrl}`);
-
-  // STEP 5: AUTO-REDEPLOY TO VERCEL
-let redeploySuccess = false;
-let deployUrl = null;
-
-try {
-  console.log('🚀 Attempting auto-redeploy...');
-  
-  // Import or require your deploy function (adjust path as needed)
-  const { deployToVercel } = require('../utils/vercel-deploy'); // If you have a separate file
-  
-  // OR call your existing deploy endpoint internally
-  // We'll do internal function call to avoid auth issues
-  
-  // Get website data for deployment
-  const websiteForDeploy = await pool.query(
-    'SELECT * FROM websites WHERE user_id = $1',
-    [userId]
-  );
-
-  if (websiteForDeploy.rows.length > 0) {
-    const website = websiteForDeploy.rows[0];
-    
-    // Call Vercel API directly (same logic as your deploy endpoint)
-    const vercelToken = process.env.VERCEL_TOKEN;
-    
-    if (!vercelToken) {
-      console.log('⚠️ VERCEL_TOKEN not set, skipping auto-redeploy');
-    } else {
-      // Deploy to Vercel
-      const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${vercelToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: `website-${userId}`,
-          files: [
-            {
-              file: 'index.html',
-              data: Buffer.from(html).toString('base64')
-            }
-          ],
-          projectSettings: {
-            framework: null
-          }
-        })
+    // Fix contact forms in ALL pages
+    if (pages && Object.keys(pages).length > 0) {
+      Object.keys(pages).forEach(pageKey => {
+        const originalHTML = pages[pageKey];
+        const fixedHTML = fixContactFormHTML(originalHTML, pageKey);
+        
+        if (fixedHTML !== originalHTML) {
+          pages[pageKey] = fixedHTML;
+          pagesFixed.push(pageKey);
+        }
       });
 
-      if (deployResponse.ok) {
-        const deployData = await deployResponse.json();
-        deployUrl = deployData.url;
-        
-        // Update database with new deployment info
+      if (pagesFixed.length > 0) {
+        // Update pages in database
         await pool.query(
-          'UPDATE websites SET vercel_url = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
-          [`https://${deployData.url}`, userId]
+          'UPDATE websites SET pages = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+          [JSON.stringify(pages), userId]
         );
-        
-        console.log('✅ Auto-redeployed to Vercel:', deployUrl);
-        redeploySuccess = true;
-      } else {
-        const errorData = await deployResponse.json();
-        console.error('❌ Vercel deploy failed:', errorData);
+
+        console.log(`✅ Fixed contact forms on ${pagesFixed.length} page(s): ${pagesFixed.join(', ')}`);
       }
     }
-  }
-} catch (deployError) {
-  console.error('Error auto-redeploying:', deployError);
-}
 
-res.json({
-  success: true,
-  message: redeploySuccess 
-    ? 'Contact form updated and redeployed! Live in 1-2 minutes.' 
-    : 'Contact form updated. Please manually redeploy to see changes.',
-  redeployed: redeploySuccess,
-  deployUrl,
-  apiUrl
+    // Also check html_content (main page) if it exists
+    if (website.html_content) {
+      const fixedMainPage = fixContactFormHTML(website.html_content, 'index.html (main)');
+      
+      if (fixedMainPage !== website.html_content) {
+        await pool.query(
+          'UPDATE websites SET html_content = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+          [fixedMainPage, userId]
+        );
+        pagesFixed.push('index.html');
+        console.log(`✅ Fixed contact form in main html_content`);
+      }
+    }
+
+    if (pagesFixed.length === 0) {
+      return res.status(404).json({ 
+        error: 'No contact forms found on any pages',
+        message: 'Your website does not appear to have any contact forms to fix'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Contact forms updated on ${pagesFixed.length} page(s). Redeploy to see changes.`,
+      apiUrl,
+      pagesFixed
+    });
+
+  } catch (error) {
+    console.error('Error fixing contact form:', error);
+    res.status(500).json({ error: 'Failed to fix contact form' });
+  }
 });
 
 // Helper function to generate working contact form
