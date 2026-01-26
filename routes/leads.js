@@ -35,6 +35,12 @@ router.get('/', authenticateToken, async (req, res) => {
 
 async function triggerLeadFormAgent(userId, lead) {
   try {
+    // ONLY trigger for leads from website contact forms
+    if (lead.source !== 'lead_form') {
+      console.log(`⏭️ Skipping lead form agent - lead source is "${lead.source}", not "lead_form"`);
+      return;
+    }
+
     // Get agent config
     const agentConfig = await pool.query(
       'SELECT config, email_template, sms_template FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
@@ -113,7 +119,7 @@ async function triggerLeadFormAgent(userId, lead) {
       console.log(`⚠️ Lead form agent: SMS NOT sent to ${lead.phone} - no SMS consent`);
     }
 
-    console.log(`✅ Lead form agent triggered for lead ${lead.id}`);
+    console.log(`✅ Lead form agent completed for lead ${lead.id} (source: ${lead.source})`);
   } catch (error) {
     console.error('Error in triggerLeadFormAgent:', error);
   }
