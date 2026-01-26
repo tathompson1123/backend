@@ -33,7 +33,6 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Add after your imports, before the routes
 async function triggerLeadFormAgent(userId, lead) {
   try {
     // Get agent config
@@ -80,8 +79,8 @@ async function triggerLeadFormAgent(userId, lead) {
       }
     }
 
-    // Send SMS if enabled and phone exists
-    if (config.smsEnabled && lead.phone && smsTemplate) {
+    // Send SMS if enabled, phone exists, AND user gave SMS consent
+    if (config.smsEnabled && lead.phone && lead.sms_consent && smsTemplate) {
       try {
         const personalizedSms = smsTemplate
           .replace(/\{\{name\}\}/g, lead.name || 'there')
@@ -90,6 +89,7 @@ async function triggerLeadFormAgent(userId, lead) {
           .replace(/\{\{service\}\}/g, lead.service || 'our services')
           .replace(/\{\{message\}\}/g, lead.message || '');
 
+        // SendBlue is already set up - just use it
         const smsResult = await sendSMS(lead.phone, personalizedSms);
 
         // Store the message
@@ -105,10 +105,12 @@ async function triggerLeadFormAgent(userId, lead) {
           [lead.id]
         );
 
-        console.log(`✅ Lead form agent: SMS sent to ${lead.phone}`);
+        console.log(`✅ Lead form agent: SMS sent to ${lead.phone} via SendBlue`);
       } catch (error) {
-        console.error('Error sending SMS:', error);
+        console.error('Error sending SMS via SendBlue:', error);
       }
+    } else if (config.smsEnabled && lead.phone && !lead.sms_consent) {
+      console.log(`⚠️ Lead form agent: SMS NOT sent to ${lead.phone} - no SMS consent`);
     }
 
     console.log(`✅ Lead form agent triggered for lead ${lead.id}`);
@@ -116,6 +118,54 @@ async function triggerLeadFormAgent(userId, lead) {
     console.error('Error in triggerLeadFormAgent:', error);
   }
 }
+
+router.post('/public/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { name, email, phone, service, message, sms_consent } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Name and email are required' });
+    }
+
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    if (!sms_consent) {
+      return res.status(400).json({ error: 'SMS consent is required' });
+    }
+
+    // Verify user exists
+    const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO leads (user_id, name, email, phone, status, source, service, message, sms_consent, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [userId, name, email, phone, 'new', 'lead_form', service, message, true]
+    );
+
+    const newLead = result.rows[0];
+    console.log(`✅ Public lead created: ${name} for user ${userId} (SMS consent: true)`);
+
+    // Trigger Lead Form Agent
+    triggerLeadFormAgent(userId, newLead).catch(err => 
+      console.error('Error triggering lead form agent:', err)
+    );
+
+    res.json({
+      success: true,
+      message: 'Thank you! We\'ll be in touch soon.'
+    });
+  } catch (error) {
+    console.error('Error creating public lead:', error);
+    res.status(500).json({ error: 'Failed to submit form' });
+  }
+});
 
 
 // ============================================
