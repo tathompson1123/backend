@@ -173,6 +173,9 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
 // ============================================
 // POST - Fix/Update Contact Form in Existing Website
 // ============================================
+// ============================================
+// POST - Fix/Update Contact Form in Existing Website
+// ============================================
 router.post('/fix-contact-form', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -189,101 +192,181 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 
     let html = websiteResult.rows[0].html_content;
 
-    // Replace or inject the working contact form
-    const workingContactForm = getWorkingContactForm(userId);
+    // Get REAL API URL - CRITICAL!
+    const apiUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
+      : process.env.API_URL || 'https://sorce-backend-production.up.railway.app';
 
-    // Find and replace existing contact form
-    // Look for common form patterns
-    const formPatterns = [
-      /<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/gi,
-      /<form[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi,
-      /<form[^>]*action=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi
-    ];
+    console.log('🔧 Using API URL:', apiUrl);
 
-    let formReplaced = false;
-    for (const pattern of formPatterns) {
-      if (pattern.test(html)) {
-        html = html.replace(pattern, workingContactForm);
-        formReplaced = true;
-        break;
+    // Generate working contact form with REAL API URL
+    const workingContactFormHTML = `
+<form id="contact-form" style="background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+  <input type="text" name="name" placeholder="Your Name" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
+  <input type="email" name="email" placeholder="Email Address" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
+  <input type="tel" name="phone" placeholder="Phone Number" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
+  <input type="text" name="service" placeholder="Service Interested In" style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
+  <textarea name="message" rows="4" placeholder="Tell us about your project..." style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; resize: vertical;"></textarea>
+  
+  <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
+    <input type="checkbox" id="sms-consent" name="sms_consent" required style="width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
+    <label for="sms-consent" style="font-size: 14px; line-height: 1.5; color: #374151; cursor: pointer;">
+      I agree to receive text messages at the number provided. Message and data rates may apply. Reply STOP to opt out.
+    </label>
+  </div>
+  
+  <button type="submit" style="width: 100%; padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer; transition: transform 0.2s;">
+    Send Message
+  </button>
+  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>
+</form>`;
+
+    const workingContactFormScript = `
+<script>
+(function() {
+  const form = document.getElementById('contact-form');
+  if (!form) return;
+  
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const button = e.target.querySelector('button[type="submit"]');
+    const statusEl = document.getElementById('form-status');
+    
+    const smsConsent = formData.get('sms_consent') === 'on';
+    if (!smsConsent) {
+      statusEl.textContent = '⚠️ Please agree to receive text messages to continue.';
+      statusEl.style.display = 'block';
+      statusEl.style.background = '#fef3c7';
+      statusEl.style.color = '#92400e';
+      statusEl.style.border = '2px solid #fbbf24';
+      return;
+    }
+    
+    button.textContent = 'Sending...';
+    button.disabled = true;
+    
+    try {
+      const userId = document.querySelector('meta[name="user-id"]')?.content || '${userId}';
+      
+      const response = await fetch('${apiUrl}/api/leads/public/' + userId, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.get('name'),
+          email: formData.get('email'),
+          phone: formData.get('phone') || '',
+          service: formData.get('service') || '',
+          message: formData.get('message') || '',
+          sms_consent: true,
+          source: 'lead_form'
+        })
+      });
+      
+      if (response.ok) {
+        statusEl.textContent = '✅ Thanks! We\\'ll be in touch soon.';
+        statusEl.style.display = 'block';
+        statusEl.style.background = '#d1fae5';
+        statusEl.style.color = '#065f46';
+        statusEl.style.border = '2px solid #6ee7b7';
+        e.target.reset();
+      } else {
+        throw new Error('Submission failed');
       }
+    } catch (error) {
+      console.error('Form error:', error);
+      statusEl.textContent = '❌ Something went wrong. Please call us directly.';
+      statusEl.style.display = 'block';
+      statusEl.style.background = '#fee2e2';
+      statusEl.style.color = '#991b1b';
+      statusEl.style.border = '2px solid #fca5a5';
+    } finally {
+      button.textContent = 'Send Message';
+      button.disabled = false;
     }
+  });
+})();
+</script>`;
 
-    // If no form found, inject before closing body tag
-    if (!formReplaced) {
-      const contactSection = `
-        <section id="contact" style="padding: 80px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-          <div style="max-width: 600px; margin: 0 auto;">
-            <h2 style="text-align: center; color: white; font-size: 36px; margin-bottom: 40px;">Get In Touch</h2>
-            ${workingContactForm}
-          </div>
-        </section>
-      `;
-      html = html.replace('</body>', contactSection + '</body>');
-    }
+    // STEP 1: Remove ALL existing contact form sections and scripts
+    html = html.replace(/<section[^>]*id=["']contact["'][^>]*>[\s\S]*?<\/section>/gi, '');
+    html = html.replace(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/gi, '');
+    
+    // Remove all duplicate scripts (there are 3 of them!)
+    html = html.replace(/<script>\s*\(function\(\) {[\s\S]*?contact-form[\s\S]*?}\)\(\);\s*<\/script>/gi, '');
 
-    // Ensure meta tag exists
+    // STEP 2: Ensure meta tag exists with correct userId
     if (!html.includes('meta name="user-id"')) {
       html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
     } else {
-      // Update existing meta tag
-      html = html.replace(/content="[^"]*"/, `content="${userId}"`);
+      html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
     }
 
-    // Save updated website
+    // STEP 3: Add NEW contact form section before closing </body>
+    const newContactSection = `
+        <section id="contact" style="padding: 80px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+          <div style="max-width: 600px; margin: 0 auto;">
+            <h2 style="text-align: center; color: white; font-size: 36px; margin-bottom: 40px;">Get In Touch</h2>
+            ${workingContactFormHTML}
+          </div>
+        </section>
+${workingContactFormScript}
+      </body>`;
+
+    html = html.replace('</body>', newContactSection);
+
+    // STEP 4: Save updated website
     await pool.query(
       'UPDATE websites SET html_content = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
       [html, userId]
     );
 
-    console.log(`✅ Contact form fixed for user ${userId}`);
+    console.log(`✅ Contact form fixed for user ${userId} with API URL: ${apiUrl}`);
 
-  // IMPORTANT: Trigger Vercel redeployment
+   // STEP 5: AUTO-REDEPLOY TO VERCEL
+    let redeploySuccess = false;
     try {
-      const vercelToken = process.env.VERCEL_TOKEN;
-      const vercelProjectId = process.env.VERCEL_PROJECT_ID;
-      
-      if (vercelToken && vercelProjectId) {
-        const deployResponse = await fetch(`https://api.vercel.com/v13/deployments`, {
+      // Get Vercel project info for this user
+      const vercelResult = await pool.query(
+        'SELECT vercel_project_id, vercel_url FROM websites WHERE user_id = $1',
+        [userId]
+      );
+
+      if (vercelResult.rows.length > 0 && vercelResult.rows[0].vercel_project_id) {
+        const vercelProjectId = vercelResult.rows[0].vercel_project_id;
+        
+        // Trigger redeploy using existing deploy endpoint
+        const deployUrl = `${process.env.API_URL || 'http://localhost:5000'}/api/website/deploy`;
+        const deployResponse = await fetch(deployUrl, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${vercelToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            name: `website-${userId}`,
-            project: vercelProjectId,
-            target: 'production',
-            files: [
-              {
-                file: 'index.html',
-                data: Buffer.from(html).toString('base64')
-              }
-            ],
-            gitSource: null
-          })
+            'Content-Type': 'application/json',
+            'Authorization': req.headers.authorization // Pass through auth
+          }
         });
 
         if (deployResponse.ok) {
           const deployData = await deployResponse.json();
-          console.log('✅ Vercel redeployment triggered:', deployData.url);
-          
-          await pool.query(
-            'UPDATE websites SET vercel_deployment_id = $1 WHERE user_id = $2',
-            [deployData.id, userId]
-          );
+          console.log('✅ Auto-redeployed to Vercel:', deployData.url);
+          redeploySuccess = true;
+        } else {
+          console.log('⚠️ Vercel redeploy failed, user will need to manually redeploy');
         }
       } else {
-        console.log('⚠️ Vercel credentials not found, skipping auto-redeploy');
+        console.log('⚠️ No Vercel project found for user');
       }
-    } catch (vercelError) {
-      console.error('Error redeploying to Vercel:', vercelError);
-      // Don't fail the whole request if Vercel deploy fails
+    } catch (deployError) {
+      console.error('Error auto-redeploying:', deployError);
     }
 
     res.json({
       success: true,
-      message: 'Contact form updated successfully. Changes will appear on your live site in 1-2 minutes.'
+      message: redeploySuccess 
+        ? 'Contact form updated and website redeployed! Changes will be live in 1-2 minutes.' 
+        : 'Contact form updated in database. Please redeploy from My Website to see changes.',
+      redeployed: redeploySuccess,
+      apiUrl
     });
 
   } catch (error) {
@@ -291,7 +374,6 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fix contact form' });
   }
 });
-
 // Helper function to generate working contact form
 function getWorkingContactForm(userId) {
   const apiUrl = process.env.API_URL || 'https://your-backend.railway.app';
