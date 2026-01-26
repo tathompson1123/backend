@@ -355,161 +355,170 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
              /<form[^>]*>[\s\S]*?(contact|email|phone|message)[\s\S]*?<\/form>/i.test(html);
     }
 
-   function fixContactFormHTML(html, pageName) {
+ function fixContactFormHTML(html, pageName) {
   if (!hasContactForm(html)) return html;
 
   console.log(`🔧 Fixing contact form in ${pageName}`);
 
-  // First, detect the existing form's styling/theme
-  const isDarkTheme = html.includes('background: #0a0a0a') || html.includes('background: black') || html.includes('bg-black');
-  
-  // Remove ALL existing forms and contact sections MORE AGGRESSIVELY
-  // Remove forms first
-  html = html.replace(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/gi, '');
-  html = html.replace(/<form[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi, '');
-  html = html.replace(/<form[^>]*name=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi, '');
-  
-  // Remove any form with contact-related fields
-  html = html.replace(/<form[^>]*>[\s\S]*?(email|phone|message)[\s\S]*?<\/form>/gi, '');
-  
-  // Remove contact sections
-  html = html.replace(/<section[^>]*id=["']contact["'][^>]*>[\s\S]*?<\/section>/gi, '');
-  html = html.replace(/<section[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/section>/gi, '');
-  
-  // Remove any div with contact-form class or id
-  html = html.replace(/<div[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/div>/gi, '');
-  html = html.replace(/<div[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '');
-  
-  // Remove scripts
-  html = html.replace(/<script>\s*\(function\(\) {[\s\S]*?contact-form[\s\S]*?}\)\(\);\s*<\/script>/gi, '');
-  html = html.replace(/<script[^>]*>[\s\S]*?contact-form[\s\S]*?<\/script>/gi, '');
-
-  // Ensure meta tag
+  // Ensure meta tag exists
   if (!html.includes('meta name="user-id"')) {
     html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
   } else {
     html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
   }
 
-  // Create styled form that matches the theme
-  const workingContactFormHTML = `
-<form id="contact-form" style="background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 450px; margin: 0 auto;">
-  <input type="text" name="name" placeholder="Your Name" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; box-sizing: border-box;">
-  <input type="email" name="email" placeholder="Email Address" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; box-sizing: border-box;">
-  <input type="tel" name="phone" placeholder="Phone Number" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; box-sizing: border-box;">
-  <input type="text" name="service" placeholder="Service Interested In" style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; box-sizing: border-box;">
-  <textarea name="message" rows="4" placeholder="Tell us about your project..." style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; resize: vertical; box-sizing: border-box;"></textarea>
+  // Find the contact form
+  const formMatch = html.match(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/i);
   
+  if (!formMatch) {
+    console.log(`⚠️ Could not find contact form with id="contact-form" in ${pageName}`);
+    return html;
+  }
+
+  let form = formMatch[0];
+  const originalForm = form;
+
+  // Check if SMS consent already exists
+  if (!form.includes('sms-consent') && !form.includes('sms_consent')) {
+    // Find the submit button
+    const buttonMatch = form.match(/<button[^>]*type=["']submit["'][^>]*>[\s\S]*?<\/button>/i);
+    
+    if (buttonMatch) {
+      // Add SMS consent BEFORE the submit button
+      const smsConsentHTML = `
   <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
     <input type="checkbox" id="sms-consent" name="sms_consent" required style="width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
     <label for="sms-consent" style="font-size: 14px; line-height: 1.5; color: #374151; cursor: pointer;">
       I agree to receive text messages at the number provided. Message and data rates may apply. Reply STOP to opt out.
     </label>
   </div>
-  
-  <button type="submit" style="width: 100%; padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer; transition: transform 0.2s;">
-    Send Message
-  </button>
-  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>
-</form>`;
+  `;
+      
+      form = form.replace(buttonMatch[0], smsConsentHTML + buttonMatch[0]);
+      console.log(`✅ Added SMS consent to ${pageName}`);
+    }
+  } else {
+    console.log(`✅ SMS consent already exists in ${pageName}`);
+  }
 
-  const workingContactFormScript = `
+  // Add/update form status div if it doesn't exist
+  if (!form.includes('form-status')) {
+    form = form.replace('</form>', '  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>\n</form>');
+  }
+
+  // Replace the form in HTML
+  html = html.replace(originalForm, form);
+
+  // Remove any existing contact-form scripts
+  html = html.replace(/<script[^>]*>[\s\S]*?contact-form[\s\S]*?<\/script>/gi, '');
+
+  // Add the new submission script
+  const submissionScript = `
 <script>
 (function() {
   const form = document.getElementById('contact-form');
   if (!form) return;
   
-  form.addEventListener('submit', async (e) => {
+  // Remove any existing submit listeners
+  const newForm = form.cloneNode(true);
+  form.parentNode.replaceChild(newForm, form);
+  
+  newForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const formData = new FormData(e.target);
     const button = e.target.querySelector('button[type="submit"]');
     const statusEl = document.getElementById('form-status');
     
+    // Check SMS consent
     const smsConsent = formData.get('sms_consent') === 'on';
     if (!smsConsent) {
-      statusEl.textContent = '⚠️ Please agree to receive text messages to continue.';
-      statusEl.style.display = 'block';
-      statusEl.style.background = '#fef3c7';
-      statusEl.style.color = '#92400e';
-      statusEl.style.border = '2px solid #fbbf24';
+      if (statusEl) {
+        statusEl.textContent = '⚠️ Please agree to receive text messages to continue.';
+        statusEl.style.display = 'block';
+        statusEl.style.background = '#fef3c7';
+        statusEl.style.color = '#92400e';
+        statusEl.style.border = '2px solid #fbbf24';
+      } else {
+        alert('Please agree to receive text messages to continue.');
+      }
       return;
     }
     
-    button.textContent = 'Sending...';
-    button.disabled = true;
+    const originalButtonText = button ? button.textContent : '';
+    if (button) {
+      button.textContent = 'Sending...';
+      button.disabled = true;
+    }
     
     try {
-      const userId = document.querySelector('meta[name="user-id"]')?.content || '${userId}';
+      const userId = document.querySelector('meta[name="user-id"]')?.content;
+      
+      if (!userId) {
+        throw new Error('User ID not found');
+      }
+      
+      // Get form field values (support various field names)
+      const name = formData.get('name') || formData.get('full_name') || formData.get('fullname') || '';
+      const email = formData.get('email') || formData.get('email_address') || '';
+      const phone = formData.get('phone') || formData.get('phone_number') || formData.get('tel') || '';
+      const service = formData.get('service') || formData.get('service_interested_in') || formData.get('vehicle_make_model') || '';
+      const message = formData.get('message') || formData.get('additional_details') || formData.get('comments') || '';
       
       const response = await fetch('${apiUrl}/api/leads/public/' + userId, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: formData.get('name'),
-          email: formData.get('email'),
-          phone: formData.get('phone') || '',
-          service: formData.get('service') || '',
-          message: formData.get('message') || '',
+          name: name,
+          email: email,
+          phone: phone,
+          service: service,
+          message: message,
           sms_consent: true,
           source: 'lead_form'
         })
       });
       
       if (response.ok) {
-        statusEl.textContent = '✅ Thanks! We\\'ll be in touch soon.';
-        statusEl.style.display = 'block';
-        statusEl.style.background = '#d1fae5';
-        statusEl.style.color = '#065f46';
-        statusEl.style.border = '2px solid #6ee7b7';
+        if (statusEl) {
+          statusEl.textContent = '✅ Thanks! We\\'ll be in touch soon.';
+          statusEl.style.display = 'block';
+          statusEl.style.background = '#d1fae5';
+          statusEl.style.color = '#065f46';
+          statusEl.style.border = '2px solid #6ee7b7';
+        } else {
+          alert('✅ Thanks! We\\'ll be in touch soon.');
+        }
         e.target.reset();
       } else {
         throw new Error('Submission failed');
       }
     } catch (error) {
-      statusEl.textContent = '❌ Something went wrong. Please call us directly.';
-      statusEl.style.display = 'block';
-      statusEl.style.background = '#fee2e2';
-      statusEl.style.color = '#991b1b';
-      statusEl.style.border = '2px solid #fca5a5';
+      console.error('Form error:', error);
+      if (statusEl) {
+        statusEl.textContent = '❌ Something went wrong. Please try again or call us directly.';
+        statusEl.style.display = 'block';
+        statusEl.style.background = '#fee2e2';
+        statusEl.style.color = '#991b1b';
+        statusEl.style.border = '2px solid #fca5a5';
+      } else {
+        alert('❌ Something went wrong. Please try again or call us directly.');
+      }
     } finally {
-      button.textContent = 'Send Message';
-      button.disabled = false;
+      if (button) {
+        button.textContent = originalButtonText;
+        button.disabled = false;
+      }
     }
   });
 })();
 </script>`;
 
-  // Find where to insert the new form
-  // Look for an existing contact section or create one
-  const contactSectionPattern = /<section[^>]*>[\s\S]*?(get in touch|contact|reach out)[\s\S]*?<\/section>/gi;
-  
-  if (contactSectionPattern.test(html)) {
-    // Replace the existing contact section
-    html = html.replace(contactSectionPattern, (match) => {
-      return `
-<section id="contact" style="padding: 80px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-  <div style="max-width: 600px; margin: 0 auto;">
-    <h2 style="text-align: center; color: white; font-size: 36px; margin-bottom: 40px;">Get In Touch</h2>
-    ${workingContactFormHTML}
-  </div>
-</section>
-${workingContactFormScript}`;
-    });
-  } else {
-    // Add before closing body tag if no contact section exists
-    const newContactSection = `
-<section id="contact" style="padding: 80px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-  <div style="max-width: 600px; margin: 0 auto;">
-    <h2 style="text-align: center; color: white; font-size: 36px; margin-bottom: 40px;">Get In Touch</h2>
-    ${workingContactFormHTML}
-  </div>
-</section>
-${workingContactFormScript}`;
-    
-    html = html.replace('</body>', newContactSection + '\n</body>');
-  }
+  // Add script before closing body tag
+  html = html.replace('</body>', submissionScript + '\n</body>');
 
+  console.log(`✅ Updated form submission script in ${pageName}`);
+  
   return html;
 }
 
