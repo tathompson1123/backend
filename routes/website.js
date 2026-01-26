@@ -127,6 +127,177 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
+// ============================================
+// POST - Fix/Update Contact Form in Existing Website
+// ============================================
+router.post('/fix-contact-form', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Get current website
+    const websiteResult = await pool.query(
+      'SELECT html_content FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (websiteResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No website found' });
+    }
+
+    let html = websiteResult.rows[0].html_content;
+
+    // Replace or inject the working contact form
+    const workingContactForm = getWorkingContactForm(userId);
+
+    // Find and replace existing contact form
+    // Look for common form patterns
+    const formPatterns = [
+      /<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/gi,
+      /<form[^>]*class=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi,
+      /<form[^>]*action=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/gi
+    ];
+
+    let formReplaced = false;
+    for (const pattern of formPatterns) {
+      if (pattern.test(html)) {
+        html = html.replace(pattern, workingContactForm);
+        formReplaced = true;
+        break;
+      }
+    }
+
+    // If no form found, inject before closing body tag
+    if (!formReplaced) {
+      const contactSection = `
+        <section id="contact" style="padding: 80px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+          <div style="max-width: 600px; margin: 0 auto;">
+            <h2 style="text-align: center; color: white; font-size: 36px; margin-bottom: 40px;">Get In Touch</h2>
+            ${workingContactForm}
+          </div>
+        </section>
+      `;
+      html = html.replace('</body>', contactSection + '</body>');
+    }
+
+    // Ensure meta tag exists
+    if (!html.includes('meta name="user-id"')) {
+      html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
+    } else {
+      // Update existing meta tag
+      html = html.replace(/content="[^"]*"/, `content="${userId}"`);
+    }
+
+    // Save updated website
+    await pool.query(
+      'UPDATE websites SET html_content = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+      [html, userId]
+    );
+
+    console.log(`✅ Contact form fixed for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Contact form updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error fixing contact form:', error);
+    res.status(500).json({ error: 'Failed to fix contact form' });
+  }
+});
+
+// Helper function to generate working contact form
+function getWorkingContactForm(userId) {
+  const apiUrl = process.env.API_URL || 'https://your-backend.railway.app';
+  
+  return `
+<form id="contact-form" style="background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+  <input type="text" name="name" placeholder="Your Name" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
+  <input type="email" name="email" placeholder="Email Address" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
+  <input type="tel" name="phone" placeholder="Phone Number" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
+  <input type="text" name="service" placeholder="Service Interested In" style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
+  <textarea name="message" rows="4" placeholder="Tell us about your project..." style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; resize: vertical;"></textarea>
+  
+  <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
+    <input type="checkbox" id="sms-consent" name="sms_consent" required style="width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
+    <label for="sms-consent" style="font-size: 14px; line-height: 1.5; color: #374151; cursor: pointer;">
+      I agree to receive text messages at the number provided. Message and data rates may apply. Reply STOP to opt out.
+    </label>
+  </div>
+  
+  <button type="submit" style="width: 100%; padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer; transition: transform 0.2s;">
+    Send Message
+  </button>
+  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>
+</form>
+
+<script>
+(function() {
+  const form = document.getElementById('contact-form');
+  if (!form) return;
+  
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const button = e.target.querySelector('button');
+    const statusEl = document.getElementById('form-status');
+    
+    const smsConsent = formData.get('sms_consent') === 'on';
+    if (!smsConsent) {
+      statusEl.textContent = '⚠️ Please agree to receive text messages to continue.';
+      statusEl.style.display = 'block';
+      statusEl.style.background = '#fef3c7';
+      statusEl.style.color = '#92400e';
+      statusEl.style.border = '2px solid #fbbf24';
+      return;
+    }
+    
+    button.textContent = 'Sending...';
+    button.disabled = true;
+    
+    try {
+      const userId = document.querySelector('meta[name="user-id"]')?.content || '${userId}';
+      
+      const response = await fetch('${apiUrl}/api/leads/public/' + userId, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.get('name'),
+          email: formData.get('email'),
+          phone: formData.get('phone') || '',
+          service: formData.get('service') || '',
+          message: formData.get('message') || '',
+          sms_consent: true,
+          source: 'lead_form'
+        })
+      });
+      
+      if (response.ok) {
+        statusEl.textContent = '✅ Thanks! We\\'ll be in touch soon.';
+        statusEl.style.display = 'block';
+        statusEl.style.background = '#d1fae5';
+        statusEl.style.color = '#065f46';
+        statusEl.style.border = '2px solid #6ee7b7';
+        e.target.reset();
+      } else {
+        throw new Error('Submission failed');
+      }
+    } catch (error) {
+      statusEl.textContent = '❌ Something went wrong. Please call us directly.';
+      statusEl.style.display = 'block';
+      statusEl.style.background = '#fee2e2';
+      statusEl.style.color = '#991b1b';
+      statusEl.style.border = '2px solid #fca5a5';
+    } finally {
+      button.textContent = 'Send Message';
+      button.disabled = false;
+    }
+  });
+})();
+</script>`;
+}
+
 // POST - Toggle publish status
 router.post('/publish', authenticateToken, async (req, res) => {
   try {
