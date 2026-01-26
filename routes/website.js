@@ -413,13 +413,12 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
   html = html.replace(/<script[^>]*>[\s\S]*?contact-form[\s\S]*?<\/script>/gi, '');
 
   // Add the new submission script
-  const submissionScript = `
+const submissionScript = `
 <script>
 (function() {
   const form = document.getElementById('contact-form');
   if (!form) return;
   
-  // Remove any existing submit listeners
   const newForm = form.cloneNode(true);
   form.parentNode.replaceChild(newForm, form);
   
@@ -427,10 +426,9 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     e.preventDefault();
     
     const formData = new FormData(e.target);
-    const button = e.target.querySelector('button[type="submit"]');
+    const button = e.target.querySelector('button[type="submit"]') || e.target.querySelector('.submit-button');
     const statusEl = document.getElementById('form-status');
     
-    // Check SMS consent
     const smsConsent = formData.get('sms_consent') === 'on';
     if (!smsConsent) {
       if (statusEl) {
@@ -452,17 +450,16 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     }
     
     try {
-      const userId = document.querySelector('meta[name="user-id"]')?.content;
+      const userId = document.querySelector('meta[name="user-id"]')?.content || '${userId}';
       
-      if (!userId) {
-        throw new Error('User ID not found');
+      if (!userId || userId === 'USER_ID_PLACEHOLDER') {
+        throw new Error('User ID not configured');
       }
       
-      // Get form field values (support various field names)
       const name = formData.get('name') || formData.get('full_name') || formData.get('fullname') || '';
       const email = formData.get('email') || formData.get('email_address') || '';
       const phone = formData.get('phone') || formData.get('phone_number') || formData.get('tel') || '';
-      const service = formData.get('service') || formData.get('service_interested_in') || formData.get('vehicle_make_model') || '';
+      const service = formData.get('service') || formData.get('service_interested_in') || formData.get('vehicle_make_model') || formData.get('service_type') || '';
       const message = formData.get('message') || formData.get('additional_details') || formData.get('comments') || '';
       
       const response = await fetch('${apiUrl}/api/leads/public/' + userId, {
