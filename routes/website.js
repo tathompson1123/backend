@@ -140,18 +140,54 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
     );
 
     if (websiteResult.rows.length === 0) {
-      return res.json({ hasWebsite: false, isValid: false });
+      return res.json({ 
+        hasWebsite: false, 
+        isValid: false,
+        message: 'No website found'
+      });
     }
 
     const html = websiteResult.rows[0].html_content;
 
-    // Check if form has required elements
-    const hasContactForm = html.includes('id="contact-form"');
-    const hasSMSConsent = html.includes('sms-consent') || html.includes('sms_consent');
-    const hasMetaTag = html.includes('meta name="user-id"');
-    const hasSubmitScript = html.includes('/api/leads/public/');
+    // Get expected API URL
+    const expectedApiUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
+      : process.env.API_URL || 'https://sorce-backend-production.up.railway.app';
 
-    const isValid = hasContactForm && hasSMSConsent && hasMetaTag && hasSubmitScript;
+    // Check ALL required elements
+    const hasContactForm = html.includes('id="contact-form"');
+    const hasSMSConsent = html.includes('id="sms-consent"') && html.includes('name="sms_consent"');
+    const hasMetaTag = html.includes(`meta name="user-id" content="${userId}"`);
+    const hasSubmitScript = html.includes('/api/leads/public/');
+    const hasCorrectApiUrl = html.includes(expectedApiUrl);
+    const hasPhoneRequired = html.includes('name="phone" placeholder="Phone Number" required');
+    
+    // Check for duplicate scripts (bad sign)
+    const scriptMatches = html.match(/<script>\s*\(function\(\) {[\s\S]*?contact-form[\s\S]*?}\)\(\);\s*<\/script>/g);
+    const hasDuplicateScripts = scriptMatches && scriptMatches.length > 1;
+    
+    // Check if using placeholder URL (bad)
+    const hasPlaceholderUrl = html.includes('https://your-backend.railway.app');
+
+    const isValid = hasContactForm 
+      && hasSMSConsent 
+      && hasMetaTag 
+      && hasSubmitScript 
+      && hasCorrectApiUrl 
+      && hasPhoneRequired
+      && !hasDuplicateScripts
+      && !hasPlaceholderUrl;
+
+    // Build detailed response
+    const issues = [];
+    if (!hasContactForm) issues.push('Missing contact form with id="contact-form"');
+    if (!hasSMSConsent) issues.push('Missing SMS consent checkbox');
+    if (!hasMetaTag) issues.push('Missing or incorrect user-id meta tag');
+    if (!hasSubmitScript) issues.push('Missing form submission script');
+    if (!hasCorrectApiUrl) issues.push('API URL is incorrect or missing');
+    if (!hasPhoneRequired) issues.push('Phone field is not required');
+    if (hasDuplicateScripts) issues.push('Duplicate form scripts detected');
+    if (hasPlaceholderUrl) issues.push('Using placeholder API URL');
 
     res.json({
       hasWebsite: true,
@@ -160,8 +196,16 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
         hasContactForm,
         hasSMSConsent,
         hasMetaTag,
-        hasSubmitScript
-      }
+        hasSubmitScript,
+        hasCorrectApiUrl,
+        hasPhoneRequired,
+        hasDuplicateScripts,
+        hasPlaceholderUrl
+      },
+      issues: issues.length > 0 ? issues : null,
+      message: isValid 
+        ? 'Contact form is properly configured' 
+        : `Issues found: ${issues.join(', ')}`
     });
 
   } catch (error) {
@@ -170,9 +214,6 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
   }
 });
 
-// ============================================
-// POST - Fix/Update Contact Form in Existing Website
-// ============================================
 // ============================================
 // POST - Fix/Update Contact Form in Existing Website
 // ============================================
