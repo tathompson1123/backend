@@ -12,7 +12,7 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
 // Rate limiters - Tiered security approach
 const strictAuthLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Only 5 login attempts per 15 minutes
+  max: 10, // Only 5 login attempts per 15 minutes
   message: { error: 'Too many login attempts, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
