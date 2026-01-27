@@ -38,13 +38,18 @@ function escapeHtml(str) {
 
 // Add this helper function to your website routes file (around line 50, after the other helper functions)
 
-function generateChatWidgetCode(userId, agentConfig) {
+function generateChatWidgetCode(userId, agentConfig, websiteColors) {
   const agentName = agentConfig?.agentName || 'Kurt';
   const greetingMessage = agentConfig?.greetingMessage || "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?";
   const autoOpenDelay = agentConfig?.autoOpenDelay || 3;
   const apiUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
     ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
     : process.env.API_URL || 'https://backend-production-ab50.up.railway.app';
+
+  // Use website colors or defaults
+  const primaryColor = websiteColors?.primaryColor || '#667eea';
+  const accentColor = websiteColors?.accentColor || '#764ba2';
+  const textColor = websiteColors?.textColor || '#1f2937';
 
   return `
 <!-- SORCE Chat Agent -->
@@ -59,7 +64,7 @@ function generateChatWidgetCode(userId, agentConfig) {
 .chat-bubble {
   width: 60px;
   height: 60px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, ${primaryColor} 0%, ${accentColor} 100%);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -96,7 +101,7 @@ function generateChatWidgetCode(userId, agentConfig) {
   transform: scale(1);
 }
 .chat-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, ${primaryColor} 0%, ${accentColor} 100%);
   color: white;
   padding: 20px;
   display: flex;
@@ -134,11 +139,11 @@ function generateChatWidgetCode(userId, agentConfig) {
 }
 .chat-message.agent .message-bubble {
   background: white;
-  color: #1f2937;
+  color: ${textColor};
   border: 1px solid #e5e7eb;
 }
 .chat-message.user .message-bubble {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, ${primaryColor} 0%, ${accentColor} 100%);
   color: white;
   margin-left: auto;
 }
@@ -164,13 +169,13 @@ function generateChatWidgetCode(userId, agentConfig) {
 }
 .chat-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: ${primaryColor};
 }
 .chat-send-btn {
   margin-top: 8px;
   width: 100%;
   padding: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, ${primaryColor} 0%, ${accentColor} 100%);
   color: white;
   border: none;
   border-radius: 8px;
