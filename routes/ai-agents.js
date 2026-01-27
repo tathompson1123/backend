@@ -132,6 +132,9 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
   try {
     const userId = req.user.userId;
 
+    console.log('🚀 Deploy request received for user:', userId);
+
+    // 1. Save agent config as deployed
     const existing = await pool.query(
       'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
       [userId, 'website_chat']
@@ -156,28 +159,157 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
       [userId, 'website_chat', JSON.stringify(config)]
     );
 
-    res.json({ success: true, message: 'Website chat agent deployed successfully' });
+    console.log('✅ Agent config saved');
+
+    // 2. Get existing website
+    const websiteResult = await pool.query(
+      'SELECT html_content, pages, vercel_url FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (websiteResult.rows.length === 0) {
+      console.log('⚠️ No website found - agent deployed but not injected');
+      return res.json({ 
+        success: true, 
+        message: 'Chat agent deployed! It will be added when you create or update your website.',
+        needsWebsite: true
+      });
+    }
+
+    const website = websiteResult.rows[0];
+    let pages = website.pages || {};
+    let htmlContent = website.html_content;
+
+    console.log('📄 Found website with', Object.keys(pages).length, 'pages');
+
+    // 3. Generate chat widget code
+    const { generateChatWidgetCode } = require('./website'); // We'll need to export this function
+    const chatWidgetCode = generateChatWidgetCode(userId, config);
+
+    console.log('🔧 Generated chat widget code');
+
+    // 4. Inject widget into all pages
+    let pagesUpdated = [];
+    
+    // Inject into all pages
+    if (pages && Object.keys(pages).length > 0) {
+      Object.keys(pages).forEach(pageKey => {
+        if (pages[pageKey].includes('</body>') && !pages[pageKey].includes('sorce-chat-widget')) {
+          pages[pageKey] = pages[pageKey].replace('</body>', chatWidgetCode + '\n</body>');
+          pagesUpdated.push(pageKey);
+          console.log(`✅ Injected widget into ${pageKey}`);
+        } else if (pages[pageKey].includes('sorce-chat-widget')) {
+          console.log(`ℹ️ Widget already exists in ${pageKey}`);
+        }
+      });
+    }
+
+    // Inject into main html_content
+    if (htmlContent && htmlContent.includes('</body>') && !htmlContent.includes('sorce-chat-widget')) {
+      htmlContent = htmlContent.replace('</body>', chatWidgetCode + '\n</body>');
+      pagesUpdated.push('index.html');
+      console.log('✅ Injected widget into main html_content');
+    } else if (htmlContent && htmlContent.includes('sorce-chat-widget')) {
+      console.log('ℹ️ Widget already exists in main html_content');
+    }
+
+    // 5. Update database
+    await pool.query(
+      'UPDATE websites SET html_content = $1, pages = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
+      [htmlContent, pages, userId]
+    );
+
+    console.log('✅ Website updated in database');
+
+    // 6. Redeploy to Vercel if website is published
+    let redeployed = false;
+    let deployUrl = website.vercel_url;
+
+    if (deployUrl) {
+      console.log('🚀 Redeploying to Vercel...');
+      
+      try {
+        const vercelToken = process.env.VERCEL_TOKEN;
+        
+        if (vercelToken) {
+          const files = [];
+          const addedFiles = new Set();
+          
+          // Add all pages
+          if (pages && Object.keys(pages).length > 0) {
+            Object.keys(pages).forEach(pageKey => {
+              if (!addedFiles.has(pageKey)) {
+                files.push({
+                  file: pageKey,
+                  data: Buffer.from(pages[pageKey]).toString('base64')
+                });
+                addedFiles.add(pageKey);
+              }
+            });
+          }
+          
+          // Add index.html if not already added
+          if (htmlContent && !addedFiles.has('index.html')) {
+            files.push({
+              file: 'index.html',
+              data: Buffer.from(htmlContent).toString('base64')
+            });
+            addedFiles.add('index.html');
+          }
+
+          console.log(`📦 Deploying ${files.length} files to Vercel`);
+
+          const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${vercelToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: `website-${userId}`,
+              files: files,
+              projectSettings: {
+                framework: null
+              }
+            })
+          });
+
+          if (deployResponse.ok) {
+            const deployData = await deployResponse.json();
+            deployUrl = `https://${deployData.url}`;
+            
+            await pool.query(
+              'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
+              [deployUrl, deployData.id, userId]
+            );
+            
+            redeployed = true;
+            console.log(`✅ Redeployed to ${deployUrl}`);
+          } else {
+            const errorText = await deployResponse.text();
+            console.error('❌ Vercel deploy failed:', errorText);
+          }
+        } else {
+          console.log('⚠️ No Vercel token - skipping redeploy');
+        }
+      } catch (deployError) {
+        console.error('Deploy error:', deployError.message);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: redeployed 
+        ? 'Chat agent deployed and website updated! Live in 1-2 minutes.' 
+        : 'Chat agent deployed! Please republish your website to see it live.',
+      pagesUpdated,
+      redeployed,
+      deployUrl
+    });
+
   } catch (error) {
     console.error('Error deploying website agent:', error);
     res.status(500).json({ error: 'Failed to deploy agent' });
-  }
-});
-
-// Website Chat Agent - Get deployment status
-router.get('/website/status', authenticateToken, requirePlan('pro'), async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    
-    const result = await pool.query(
-      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
-      [userId, 'website_chat']
-    );
-
-    const isDeployed = result.rows.length > 0 && result.rows[0].config?.enabled === true;
-    res.json({ isDeployed });
-  } catch (error) {
-    console.error('Error checking website agent status:', error);
-    res.status(500).json({ error: 'Failed to check status' });
   }
 });
 
