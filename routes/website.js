@@ -1036,8 +1036,12 @@ const submissionScript = `
   accentColor,
   textColor: '#1f2937'
 };
+const websiteColors = {
+  primaryColor,
+  accentColor,
+  textColor: '#1f2937'
+};
 const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config, websiteColors);
-      
       // Inject into all pages
       Object.keys(updatedPages).forEach(pageKey => {
         if (updatedPages[pageKey].includes('</body>') && !updatedPages[pageKey].includes('sorce-chat-widget')) {
@@ -1480,7 +1484,12 @@ console.log('📏 Prompt size:', (prompt.length / 1024).toFixed(2), 'KB');
 if (chatAgentDeployed) {
   console.log('💬 Chat agent is deployed - injecting widget into website pages');
   console.log('📋 Agent config:', chatAgentResult.rows[0].config);
-  const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config);
+  const websiteColors = {
+    primaryColor,
+    accentColor,
+    textColor: '#1f2937'
+  };
+  const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config, websiteColors);
   
   let widgetInjected = false;
   Object.keys(files).forEach(filename => {
