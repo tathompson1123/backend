@@ -4,7 +4,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { setupMiddleware } = require('./config/middleware');
 const { pool } = require('./config/database');
-const chatRoutes = require('./routes/chat');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -34,8 +33,6 @@ app.use(cors({
 // IMPORTANT: Stripe webhook MUST use raw body, so it comes BEFORE express.json()
 const billingRoutes = require('./routes/billing');
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), billingRoutes);
-
-app.use('/api/chat', chatRoutes);
 
 // Regular JSON parsing for all other routes
 app.use(express.json({ limit: '50mb' }));
@@ -70,6 +67,7 @@ const aiAgentRoutes = require('./routes/ai-agents');
 const reviewRoutes = require('./routes/reviews');
 const sendblueWebhook = require('./routes/sendblue-webhook');
 const marketResearchRoutes = require('./routes/market-research');
+const chatRoutes = require('./routes/chat');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -84,6 +82,7 @@ app.use('/api/google-business', reviewRoutes);
 app.use('/api/sendblue', sendblueWebhook);
 app.use('/api/billing', billingRoutes); //
 app.use('/api/market-research', marketResearchRoutes);
+app.use('/api/chat', chatRoutes);
 
 app.get('/api/business-hours', (req, res) => {
   res.json({ success: true, hours: [] });
@@ -118,6 +117,7 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
 
 
 
