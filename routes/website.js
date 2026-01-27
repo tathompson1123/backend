@@ -1036,11 +1036,7 @@ const submissionScript = `
   accentColor,
   textColor: '#1f2937'
 };
-const websiteColors = {
-  primaryColor,
-  accentColor,
-  textColor: '#1f2937'
-};
+      
 const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config, websiteColors);
       // Inject into all pages
       Object.keys(updatedPages).forEach(pageKey => {
@@ -1483,10 +1479,9 @@ console.log('📏 Prompt size:', (prompt.length / 1024).toFixed(2), 'KB');
    // In the /generate route, update the chat widget injection section:
 if (chatAgentDeployed) {
   console.log('💬 Chat agent is deployed - injecting widget into website pages');
-  console.log('📋 Agent config:', chatAgentResult.rows[0].config);
   const websiteColors = {
-    primaryColor,
-    accentColor,
+    primaryColor: '#667eea',
+    accentColor: '#764ba2',
     textColor: '#1f2937'
   };
   const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config, websiteColors);
