@@ -41,7 +41,7 @@ function escapeHtml(str) {
 function generateChatWidgetCode(userId, agentConfig, websiteColors) {
   const agentName = agentConfig?.agentName || 'Kurt';
   const greetingMessage = agentConfig?.greetingMessage || "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?";
-  const autoOpenDelay = agentConfig?.autoOpenDelay || 3;
+  const autoOpenDelay = agentConfig?.autoOpenDelay || 14;
   const apiUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
     ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
     : process.env.API_URL || 'https://backend-production-ab50.up.railway.app';
