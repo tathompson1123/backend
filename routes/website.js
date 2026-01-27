@@ -1031,7 +1031,12 @@ const submissionScript = `
 
     if (chatAgentDeployed) {
       console.log('💬 Chat agent is deployed - injecting widget into website pages');
-      const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config);
+      const websiteColors = {
+  primaryColor,
+  accentColor,
+  textColor: '#1f2937'
+};
+const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config, websiteColors);
       
       // Inject into all pages
       Object.keys(updatedPages).forEach(pageKey => {
