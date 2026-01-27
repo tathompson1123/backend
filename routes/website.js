@@ -1439,19 +1439,29 @@ console.log('📏 Prompt size:', (prompt.length / 1024).toFixed(2), 'KB');
     const chatAgentDeployed = chatAgentResult.rows.length > 0 && 
                               chatAgentResult.rows[0].config?.enabled === true;
 
-    if (chatAgentDeployed) {
-      console.log('💬 Chat agent is deployed - injecting widget into website pages');
-      const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config);
-      
-      Object.keys(files).forEach(filename => {
-        if (files[filename].includes('</body>')) {
-          files[filename] = files[filename].replace('</body>', chatWidgetCode + '\n</body>');
-          console.log(`✅ Injected chat widget into ${filename}`);
-        }
-      });
+   // In the /generate route, update the chat widget injection section:
+if (chatAgentDeployed) {
+  console.log('💬 Chat agent is deployed - injecting widget into website pages');
+  console.log('📋 Agent config:', chatAgentResult.rows[0].config);
+  const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config);
+  
+  let widgetInjected = false;
+  Object.keys(files).forEach(filename => {
+    if (files[filename].includes('</body>')) {
+      files[filename] = files[filename].replace('</body>', chatWidgetCode + '\n</body>');
+      console.log(`✅ Injected chat widget into ${filename}`);
+      widgetInjected = true;
     } else {
-      console.log('ℹ️ Chat agent not deployed - skipping widget injection');
+      console.log(`⚠️ No </body> tag found in ${filename}, skipping widget injection`);
     }
+  });
+  
+  if (!widgetInjected) {
+    console.error('❌ WARNING: Chat widget was NOT injected into any files!');
+  }
+} else {
+  console.log('ℹ️ Chat agent not deployed - skipping widget injection');
+}
     // ============================================
 
     res.json({ 
