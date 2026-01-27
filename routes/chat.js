@@ -26,43 +26,10 @@ router.post('/start', async (req, res) => {
   }
 });
 
-// Helper function to extract booking intent from conversation
-function extractBookingInfo(messages) {
-  const allMessages = messages.map(m => m.content).join(' ').toLowerCase();
-  
-  // Check for booking intent
-  const bookingKeywords = ['book', 'schedule', 'appointment', 'reserve', 'set up'];
-  const hasBookingIntent = bookingKeywords.some(kw => allMessages.includes(kw));
-  
-  if (!hasBookingIntent) return null;
-  
-  // Extract date (basic patterns)
-  const datePatterns = [
-    /(?:on|for)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
-    /(?:on|for)\s+(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/,
-    /(tomorrow|today|next week)/i
-  ];
-  
-  let dateMatch = null;
-  for (const pattern of datePatterns) {
-    dateMatch = allMessages.match(pattern);
-    if (dateMatch) break;
-  }
-  
-  // Extract time (basic patterns)
-  const timeMatch = allMessages.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM))/);
-  
-  return {
-    hasIntent: true,
-    date: dateMatch ? dateMatch[1] : null,
-    time: timeMatch ? timeMatch[1] : null
-  };
-}
-
 // Helper function to create booking from chat
 async function createBookingFromChat(userId, bookingData) {
   try {
-    const { serviceId, serviceName, bookingDate, startTime, customerName, customerEmail, customerPhone } = bookingData;
+    const { serviceId, bookingDate, startTime, customerName, customerEmail, customerPhone } = bookingData;
     
     // Get service details
     const serviceResult = await pool.query(
@@ -229,11 +196,7 @@ router.post('/message', async (req, res) => {
       .map(h => `${daysMap[h.day_of_week]}: ${h.open_time} - ${h.close_time}`)
       .join('\n');
 
-    const systemPrompt = `You are ${userInfo.business_name || 'a helpful'} assistant. 
-Your job is to help website visitors by:
-1. Answering questions about services and pricing
-2. Capturing lead information (name, email, phone)
-3. Booking appointments when requested
+    const systemPrompt = `You are ${userInfo.business_name || 'a helpful'} assistant helping customers book services.
 
 Available services:
 ${servicesResult.rows.map(s => `- ${s.name} (ID: ${s.id}): $${s.price} - ${s.description} (${s.duration_hours} hours)`).join('\n')}
@@ -244,16 +207,66 @@ ${businessHours || 'Monday-Friday: 9:00 AM - 5:00 PM'}
 Contact: ${userInfo.phone || 'N/A'}
 Email: ${userInfo.email || 'N/A'}
 
-IMPORTANT INSTRUCTIONS:
-- Be friendly, professional, and helpful
-- When someone wants to book, ask for: service name, preferred date, preferred time, name, email, and phone
-- Once you have ALL booking details, respond with a special formatted message:
-  BOOKING_REQUEST|serviceId|YYYY-MM-DD|HH:MM|customerName|customerEmail|customerPhone
-  Example: BOOKING_REQUEST|5|2025-01-30|14:00|John Smith|john@email.com|5551234567
-- Use 24-hour time format (14:00 not 2:00 PM)
-- For dates, use YYYY-MM-DD format
-- When you capture a lead (email or phone), acknowledge it naturally
-- Don't mention the BOOKING_REQUEST format to the customer - it's internal`;
+CONVERSATION FLOW - Follow these stages in order:
+
+STAGE 1 - IDENTIFY THE PROBLEM:
+- Ask what they're looking to get done
+- Listen to their needs and pain points
+- Be conversational and friendly
+
+STAGE 2 - RECOMMEND SERVICES:
+- Based on their problem, suggest 1-3 relevant services from the list above
+- Explain briefly why each service fits their needs
+- Mention the price and duration for each
+- Ask which service interests them most
+
+STAGE 3 - GATHER BOOKING DETAILS (only after they choose a service):
+Ask ONE question at a time in this order:
+1. First, ask: "What day works best for you?" (accept formats like "tomorrow", "Monday", "Jan 30", etc.)
+2. Then ask: "What time would you prefer?" (accept formats like "2pm", "14:00", "afternoon")
+3. Then ask: "Can I get your name?"
+4. Then ask: "What's the best email to send your confirmation?"
+5. Finally ask: "And your phone number?"
+
+STAGE 4 - CONFIRM AND BOOK:
+Once you have ALL information (service, date, time, name, email, phone), respond with:
+BOOKING_REQUEST|serviceId|YYYY-MM-DD|HH:MM|customerName|customerEmail|customerPhone
+
+IMPORTANT RULES:
+- Only ask for ONE piece of information per message
+- Don't skip stages - follow the order
+- Use natural, conversational language
+- Convert dates to YYYY-MM-DD format (today is ${new Date().toISOString().split('T')[0]})
+- Convert times to 24-hour format (2pm = 14:00, 9am = 09:00)
+- Only send BOOKING_REQUEST when you have ALL 6 pieces of information
+- Don't mention "BOOKING_REQUEST" to the customer - it's internal
+- If they're just asking questions, answer them and don't force the booking flow
+
+Examples of good responses:
+
+User: "I need help with my car"
+You: "I'd be happy to help! What specifically are you looking to get done with your car?"
+
+User: "It needs to be detailed"
+You: "Perfect! We have a Full Exterior Detail for $150 (2 hours) which includes wash, clay bar, polish, and wax. We also offer an Interior Detail for $120 (1.5 hours) with deep vacuum, shampoo, and leather conditioning. Which one sounds better for what you need?"
+
+User: "The full exterior sounds great"
+You: "Awesome choice! What day works best for you?"
+
+User: "How about next Monday?"
+You: "Monday works! What time would you prefer?"
+
+User: "Maybe 2pm?"
+You: "2pm is perfect. Can I get your name?"
+
+User: "John Smith"
+You: "Thanks John! What's the best email to send your confirmation?"
+
+User: "john@email.com"  
+You: "Got it! And your phone number?"
+
+User: "555-123-4567"
+You: [Then create BOOKING_REQUEST]`;
 
     // Call Claude API
     const response = await anthropic.messages.create({
@@ -288,15 +301,26 @@ IMPORTANT INSTRUCTIONS:
         // Remove the BOOKING_REQUEST line from reply
         reply = reply.replace(/BOOKING_REQUEST\|[^\n]+\n?/, '');
         
-        // Add confirmation message
-        reply += `\n\n✅ Perfect! I've booked your appointment:\n` +
-                 `📅 ${bookingDate} at ${startTime}\n` +
-                 `🔧 ${bookingResult.serviceName}\n` +
-                 `👤 with ${bookingResult.employeeName}\n` +
-                 `📋 Booking #${bookingResult.bookingNumber}\n\n` +
-                 `You'll receive a confirmation email at ${customerEmail}. See you then!`;
+        // Format the date nicely
+        const dateObj = new Date(bookingDate + 'T00:00:00');
+        const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
         
-        // Also create a lead if we haven't already
+        // Format the time nicely (convert 14:00 to 2:00 PM)
+        const [hours, mins] = startTime.split(':');
+        const hour = parseInt(hours);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+        const formattedTime = `${displayHour}:${mins} ${ampm}`;
+        
+        // Add confirmation message
+        reply = `Perfect! You're all set, ${customerName}! 🎉\n\n` +
+                `📅 ${formattedDate} at ${formattedTime}\n` +
+                `🔧 ${bookingResult.serviceName}\n` +
+                `👤 ${bookingResult.employeeName} will take great care of you\n` +
+                `📋 Booking #${bookingResult.bookingNumber}\n\n` +
+                `I've sent a confirmation to ${customerEmail}. Looking forward to seeing you!`;
+        
+        // Also create a lead with "booked" status
         const leadExists = await pool.query(
           'SELECT id FROM leads WHERE user_id = $1 AND email = $2',
           [userId, customerEmail]
@@ -308,10 +332,16 @@ IMPORTANT INSTRUCTIONS:
              VALUES ($1, $2, $3, $4, 'ai_chat_agent', 'booked', CURRENT_TIMESTAMP)`,
             [userId, customerName, customerEmail, customerPhone]
           );
+        } else {
+          // Update existing lead to "booked"
+          await pool.query(
+            `UPDATE leads SET status = 'booked', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            [leadExists.rows[0].id]
+          );
         }
       } else {
         reply = reply.replace(/BOOKING_REQUEST\|[^\n]+\n?/, '');
-        reply += `\n\n❌ I'm sorry, but ${bookingResult.error}. Would you like to try a different time?`;
+        reply = `I'm sorry, but ${bookingResult.error}. Would you like to try a different time?`;
       }
     }
 
@@ -322,7 +352,7 @@ IMPORTANT INSTRUCTIONS:
       [conversationId, reply]
     );
 
-    // Extract lead info if present (basic detection) - only if no booking was made
+    // Extract lead info if present (only if no booking was made yet)
     if (!bookingMatch) {
       const emailMatch = message.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
       const phoneMatch = message.match(/\b\d{10}\b|\b\(\d{3}\)\s*\d{3}-\d{4}\b/);
@@ -339,12 +369,16 @@ IMPORTANT INSTRUCTIONS:
         const possibleName = nameResult.rows.find(r => 
           r.content.toLowerCase().includes('my name is') ||
           r.content.toLowerCase().includes("i'm ") ||
-          r.content.toLowerCase().includes('this is ')
+          r.content.toLowerCase().match(/\b(name|called)\s+(is\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
         );
 
-        const name = possibleName ? 
-          possibleName.content.match(/(?:my name is|i'm|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)?.[1] :
-          'Website Visitor';
+        let name = 'Website Visitor';
+        if (possibleName) {
+          const nameMatch = possibleName.content.match(/(?:my name is|i'm|this is|name is|called)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
+          if (nameMatch) {
+            name = nameMatch[1];
+          }
+        }
 
         // Check if lead already exists
         const leadExists = await pool.query(
