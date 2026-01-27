@@ -16,11 +16,11 @@ router.get('/website/config', authenticateToken, requirePlan('pro'), async (req,
     if (result.rows.length === 0) {
       return res.json({
         config: {
-          enabled: true,
-          agentName: 'Kurt',
-          greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
-          autoOpenDelay: 3
-        }
+  enabled: true,
+  agentName: 'Kurt',
+  greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
+  autoOpenDelay: 14  // Changed from 3
+}
       });
     }
 
@@ -102,11 +102,12 @@ router.patch('/website', authenticateToken, requirePlan('pro'), async (req, res)
     );
 
     let config = {
-      enabled,
-      agentName: 'Kurt',
-      greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
-      autoOpenDelay: 3
-    };
+  enabled,
+  agentName: 'Kurt',
+  greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
+  autoOpenDelay: 14  // Changed from 3
+};
+
 
     if (existing.rows.length > 0 && existing.rows[0].config) {
       config = { ...existing.rows[0].config, enabled };
@@ -141,11 +142,11 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
     );
 
     let config = {
-      enabled: true,
-      agentName: 'Kurt',
-      greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
-      autoOpenDelay: 3
-    };
+  enabled: true,
+  agentName: 'Kurt',
+  greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
+  autoOpenDelay: 14  // Changed from 3
+};
 
     if (existing.rows.length > 0 && existing.rows[0].config) {
       config = { ...existing.rows[0].config, enabled: true };
