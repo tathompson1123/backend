@@ -185,8 +185,12 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
     // 3. Generate chat widget code
     const websiteModule = require('./website');
     const generateChatWidgetCode = websiteModule.generateChatWidgetCode || websiteModule;
-    const chatWidgetCode = generateChatWidgetCode(userId, config);
-
+    const websiteColors = {
+  primaryColor: website.primary_color || '#667eea',
+  accentColor: website.accent_color || '#764ba2', 
+  textColor: website.text_color || '#1f2937'
+};
+const chatWidgetCode = generateChatWidgetCode(userId, config, websiteColors);
     console.log('🔧 Generated chat widget code');
 
     // 4. Inject widget into all pages
