@@ -240,36 +240,12 @@ function generateChatWidgetCode(userId, agentConfig) {
     
     console.log('✅ Found widget container');
     
-    widget.innerHTML = \`
-      <div class="chat-bubble" onclick="toggleChat()">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
-        </svg>
-      </div>
-      <div class="chat-window" id="chat-window">
-        <div class="chat-header">
-          <h3>Chat with \${agentName}</h3>
-          <button class="chat-close" onclick="toggleChat()">×</button>
-        </div>
-        <div class="chat-messages" id="chat-messages"></div>
-        <div class="chat-input-area">
-          <textarea 
-            class="chat-input" 
-            id="chat-input" 
-            placeholder="Type your message..."
-            rows="2"
-            onkeypress="handleKeyPress(event)"
-          ></textarea>
-          <button class="chat-send-btn" onclick="sendMessage()">Send Message</button>
-        </div>
-      </div>
-    \`;
+    widget.innerHTML = '<div class="chat-bubble" onclick="toggleChat()"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg></div><div class="chat-window" id="chat-window"><div class="chat-header"><h3>Chat with ' + agentName + '</h3><button class="chat-close" onclick="toggleChat()">×</button></div><div class="chat-messages" id="chat-messages"></div><div class="chat-input-area"><textarea class="chat-input" id="chat-input" placeholder="Type your message..." rows="2" onkeypress="handleKeyPress(event)"></textarea><button class="chat-send-btn" onclick="sendMessage()">Send Message</button></div></div>';
     
     console.log('✅ Chat widget HTML injected');
     
-    // Auto-open after delay
-    console.log(\`⏱️ Will auto-open in \${autoOpenDelay} seconds...\`);
-    setTimeout(() => {
+    console.log('⏱️ Will auto-open in ' + autoOpenDelay + ' seconds...');
+    setTimeout(function() {
       const hasOpened = sessionStorage.getItem('chat-opened');
       console.log('Auto-open check - Has opened before?', hasOpened);
       
@@ -311,13 +287,13 @@ function generateChatWidgetCode(userId, agentConfig) {
   
   async function startConversation() {
     console.log('📞 API Call: Starting conversation');
-    console.log('Endpoint:', \`\${apiUrl}/api/chat/start\`);
+    console.log('Endpoint:', apiUrl + '/api/chat/start');
     
     try {
-      const response = await fetch(\`\${apiUrl}/api/chat/start\`, {
+      const response = await fetch(apiUrl + '/api/chat/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, source: 'website' })
+        body: JSON.stringify({ userId: userId, source: 'website' })
       });
       
       console.log('Response status:', response.status);
@@ -352,17 +328,17 @@ function generateChatWidgetCode(userId, agentConfig) {
     showTypingIndicator();
     
     console.log('📞 API Call: Sending message');
-    console.log('Endpoint:', \`\${apiUrl}/api/chat/message\`);
+    console.log('Endpoint:', apiUrl + '/api/chat/message');
     console.log('Conversation ID:', conversationId);
     
     try {
-      const response = await fetch(\`\${apiUrl}/api/chat/message\`, {
+      const response = await fetch(apiUrl + '/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
-          conversationId,
-          message
+          userId: userId,
+          conversationId: conversationId,
+          message: message
         })
       });
       
@@ -386,11 +362,11 @@ function generateChatWidgetCode(userId, agentConfig) {
   };
   
   function addMessage(text, type) {
-    console.log(\`💬 Adding \${type} message:`, text);
+    console.log('💬 Adding ' + type + ' message:', text);
     const messagesDiv = document.getElementById('chat-messages');
     const messageEl = document.createElement('div');
-    messageEl.className = \`chat-message \${type}\`;
-    messageEl.innerHTML = \`<div class="message-bubble">\${escapeHtml(text)}</div>\`;
+    messageEl.className = 'chat-message ' + type;
+    messageEl.innerHTML = '<div class="message-bubble">' + escapeHtml(text) + '</div>';
     messagesDiv.appendChild(messageEl);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
   }
@@ -401,15 +377,7 @@ function generateChatWidgetCode(userId, agentConfig) {
     const indicator = document.createElement('div');
     indicator.id = 'typing-indicator';
     indicator.className = 'chat-message agent';
-    indicator.innerHTML = \`
-      <div class="message-bubble">
-        <div class="typing-indicator">
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-        </div>
-      </div>
-    \`;
+    indicator.innerHTML = '<div class="message-bubble"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
     messagesDiv.appendChild(indicator);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
   }
@@ -426,7 +394,6 @@ function generateChatWidgetCode(userId, agentConfig) {
     return div.innerHTML;
   }
   
-  // Initialize widget
   console.log('📄 Document ready state:', document.readyState);
   if (document.readyState === 'loading') {
     console.log('⏳ Waiting for DOM to load...');
@@ -445,6 +412,7 @@ function generateChatWidgetCode(userId, agentConfig) {
 <!-- End SORCE Chat Agent -->
 `;
 }
+
 router.get('/my-ip', async (req, res) => {
   try {
     const axios = require('axios');
