@@ -640,6 +640,65 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
   }
 });
 
+router.get('/check-chat-widget', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const websiteResult = await pool.query(
+      'SELECT html_content, pages FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (websiteResult.rows.length === 0) {
+      return res.json({ 
+        hasWebsite: false,
+        hasWidget: false,
+        message: 'No website found'
+      });
+    }
+
+    const website = websiteResult.rows[0];
+    let pages = website.pages || {};
+
+    const widgetMarker = 'sorce-chat-widget';
+    let pagesWithWidget = [];
+    let pagesWithoutWidget = [];
+
+    // Check all pages
+    if (pages && Object.keys(pages).length > 0) {
+      Object.keys(pages).forEach(pageKey => {
+        const html = pages[pageKey];
+        if (html && html.includes(widgetMarker)) {
+          pagesWithWidget.push(pageKey);
+        } else {
+          pagesWithoutWidget.push(pageKey);
+        }
+      });
+    }
+
+    // Check main html_content
+    if (website.html_content) {
+      if (website.html_content.includes(widgetMarker)) {
+        pagesWithWidget.push('index.html (main)');
+      } else {
+        pagesWithoutWidget.push('index.html (main)');
+      }
+    }
+
+    res.json({
+      hasWebsite: true,
+      hasWidget: pagesWithWidget.length > 0,
+      pagesWithWidget,
+      pagesWithoutWidget,
+      totalPages: pagesWithWidget.length + pagesWithoutWidget.length
+    });
+
+  } catch (error) {
+    console.error('Error checking chat widget:', error);
+    res.status(500).json({ error: 'Failed to check chat widget' });
+  }
+});
+
 // ============================================
 // POST - Fix/Update Contact Form in Existing Website
 // ============================================
