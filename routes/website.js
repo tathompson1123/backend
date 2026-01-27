@@ -913,6 +913,65 @@ const submissionScript = `
       });
     }
 
+    if (pagesFixed.length === 0) {
+      return res.status(404).json({ 
+        error: 'No contact forms found on any pages',
+        message: 'Your website does not appear to have any contact forms to fix'
+      });
+    }
+
+    // ============================================
+    // INJECT CHAT WIDGET IF DEPLOYED
+    // ============================================
+    const chatAgentResult = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'website_chat']
+    );
+
+    const chatAgentDeployed = chatAgentResult.rows.length > 0 && 
+                              chatAgentResult.rows[0].config?.enabled === true;
+
+    if (chatAgentDeployed) {
+      console.log('💬 Chat agent is deployed - injecting widget into website pages');
+      const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config);
+      
+      // Inject into all pages
+      Object.keys(updatedPages).forEach(pageKey => {
+        if (updatedPages[pageKey].includes('</body>') && !updatedPages[pageKey].includes('sorce-chat-widget')) {
+          updatedPages[pageKey] = updatedPages[pageKey].replace('</body>', chatWidgetCode + '\n</body>');
+          console.log(`✅ Injected chat widget into ${pageKey}`);
+          if (!pagesFixed.includes(pageKey)) {
+            pagesFixed.push(pageKey + ' (chat widget)');
+          }
+        }
+      });
+      
+      // Inject into main html_content if it exists
+      if (updatedHtmlContent && updatedHtmlContent.includes('</body>') && !updatedHtmlContent.includes('sorce-chat-widget')) {
+        updatedHtmlContent = updatedHtmlContent.replace('</body>', chatWidgetCode + '\n</body>');
+        console.log(`✅ Injected chat widget into main html_content`);
+        if (!pagesFixed.includes('index.html')) {
+          pagesFixed.push('index.html (chat widget)');
+        }
+      }
+      
+      // Update pages in database
+      if (Object.keys(updatedPages).length > 0) {
+        await pool.query(
+          'UPDATE websites SET pages = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+          [updatedPages, userId]
+        );
+      }
+      
+      if (updatedHtmlContent) {
+        await pool.query(
+          'UPDATE websites SET html_content = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+          [updatedHtmlContent, userId]
+        );
+      }
+    }
+    // ============================================
+
     // AUTO-REDEPLOY TO VERCEL
     let redeploySuccess = false;
 let deployUrl = null;
