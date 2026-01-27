@@ -183,7 +183,8 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
     console.log('📄 Found website with', Object.keys(pages).length, 'pages');
 
     // 3. Generate chat widget code
-    const { generateChatWidgetCode } = require('./website'); // We'll need to export this function
+    const websiteModule = require('./website');
+    const generateChatWidgetCode = websiteModule.generateChatWidgetCode || websiteModule;
     const chatWidgetCode = generateChatWidgetCode(userId, config);
 
     console.log('🔧 Generated chat widget code');
@@ -191,7 +192,6 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
     // 4. Inject widget into all pages
     let pagesUpdated = [];
     
-    // Inject into all pages
     if (pages && Object.keys(pages).length > 0) {
       Object.keys(pages).forEach(pageKey => {
         if (pages[pageKey].includes('</body>') && !pages[pageKey].includes('sorce-chat-widget')) {
@@ -204,7 +204,6 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
       });
     }
 
-    // Inject into main html_content
     if (htmlContent && htmlContent.includes('</body>') && !htmlContent.includes('sorce-chat-widget')) {
       htmlContent = htmlContent.replace('</body>', chatWidgetCode + '\n</body>');
       pagesUpdated.push('index.html');
@@ -221,142 +220,18 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
 
     console.log('✅ Website updated in database');
 
-   // 6. Redeploy to Vercel
-    let redeployed = false;
-    let deployUrl = website.vercel_url;
-
-    log('Step 6: Checking for Vercel deployment...');
-    
-    const vercelToken = process.env.VERCEL_TOKEN;
-    
-    if (!vercelToken) {
-      log('⚠️ VERCEL_TOKEN not set - skipping auto-deploy');
-      log('User must manually redeploy from dashboard');
-      
-      return res.json({ 
-        success: true, 
-        message: 'Chat agent deployed! Please click "Publish Website" to make it live.',
-        pagesUpdated,
-        redeployed: false,
-        needsManualDeploy: true,
-        logs
-      });
-    }
-
-    try {
-      log('Building file list for Vercel...');
-      const files = [];
-      const addedFiles = new Set();
-      
-      // Add all pages from the pages object
-      if (pages && Object.keys(pages).length > 0) {
-        Object.keys(pages).forEach(pageKey => {
-          if (!addedFiles.has(pageKey)) {
-            const fileContent = pages[pageKey];
-            const hasWidget = fileContent.includes('sorce-chat-widget');
-            log(`  - ${pageKey}: ${fileContent.length} chars, widget=${hasWidget}`);
-            
-            files.push({
-              file: pageKey,
-              data: Buffer.from(fileContent).toString('base64')
-            });
-            addedFiles.add(pageKey);
-          }
-        });
-      }
-      
-      // Add index.html from html_content if not already added
-      if (htmlContent && !addedFiles.has('index.html')) {
-        const hasWidget = htmlContent.includes('sorce-chat-widget');
-        log(`  - index.html: ${htmlContent.length} chars, widget=${hasWidget}`);
-        
-        files.push({
-          file: 'index.html',
-          data: Buffer.from(htmlContent).toString('base64')
-        });
-        addedFiles.add('index.html');
-      }
-
-      if (files.length === 0) {
-        log('❌ No files to deploy!');
-        throw new Error('No files to deploy');
-      }
-
-      log(`📦 Deploying ${files.length} files to Vercel...`);
-      
-      // Force a NEW deployment (not using existing project)
-      const deployPayload = {
-        name: `website-${userId}`,
-        files: files,
-        projectSettings: {
-          framework: null,
-          buildCommand: null,
-          installCommand: null
-        },
-        target: 'production'
-      };
-
-      log('Calling Vercel API...');
-      const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${vercelToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(deployPayload)
-      });
-
-      const responseStatus = deployResponse.status;
-      log(`Vercel response status: ${responseStatus}`);
-
-      if (deployResponse.ok) {
-        const deployData = await deployResponse.json();
-        deployUrl = `https://${deployData.url}`;
-        
-        log(`✅ New deployment created: ${deployUrl}`);
-        
-        // Update database with new URL
-        await pool.query(
-          'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
-          [deployUrl, deployData.id, userId]
-        );
-        
-        redeployed = true;
-        log(`✅ Database updated with new deployment URL`);
-      } else {
-        const errorText = await deployResponse.text();
-        log(`❌ Vercel deploy failed: ${errorText}`);
-        throw new Error(`Vercel deployment failed: ${errorText}`);
-      }
-    } catch (deployError) {
-      log(`❌ Deploy exception: ${deployError.message}`);
-      log('Stack:', deployError.stack);
-      
-      // Don't fail the whole operation, just skip auto-deploy
-      return res.json({ 
-        success: true, 
-        message: 'Chat agent deployed! Auto-deploy failed, please manually publish from dashboard.',
-        pagesUpdated,
-        redeployed: false,
-        needsManualDeploy: true,
-        deployError: deployError.message,
-        logs
-      });
-    }
-
-    const totalTime = Date.now() - startTime;
-    log(`🎉 Deploy complete in ${totalTime}ms`);
-
     res.json({ 
       success: true, 
-      message: redeployed 
-        ? 'Chat agent deployed and website updated! Live in 1-2 minutes.' 
-        : 'Chat agent deployed! Website updated in database.',
+      message: 'Chat agent deployed! Please manually publish your website to see it live.',
       pagesUpdated,
-      redeployed,
-      deployUrl,
-      logs
+      needsManualDeploy: true
     });
+
+  } catch (error) {
+    console.error('Error deploying website agent:', error);
+    res.status(500).json({ error: 'Failed to deploy agent' });
+  }
+});
     
 // LEAD FORM AGENT ROUTES
 // ============================================
