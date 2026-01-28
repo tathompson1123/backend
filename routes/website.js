@@ -509,6 +509,128 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
+// POST - Save changes without publishing
+router.post('/save', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { html_content, pages } = req.body;
+
+    console.log('💾 Saving changes for user:', userId);
+
+    await pool.query(
+      'UPDATE websites SET html_content = $1, pages = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
+      [html_content, pages, userId]
+    );
+
+    console.log(`✅ Changes saved for user ${userId}`);
+
+    res.json({ success: true, message: 'Changes saved' });
+  } catch (error) {
+    console.error('Error saving website:', error);
+    res.status(500).json({ error: 'Failed to save changes' });
+  }
+});
+
+// POST - Publish changes to Vercel
+router.post('/publish', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { html_content, pages } = req.body;
+
+    console.log('📤 Publishing website for user:', userId);
+
+    // Save to database first
+    await pool.query(
+      'UPDATE websites SET html_content = $1, pages = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
+      [html_content, pages, userId]
+    );
+
+    // Deploy to Vercel
+    const vercelToken = process.env.VERCEL_TOKEN;
+    
+    if (!vercelToken) {
+      throw new Error('Vercel token not configured');
+    }
+
+    // Prepare files for deployment
+    const files = [];
+    const addedFiles = new Set();
+
+    // Add all pages from the pages object
+    if (pages && Object.keys(pages).length > 0) {
+      Object.keys(pages).forEach(pageKey => {
+        if (!addedFiles.has(pageKey)) {
+          files.push({
+            file: pageKey,
+            data: Buffer.from(pages[pageKey]).toString('base64')
+          });
+          addedFiles.add(pageKey);
+          console.log(`📄 Added ${pageKey} to deployment`);
+        }
+      });
+    }
+
+    // Only add index.html from html_content if it wasn't already added from pages
+    if (html_content && !addedFiles.has('index.html')) {
+      files.push({
+        file: 'index.html',
+        data: Buffer.from(html_content).toString('base64')
+      });
+      addedFiles.add('index.html');
+      console.log(`📄 Added index.html to deployment`);
+    }
+
+    console.log(`📦 Total files to deploy: ${files.length}`);
+
+    if (files.length === 0) {
+      throw new Error('No files to deploy');
+    }
+
+    // Create deployment
+    const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${vercelToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: `website-${userId}`,
+        files: files,
+        projectSettings: {
+          framework: null
+        }
+      })
+    });
+
+    if (!deployResponse.ok) {
+      const errorText = await deployResponse.text();
+      console.error('Vercel deployment error:', errorText);
+      throw new Error('Deployment failed: ' + errorText);
+    }
+
+    const deployData = await deployResponse.json();
+    const deploymentUrl = `https://${deployData.url}`;
+
+    // Update database with new deployment info
+    await pool.query(
+      'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2, is_published = true WHERE user_id = $3',
+      [deploymentUrl, deployData.id, userId]
+    );
+
+    console.log(`✅ Published for user ${userId}: ${deploymentUrl}`);
+    
+    res.json({ 
+      success: true, 
+      url: deploymentUrl,
+      message: 'Website published successfully'
+    });
+
+  } catch (error) {
+    console.error('Error publishing website:', error);
+    res.status(500).json({ error: 'Failed to publish website', details: error.message });
+  }
+});
+
 // ============================================
 // GET - Check if contact form is properly configured IN DATABASE
 // ============================================
@@ -880,46 +1002,92 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 
     console.log(`✅ Fixed contact forms on ${pagesFixed.length} page(s): ${pagesFixed.join(', ')}`);
 
-    // AUTO-REDEPLOY - Trigger the publish endpoint
-    let redeployed = false;
-    let deployUrl = website.vercel_url;
+   // AUTO-REDEPLOY - Call the publish endpoint internally
+let redeployed = false;
+let deployUrl = website.vercel_url;
 
-    try {
-      console.log('🚀 Auto-triggering publish...');
-      
-      // Import the publish function or call it directly
-      const { publishToVercel } = require('../utils/vercel');
-      
-      const deploymentResult = await publishToVercel(
-        userId,
-        updatedHtmlContent,
-        updatedPages
-      );
+try {
+  console.log('🚀 Auto-triggering publish...');
+  
+  const vercelToken = process.env.VERCEL_TOKEN;
+  
+  if (!vercelToken) {
+    console.warn('⚠️ No Vercel token - skipping auto-deploy');
+  } else {
+    // Prepare files for deployment
+    const files = [];
+    const addedFiles = new Set();
 
-      if (deploymentResult.success) {
-        redeployed = true;
-        deployUrl = deploymentResult.url;
-        console.log(`✅ Auto-deployed to ${deployUrl}`);
-      }
-    } catch (error) {
-      console.error('Auto-deploy failed:', error);
-      // Don't fail the whole request - just mark as not redeployed
+    // Add all pages
+    if (updatedPages && Object.keys(updatedPages).length > 0) {
+      Object.keys(updatedPages).forEach(pageKey => {
+        if (!addedFiles.has(pageKey)) {
+          files.push({
+            file: pageKey,
+            data: Buffer.from(updatedPages[pageKey]).toString('base64')
+          });
+          addedFiles.add(pageKey);
+        }
+      });
     }
 
-    res.json({
-      success: true,
-      pagesFixed,
-      message: redeployed 
-        ? `Contact form(s) updated and published! Live at ${deployUrl}` 
-        : `Contact form(s) updated. Click "Publish Changes" to go live.`,
-      redeployed,
-      deployUrl
-    });
+    // Add index.html if not already added
+    if (updatedHtmlContent && !addedFiles.has('index.html')) {
+      files.push({
+        file: 'index.html',
+        data: Buffer.from(updatedHtmlContent).toString('base64')
+      });
+      addedFiles.add('index.html');
+    }
 
-  } catch (error) {
-    console.error('Error fixing contact form:', error);
-    res.status(500).json({ error: 'Failed to fix contact form' });
+    console.log(`📦 Auto-deploy: ${files.length} files`);
+
+    if (files.length > 0) {
+      const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${vercelToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: `website-${userId}`,
+          files: files,
+          projectSettings: {
+            framework: null
+          }
+        })
+      });
+
+      if (deployResponse.ok) {
+        const deployData = await deployResponse.json();
+        deployUrl = `https://${deployData.url}`;
+        
+        await pool.query(
+          'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
+          [deployUrl, deployData.id, userId]
+        );
+        
+        redeployed = true;
+        console.log(`✅ Auto-deployed to ${deployUrl}`);
+      } else {
+        const errorText = await deployResponse.text();
+        console.error('❌ Auto-deploy failed:', errorText);
+      }
+    }
   }
+} catch (error) {
+  console.error('Auto-deploy error:', error);
+  // Don't fail the whole request - just mark as not redeployed
+}
+
+res.json({
+  success: true,
+  pagesFixed,
+  message: redeployed 
+    ? `Contact form(s) updated and published! Live at ${deployUrl}` 
+    : `Contact form(s) updated. Click "Publish Changes" to go live.`,
+  redeployed,
+  deployUrl
 });
 
     // ============================================
