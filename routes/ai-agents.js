@@ -31,6 +31,43 @@ router.get('/website/config', authenticateToken, requirePlan('pro'), async (req,
   }
 });
 
+router.get('/website/status', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'website_chat']
+    );
+    
+    const isDeployed = result.rows.length > 0 && result.rows[0].config?.enabled === true;
+    
+    res.json({ isDeployed });
+  } catch (error) {
+    console.error('Error checking website agent status:', error);
+    res.status(500).json({ error: 'Failed to check status' });
+  }
+});
+
+// GET - Check if lead form agent is deployed
+router.get('/leadform/status', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
+    );
+    
+    const isDeployed = result.rows.length > 0 && result.rows[0].config?.enabled === true;
+    
+    res.json({ isDeployed });
+  } catch (error) {
+    console.error('Error checking lead form agent status:', error);
+    res.status(500).json({ error: 'Failed to check status' });
+  }
+});
+
 // Website Chat Agent - Save config
 router.post('/website/config', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {
