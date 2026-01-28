@@ -3,12 +3,12 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { sendSMS } = require('../utils/twilio');
 
-// Twilio webhook for incoming SMS
+// Single webhook handles ALL customers
 router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
   try {
     const { From, To, Body, MessageSid } = req.body;
 
-    console.log(`📨 Incoming SMS from ${From} to ${To}: "${Body}"`);
+    console.log(`📨 SMS: ${From} → ${To}: "${Body}"`);
 
     // Find user by their Twilio phone number
     const userResult = await pool.query(
@@ -17,34 +17,34 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     );
 
     if (userResult.rows.length === 0) {
-      console.log(`⚠️ No user found for phone: ${To}`);
+      console.log(`⚠️ No user found for ${To}`);
       return res.status(200).send('<Response></Response>');
     }
 
     const user = userResult.rows[0];
 
     // Find or create lead
-    let lead = await pool.query(
+    let leadResult = await pool.query(
       'SELECT id, name, email FROM leads WHERE phone = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
       [From, user.id]
     );
 
     let leadId;
-    if (lead.rows.length === 0) {
+    if (leadResult.rows.length === 0) {
       const newLead = await pool.query(
         `INSERT INTO leads (user_id, phone, source, status, created_at) 
          VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) 
          RETURNING id, name, email`,
-        [user.id, From, 'sms_lead', 'new']
+        [user.id, From, 'sms_inbound', 'new']
       );
-      lead = newLead;
       leadId = newLead.rows[0].id;
-      console.log(`📝 Created new lead ${leadId} for ${From}`);
+      leadResult = newLead;
+      console.log(`📝 New lead ${leadId} from ${From}`);
     } else {
-      leadId = lead.rows[0].id;
+      leadId = leadResult.rows[0].id;
     }
 
-    // Store incoming message
+    // Store message
     await pool.query(
       `INSERT INTO sms_messages 
        (lead_id, user_id, direction, from_number, message, twilio_message_sid, created_at) 
@@ -52,13 +52,12 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
       [leadId, user.id, 'incoming', From, Body, MessageSid]
     );
 
-    // Update lead status
     await pool.query(
       `UPDATE leads SET status = 'replied', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
       [leadId]
     );
 
-    // Check if AI agent is enabled
+    // Check if AI enabled
     const configResult = await pool.query(
       'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
       [user.id, 'lead_form']
@@ -66,27 +65,21 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
 
     const agentEnabled = configResult.rows[0]?.config?.enabled !== false;
 
-    if (!agentEnabled) {
-      console.log('🤖 Lead form agent disabled, no AI response');
-      return res.status(200).send('<Response></Response>');
-    }
-
-    // Generate AI response
-    const aiResponse = await generateAIResponse(user.id, leadId, lead.rows[0], Body);
-
-    if (aiResponse) {
-      // Send AI reply via Twilio
-      await sendSMS(From, To, aiResponse);
-
-      // Store outgoing message
-      await pool.query(
-        `INSERT INTO sms_messages 
-         (lead_id, user_id, direction, to_number, message, created_at) 
-         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
-        [leadId, user.id, 'outgoing', From, aiResponse]
-      );
-
-      console.log(`🤖 AI response sent to ${From}`);
+    if (agentEnabled) {
+      const aiResponse = await generateAIResponse(user.id, leadId, leadResult.rows[0], Body);
+      
+      if (aiResponse) {
+        await sendSMS(From, aiResponse, user.id);
+        
+        await pool.query(
+          `INSERT INTO sms_messages 
+           (lead_id, user_id, direction, to_number, message, created_at) 
+           VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
+          [leadId, user.id, 'outgoing', From, aiResponse]
+        );
+        
+        console.log(`🤖 AI replied to ${From}`);
+      }
     }
 
     res.status(200).send('<Response></Response>');
@@ -96,7 +89,6 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
   }
 });
 
-// Generate AI Response (same as before)
 async function generateAIResponse(userId, leadId, lead, userMessage) {
   try {
     const historyResult = await pool.query(
@@ -113,7 +105,7 @@ async function generateAIResponse(userId, leadId, lead, userMessage) {
 
     const services = servicesResult.rows.map(s => 
       `${s.name} - $${s.price} - ${s.duration_hours}hrs${s.description ? ': ' + s.description : ''}`
-    ).join('\n');
+    ).join('\n') || 'General services';
 
     const hoursResult = await pool.query(
       `SELECT day_of_week, is_open, open_time, close_time 
@@ -127,33 +119,27 @@ async function generateAIResponse(userId, leadId, lead, userMessage) {
         const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         return `${days[h.day_of_week]}: ${h.open_time}-${h.close_time}`;
       })
-      .join(', ');
+      .join(', ') || 'Contact us for hours';
 
     const conversationHistory = historyResult.rows.map(msg => ({
       role: msg.direction === 'incoming' ? 'user' : 'assistant',
       content: msg.message
     }));
 
-    const systemPrompt = `You are a friendly service business AI assistant responding to customer SMS messages.
+    const systemPrompt = `You are a friendly service business AI assistant responding to customer SMS.
 
-Your goal is to:
-1. Qualify the lead by understanding their needs
-2. Answer questions about services and pricing
-3. Schedule appointments when they're ready
-4. Keep responses SHORT (SMS-length, under 160 characters when possible)
-5. Sound natural and conversational
+Goal: Qualify leads, answer questions, schedule appointments.
+Style: Brief, conversational, SMS-friendly (under 160 chars when possible).
 
-Available services:
+Services:
 ${services}
 
-Business hours:
+Hours:
 ${businessHours}
 
-Lead info:
-Name: ${lead.name || 'Customer'}
-Email: ${lead.email || 'Not provided'}
+Lead: ${lead.name || 'Customer'} | ${lead.email || 'No email'}
 
-Keep it casual and brief. This is SMS, not email.`;
+Keep it casual and brief.`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -176,7 +162,7 @@ Keep it casual and brief. This is SMS, not email.`;
     const data = await response.json();
     return data.content[0].text;
   } catch (error) {
-    console.error('Error generating AI response:', error);
+    console.error('AI error:', error);
     return null;
   }
 }
