@@ -3,7 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { sendSMS } = require('../utils/twilio');
 
-// Single webhook handles ALL customers
+// Twilio webhook for incoming SMS
 router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
   try {
     const { From, To, Body, MessageSid } = req.body;
@@ -44,7 +44,7 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
       leadId = leadResult.rows[0].id;
     }
 
-    // Store message
+    // Store incoming message
     await pool.query(
       `INSERT INTO sms_messages 
        (lead_id, user_id, direction, from_number, message, twilio_message_sid, created_at) 
@@ -66,22 +66,42 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     const agentEnabled = configResult.rows[0]?.config?.enabled !== false;
 
     if (agentEnabled) {
+      // Generate AI response first to calculate typing delay
       const aiResponse = await generateAIResponse(user.id, leadId, leadResult.rows[0], Body);
       
       if (aiResponse) {
-        await sendSMS(From, aiResponse, user.id);
+        // Calculate human-like delay
+        // Base delay: 30-90 seconds (reading and thinking time)
+        const baseDelay = 30000 + Math.random() * 60000; // 30-90 seconds
         
-        await pool.query(
-          `INSERT INTO sms_messages 
-           (lead_id, user_id, direction, to_number, message, created_at) 
-           VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
-          [leadId, user.id, 'outgoing', From, aiResponse]
-        );
+        // Typing delay: 50-80ms per character (simulates 40-60 WPM typing)
+        const typingDelay = aiResponse.length * (50 + Math.random() * 30);
         
-        console.log(`🤖 AI replied to ${From}`);
+        const totalDelay = baseDelay + typingDelay;
+        
+        console.log(`⏰ AI will respond in ${Math.round(totalDelay / 1000)} seconds (reading: ${Math.round(baseDelay / 1000)}s + typing: ${Math.round(typingDelay / 1000)}s)`);
+        
+        // Schedule the response
+        setTimeout(async () => {
+          try {
+            await sendSMS(From, To, aiResponse);
+            
+            await pool.query(
+              `INSERT INTO sms_messages 
+               (lead_id, user_id, direction, to_number, message, created_at) 
+               VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
+              [leadId, user.id, 'outgoing', From, aiResponse]
+            );
+            
+            console.log(`🤖 AI replied to ${From} after ${Math.round(totalDelay / 1000)}s delay`);
+          } catch (error) {
+            console.error('Error sending delayed AI response:', error);
+          }
+        }, totalDelay);
       }
     }
 
+    // Always respond to Twilio immediately so it doesn't retry
     res.status(200).send('<Response></Response>');
   } catch (error) {
     console.error('SMS webhook error:', error);
@@ -89,6 +109,7 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
   }
 });
 
+// Generate AI Response
 async function generateAIResponse(userId, leadId, lead, userMessage) {
   try {
     const historyResult = await pool.query(
@@ -129,7 +150,7 @@ async function generateAIResponse(userId, leadId, lead, userMessage) {
     const systemPrompt = `You are a friendly service business AI assistant responding to customer SMS.
 
 Goal: Qualify leads, answer questions, schedule appointments.
-Style: Brief, conversational, SMS-friendly (under 160 chars when possible).
+Style: Brief, conversational, SMS-friendly (under 160 chars when possible). Sound human and casual.
 
 Services:
 ${services}
@@ -139,7 +160,7 @@ ${businessHours}
 
 Lead: ${lead.name || 'Customer'} | ${lead.email || 'No email'}
 
-Keep it casual and brief.`;
+Keep it casual and brief. Don't be overly formal.`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
