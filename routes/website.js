@@ -631,11 +631,6 @@ router.post('/publish', authenticateToken, async (req, res) => {
   }
 });
 
-// ============================================
-// GET - Check if contact form is properly configured IN DATABASE
-// ============================================
-// Around line 950 in website.js - Find check-contact-form endpoint
-
 router.get('/check-contact-form', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -659,8 +654,13 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
     const issues = [];
     let isValid = true;
 
-    // Check for contact form
-    const hasContactForm = /id=["']contact["']|id=["']leadForm["']/i.test(allHtml);
+    // Check for ANY contact form - much more flexible patterns
+    const hasContactForm = 
+      /id=["']contact/i.test(allHtml) ||
+      /id=["'].*form["']/i.test(allHtml) ||
+      /class=["'].*contact.*form["']/i.test(allHtml) ||
+      /<form[^>]*>/i.test(allHtml);  // ANY form element
+    
     if (!hasContactForm) {
       issues.push('No contact form found');
       isValid = false;
@@ -680,9 +680,9 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
 
     // Check for form submission handler
     const hasFormHandler = 
-      /leadForm.*submit/i.test(allHtml) ||
-      /contact.*submit/i.test(allHtml) ||
-      /addEventListener.*submit/i.test(allHtml);
+      /addEventListener.*submit/i.test(allHtml) ||
+      /\.submit/i.test(allHtml) ||
+      /onsubmit/i.test(allHtml);
     
     if (!hasFormHandler) {
       issues.push('No form submission handler found');
@@ -696,7 +696,14 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
       isValid = false;
     }
 
-    console.log('Contact form check:', { isValid, issues, hasSmsConsent, hasFormHandler, hasCorrectEndpoint });
+    console.log('Contact form check:', { 
+      isValid, 
+      issues, 
+      hasContactForm, 
+      hasSmsConsent, 
+      hasFormHandler, 
+      hasCorrectEndpoint 
+    });
 
     res.json({ isValid, issues });
 
@@ -799,41 +806,59 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     console.log('🔧 Using API URL:', apiUrl);
 
     // Helper function to check if page has a contact form
-    function hasContactForm(html) {
-      return html.includes('id="contact-form"') || 
-             html.includes('class="contact-form"') ||
-             /<form[^>]*>[\s\S]*?(contact|email|phone|message)[\s\S]*?<\/form>/i.test(html);
-    }
+function hasContactForm(html) {
+  // Look for ANY form element
+  return /<form[^>]*>/i.test(html);
+}
 
-    function fixContactFormHTML(html, pageName) {
-      if (!hasContactForm(html)) return html;
+function fixContactFormHTML(html, pageName) {
+  if (!hasContactForm(html)) return html;
 
-      console.log(`🔧 Fixing contact form in ${pageName}`);
+  console.log(`🔧 Fixing contact form in ${pageName}`);
 
-      // Ensure meta tag exists
-      if (!html.includes('meta name="user-id"')) {
-        html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
-      } else {
-        html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
-      }
+  // Ensure meta tag exists
+  if (!html.includes('meta name="user-id"')) {
+    html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
+  } else {
+    html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
+  }
 
-      // Find the contact form
-      const formMatch = html.match(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/i);
-      
-      if (!formMatch) {
-        console.log(`⚠️ Could not find contact form with id="contact-form" in ${pageName}`);
-        return html;
-      }
+  // Find ANY form - try multiple patterns
+  let formMatch = html.match(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/i);
+  
+  if (!formMatch) {
+    // Try to find any form with "contact" in the id
+    formMatch = html.match(/<form[^>]*id=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/i);
+  }
+  
+  if (!formMatch) {
+    // Try to find any form element at all
+    formMatch = html.match(/<form[^>]*>[\s\S]*?<\/form>/i);
+  }
+  
+  if (!formMatch) {
+    console.log(`⚠️ Could not find any form element in ${pageName}`);
+    return html;
+  }
 
-      let form = formMatch[0];
-      const originalForm = form;
+  let form = formMatch[0];
+  const originalForm = form;
 
-      // Check if SMS consent already exists
-      if (!form.includes('sms-consent') && !form.includes('sms_consent')) {
-        const buttonMatch = form.match(/<button[^>]*type=["']submit["'][^>]*>[\s\S]*?<\/button>/i);
-        
-        if (buttonMatch) {
-          const smsConsentHTML = `
+  // Add id="contact-form" if it doesn't have it
+  if (!form.includes('id="contact-form"') && !form.includes("id='contact-form'")) {
+    form = form.replace(/<form/, '<form id="contact-form"');
+    console.log(`✅ Added id="contact-form" to form in ${pageName}`);
+  }
+
+  // Check if SMS consent already exists
+  if (!form.includes('sms-consent') && !form.includes('sms_consent')) {
+    // Find the submit button
+    const buttonMatch = form.match(/<button[^>]*type=["']submit["'][^>]*>[\s\S]*?<\/button>/i) ||
+                       form.match(/<input[^>]*type=["']submit["'][^>]*>/i) ||
+                       form.match(/<button[^>]*>[\s\S]*?submit[\s\S]*?<\/button>/i);
+    
+    if (buttonMatch) {
+      const smsConsentHTML = `
   <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
     <input type="checkbox" id="sms-consent" name="sms_consent" required style="width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
     <label for="sms-consent" style="font-size: 14px; line-height: 1.5; color: ${textColor}; cursor: pointer;">
@@ -841,27 +866,37 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     </label>
   </div>
   `;
-          
-          form = form.replace(buttonMatch[0], smsConsentHTML + buttonMatch[0]);
-          console.log(`✅ Added SMS consent to ${pageName}`);
-        }
-      } else {
-        console.log(`✅ SMS consent already exists in ${pageName}`);
-      }
+      
+      form = form.replace(buttonMatch[0], smsConsentHTML + buttonMatch[0]);
+      console.log(`✅ Added SMS consent to ${pageName}`);
+    } else {
+      console.log(`⚠️ Could not find submit button in form in ${pageName}`);
+    }
+  } else {
+    console.log(`✅ SMS consent already exists in ${pageName}`);
+  }
 
-      if (!form.includes('form-status')) {
-        form = form.replace('</form>', '  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>\n</form>');
-      }
+  // Add form status div if missing
+  if (!form.includes('form-status')) {
+    form = form.replace('</form>', '  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>\n</form>');
+  }
 
-      html = html.replace(originalForm, form);
-      html = html.replace(/<script[^>]*>[\s\S]*?contact-form[\s\S]*?<\/script>/gi, '');
+  // Replace form in HTML
+  html = html.replace(originalForm, form);
+  
+  // Remove any existing contact form scripts
+  html = html.replace(/<script[^>]*>[\s\S]*?contact.*form[\s\S]*?<\/script>/gi, '');
 
-      const submissionScript = `
+  const submissionScript = `
 <script>
 (function() {
   const form = document.getElementById('contact-form');
-  if (!form) return;
+  if (!form) {
+    console.error('Contact form not found!');
+    return;
+  }
   
+  // Remove any existing event listeners
   const newForm = form.cloneNode(true);
   form.parentNode.replaceChild(newForm, form);
   
@@ -869,7 +904,7 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     e.preventDefault();
     
     const formData = new FormData(e.target);
-    const button = e.target.querySelector('button[type="submit"]') || e.target.querySelector('.submit-button');
+    const button = e.target.querySelector('button[type="submit"]') || e.target.querySelector('.submit-button') || e.target.querySelector('button');
     const statusEl = document.getElementById('form-status');
     
     const smsConsent = formData.get('sms_consent') === 'on';
@@ -954,11 +989,11 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 })();
 </script>`;
 
-      html = html.replace('</body>', submissionScript + '\n</body>');
-      console.log(`✅ Updated form submission script in ${pageName}`);
-      
-      return html;
-    }
+  html = html.replace('</body>', submissionScript + '\n</body>');
+  console.log(`✅ Updated form submission script in ${pageName}`);
+  
+  return html;
+}
 
     const pagesFixed = [];
     let updatedPages = { ...pages };
