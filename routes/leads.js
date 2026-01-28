@@ -282,6 +282,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 // ============================================
 // POST - Send manual SMS to lead (SendBlue)
 // ============================================
+// Around line 250 - Update send-sms endpoint
 router.post('/:leadId/send-sms', authenticateToken, async (req, res) => {
   try {
     const { leadId } = req.params;
@@ -292,7 +293,6 @@ router.post('/:leadId/send-sms', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Message required' });
     }
     
-    // Get lead
     const leadResult = await pool.query(
       'SELECT phone, name FROM leads WHERE id = $1 AND user_id = $2',
       [leadId, userId]
@@ -308,34 +308,42 @@ router.post('/:leadId/send-sms', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Lead has no phone number' });
     }
     
-    // Send via SendBlue
-    const smsResult = await sendSMS(lead.phone, message);
+    // Get user's Twilio phone number
+    const userResult = await pool.query(
+      'SELECT twilio_phone_number FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    if (!userResult.rows[0]?.twilio_phone_number) {
+      return res.status(400).json({ error: 'No phone number provisioned. Please set up Twilio first.' });
+    }
+    
+    const fromNumber = userResult.rows[0].twilio_phone_number;
+    
+    // Send via Twilio
+    const smsResult = await sendSMS(lead.phone, fromNumber, message);
     
     // Store outgoing message
     await pool.query(
       `INSERT INTO sms_messages 
-       (lead_id, user_id, direction, to_number, message, sendblue_message_id, created_at) 
+       (lead_id, user_id, direction, to_number, message, twilio_message_sid, created_at) 
        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
-      [leadId, userId, 'outgoing', lead.phone, message, smsResult.message_handle]
+      [leadId, userId, 'outgoing', lead.phone, message, smsResult.messageSid]
     );
     
-    // Update lead status
     await pool.query(
-      `UPDATE leads 
-       SET status = 'contacted_sms', last_contact_at = CURRENT_TIMESTAMP 
-       WHERE id = $1`,
+      `UPDATE leads SET status = 'contacted_sms', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
       [leadId]
     );
     
-    console.log(`✅ SMS sent via SendBlue to lead ${leadId}`);
-    res.json({ success: true, messageId: smsResult.message_handle });
+    console.log(`✅ SMS sent via Twilio to lead ${leadId}`);
+    res.json({ success: true, messageId: smsResult.messageSid });
     
   } catch (error) {
     console.error('Error sending SMS:', error);
     res.status(500).json({ error: 'Failed to send SMS', details: error.message });
   }
 });
-
 // ============================================
 // GET - Get SMS conversation for a lead
 // ============================================
