@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
-const { sendSMS } = require('../utils/sendblue');
+const { sendSMS } = require('../utils/twilio');
 const sgMail = require('@sendgrid/mail');
 
 if (process.env.SENDGRID_API_KEY) {
