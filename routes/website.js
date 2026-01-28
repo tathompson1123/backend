@@ -652,7 +652,7 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 
     // Get website with pages AND colors
     const websiteResult = await pool.query(
-      'SELECT html_content, pages, vercel_url, primary_color, accent_color, text_color FROM websites WHERE user_id = $1',
+      'SELECT html_content, pages, vercel_url, vercel_deployment_id, primary_color, accent_color, text_color FROM websites WHERE user_id = $1',
       [userId]
     );
 
@@ -667,7 +667,6 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     const accentColor = website.accent_color || '#764ba2';
     const textColor = website.text_color || '#1f2937';
     
-    // pages is already an object (PostgreSQL returns jsonb/json as objects)
     let pages = website.pages || {};
 
     // Get REAL API URL
@@ -709,11 +708,9 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 
       // Check if SMS consent already exists
       if (!form.includes('sms-consent') && !form.includes('sms_consent')) {
-        // Find the submit button
         const buttonMatch = form.match(/<button[^>]*type=["']submit["'][^>]*>[\s\S]*?<\/button>/i);
         
         if (buttonMatch) {
-          // Add SMS consent BEFORE the submit button
           const smsConsentHTML = `
   <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
     <input type="checkbox" id="sms-consent" name="sms_consent" required style="width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
@@ -730,18 +727,13 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
         console.log(`✅ SMS consent already exists in ${pageName}`);
       }
 
-      // Add/update form status div if it doesn't exist
       if (!form.includes('form-status')) {
         form = form.replace('</form>', '  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>\n</form>');
       }
 
-      // Replace the form in HTML
       html = html.replace(originalForm, form);
-
-      // Remove any existing contact-form scripts
       html = html.replace(/<script[^>]*>[\s\S]*?contact-form[\s\S]*?<\/script>/gi, '');
 
-      // Add the new submission script
       const submissionScript = `
 <script>
 (function() {
@@ -840,9 +832,7 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 })();
 </script>`;
 
-      // Add script before closing body tag
       html = html.replace('</body>', submissionScript + '\n</body>');
-
       console.log(`✅ Updated form submission script in ${pageName}`);
       
       return html;
@@ -863,29 +853,15 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
           pagesFixed.push(pageKey);
         }
       });
-
-      if (pagesFixed.length > 0) {
-        await pool.query(
-          'UPDATE websites SET pages = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
-          [updatedPages, userId]
-        );
-
-        console.log(`✅ Fixed contact forms on ${pagesFixed.length} page(s): ${pagesFixed.join(', ')}`);
-      }
     }
 
-    // Also check html_content (main page) if it exists
+    // Also check html_content (main page)
     if (website.html_content) {
       const fixedMainPage = fixContactFormHTML(website.html_content, 'index.html (main)');
       
       if (fixedMainPage !== website.html_content) {
-        await pool.query(
-          'UPDATE websites SET html_content = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
-          [fixedMainPage, userId]
-        );
         updatedHtmlContent = fixedMainPage;
         pagesFixed.push('index.html');
-        console.log(`✅ Fixed contact form in main html_content`);
       }
     }
 
@@ -896,13 +872,48 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
       });
     }
 
-    // Return success
+    // Update database with ALL changes at once
+    await pool.query(
+      'UPDATE websites SET html_content = $1, pages = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
+      [updatedHtmlContent, updatedPages, userId]
+    );
+
+    console.log(`✅ Fixed contact forms on ${pagesFixed.length} page(s): ${pagesFixed.join(', ')}`);
+
+    // AUTO-REDEPLOY - Trigger the publish endpoint
+    let redeployed = false;
+    let deployUrl = website.vercel_url;
+
+    try {
+      console.log('🚀 Auto-triggering publish...');
+      
+      // Import the publish function or call it directly
+      const { publishToVercel } = require('../utils/vercel');
+      
+      const deploymentResult = await publishToVercel(
+        userId,
+        updatedHtmlContent,
+        updatedPages
+      );
+
+      if (deploymentResult.success) {
+        redeployed = true;
+        deployUrl = deploymentResult.url;
+        console.log(`✅ Auto-deployed to ${deployUrl}`);
+      }
+    } catch (error) {
+      console.error('Auto-deploy failed:', error);
+      // Don't fail the whole request - just mark as not redeployed
+    }
+
     res.json({
       success: true,
       pagesFixed,
-      message: `Contact form(s) updated on ${pagesFixed.length} page(s)`,
-      redeployed: false, // Manual deploy required
-      deployUrl: website.vercel_url
+      message: redeployed 
+        ? `Contact form(s) updated and published! Live at ${deployUrl}` 
+        : `Contact form(s) updated. Click "Publish Changes" to go live.`,
+      redeployed,
+      deployUrl
     });
 
   } catch (error) {
