@@ -48,7 +48,7 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     services: {
       database: pool ? 'connected' : 'disconnected',
-      sendblue: process.env.SENDBLUE_API_KEY ? 'configured' : 'not configured',
+      twilio: process.env.TWILIO_ACCOUNT_SID ? 'configured' : 'not configured',
       sendgrid: process.env.SENDGRID_API_KEY ? 'configured' : 'not configured',
       stripe: process.env.STRIPE_SECRET_KEY ? 'configured' : 'not configured'
     }
@@ -65,7 +65,7 @@ const employeeRoutes = require('./routes/employees');
 const websiteRoutes = require('./routes/website');
 const aiAgentRoutes = require('./routes/ai-agents');
 const reviewRoutes = require('./routes/reviews');
-const sendblueWebhook = require('./routes/sendblue-webhook');
+const smsRoutes = require('./routes/sms');
 const marketResearchRoutes = require('./routes/market-research');
 const chatRoutes = require('./routes/chat');
 
@@ -79,8 +79,8 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/website', websiteRoutes);
 app.use('/api/agents', aiAgentRoutes);
 app.use('/api/google-business', reviewRoutes);
-app.use('/api/sendblue', sendblueWebhook);
-app.use('/api/billing', billingRoutes); //
+app.use('/api/sms', smsRoutes);
+app.use('/api/billing', billingRoutes);
 app.use('/api/market-research', marketResearchRoutes);
 app.use('/api/chat', chatRoutes);
 
@@ -111,14 +111,9 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected'}`);
-  console.log(`📱 SendBlue: ${process.env.SENDBLUE_API_KEY ? 'Ready' : 'Not configured'}`);
+  console.log(`📱 Twilio: ${process.env.TWILIO_ACCOUNT_SID ? 'Ready' : 'Not configured'}`);
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
   console.log(`💳 Stripe: ${process.env.STRIPE_SECRET_KEY ? 'Ready' : 'Not configured'}`);
 });
 
 module.exports = app;
-
-
-
-
-
