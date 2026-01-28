@@ -1002,94 +1002,99 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 
     console.log(`✅ Fixed contact forms on ${pagesFixed.length} page(s): ${pagesFixed.join(', ')}`);
 
-   // AUTO-REDEPLOY - Call the publish endpoint internally
-let redeployed = false;
-let deployUrl = website.vercel_url;
+    // AUTO-REDEPLOY - Call the publish endpoint internally
+    let redeployed = false;
+    let deployUrl = website.vercel_url;
 
-try {
-  console.log('🚀 Auto-triggering publish...');
-  
-  const vercelToken = process.env.VERCEL_TOKEN;
-  
-  if (!vercelToken) {
-    console.warn('⚠️ No Vercel token - skipping auto-deploy');
-  } else {
-    // Prepare files for deployment
-    const files = [];
-    const addedFiles = new Set();
-
-    // Add all pages
-    if (updatedPages && Object.keys(updatedPages).length > 0) {
-      Object.keys(updatedPages).forEach(pageKey => {
-        if (!addedFiles.has(pageKey)) {
-          files.push({
-            file: pageKey,
-            data: Buffer.from(updatedPages[pageKey]).toString('base64')
-          });
-          addedFiles.add(pageKey);
-        }
-      });
-    }
-
-    // Add index.html if not already added
-    if (updatedHtmlContent && !addedFiles.has('index.html')) {
-      files.push({
-        file: 'index.html',
-        data: Buffer.from(updatedHtmlContent).toString('base64')
-      });
-      addedFiles.add('index.html');
-    }
-
-    console.log(`📦 Auto-deploy: ${files.length} files`);
-
-    if (files.length > 0) {
-      const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${vercelToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: `website-${userId}`,
-          files: files,
-          projectSettings: {
-            framework: null
-          }
-        })
-      });
-
-      if (deployResponse.ok) {
-        const deployData = await deployResponse.json();
-        deployUrl = `https://${deployData.url}`;
-        
-        await pool.query(
-          'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
-          [deployUrl, deployData.id, userId]
-        );
-        
-        redeployed = true;
-        console.log(`✅ Auto-deployed to ${deployUrl}`);
+    try {
+      console.log('🚀 Auto-triggering publish...');
+      
+      const vercelToken = process.env.VERCEL_TOKEN;
+      
+      if (!vercelToken) {
+        console.warn('⚠️ No Vercel token - skipping auto-deploy');
       } else {
-        const errorText = await deployResponse.text();
-        console.error('❌ Auto-deploy failed:', errorText);
+        // Prepare files for deployment
+        const files = [];
+        const addedFiles = new Set();
+
+        // Add all pages
+        if (updatedPages && Object.keys(updatedPages).length > 0) {
+          Object.keys(updatedPages).forEach(pageKey => {
+            if (!addedFiles.has(pageKey)) {
+              files.push({
+                file: pageKey,
+                data: Buffer.from(updatedPages[pageKey]).toString('base64')
+              });
+              addedFiles.add(pageKey);
+            }
+          });
+        }
+
+        // Add index.html if not already added
+        if (updatedHtmlContent && !addedFiles.has('index.html')) {
+          files.push({
+            file: 'index.html',
+            data: Buffer.from(updatedHtmlContent).toString('base64')
+          });
+          addedFiles.add('index.html');
+        }
+
+        console.log(`📦 Auto-deploy: ${files.length} files`);
+
+        if (files.length > 0) {
+          const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${vercelToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: `website-${userId}`,
+              files: files,
+              projectSettings: {
+                framework: null
+              }
+            })
+          });
+
+          if (deployResponse.ok) {
+            const deployData = await deployResponse.json();
+            deployUrl = `https://${deployData.url}`;
+            
+            await pool.query(
+              'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
+              [deployUrl, deployData.id, userId]
+            );
+            
+            redeployed = true;
+            console.log(`✅ Auto-deployed to ${deployUrl}`);
+          } else {
+            const errorText = await deployResponse.text();
+            console.error('❌ Auto-deploy failed:', errorText);
+          }
+        }
       }
+    } catch (error) {
+      console.error('Auto-deploy error:', error);
+      // Don't fail the whole request - just mark as not redeployed
     }
+
+    res.json({
+      success: true,
+      pagesFixed,
+      message: redeployed 
+        ? `Contact form(s) updated and published! Live at ${deployUrl}` 
+        : `Contact form(s) updated. Click "Publish Changes" to go live.`,
+      redeployed,
+      deployUrl
+    });
+
+  } catch (error) {
+    console.error('Error fixing contact form:', error);
+    res.status(500).json({ error: 'Failed to fix contact form' });
   }
-} catch (error) {
-  console.error('Auto-deploy error:', error);
-  // Don't fail the whole request - just mark as not redeployed
-}
-
-res.json({
-  success: true,
-  pagesFixed,
-  message: redeployed 
-    ? `Contact form(s) updated and published! Live at ${deployUrl}` 
-    : `Contact form(s) updated. Click "Publish Changes" to go live.`,
-  redeployed,
-  deployUrl
 });
-
     // ============================================
     // INJECT CHAT WIDGET IF DEPLOYED
     // ============================================
