@@ -364,7 +364,40 @@ router.get('/lead-form/stats', authenticateToken, async (req, res) => {
 router.post('/lead-form/deploy', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
+    const { areaCode } = req.body; // Frontend passes user's area code
 
+    // Check if already has a number
+    const userCheck = await pool.query(
+      'SELECT twilio_phone_number FROM users WHERE id = $1',
+      [userId]
+    );
+
+    let phoneNumber = userCheck.rows[0]?.twilio_phone_number;
+
+    // Auto-provision phone number if they don't have one
+    if (!phoneNumber) {
+      try {
+        const { purchasePhoneNumber } = require('../utils/twilio');
+        const result = await purchasePhoneNumber(areaCode || '206', userId);
+        
+        // Update user record
+        await pool.query(
+          'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2 WHERE id = $3',
+          [result.phoneNumber, result.phoneSid, userId]
+        );
+
+        phoneNumber = result.phoneNumber;
+        console.log(`✅ Auto-provisioned ${phoneNumber} for user ${userId}`);
+      } catch (error) {
+        console.error('Error provisioning phone:', error);
+        return res.status(500).json({ 
+          error: 'Failed to provision phone number. Please contact support.',
+          details: error.message 
+        });
+      }
+    }
+
+    // Deploy agent config
     const defaultSmsTemplate = `Hi {{name}}! Thanks for reaching out. We received your inquiry about {{service}} and will get back to you within 24 hours. Reply STOP to opt out.`;
     const defaultEmailTemplate = `Hi {{name}},\n\nThank you for contacting us! We received your message about {{service}}.\n\nWe'll review your request and get back to you within 24 hours.\n\nBest regards`;
 
@@ -375,7 +408,6 @@ router.post('/lead-form/deploy', authenticateToken, async (req, res) => {
 
     if (existing.rows.length > 0) {
       const currentConfig = existing.rows[0].config || {};
-      
       await pool.query(
         `UPDATE agent_configs 
          SET config = $1, 
@@ -406,7 +438,11 @@ router.post('/lead-form/deploy', authenticateToken, async (req, res) => {
     }
 
     console.log(`✅ Lead form agent deployed for user ${userId}`);
-    res.json({ success: true, message: 'Lead form agent deployed successfully' });
+    res.json({ 
+      success: true, 
+      message: 'Lead form agent deployed successfully',
+      phoneNumber 
+    });
   } catch (error) {
     console.error('Error deploying lead form agent:', error);
     res.status(500).json({ error: 'Failed to deploy agent' });
