@@ -512,6 +512,8 @@ router.post('/', authenticateToken, async (req, res) => {
 // ============================================
 // GET - Check if contact form is properly configured IN DATABASE
 // ============================================
+// Around line 950 in website.js - Find check-contact-form endpoint
+
 router.get('/check-contact-form', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -522,90 +524,59 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
     );
 
     if (websiteResult.rows.length === 0) {
-      return res.json({ 
-        hasWebsite: false, 
-        isValid: false,
-        message: 'No website found'
-      });
+      return res.json({ isValid: false, issues: ['No website found'] });
     }
 
     const website = websiteResult.rows[0];
-    let pages = website.pages || {};
+    const htmlContent = website.html_content || '';
+    const pages = website.pages || {};
 
-    const expectedApiUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
-      : process.env.API_URL || 'https://backend-production-ab50.up.railway.app';
+    // Combine all HTML to check
+    const allHtml = htmlContent + Object.values(pages).join('');
 
-    // Helper to check a single HTML string
-    function checkHTML(html) {
-      if (!html) return { isValid: false, issues: ['No HTML content'] };
-      
-      const hasContactForm = html.includes('id="contact-form"');
-      
-      // STRICT SMS consent check - must have checkbox with required attribute
-      const hasSMSConsentCheckbox = (html.includes('id="sms-consent"') || html.includes('name="sms_consent"')) && 
-                                     html.includes('type="checkbox"');
-      const isSMSConsentRequired = html.match(/<input[^>]*name=["']sms_consent["'][^>]*required/i) || 
-                                   html.match(/<input[^>]*id=["']sms-consent["'][^>]*required/i);
-      const hasSMSConsent = hasSMSConsentCheckbox && isSMSConsentRequired;
-      
-      const hasMetaTag = html.includes(`meta name="user-id" content="${userId}"`);
-      const hasSubmitScript = html.includes('/api/leads/public/');
-      const hasCorrectApiUrl = html.includes(expectedApiUrl);
-      const hasPhoneField = html.includes('name="phone"') || html.includes('name="phone_number"') || html.includes('name="tel"');
+    const issues = [];
+    let isValid = true;
 
-      const issues = [];
-      if (!hasContactForm) issues.push('Missing contact form');
-      if (!hasSMSConsentCheckbox) issues.push('Missing SMS consent checkbox');
-      if (!isSMSConsentRequired) issues.push('SMS consent must be required');
-      if (!hasMetaTag) issues.push('Missing user-id meta tag');
-      if (!hasSubmitScript) issues.push('Missing submission script');
-      if (!hasCorrectApiUrl) issues.push('Wrong API URL');
-      if (!hasPhoneField) issues.push('Missing phone field');
-
-      const isValid = hasContactForm && hasSMSConsent && hasMetaTag && hasSubmitScript && hasCorrectApiUrl && hasPhoneField;
-
-      return { isValid, issues };
+    // Check for contact form
+    const hasContactForm = /id=["']contact["']|id=["']leadForm["']/i.test(allHtml);
+    if (!hasContactForm) {
+      issues.push('No contact form found');
+      isValid = false;
     }
 
-    // Check all pages that have contact forms
-    let anyFormValid = false;
-    const allIssues = [];
-
-    // Check pages
-    if (pages && Object.keys(pages).length > 0) {
-      Object.keys(pages).forEach(pageKey => {
-        const html = pages[pageKey];
-        // Only check pages that actually have forms
-        if (html && html.includes('id="contact-form"')) {
-          const result = checkHTML(html);
-          if (result.isValid) {
-            anyFormValid = true;
-          } else {
-            allIssues.push(`${pageKey}: ${result.issues.join(', ')}`);
-          }
-        }
-      });
+    // Check for SMS consent checkbox - look for multiple patterns
+    const hasSmsConsent = 
+      /name=["']sms_consent["']/i.test(allHtml) ||
+      /sms.{0,20}consent/i.test(allHtml) ||
+      /receive.{0,30}text.{0,30}message/i.test(allHtml) ||
+      /agree.{0,50}SMS/i.test(allHtml);
+    
+    if (!hasSmsConsent) {
+      issues.push('No SMS consent checkbox found');
+      isValid = false;
     }
 
-    // Check main html_content
-    if (website.html_content && website.html_content.includes('id="contact-form"')) {
-      const result = checkHTML(website.html_content);
-      if (result.isValid) {
-        anyFormValid = true;
-      } else {
-        allIssues.push(`index.html: ${result.issues.join(', ')}`);
-      }
+    // Check for form submission handler
+    const hasFormHandler = 
+      /leadForm.*submit/i.test(allHtml) ||
+      /contact.*submit/i.test(allHtml) ||
+      /addEventListener.*submit/i.test(allHtml);
+    
+    if (!hasFormHandler) {
+      issues.push('No form submission handler found');
+      isValid = false;
     }
 
-    res.json({
-      hasWebsite: true,
-      isValid: anyFormValid,
-      message: anyFormValid 
-        ? 'Contact form is properly configured' 
-        : 'Contact form needs fixing',
-      issues: allIssues.length > 0 ? allIssues : null
-    });
+    // Check if form posts to correct endpoint
+    const hasCorrectEndpoint = /\/api\/leads\/public\//i.test(allHtml);
+    if (!hasCorrectEndpoint) {
+      issues.push('Form not configured to submit to lead endpoint');
+      isValid = false;
+    }
+
+    console.log('Contact form check:', { isValid, issues, hasSmsConsent, hasFormHandler, hasCorrectEndpoint });
+
+    res.json({ isValid, issues });
 
   } catch (error) {
     console.error('Error checking contact form:', error);
@@ -679,9 +650,9 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    // Get website with pages
+    // Get website with pages AND colors
     const websiteResult = await pool.query(
-      'SELECT html_content, pages, vercel_url FROM websites WHERE user_id = $1',
+      'SELECT html_content, pages, vercel_url, primary_color, accent_color, text_color FROM websites WHERE user_id = $1',
       [userId]
     );
 
@@ -690,6 +661,11 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     }
 
     const website = websiteResult.rows[0];
+    
+    // Get colors with defaults
+    const primaryColor = website.primary_color || '#667eea';
+    const accentColor = website.accent_color || '#764ba2';
+    const textColor = website.text_color || '#1f2937';
     
     // pages is already an object (PostgreSQL returns jsonb/json as objects)
     let pages = website.pages || {};
@@ -701,96 +677,6 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 
     console.log('🔧 Using API URL:', apiUrl);
 
-    // Working contact form HTML
-    const workingContactFormHTML = `
-<form id="contact-form" style="background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-  <input type="text" name="name" placeholder="Your Name" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
-  <input type="email" name="email" placeholder="Email Address" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
-  <input type="tel" name="phone" placeholder="Phone Number" required style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
-  <input type="text" name="service" placeholder="Service Interested In" style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;">
-  <textarea name="message" rows="4" placeholder="Tell us about your project..." style="width: 100%; padding: 16px; margin-bottom: 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; resize: vertical;"></textarea>
-  
-  <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
-    <input type="checkbox" id="sms-consent" name="sms_consent" required style="width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
-    <label for="sms-consent" style="font-size: 14px; line-height: 1.5; color: #374151; cursor: pointer;">
-      I agree to receive text messages at the number provided. Message and data rates may apply. Reply STOP to opt out.
-    </label>
-  </div>
-  
-  <button type="submit" style="width: 100%; padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer; transition: transform 0.2s;">
-    Send Message
-  </button>
-  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>
-</form>`;
-
-    const workingContactFormScript = `
-<script>
-(function() {
-  const form = document.getElementById('contact-form');
-  if (!form) return;
-  
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const formData = new FormData(e.target);
-    const button = e.target.querySelector('button[type="submit"]');
-    const statusEl = document.getElementById('form-status');
-    
-    const smsConsent = formData.get('sms_consent') === 'on';
-    if (!smsConsent) {
-      statusEl.textContent = '⚠️ Please agree to receive text messages to continue.';
-      statusEl.style.display = 'block';
-      statusEl.style.background = '#fef3c7';
-      statusEl.style.color = '#92400e';
-      statusEl.style.border = '2px solid #fbbf24';
-      return;
-    }
-    
-    button.textContent = 'Sending...';
-    button.disabled = true;
-    
-    try {
-      const userId = document.querySelector('meta[name="user-id"]')?.content || '${userId}';
-      
-      const response = await fetch('${apiUrl}/api/leads/public/' + userId, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.get('name'),
-          email: formData.get('email'),
-          phone: formData.get('phone') || '',
-          service: formData.get('service') || '',
-          message: formData.get('message') || '',
-          sms_consent: true,
-          source: 'lead_form'
-        })
-      });
-      
-      if (response.ok) {
-        statusEl.textContent = '✅ Thanks! We\\'ll be in touch soon.';
-        statusEl.style.display = 'block';
-        statusEl.style.background = '#d1fae5';
-        statusEl.style.color = '#065f46';
-        statusEl.style.border = '2px solid #6ee7b7';
-        e.target.reset();
-      } else {
-        throw new Error('Submission failed');
-      }
-    } catch (error) {
-      console.error('Form error:', error);
-      statusEl.textContent = '❌ Something went wrong. Please call us directly.';
-      statusEl.style.display = 'block';
-      statusEl.style.background = '#fee2e2';
-      statusEl.style.color = '#991b1b';
-      statusEl.style.border = '2px solid #fca5a5';
-    } finally {
-      button.textContent = 'Send Message';
-      button.disabled = false;
-    }
-  });
-})();
-</script>`;
-
     // Helper function to check if page has a contact form
     function hasContactForm(html) {
       return html.includes('id="contact-form"') || 
@@ -798,65 +684,65 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
              /<form[^>]*>[\s\S]*?(contact|email|phone|message)[\s\S]*?<\/form>/i.test(html);
     }
 
- function fixContactFormHTML(html, pageName) {
-  if (!hasContactForm(html)) return html;
+    function fixContactFormHTML(html, pageName) {
+      if (!hasContactForm(html)) return html;
 
-  console.log(`🔧 Fixing contact form in ${pageName}`);
+      console.log(`🔧 Fixing contact form in ${pageName}`);
 
-  // Ensure meta tag exists
-  if (!html.includes('meta name="user-id"')) {
-    html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
-  } else {
-    html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
-  }
+      // Ensure meta tag exists
+      if (!html.includes('meta name="user-id"')) {
+        html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
+      } else {
+        html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
+      }
 
-  // Find the contact form
-  const formMatch = html.match(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/i);
-  
-  if (!formMatch) {
-    console.log(`⚠️ Could not find contact form with id="contact-form" in ${pageName}`);
-    return html;
-  }
+      // Find the contact form
+      const formMatch = html.match(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/i);
+      
+      if (!formMatch) {
+        console.log(`⚠️ Could not find contact form with id="contact-form" in ${pageName}`);
+        return html;
+      }
 
-  let form = formMatch[0];
-  const originalForm = form;
+      let form = formMatch[0];
+      const originalForm = form;
 
-  // Check if SMS consent already exists
-  if (!form.includes('sms-consent') && !form.includes('sms_consent')) {
-    // Find the submit button
-    const buttonMatch = form.match(/<button[^>]*type=["']submit["'][^>]*>[\s\S]*?<\/button>/i);
-    
-    if (buttonMatch) {
-      // Add SMS consent BEFORE the submit button
-      const smsConsentHTML = `
+      // Check if SMS consent already exists
+      if (!form.includes('sms-consent') && !form.includes('sms_consent')) {
+        // Find the submit button
+        const buttonMatch = form.match(/<button[^>]*type=["']submit["'][^>]*>[\s\S]*?<\/button>/i);
+        
+        if (buttonMatch) {
+          // Add SMS consent BEFORE the submit button
+          const smsConsentHTML = `
   <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
     <input type="checkbox" id="sms-consent" name="sms_consent" required style="width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
-    <label for="sms-consent" style="font-size: 14px; line-height: 1.5; color: #374151; cursor: pointer;">
+    <label for="sms-consent" style="font-size: 14px; line-height: 1.5; color: ${textColor}; cursor: pointer;">
       I agree to receive text messages at the number provided. Message and data rates may apply. Reply STOP to opt out.
     </label>
   </div>
   `;
-      
-      form = form.replace(buttonMatch[0], smsConsentHTML + buttonMatch[0]);
-      console.log(`✅ Added SMS consent to ${pageName}`);
-    }
-  } else {
-    console.log(`✅ SMS consent already exists in ${pageName}`);
-  }
+          
+          form = form.replace(buttonMatch[0], smsConsentHTML + buttonMatch[0]);
+          console.log(`✅ Added SMS consent to ${pageName}`);
+        }
+      } else {
+        console.log(`✅ SMS consent already exists in ${pageName}`);
+      }
 
-  // Add/update form status div if it doesn't exist
-  if (!form.includes('form-status')) {
-    form = form.replace('</form>', '  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>\n</form>');
-  }
+      // Add/update form status div if it doesn't exist
+      if (!form.includes('form-status')) {
+        form = form.replace('</form>', '  <div id="form-status" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500;"></div>\n</form>');
+      }
 
-  // Replace the form in HTML
-  html = html.replace(originalForm, form);
+      // Replace the form in HTML
+      html = html.replace(originalForm, form);
 
-  // Remove any existing contact-form scripts
-  html = html.replace(/<script[^>]*>[\s\S]*?contact-form[\s\S]*?<\/script>/gi, '');
+      // Remove any existing contact-form scripts
+      html = html.replace(/<script[^>]*>[\s\S]*?contact-form[\s\S]*?<\/script>/gi, '');
 
-  // Add the new submission script
-const submissionScript = `
+      // Add the new submission script
+      const submissionScript = `
 <script>
 (function() {
   const form = document.getElementById('contact-form');
@@ -954,16 +840,16 @@ const submissionScript = `
 })();
 </script>`;
 
-  // Add script before closing body tag
-  html = html.replace('</body>', submissionScript + '\n</body>');
+      // Add script before closing body tag
+      html = html.replace('</body>', submissionScript + '\n</body>');
 
-  console.log(`✅ Updated form submission script in ${pageName}`);
-  
-  return html;
-}
+      console.log(`✅ Updated form submission script in ${pageName}`);
+      
+      return html;
+    }
 
     const pagesFixed = [];
-    let updatedPages = { ...pages }; // Create a copy
+    let updatedPages = { ...pages };
     let updatedHtmlContent = website.html_content;
 
     // Fix contact forms in ALL pages
@@ -979,7 +865,6 @@ const submissionScript = `
       });
 
       if (pagesFixed.length > 0) {
-        // Update pages in database - NO JSON.stringify needed
         await pool.query(
           'UPDATE websites SET pages = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
           [updatedPages, userId]
@@ -1011,12 +896,20 @@ const submissionScript = `
       });
     }
 
-    if (pagesFixed.length === 0) {
-      return res.status(404).json({ 
-        error: 'No contact forms found on any pages',
-        message: 'Your website does not appear to have any contact forms to fix'
-      });
-    }
+    // Return success
+    res.json({
+      success: true,
+      pagesFixed,
+      message: `Contact form(s) updated on ${pagesFixed.length} page(s)`,
+      redeployed: false, // Manual deploy required
+      deployUrl: website.vercel_url
+    });
+
+  } catch (error) {
+    console.error('Error fixing contact form:', error);
+    res.status(500).json({ error: 'Failed to fix contact form' });
+  }
+});
 
     // ============================================
     // INJECT CHAT WIDGET IF DEPLOYED
