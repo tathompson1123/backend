@@ -38,82 +38,125 @@ function escapeHtml(str) {
 
 // Add this helper function at the top, after const router = express.Router();
 function makeMobileResponsive(html) {
-  console.log('========================================');
-  console.log('🔧 makeMobileResponsive() START');
-  console.log('📏 Input HTML length:', html.length);
-  console.log('========================================');
+  console.log('📱 Adding mobile overflow fixes with diagnostics...');
   
-  const originalLength = html.length;
-  
-  // SAFE CLEANUP - Only remove tags with our exact IDs
-  console.log('🧹 Safe cleanup - removing only sorce-mobile tags...');
-  
-  // Method 1: Remove by exact ID attribute (safest)
-  let beforeLength = html.length;
-  html = html.replace(/<style id="sorce-mobile-styles">[\s\S]*?<\/style>/g, '');
-  let afterStyleRemoval = html.length;
-  console.log('  - Removed style tag:', beforeLength - afterStyleRemoval, 'chars');
-  
-  beforeLength = html.length;
-  html = html.replace(/<script id="sorce-mobile-script">[\s\S]*?<\/script>/g, '');
-  let afterScriptRemoval = html.length;
-  console.log('  - Removed script tag:', beforeLength - afterScriptRemoval, 'chars');
-  
-  console.log('📏 After cleanup length:', html.length);
-  console.log('📉 Total removed:', (originalLength - html.length), 'characters');
-  
-  // Validate structure
-  if (!html.includes('</head>') || !html.includes('</body>')) {
-    console.error('❌ CRITICAL: HTML structure corrupted after cleanup!');
-    console.log('Missing </head>:', !html.includes('</head>'));
-    console.log('Missing </body>:', !html.includes('</body>'));
-    return html; // Return corrupted HTML as-is, don't add more
-  }
-  
-  console.log('✅ HTML structure intact after cleanup');
-  
-  // Check if mobile menu already exists (shouldn't after cleanup, but check anyway)
-  if (html.includes('id="sorce-mobile-styles"') || html.includes('id="sorce-mobile-script"')) {
-    console.log('⚠️ Mobile menu still present after cleanup, skipping add');
+  // Check if already has our overflow fix
+  if (html.includes('id="sorce-overflow-fix"')) {
+    console.log('⏭️ Overflow fix already present');
     return html;
   }
   
-  console.log('➕ Adding fresh mobile menu...');
-  
-  const mobileMenuStyles = `
-<style id="sorce-mobile-styles">
+  const overflowFix = `
+<style id="sorce-overflow-fix">
 @media (max-width: 768px) {
-  nav ul, nav > ul, nav > a:not(.logo), header nav ul { display: none !important; }
-  html, body { max-width: 100vw !important; overflow-x: hidden !important; }
-  * { max-width: 100vw !important; box-sizing: border-box !important; }
-  nav, header nav { display: flex !important; align-items: center !important; padding: 12px 20px !important; }
-  nav img, nav .logo { position: absolute !important; left: 50% !important; transform: translateX(-50%) !important; max-height: 40px !important; }
-  .mobile-menu-btn { display: flex !important; width: 44px; height: 44px; border: none; background: transparent; cursor: pointer; z-index: 1001; }
-  .mobile-menu-btn span { width: 24px; height: 3px; background: currentColor; position: relative; transition: 0.3s; }
-  .mobile-menu-btn span::before, .mobile-menu-btn span::after { content: ''; position: absolute; width: 24px; height: 3px; background: currentColor; transition: 0.3s; }
-  .mobile-menu-btn span::before { top: -8px; }
-  .mobile-menu-btn span::after { bottom: -8px; }
-  .mobile-menu-panel { display: none; position: fixed; top: 0; left: 0; width: 80%; max-width: 320px; height: 100vh; background: white; z-index: 9999; padding: 80px 0 20px; }
-  .mobile-menu-panel.active { display: block; }
-  .mobile-menu-panel a { display: block; padding: 16px 24px; color: #1f2937; text-decoration: none; border-bottom: 1px solid #e5e7eb; }
-  .mobile-menu-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9998; }
-  .mobile-menu-overlay.active { display: block; }
+  /* AGGRESSIVE overflow prevention */
+  html {
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    position: relative !important;
+  }
+  
+  body {
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: relative !important;
+  }
+  
+  /* Force EVERYTHING to fit */
+  * {
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Extra aggressive container fixes */
+  section, div, header, main, article, nav, footer, aside {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Responsive media */
+  img, video, iframe, svg, canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+  
+  /* Fix tables and code blocks */
+  table {
+    width: 100% !important;
+    display: block !important;
+    overflow-x: auto !important;
+  }
+  
+  pre, code {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    word-wrap: break-word !important;
+  }
+  
+  /* Fix specific width declarations */
+  [style*="width"] {
+    max-width: 100% !important;
+  }
+  
+  /* Hide horizontal scrollbar if it appears anyway */
+  ::-webkit-scrollbar-horizontal {
+    display: none !important;
+  }
+  
+  /* Debug: Add red border to overflowing elements */
+  /* Uncomment this to see what's overflowing: */
+  /*
+  * {
+    outline: 1px solid rgba(255, 0, 0, 0.2) !important;
+  }
+  */
 }
-@media (min-width: 769px) { .mobile-menu-btn, .mobile-menu-panel, .mobile-menu-overlay { display: none !important; } }
-</style>`;
+</style>
 
-  const mobileMenuScript = `
-<script id="sorce-mobile-script">
-(function(){if(window.sorceMobileInit)return;window.sorceMobileInit=1;function i(){const n=document.querySelector('nav')||document.querySelector('header nav');if(!n||n.querySelector('.mobile-menu-btn'))return;const l=Array.from(n.querySelectorAll('a')).filter(a=>!a.classList.contains('logo')&&!a.querySelector('img'));if(!l.length)return;const b=document.createElement('button');b.className='mobile-menu-btn';b.innerHTML='<span></span>';const p=document.createElement('div');p.className='mobile-menu-panel';l.forEach(a=>p.appendChild(a.cloneNode(true)));const o=document.createElement('div');o.className='mobile-menu-overlay';n.insertBefore(b,n.firstChild);document.body.appendChild(o);document.body.appendChild(p);function t(){b.classList.toggle('active');p.classList.toggle('active');o.classList.toggle('active');document.body.style.overflow=p.classList.contains('active')?'hidden':'';}b.onclick=t;o.onclick=t;p.querySelectorAll('a').forEach(a=>a.onclick=t);}document.readyState==='loading'?document.addEventListener('DOMContentLoaded',i):i();})();
+<script id="sorce-overflow-diagnostic">
+// Mobile overflow diagnostic
+if (window.innerWidth <= 768) {
+  window.addEventListener('load', function() {
+    console.log('📊 Mobile Overflow Diagnostic');
+    console.log('Viewport width:', window.innerWidth);
+    console.log('Body width:', document.body.scrollWidth);
+    console.log('HTML width:', document.documentElement.scrollWidth);
+    
+    // Find elements wider than viewport
+    const allElements = document.querySelectorAll('*');
+    const overflowing = [];
+    
+    allElements.forEach(el => {
+      if (el.scrollWidth > window.innerWidth) {
+        overflowing.push({
+          tag: el.tagName,
+          class: el.className,
+          id: el.id,
+          width: el.scrollWidth,
+          computedWidth: window.getComputedStyle(el).width
+        });
+      }
+    });
+    
+    if (overflowing.length > 0) {
+      console.log('⚠️ Found', overflowing.length, 'overflowing elements:');
+      overflowing.slice(0, 10).forEach(el => {
+        console.log('  -', el.tag, el.class || el.id || '', '→', el.width + 'px');
+      });
+    } else {
+      console.log('✅ No overflowing elements found');
+    }
+  });
+}
 </script>`;
   
-  // Add to HTML
-  html = html.replace('</head>', mobileMenuStyles + '\n</head>');
-  html = html.replace('</body>', mobileMenuScript + '\n</body>');
-  
-  console.log('✅ Mobile menu added');
-  console.log('📏 Final length:', html.length);
-  console.log('========================================');
+  // Add before </head>
+  if (html.includes('</head>')) {
+    html = html.replace('</head>', overflowFix + '\n</head>');
+    console.log('✅ Overflow fix + diagnostics added');
+  }
   
   return html;
 }
