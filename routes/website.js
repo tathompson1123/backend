@@ -43,11 +43,31 @@ function makeMobileResponsive(html) {
     <style>
       /* Mobile Menu Styles */
       @media (max-width: 768px) {
-        /* Hide desktop nav */
-        nav > ul, nav > div > ul, header > nav > ul, header nav ul {
-          display: none !important;
-        }
-        
+/* Hide desktop nav on mobile */
+nav ul,
+nav > ul,
+nav > div > ul,
+nav > div,
+header > nav > ul,
+header nav ul,
+header nav > div,
+nav a:not(.mobile-menu-panel a),
+header nav a:not(.mobile-menu-panel a) {
+  display: none !important;
+}
+
+/* Keep only the hamburger button visible */
+nav {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+}
+
+header nav {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+}
         /* Show mobile menu button */
         .mobile-menu-btn {
           display: flex !important;
@@ -1871,10 +1891,6 @@ router.post('/deploy', authenticateToken, async (req, res) => {
 router.post('/connect-existing', authenticateToken, async (req, res) => {
   try {
     const { url } = req.body;
-    
-    // Fetch the website
-    const response = await axios.get(url);
-    let html_content = response.data;
     
     // Make HTML mobile responsive
     html_content = makeMobileResponsive(html_content);
