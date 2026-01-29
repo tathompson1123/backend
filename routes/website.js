@@ -38,27 +38,103 @@ function escapeHtml(str) {
 
 // Add this helper function at the top, after const router = express.Router();
 function makeMobileResponsive(html) {
-  console.log('🧹 Removing ALL existing mobile menus...');
+  console.log('========================================');
+  console.log('🔧 makeMobileResponsive() START');
+  console.log('📏 Input HTML length:', html.length);
+  console.log('========================================');
   
-  // Remove ALL style tags that contain mobile menu code
+  // Log what we're looking for
+  const hasMobileMenuStyle = html.includes('mobile-menu');
+  const hasMobileMenuScript = html.includes('sorceMobileMenu');
+  const hasHead = html.includes('</head>');
+  const hasBody = html.includes('</body>');
+  
+  console.log('📊 Initial state:');
+  console.log('  - Has mobile-menu in HTML:', hasMobileMenuStyle);
+  console.log('  - Has sorceMobileMenu in HTML:', hasMobileMenuScript);
+  console.log('  - Has </head> tag:', hasHead);
+  console.log('  - Has </body> tag:', hasBody);
+  
+  const originalLength = html.length;
+  
+  console.log('🧹 Starting cleanup...');
+  
+  // Count matches before removing
+  const styleMatches = (html.match(/<style[^>]*>[\s\S]*?mobile-menu[\s\S]*?<\/style>/gi) || []).length;
+  const scriptMatches = (html.match(/<script[^>]*>[\s\S]*?mobile-menu[\s\S]*?<\/script>/gi) || []).length;
+  
+  console.log('  - Found', styleMatches, 'mobile menu style tags');
+  console.log('  - Found', scriptMatches, 'mobile menu script tags');
+  
+  // Remove mobile menu styles
   html = html.replace(/<style[^>]*>[\s\S]*?mobile-menu[\s\S]*?<\/style>/gi, '');
-  html = html.replace(/<style[^>]*>[\s\S]*?Mobile Menu[\s\S]*?<\/style>/gi, '');
+  console.log('  ✓ Removed mobile menu styles');
   
-  // Remove ALL script tags that contain mobile menu code
+  // Remove mobile menu scripts
   html = html.replace(/<script[^>]*>[\s\S]*?mobile-menu[\s\S]*?<\/script>/gi, '');
   html = html.replace(/<script[^>]*>[\s\S]*?sorceMobileMenu[\s\S]*?<\/script>/gi, '');
+  console.log('  ✓ Removed mobile menu scripts');
   
-  // Remove any leftover mobile menu elements from body
-  html = html.replace(/<div class="mobile-menu-panel"[\s\S]*?<\/div>/gi, '');
-  html = html.replace(/<div class="mobile-menu-overlay"[\s\S]*?<\/div>/gi, '');
-  html = html.replace(/<button class="mobile-menu-btn"[\s\S]*?<\/button>/gi, '');
+  const afterCleanupLength = html.length;
+  console.log('📏 After cleanup length:', afterCleanupLength);
+  console.log('📉 Removed', (originalLength - afterCleanupLength), 'characters');
   
-  console.log('✅ Cleanup complete');
-  
-  if (!html.includes('</head>') || !html.includes('</body>')) {
-    console.error('❌ Invalid HTML structure');
+  // Validate HTML structure
+  if (!html.includes('</head>')) {
+    console.error('❌ CRITICAL: </head> tag missing after cleanup!');
+    console.log('🔍 HTML preview (first 500 chars):', html.substring(0, 500));
     return html;
   }
+  
+  if (!html.includes('</body>')) {
+    console.error('❌ CRITICAL: </body> tag missing after cleanup!');
+    console.log('🔍 HTML preview (first 500 chars):', html.substring(0, 500));
+    return html;
+  }
+  
+  console.log('✅ HTML structure valid');
+  console.log('➕ Adding new mobile menu...');
+  
+  const mobileMenuStyles = `<style id="sorce-mobile-styles">/* Mobile styles */</style>`;
+  const mobileMenuScript = `<script id="sorce-mobile-script">console.log('Mobile menu loaded');</script>`;
+  
+  // Add styles
+  if (html.includes('</head>')) {
+    html = html.replace('</head>', mobileMenuStyles + '\n</head>');
+    console.log('  ✓ Added mobile menu styles before </head>');
+  }
+  
+  // Add script
+  if (html.includes('</body>')) {
+    html = html.replace('</body>', mobileMenuScript + '\n</body>');
+    console.log('  ✓ Added mobile menu script before </body>');
+  }
+  
+  const finalLength = html.length;
+  console.log('📏 Final HTML length:', finalLength);
+  console.log('📈 Added', (finalLength - afterCleanupLength), 'characters');
+  
+  // Verify final structure
+  const finalHasHead = html.includes('</head>');
+  const finalHasBody = html.includes('</body>');
+  
+  console.log('📊 Final validation:');
+  console.log('  - Has </head>:', finalHasHead);
+  console.log('  - Has </body>:', finalHasBody);
+  
+  if (!finalHasHead || !finalHasBody) {
+    console.error('❌ CRITICAL: HTML structure corrupted!');
+    console.log('🔍 Damaged HTML preview:', html.substring(0, 1000));
+  } else {
+    console.log('✅ HTML structure intact');
+  }
+  
+  console.log('========================================');
+  console.log('🔧 makeMobileResponsive() END');
+  console.log('========================================');
+  
+  return html;
+}
   
   const mobileMenuStyles = `
 <style id="sorce-mobile-styles">
