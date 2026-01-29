@@ -418,6 +418,65 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
 `;
 }
 
+// GET - Get website version history
+router.get('/versions', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      `SELECT id, html_content, pages, created_at, version_number, description
+       FROM website_versions 
+       WHERE user_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 50`,
+      [userId]
+    );
+    
+    res.json({ versions: result.rows });
+  } catch (error) {
+    console.error('Error fetching versions:', error);
+    res.status(500).json({ error: 'Failed to fetch versions' });
+  }
+});
+
+// POST - Restore a specific version
+router.post('/restore-version/:versionId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { versionId } = req.params;
+    
+    // Get the version
+    const versionResult = await pool.query(
+      'SELECT html_content, pages FROM website_versions WHERE id = $1 AND user_id = $2',
+      [versionId, userId]
+    );
+    
+    if (versionResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Version not found' });
+    }
+    
+    const version = versionResult.rows[0];
+    
+    // Update current website
+    await pool.query(
+      `UPDATE websites 
+       SET html_content = $1, pages = $2, updated_at = CURRENT_TIMESTAMP 
+       WHERE user_id = $3`,
+      [version.html_content, version.pages, userId]
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'Version restored successfully',
+      html_content: version.html_content,
+      pages: version.pages
+    });
+  } catch (error) {
+    console.error('Error restoring version:', error);
+    res.status(500).json({ error: 'Failed to restore version' });
+  }
+});
+
 router.get('/my-ip', async (req, res) => {
   try {
     const axios = require('axios');
@@ -514,20 +573,47 @@ router.post('/save', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { html_content, pages } = req.body;
-
-    console.log('💾 Saving changes for user:', userId);
-
+    
+    // Get current version number
+    const versionResult = await pool.query(
+      'SELECT COALESCE(MAX(version_number), 0) as max_version FROM website_versions WHERE user_id = $1',
+      [userId]
+    );
+    
+    const nextVersion = versionResult.rows[0].max_version + 1;
+    
+    // Save current state as a version BEFORE updating
+    const currentWebsite = await pool.query(
+      'SELECT html_content, pages FROM websites WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (currentWebsite.rows.length > 0) {
+      await pool.query(
+        `INSERT INTO website_versions (user_id, html_content, pages, version_number, description)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          userId, 
+          currentWebsite.rows[0].html_content, 
+          currentWebsite.rows[0].pages,
+          nextVersion,
+          `Saved ${new Date().toLocaleString()}`
+        ]
+      );
+    }
+    
+    // Update current website
     await pool.query(
-      'UPDATE websites SET html_content = $1, pages = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
+      `UPDATE websites 
+       SET html_content = $1, pages = $2, updated_at = CURRENT_TIMESTAMP 
+       WHERE user_id = $3`,
       [html_content, pages, userId]
     );
-
-    console.log(`✅ Changes saved for user ${userId}`);
-
-    res.json({ success: true, message: 'Changes saved' });
+    
+    res.json({ success: true, message: 'Changes saved', version: nextVersion });
   } catch (error) {
     console.error('Error saving website:', error);
-    res.status(500).json({ error: 'Failed to save changes' });
+    res.status(500).json({ error: 'Failed to save website' });
   }
 });
 
