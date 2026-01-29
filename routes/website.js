@@ -439,6 +439,23 @@ router.get('/versions', authenticateToken, async (req, res) => {
   }
 });
 
+// POST - Mark website as unpublished (has pending changes)
+router.post('/mark-unpublished', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    await pool.query(
+      'UPDATE websites SET is_published = false WHERE user_id = $1',
+      [userId]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking unpublished:', error);
+    res.status(500).json({ error: 'Failed to mark unpublished' });
+  }
+});
+
 // POST - Restore a specific version
 router.post('/restore-version/:versionId', authenticateToken, async (req, res) => {
   try {
