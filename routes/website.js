@@ -869,13 +869,10 @@ router.post('/save', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     let { html_content, pages } = req.body;
     
-    // Make HTML mobile responsive
-    html_content = makeMobileResponsive(html_content);
-    
-    if (pages) {
-      Object.keys(pages).forEach(pageName => {
-        pages[pageName] = makeMobileResponsive(pages[pageName]);
-      });
+    // ONLY make index.html mobile responsive
+    if (html_content) {
+      console.log('📱 Making index.html mobile responsive');
+      html_content = makeMobileResponsive(html_content);
     }
     
     // Get current version number
