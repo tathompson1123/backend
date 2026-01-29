@@ -1870,12 +1870,14 @@ router.post('/deploy', authenticateToken, async (req, res) => {
 // POST - Connect existing website
 router.post('/connect-existing', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
     const { url } = req.body;
-
-    if (!url) {
-      return res.status(400).json({ error: 'URL is required' });
-    }
+    
+    // Fetch the website
+    const response = await axios.get(url);
+    let html_content = response.data;
+    
+    // Make HTML mobile responsive
+    html_content = makeMobileResponsive(html_content);
 
     // Validate URL format
     let websiteUrl;
