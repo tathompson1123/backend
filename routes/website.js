@@ -36,7 +36,219 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-// Add this helper function to your website routes file (around line 50, after the other helper functions)
+// Add this helper function at the top, after const router = express.Router();
+function makeMobileResponsive(html) {
+  // Add mobile menu CSS and JS
+  const mobileMenuStyles = `
+    <style>
+      /* Mobile Menu Styles */
+      @media (max-width: 768px) {
+        /* Hide desktop nav */
+        nav > ul, nav > div > ul, header > nav > ul, header nav ul {
+          display: none !important;
+        }
+        
+        /* Show mobile menu button */
+        .mobile-menu-btn {
+          display: flex !important;
+          align-items: center;
+          justify-content: center;
+          width: 40px;
+          height: 40px;
+          background: transparent;
+          border: 2px solid currentColor;
+          border-radius: 6px;
+          cursor: pointer;
+          padding: 0;
+          position: relative;
+          z-index: 1001;
+        }
+        
+        .mobile-menu-btn span {
+          display: block;
+          width: 22px;
+          height: 2px;
+          background: currentColor;
+          position: relative;
+          transition: all 0.3s;
+        }
+        
+        .mobile-menu-btn span::before,
+        .mobile-menu-btn span::after {
+          content: '';
+          position: absolute;
+          width: 22px;
+          height: 2px;
+          background: currentColor;
+          transition: all 0.3s;
+        }
+        
+        .mobile-menu-btn span::before {
+          top: -7px;
+        }
+        
+        .mobile-menu-btn span::after {
+          bottom: -7px;
+        }
+        
+        .mobile-menu-btn.active span {
+          background: transparent;
+        }
+        
+        .mobile-menu-btn.active span::before {
+          top: 0;
+          transform: rotate(45deg);
+        }
+        
+        .mobile-menu-btn.active span::after {
+          bottom: 0;
+          transform: rotate(-45deg);
+        }
+        
+        /* Mobile menu panel */
+        .mobile-menu-panel {
+          display: none;
+          position: fixed;
+          top: 0;
+          right: 0;
+          width: 80%;
+          max-width: 300px;
+          height: 100vh;
+          background: white;
+          box-shadow: -4px 0 12px rgba(0,0,0,0.15);
+          z-index: 1000;
+          padding: 80px 20px 20px;
+          overflow-y: auto;
+        }
+        
+        .mobile-menu-panel.active {
+          display: block;
+          animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+          from {
+            transform: translateX(100%);
+          }
+          to {
+            transform: translateX(0);
+          }
+        }
+        
+        .mobile-menu-panel a {
+          display: block;
+          padding: 15px 10px;
+          color: inherit;
+          text-decoration: none;
+          border-bottom: 1px solid #e5e7eb;
+          font-size: 16px;
+          font-weight: 500;
+        }
+        
+        .mobile-menu-overlay {
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100vh;
+          background: rgba(0,0,0,0.5);
+          z-index: 999;
+        }
+        
+        .mobile-menu-overlay.active {
+          display: block;
+        }
+      }
+      
+      /* Desktop: hide mobile menu */
+      @media (min-width: 769px) {
+        .mobile-menu-btn,
+        .mobile-menu-panel,
+        .mobile-menu-overlay {
+          display: none !important;
+        }
+      }
+    </style>
+  `;
+
+  const mobileMenuScript = `
+    <script>
+      (function() {
+        // Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initMobileMenu);
+        } else {
+          initMobileMenu();
+        }
+        
+        function initMobileMenu() {
+          // Find navigation
+          const nav = document.querySelector('nav') || document.querySelector('header nav');
+          if (!nav) return;
+          
+          // Get all nav links
+          const navLinks = Array.from(nav.querySelectorAll('a'));
+          if (navLinks.length === 0) return;
+          
+          // Create mobile menu button
+          const menuBtn = document.createElement('button');
+          menuBtn.className = 'mobile-menu-btn';
+          menuBtn.innerHTML = '<span></span>';
+          menuBtn.setAttribute('aria-label', 'Toggle menu');
+          
+          // Create mobile menu panel
+          const menuPanel = document.createElement('div');
+          menuPanel.className = 'mobile-menu-panel';
+          
+          // Clone nav links into panel
+          navLinks.forEach(link => {
+            const clonedLink = link.cloneNode(true);
+            menuPanel.appendChild(clonedLink);
+          });
+          
+          // Create overlay
+          const overlay = document.createElement('div');
+          overlay.className = 'mobile-menu-overlay';
+          
+          // Insert elements
+          nav.appendChild(menuBtn);
+          document.body.appendChild(overlay);
+          document.body.appendChild(menuPanel);
+          
+          // Toggle function
+          function toggleMenu() {
+            menuBtn.classList.toggle('active');
+            menuPanel.classList.toggle('active');
+            overlay.classList.toggle('active');
+            document.body.style.overflow = menuPanel.classList.contains('active') ? 'hidden' : '';
+          }
+          
+          // Event listeners
+          menuBtn.addEventListener('click', toggleMenu);
+          overlay.addEventListener('click', toggleMenu);
+          
+          // Close on link click
+          menuPanel.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', toggleMenu);
+          });
+        }
+      })();
+    </script>
+  `;
+
+  // Insert before </head>
+  if (html.includes('</head>')) {
+    html = html.replace('</head>', mobileMenuStyles + '</head>');
+  }
+  
+  // Insert before </body>
+  if (html.includes('</body>')) {
+    html = html.replace('</body>', mobileMenuScript + '</body>');
+  }
+  
+  return html;
+}
 
 function generateChatWidgetCode(userId, agentConfig, websiteColors) {
   const agentName = agentConfig?.agentName || 'Kurt';
@@ -585,11 +797,19 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-// POST - Save changes without publishing
 router.post('/save', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { html_content, pages } = req.body;
+    let { html_content, pages } = req.body;
+    
+    // Make HTML mobile responsive
+    html_content = makeMobileResponsive(html_content);
+    
+    if (pages) {
+      Object.keys(pages).forEach(pageName => {
+        pages[pageName] = makeMobileResponsive(pages[pageName]);
+      });
+    }
     
     // Get current version number
     const versionResult = await pool.query(
@@ -634,14 +854,19 @@ router.post('/save', authenticateToken, async (req, res) => {
   }
 });
 
-// POST - Publish changes to Vercel
 router.post('/publish', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { html_content, pages } = req.body;
-
-    console.log('📤 Publishing website for user:', userId);
-
+    let { html_content, pages } = req.body;
+    
+    // Make HTML mobile responsive before publishing
+    html_content = makeMobileResponsive(html_content);
+    
+    if (pages) {
+      Object.keys(pages).forEach(pageName => {
+        pages[pageName] = makeMobileResponsive(pages[pageName]);
+      });
+    }
     // Save to database first
     await pool.query(
       'UPDATE websites SET html_content = $1, pages = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
