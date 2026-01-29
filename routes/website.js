@@ -95,47 +95,6 @@ function makeMobileResponsive(html) {
   console.log('✅ HTML structure valid');
   console.log('➕ Adding new mobile menu...');
   
-  const mobileMenuStyles = `<style id="sorce-mobile-styles">/* Mobile styles */</style>`;
-  const mobileMenuScript = `<script id="sorce-mobile-script">console.log('Mobile menu loaded');</script>`;
-  
-  // Add styles
-  if (html.includes('</head>')) {
-    html = html.replace('</head>', mobileMenuStyles + '\n</head>');
-    console.log('  ✓ Added mobile menu styles before </head>');
-  }
-  
-  // Add script
-  if (html.includes('</body>')) {
-    html = html.replace('</body>', mobileMenuScript + '\n</body>');
-    console.log('  ✓ Added mobile menu script before </body>');
-  }
-  
-  const finalLength = html.length;
-  console.log('📏 Final HTML length:', finalLength);
-  console.log('📈 Added', (finalLength - afterCleanupLength), 'characters');
-  
-  // Verify final structure
-  const finalHasHead = html.includes('</head>');
-  const finalHasBody = html.includes('</body>');
-  
-  console.log('📊 Final validation:');
-  console.log('  - Has </head>:', finalHasHead);
-  console.log('  - Has </body>:', finalHasBody);
-  
-  if (!finalHasHead || !finalHasBody) {
-    console.error('❌ CRITICAL: HTML structure corrupted!');
-    console.log('🔍 Damaged HTML preview:', html.substring(0, 1000));
-  } else {
-    console.log('✅ HTML structure intact');
-  }
-  
-  console.log('========================================');
-  console.log('🔧 makeMobileResponsive() END');
-  console.log('========================================');
-  
-  return html;
-}
-  
   const mobileMenuStyles = `
 <style id="sorce-mobile-styles">
 @media (max-width: 768px) {
