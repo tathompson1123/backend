@@ -38,77 +38,98 @@ function escapeHtml(str) {
 
 // Add this helper function at the top, after const router = express.Router();
 function makeMobileResponsive(html) {
-  // Add mobile menu CSS and JS
+  // Check if already has mobile menu to prevent duplicates
+  if (html.includes('mobile-menu-btn') || html.includes('sorce-mobile-menu')) {
+    console.log('⏭️ Mobile menu already exists, skipping...');
+    return html;
+  }
+  
   const mobileMenuStyles = `
-    <style>
+    <style id="sorce-mobile-styles">
       /* Mobile Menu Styles */
       @media (max-width: 768px) {
-/* Hide desktop nav on mobile */
-nav ul,
-nav > ul,
-nav > div > ul,
-nav > div,
-header > nav > ul,
-header nav ul,
-header nav > div,
-nav a:not(.mobile-menu-panel a),
-header nav a:not(.mobile-menu-panel a) {
-  display: none !important;
-}
-
-/* Keep only the hamburger button visible */
-nav {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-}
-
-header nav {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-}
-        /* Show mobile menu button */
+        /* Hide ALL desktop nav items */
+        nav ul,
+        nav > ul,
+        nav > div:not(.mobile-header-content),
+        nav > a,
+        header nav ul,
+        header nav > div:not(.mobile-header-content),
+        header nav > a,
+        nav .nav-links,
+        header .nav-links {
+          display: none !important;
+        }
+        
+        /* Mobile header layout: hamburger | logo | spacer */
+        nav,
+        header nav {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          padding: 12px 20px !important;
+          position: relative !important;
+        }
+        
+        /* Logo styling */
+        nav img,
+        header nav img,
+        nav .logo,
+        header nav .logo,
+        nav h1,
+        header nav h1 {
+          display: block !important;
+          max-height: 40px !important;
+          width: auto !important;
+          margin: 0 auto !important;
+          position: absolute !important;
+          left: 50% !important;
+          transform: translateX(-50%) !important;
+        }
+        
+        /* Hamburger button - left side */
         .mobile-menu-btn {
           display: flex !important;
           align-items: center;
           justify-content: center;
-          width: 40px;
-          height: 40px;
+          width: 44px;
+          height: 44px;
           background: transparent;
-          border: 2px solid currentColor;
-          border-radius: 6px;
+          border: none;
           cursor: pointer;
           padding: 0;
           position: relative;
           z-index: 1001;
+          order: -1;
         }
         
         .mobile-menu-btn span {
           display: block;
-          width: 22px;
-          height: 2px;
+          width: 24px;
+          height: 3px;
           background: currentColor;
           position: relative;
-          transition: all 0.3s;
+          transition: all 0.3s ease;
+          border-radius: 2px;
         }
         
         .mobile-menu-btn span::before,
         .mobile-menu-btn span::after {
           content: '';
           position: absolute;
-          width: 22px;
-          height: 2px;
+          width: 24px;
+          height: 3px;
           background: currentColor;
-          transition: all 0.3s;
+          transition: all 0.3s ease;
+          border-radius: 2px;
         }
         
         .mobile-menu-btn span::before {
-          top: -7px;
+          top: -8px;
         }
         
         .mobile-menu-btn span::after {
-          bottom: -7px;
+          bottom: -8px;
         }
         
         .mobile-menu-btn.active span {
@@ -130,25 +151,25 @@ header nav {
           display: none;
           position: fixed;
           top: 0;
-          right: 0;
+          left: 0;
           width: 80%;
-          max-width: 300px;
+          max-width: 320px;
           height: 100vh;
           background: white;
-          box-shadow: -4px 0 12px rgba(0,0,0,0.15);
-          z-index: 1000;
-          padding: 80px 20px 20px;
+          box-shadow: 4px 0 12px rgba(0,0,0,0.15);
+          z-index: 9999;
+          padding: 80px 0 20px;
           overflow-y: auto;
         }
         
         .mobile-menu-panel.active {
           display: block;
-          animation: slideIn 0.3s ease-out;
+          animation: slideInLeft 0.3s ease-out;
         }
         
-        @keyframes slideIn {
+        @keyframes slideInLeft {
           from {
-            transform: translateX(100%);
+            transform: translateX(-100%);
           }
           to {
             transform: translateX(0);
@@ -157,12 +178,17 @@ header nav {
         
         .mobile-menu-panel a {
           display: block;
-          padding: 15px 10px;
-          color: inherit;
+          padding: 16px 24px;
+          color: #1f2937;
           text-decoration: none;
           border-bottom: 1px solid #e5e7eb;
           font-size: 16px;
           font-weight: 500;
+          transition: background 0.2s;
+        }
+        
+        .mobile-menu-panel a:hover {
+          background: #f3f4f6;
         }
         
         .mobile-menu-overlay {
@@ -173,11 +199,25 @@ header nav {
           width: 100%;
           height: 100vh;
           background: rgba(0,0,0,0.5);
-          z-index: 999;
+          z-index: 9998;
         }
         
         .mobile-menu-overlay.active {
           display: block;
+        }
+        
+        /* Prevent content overflow */
+        body {
+          overflow-x: hidden !important;
+        }
+        
+        * {
+          max-width: 100vw !important;
+        }
+        
+        img {
+          max-width: 100% !important;
+          height: auto !important;
         }
       }
       
@@ -193,35 +233,53 @@ header nav {
   `;
 
   const mobileMenuScript = `
-    <script>
+    <script id="sorce-mobile-script">
       (function() {
-        // Wait for DOM to be ready
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', initMobileMenu);
-        } else {
-          initMobileMenu();
+        // Prevent duplicate initialization
+        if (window.sorceMobileMenuInitialized) {
+          console.log('Mobile menu already initialized');
+          return;
         }
+        window.sorceMobileMenuInitialized = true;
         
         function initMobileMenu() {
           // Find navigation
           const nav = document.querySelector('nav') || document.querySelector('header nav');
-          if (!nav) return;
+          if (!nav) {
+            console.log('No nav found');
+            return;
+          }
           
-          // Get all nav links
-          const navLinks = Array.from(nav.querySelectorAll('a'));
-          if (navLinks.length === 0) return;
+          // Check if already initialized
+          if (nav.querySelector('.mobile-menu-btn')) {
+            console.log('Menu button already exists');
+            return;
+          }
           
-          // Create mobile menu button
+          // Get all nav links before hiding them
+          const navLinks = Array.from(nav.querySelectorAll('a')).filter(link => {
+            const parent = link.parentElement;
+            return !link.classList.contains('logo') && 
+                   parent.tagName !== 'H1' &&
+                   !link.querySelector('img');
+          });
+          
+          if (navLinks.length === 0) {
+            console.log('No nav links found');
+            return;
+          }
+          
+          // Create hamburger button
           const menuBtn = document.createElement('button');
           menuBtn.className = 'mobile-menu-btn';
           menuBtn.innerHTML = '<span></span>';
           menuBtn.setAttribute('aria-label', 'Toggle menu');
           
-          // Create mobile menu panel
+          // Create menu panel
           const menuPanel = document.createElement('div');
           menuPanel.className = 'mobile-menu-panel';
           
-          // Clone nav links into panel
+          // Clone links into panel
           navLinks.forEach(link => {
             const clonedLink = link.cloneNode(true);
             menuPanel.appendChild(clonedLink);
@@ -232,7 +290,7 @@ header nav {
           overlay.className = 'mobile-menu-overlay';
           
           // Insert elements
-          nav.appendChild(menuBtn);
+          nav.insertBefore(menuBtn, nav.firstChild);
           document.body.appendChild(overlay);
           document.body.appendChild(menuPanel);
           
@@ -245,24 +303,37 @@ header nav {
           }
           
           // Event listeners
-          menuBtn.addEventListener('click', toggleMenu);
+          menuBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleMenu();
+          });
+          
           overlay.addEventListener('click', toggleMenu);
           
           // Close on link click
           menuPanel.querySelectorAll('a').forEach(link => {
             link.addEventListener('click', toggleMenu);
           });
+          
+          console.log('✅ Mobile menu initialized');
+        }
+        
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initMobileMenu);
+        } else {
+          initMobileMenu();
         }
       })();
     </script>
   `;
-
-  // Insert before </head>
+  
+  // Insert styles before </head>
   if (html.includes('</head>')) {
     html = html.replace('</head>', mobileMenuStyles + '</head>');
   }
   
-  // Insert before </body>
+  // Insert script before </body>
   if (html.includes('</body>')) {
     html = html.replace('</body>', mobileMenuScript + '</body>');
   }
