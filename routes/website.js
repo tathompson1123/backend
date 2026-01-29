@@ -49,9 +49,12 @@ function makeMobileResponsive(html) {
   html = html.replace(/<script[^>]*id=["']sorce-mobile-script["'][^>]*>[\s\S]*?<\/script>/gi, '');
   html = html.replace(/<script[^>]*>[\s\S]*?sorceMobileMenuInitialized[\s\S]*?<\/script>/gi, '');
   html = html.replace(/<script[^>]*>[\s\S]*?mobile-menu-btn[\s\S]*?<\/script>/gi, '');
-  // Check if already has mobile menu to prevent duplicates
-  if (html.includes('mobile-menu-btn') || html.includes('sorce-mobile-menu')) {
-    console.log('⏭️ Mobile menu already exists, skipping...');
+  
+  console.log('✅ Cleanup complete');
+  
+  // Check if HTML has proper structure
+  if (!html.includes('</head>') || !html.includes('</body>')) {
+    console.error('❌ Invalid HTML structure, skipping mobile menu');
     return html;
   }
   
@@ -59,37 +62,28 @@ function makeMobileResponsive(html) {
     <style id="sorce-mobile-styles">
       /* Mobile Menu Styles */
       @media (max-width: 768px) {
-        /* Hide ALL desktop nav items */
         nav ul,
         nav > ul,
         nav > div:not(.mobile-header-content),
         nav > a,
         header nav ul,
         header nav > div:not(.mobile-header-content),
-        header nav > a,
-        nav .nav-links,
-        header .nav-links {
+        header nav > a {
           display: none !important;
         }
         
-        /* Mobile header layout: hamburger | logo | spacer */
         nav,
         header nav {
           display: flex !important;
           align-items: center !important;
           justify-content: space-between !important;
           padding: 12px 20px !important;
-          position: relative !important;
         }
         
-        /* Logo styling */
         nav img,
         header nav img,
         nav .logo,
-        header nav .logo,
-        nav h1,
-        header nav h1 {
-          display: block !important;
+        header nav .logo {
           max-height: 40px !important;
           width: auto !important;
           margin: 0 auto !important;
@@ -98,29 +92,23 @@ function makeMobileResponsive(html) {
           transform: translateX(-50%) !important;
         }
         
-        /* Hamburger button - left side */
         .mobile-menu-btn {
           display: flex !important;
-          align-items: center;
-          justify-content: center;
           width: 44px;
           height: 44px;
           background: transparent;
           border: none;
           cursor: pointer;
-          padding: 0;
-          position: relative;
           z-index: 1001;
           order: -1;
         }
         
         .mobile-menu-btn span {
-          display: block;
           width: 24px;
           height: 3px;
           background: currentColor;
           position: relative;
-          transition: all 0.3s ease;
+          transition: all 0.3s;
           border-radius: 2px;
         }
         
@@ -131,33 +119,17 @@ function makeMobileResponsive(html) {
           width: 24px;
           height: 3px;
           background: currentColor;
-          transition: all 0.3s ease;
+          transition: all 0.3s;
           border-radius: 2px;
         }
         
-        .mobile-menu-btn span::before {
-          top: -8px;
-        }
+        .mobile-menu-btn span::before { top: -8px; }
+        .mobile-menu-btn span::after { bottom: -8px; }
         
-        .mobile-menu-btn span::after {
-          bottom: -8px;
-        }
+        .mobile-menu-btn.active span { background: transparent; }
+        .mobile-menu-btn.active span::before { top: 0; transform: rotate(45deg); }
+        .mobile-menu-btn.active span::after { bottom: 0; transform: rotate(-45deg); }
         
-        .mobile-menu-btn.active span {
-          background: transparent;
-        }
-        
-        .mobile-menu-btn.active span::before {
-          top: 0;
-          transform: rotate(45deg);
-        }
-        
-        .mobile-menu-btn.active span::after {
-          bottom: 0;
-          transform: rotate(-45deg);
-        }
-        
-        /* Mobile menu panel */
         .mobile-menu-panel {
           display: none;
           position: fixed;
@@ -179,12 +151,8 @@ function makeMobileResponsive(html) {
         }
         
         @keyframes slideInLeft {
-          from {
-            transform: translateX(-100%);
-          }
-          to {
-            transform: translateX(0);
-          }
+          from { transform: translateX(-100%); }
+          to { transform: translateX(0); }
         }
         
         .mobile-menu-panel a {
@@ -194,12 +162,6 @@ function makeMobileResponsive(html) {
           text-decoration: none;
           border-bottom: 1px solid #e5e7eb;
           font-size: 16px;
-          font-weight: 500;
-          transition: background 0.2s;
-        }
-        
-        .mobile-menu-panel a:hover {
-          background: #f3f4f6;
         }
         
         .mobile-menu-overlay {
@@ -213,26 +175,13 @@ function makeMobileResponsive(html) {
           z-index: 9998;
         }
         
-        .mobile-menu-overlay.active {
-          display: block;
-        }
+        .mobile-menu-overlay.active { display: block; }
         
-        /* Prevent content overflow */
-        body {
-          overflow-x: hidden !important;
-        }
-        
-        * {
-          max-width: 100vw !important;
-        }
-        
-        img {
-          max-width: 100% !important;
-          height: auto !important;
-        }
+        body { overflow-x: hidden !important; }
+        * { max-width: 100vw !important; box-sizing: border-box !important; }
+        img { max-width: 100% !important; height: auto !important; }
       }
       
-      /* Desktop: hide mobile menu */
       @media (min-width: 769px) {
         .mobile-menu-btn,
         .mobile-menu-panel,
@@ -241,112 +190,66 @@ function makeMobileResponsive(html) {
         }
       }
     </style>
-  `;
+`;
 
   const mobileMenuScript = `
-    <script id="sorce-mobile-script">
-      (function() {
-        // Prevent duplicate initialization
-        if (window.sorceMobileMenuInitialized) {
-          console.log('Mobile menu already initialized');
-          return;
-        }
-        window.sorceMobileMenuInitialized = true;
-        
-        function initMobileMenu() {
-          // Find navigation
-          const nav = document.querySelector('nav') || document.querySelector('header nav');
-          if (!nav) {
-            console.log('No nav found');
-            return;
-          }
-          
-          // Check if already initialized
-          if (nav.querySelector('.mobile-menu-btn')) {
-            console.log('Menu button already exists');
-            return;
-          }
-          
-          // Get all nav links before hiding them
-          const navLinks = Array.from(nav.querySelectorAll('a')).filter(link => {
-            const parent = link.parentElement;
-            return !link.classList.contains('logo') && 
-                   parent.tagName !== 'H1' &&
-                   !link.querySelector('img');
-          });
-          
-          if (navLinks.length === 0) {
-            console.log('No nav links found');
-            return;
-          }
-          
-          // Create hamburger button
-          const menuBtn = document.createElement('button');
-          menuBtn.className = 'mobile-menu-btn';
-          menuBtn.innerHTML = '<span></span>';
-          menuBtn.setAttribute('aria-label', 'Toggle menu');
-          
-          // Create menu panel
-          const menuPanel = document.createElement('div');
-          menuPanel.className = 'mobile-menu-panel';
-          
-          // Clone links into panel
-          navLinks.forEach(link => {
-            const clonedLink = link.cloneNode(true);
-            menuPanel.appendChild(clonedLink);
-          });
-          
-          // Create overlay
-          const overlay = document.createElement('div');
-          overlay.className = 'mobile-menu-overlay';
-          
-          // Insert elements
-          nav.insertBefore(menuBtn, nav.firstChild);
-          document.body.appendChild(overlay);
-          document.body.appendChild(menuPanel);
-          
-          // Toggle function
-          function toggleMenu() {
-            menuBtn.classList.toggle('active');
-            menuPanel.classList.toggle('active');
-            overlay.classList.toggle('active');
-            document.body.style.overflow = menuPanel.classList.contains('active') ? 'hidden' : '';
-          }
-          
-          // Event listeners
-          menuBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleMenu();
-          });
-          
-          overlay.addEventListener('click', toggleMenu);
-          
-          // Close on link click
-          menuPanel.querySelectorAll('a').forEach(link => {
-            link.addEventListener('click', toggleMenu);
-          });
-          
-          console.log('✅ Mobile menu initialized');
-        }
-        
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', initMobileMenu);
-        } else {
-          initMobileMenu();
-        }
-      })();
-    </script>
-  `;
+<script id="sorce-mobile-script">
+(function() {
+  if (window.sorceMobileMenuInitialized) return;
+  window.sorceMobileMenuInitialized = true;
   
-  // Insert styles before </head>
-  if (html.includes('</head>')) {
-    html = html.replace('</head>', mobileMenuStyles + '</head>');
+  function init() {
+    const nav = document.querySelector('nav') || document.querySelector('header nav');
+    if (!nav || nav.querySelector('.mobile-menu-btn')) return;
+    
+    const links = Array.from(nav.querySelectorAll('a')).filter(l => 
+      !l.classList.contains('logo') && !l.querySelector('img')
+    );
+    if (!links.length) return;
+    
+    const btn = document.createElement('button');
+    btn.className = 'mobile-menu-btn';
+    btn.innerHTML = '<span></span>';
+    
+    const panel = document.createElement('div');
+    panel.className = 'mobile-menu-panel';
+    links.forEach(l => panel.appendChild(l.cloneNode(true)));
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'mobile-menu-overlay';
+    
+    nav.insertBefore(btn, nav.firstChild);
+    document.body.appendChild(overlay);
+    document.body.appendChild(panel);
+    
+    function toggle() {
+      btn.classList.toggle('active');
+      panel.classList.toggle('active');
+      overlay.classList.toggle('active');
+      document.body.style.overflow = panel.classList.contains('active') ? 'hidden' : '';
+    }
+    
+    btn.onclick = toggle;
+    overlay.onclick = toggle;
+    panel.querySelectorAll('a').forEach(a => a.onclick = toggle);
   }
   
-  // Insert script before </body>
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+`;
+  
+  // Safer injection - only if tags exist
+  if (html.includes('</head>')) {
+    html = html.replace('</head>', `${mobileMenuStyles}\n</head>`);
+  }
+  
   if (html.includes('</body>')) {
-    html = html.replace('</body>', mobileMenuScript + '</body>');
+    html = html.replace('</body>', `${mobileMenuScript}\n</body>`);
   }
   
   return html;
