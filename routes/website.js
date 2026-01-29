@@ -536,6 +536,59 @@ router.post('/mark-unpublished', authenticateToken, async (req, res) => {
   }
 });
 
+// POST - Remove mobile menu (cleanup)
+router.post('/remove-mobile-menu', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Get current website
+    const result = await pool.query(
+      'SELECT html_content, pages FROM websites WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+    
+    let html_content = result.rows[0].html_content;
+    let pages = result.rows[0].pages;
+    
+    console.log('🧹 Removing mobile menus...');
+    
+    // Clean index.html
+    if (html_content) {
+      html_content = html_content.replace(/<style id="sorce-mobile-styles">[\s\S]*?<\/style>/g, '');
+      html_content = html_content.replace(/<script id="sorce-mobile-script">[\s\S]*?<\/script>/g, '');
+    }
+    
+    // Clean all pages
+    if (pages) {
+      Object.keys(pages).forEach(pageName => {
+        pages[pageName] = pages[pageName].replace(/<style id="sorce-mobile-styles">[\s\S]*?<\/style>/g, '');
+        pages[pageName] = pages[pageName].replace(/<script id="sorce-mobile-script">[\s\S]*?<\/script>/g, '');
+      });
+    }
+    
+    // Update database
+    await pool.query(
+      'UPDATE websites SET html_content = $1, pages = $2 WHERE user_id = $3',
+      [html_content, pages, userId]
+    );
+    
+    console.log('✅ Mobile menus removed');
+    
+    res.json({ 
+      success: true, 
+      message: 'Mobile menus removed successfully' 
+    });
+    
+  } catch (error) {
+    console.error('Error removing mobile menu:', error);
+    res.status(500).json({ error: 'Failed to remove mobile menu' });
+  }
+});
+
 // POST - Restore a specific version
 router.post('/restore-version/:versionId', authenticateToken, async (req, res) => {
   try {
