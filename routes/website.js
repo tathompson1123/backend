@@ -38,6 +38,17 @@ function escapeHtml(str) {
 
 // Add this helper function at the top, after const router = express.Router();
 function makeMobileResponsive(html) {
+  // CLEAN UP ANY EXISTING MOBILE MENU CODE FIRST
+  console.log('🧹 Cleaning up existing mobile menus...');
+  
+  // Remove old mobile menu styles
+  html = html.replace(/<style[^>]*id=["']sorce-mobile-styles["'][^>]*>[\s\S]*?<\/style>/gi, '');
+  html = html.replace(/<style[^>]*>[\s\S]*?Mobile Menu Styles[\s\S]*?<\/style>/gi, '');
+  
+  // Remove old mobile menu scripts
+  html = html.replace(/<script[^>]*id=["']sorce-mobile-script["'][^>]*>[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<script[^>]*>[\s\S]*?sorceMobileMenuInitialized[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<script[^>]*>[\s\S]*?mobile-menu-btn[\s\S]*?<\/script>/gi, '');
   // Check if already has mobile menu to prevent duplicates
   if (html.includes('mobile-menu-btn') || html.includes('sorce-mobile-menu')) {
     console.log('⏭️ Mobile menu already exists, skipping...');
