@@ -43,276 +43,77 @@ function makeMobileResponsive(html) {
   console.log('📏 Input HTML length:', html.length);
   console.log('========================================');
   
-  // Log what we're looking for
-  const hasMobileMenuStyle = html.includes('mobile-menu');
-  const hasMobileMenuScript = html.includes('sorceMobileMenu');
-  const hasHead = html.includes('</head>');
-  const hasBody = html.includes('</body>');
-  
-  console.log('📊 Initial state:');
-  console.log('  - Has mobile-menu in HTML:', hasMobileMenuStyle);
-  console.log('  - Has sorceMobileMenu in HTML:', hasMobileMenuScript);
-  console.log('  - Has </head> tag:', hasHead);
-  console.log('  - Has </body> tag:', hasBody);
-  
   const originalLength = html.length;
   
-  console.log('🧹 Starting cleanup...');
+  // SAFE CLEANUP - Only remove tags with our exact IDs
+  console.log('🧹 Safe cleanup - removing only sorce-mobile tags...');
   
-  // Count matches before removing
-  const styleMatches = (html.match(/<style[^>]*>[\s\S]*?mobile-menu[\s\S]*?<\/style>/gi) || []).length;
-  const scriptMatches = (html.match(/<script[^>]*>[\s\S]*?mobile-menu[\s\S]*?<\/script>/gi) || []).length;
+  // Method 1: Remove by exact ID attribute (safest)
+  let beforeLength = html.length;
+  html = html.replace(/<style id="sorce-mobile-styles">[\s\S]*?<\/style>/g, '');
+  let afterStyleRemoval = html.length;
+  console.log('  - Removed style tag:', beforeLength - afterStyleRemoval, 'chars');
   
-  console.log('  - Found', styleMatches, 'mobile menu style tags');
-  console.log('  - Found', scriptMatches, 'mobile menu script tags');
+  beforeLength = html.length;
+  html = html.replace(/<script id="sorce-mobile-script">[\s\S]*?<\/script>/g, '');
+  let afterScriptRemoval = html.length;
+  console.log('  - Removed script tag:', beforeLength - afterScriptRemoval, 'chars');
   
-  // Remove mobile menu styles
-  html = html.replace(/<style[^>]*>[\s\S]*?mobile-menu[\s\S]*?<\/style>/gi, '');
-  console.log('  ✓ Removed mobile menu styles');
+  console.log('📏 After cleanup length:', html.length);
+  console.log('📉 Total removed:', (originalLength - html.length), 'characters');
   
-  // Remove mobile menu scripts
-  html = html.replace(/<script[^>]*>[\s\S]*?mobile-menu[\s\S]*?<\/script>/gi, '');
-  html = html.replace(/<script[^>]*>[\s\S]*?sorceMobileMenu[\s\S]*?<\/script>/gi, '');
-  console.log('  ✓ Removed mobile menu scripts');
+  // Validate structure
+  if (!html.includes('</head>') || !html.includes('</body>')) {
+    console.error('❌ CRITICAL: HTML structure corrupted after cleanup!');
+    console.log('Missing </head>:', !html.includes('</head>'));
+    console.log('Missing </body>:', !html.includes('</body>'));
+    return html; // Return corrupted HTML as-is, don't add more
+  }
   
-  const afterCleanupLength = html.length;
-  console.log('📏 After cleanup length:', afterCleanupLength);
-  console.log('📉 Removed', (originalLength - afterCleanupLength), 'characters');
+  console.log('✅ HTML structure intact after cleanup');
   
-  // Validate HTML structure
-  if (!html.includes('</head>')) {
-    console.error('❌ CRITICAL: </head> tag missing after cleanup!');
-    console.log('🔍 HTML preview (first 500 chars):', html.substring(0, 500));
+  // Check if mobile menu already exists (shouldn't after cleanup, but check anyway)
+  if (html.includes('id="sorce-mobile-styles"') || html.includes('id="sorce-mobile-script"')) {
+    console.log('⚠️ Mobile menu still present after cleanup, skipping add');
     return html;
   }
   
-  if (!html.includes('</body>')) {
-    console.error('❌ CRITICAL: </body> tag missing after cleanup!');
-    console.log('🔍 HTML preview (first 500 chars):', html.substring(0, 500));
-    return html;
-  }
-  
-  console.log('✅ HTML structure valid');
-  console.log('➕ Adding new mobile menu...');
+  console.log('➕ Adding fresh mobile menu...');
   
   const mobileMenuStyles = `
 <style id="sorce-mobile-styles">
 @media (max-width: 768px) {
-  /* Hide ALL nav content except logo and menu button */
-  nav ul, nav > ul, nav > div > ul, nav > div > a, nav > a:not(.logo), 
-  header nav ul, header nav > div > a, header nav > a:not(.logo) {
-    display: none !important;
-  }
-  
-  /* Prevent ALL horizontal overflow */
-  html, body {
-    max-width: 100vw !important;
-    overflow-x: hidden !important;
-  }
-  
-  * {
-    max-width: 100vw !important;
-    box-sizing: border-box !important;
-  }
-  
-  /* Specific overflow fixes */
-  section, div, header, main, article {
-    max-width: 100% !important;
-    overflow-x: hidden !important;
-  }
-  
-  img, video, iframe {
-    max-width: 100% !important;
-    height: auto !important;
-  }
-  
-  /* Mobile header: hamburger left, logo center */
-  nav, header nav {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    padding: 12px 20px !important;
-    position: relative !important;
-    max-width: 100vw !important;
-  }
-  
-  /* Logo centered */
-  nav img:not(.mobile-menu-btn *), 
-  nav .logo,
-  header nav img:not(.mobile-menu-btn *),
-  header nav .logo {
-    position: absolute !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    max-height: 40px !important;
-    width: auto !important;
-    max-width: 150px !important;
-  }
-  
-  /* Hamburger button - left side */
-  .mobile-menu-btn {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 44px !important;
-    height: 44px !important;
-    background: transparent !important;
-    border: none !important;
-    cursor: pointer !important;
-    padding: 0 !important;
-    z-index: 1001 !important;
-    flex-shrink: 0 !important;
-  }
-  
-  .mobile-menu-btn span {
-    display: block !important;
-    width: 24px !important;
-    height: 3px !important;
-    background: currentColor !important;
-    position: relative !important;
-    transition: all 0.3s !important;
-  }
-  
-  .mobile-menu-btn span::before,
-  .mobile-menu-btn span::after {
-    content: '' !important;
-    position: absolute !important;
-    width: 24px !important;
-    height: 3px !important;
-    background: currentColor !important;
-    transition: all 0.3s !important;
-  }
-  
-  .mobile-menu-btn span::before { top: -8px !important; }
-  .mobile-menu-btn span::after { bottom: -8px !important; }
-  
-  .mobile-menu-btn.active span { background: transparent !important; }
-  .mobile-menu-btn.active span::before { top: 0 !important; transform: rotate(45deg) !important; }
-  .mobile-menu-btn.active span::after { bottom: 0 !important; transform: rotate(-45deg) !important; }
-  
-  /* Slide-out menu panel */
-  .mobile-menu-panel {
-    display: none !important;
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 80% !important;
-    max-width: 320px !important;
-    height: 100vh !important;
-    background: white !important;
-    box-shadow: 4px 0 12px rgba(0,0,0,0.15) !important;
-    z-index: 10000 !important;
-    padding: 80px 0 20px !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-  }
-  
-  .mobile-menu-panel.active {
-    display: block !important;
-    animation: slideIn 0.3s ease-out !important;
-  }
-  
-  @keyframes slideIn {
-    from { transform: translateX(-100%); }
-    to { transform: translateX(0); }
-  }
-  
-  .mobile-menu-panel a {
-    display: block !important;
-    padding: 16px 24px !important;
-    color: #1f2937 !important;
-    text-decoration: none !important;
-    border-bottom: 1px solid #e5e7eb !important;
-    font-size: 16px !important;
-  }
-  
-  /* Overlay */
-  .mobile-menu-overlay {
-    display: none !important;
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100vh !important;
-    background: rgba(0,0,0,0.5) !important;
-    z-index: 9999 !important;
-  }
-  
-  .mobile-menu-overlay.active {
-    display: block !important;
-  }
+  nav ul, nav > ul, nav > a:not(.logo), header nav ul { display: none !important; }
+  html, body { max-width: 100vw !important; overflow-x: hidden !important; }
+  * { max-width: 100vw !important; box-sizing: border-box !important; }
+  nav, header nav { display: flex !important; align-items: center !important; padding: 12px 20px !important; }
+  nav img, nav .logo { position: absolute !important; left: 50% !important; transform: translateX(-50%) !important; max-height: 40px !important; }
+  .mobile-menu-btn { display: flex !important; width: 44px; height: 44px; border: none; background: transparent; cursor: pointer; z-index: 1001; }
+  .mobile-menu-btn span { width: 24px; height: 3px; background: currentColor; position: relative; transition: 0.3s; }
+  .mobile-menu-btn span::before, .mobile-menu-btn span::after { content: ''; position: absolute; width: 24px; height: 3px; background: currentColor; transition: 0.3s; }
+  .mobile-menu-btn span::before { top: -8px; }
+  .mobile-menu-btn span::after { bottom: -8px; }
+  .mobile-menu-panel { display: none; position: fixed; top: 0; left: 0; width: 80%; max-width: 320px; height: 100vh; background: white; z-index: 9999; padding: 80px 0 20px; }
+  .mobile-menu-panel.active { display: block; }
+  .mobile-menu-panel a { display: block; padding: 16px 24px; color: #1f2937; text-decoration: none; border-bottom: 1px solid #e5e7eb; }
+  .mobile-menu-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9998; }
+  .mobile-menu-overlay.active { display: block; }
 }
-
-@media (min-width: 769px) {
-  .mobile-menu-btn,
-  .mobile-menu-panel,
-  .mobile-menu-overlay {
-    display: none !important;
-  }
-}
+@media (min-width: 769px) { .mobile-menu-btn, .mobile-menu-panel, .mobile-menu-overlay { display: none !important; } }
 </style>`;
 
   const mobileMenuScript = `
 <script id="sorce-mobile-script">
-(function() {
-  if (window.sorceMobileMenuInitialized) return;
-  window.sorceMobileMenuInitialized = true;
-  
-  function init() {
-    const nav = document.querySelector('nav') || document.querySelector('header nav');
-    if (!nav || nav.querySelector('.mobile-menu-btn')) return;
-    
-    const links = Array.from(nav.querySelectorAll('a')).filter(link => {
-      return !link.classList.contains('logo') && 
-             !link.querySelector('img') &&
-             link.parentElement.tagName !== 'BUTTON';
-    });
-    
-    if (links.length === 0) return;
-    
-    const btn = document.createElement('button');
-    btn.className = 'mobile-menu-btn';
-    btn.innerHTML = '<span></span>';
-    btn.setAttribute('aria-label', 'Menu');
-    
-    const panel = document.createElement('div');
-    panel.className = 'mobile-menu-panel';
-    links.forEach(link => panel.appendChild(link.cloneNode(true)));
-    
-    const overlay = document.createElement('div');
-    overlay.className = 'mobile-menu-overlay';
-    
-    nav.insertBefore(btn, nav.firstChild);
-    document.body.appendChild(overlay);
-    document.body.appendChild(panel);
-    
-    function toggle() {
-      btn.classList.toggle('active');
-      panel.classList.toggle('active');
-      overlay.classList.toggle('active');
-      document.body.style.overflow = panel.classList.contains('active') ? 'hidden' : '';
-    }
-    
-    btn.addEventListener('click', toggle);
-    overlay.addEventListener('click', toggle);
-    panel.querySelectorAll('a').forEach(a => a.addEventListener('click', toggle));
-  }
-  
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
+(function(){if(window.sorceMobileInit)return;window.sorceMobileInit=1;function i(){const n=document.querySelector('nav')||document.querySelector('header nav');if(!n||n.querySelector('.mobile-menu-btn'))return;const l=Array.from(n.querySelectorAll('a')).filter(a=>!a.classList.contains('logo')&&!a.querySelector('img'));if(!l.length)return;const b=document.createElement('button');b.className='mobile-menu-btn';b.innerHTML='<span></span>';const p=document.createElement('div');p.className='mobile-menu-panel';l.forEach(a=>p.appendChild(a.cloneNode(true)));const o=document.createElement('div');o.className='mobile-menu-overlay';n.insertBefore(b,n.firstChild);document.body.appendChild(o);document.body.appendChild(p);function t(){b.classList.toggle('active');p.classList.toggle('active');o.classList.toggle('active');document.body.style.overflow=p.classList.contains('active')?'hidden':'';}b.onclick=t;o.onclick=t;p.querySelectorAll('a').forEach(a=>a.onclick=t);}document.readyState==='loading'?document.addEventListener('DOMContentLoaded',i):i();})();
 </script>`;
   
-  if (html.includes('</head>')) {
-    html = html.replace('</head>', mobileMenuStyles + '\n</head>');
-  }
+  // Add to HTML
+  html = html.replace('</head>', mobileMenuStyles + '\n</head>');
+  html = html.replace('</body>', mobileMenuScript + '\n</body>');
   
-  if (html.includes('</body>')) {
-    html = html.replace('</body>', mobileMenuScript + '\n</body>');
-  }
+  console.log('✅ Mobile menu added');
+  console.log('📏 Final length:', html.length);
+  console.log('========================================');
   
   return html;
 }
