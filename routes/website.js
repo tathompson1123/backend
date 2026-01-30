@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
-const { buildVisualSupremacyPrompt } = require('../utils/visual-supremacy-prompt');
 const { deployToVercel, addDomainToVercel, checkDomainVerification, removeDomainFromVercel } = require('../services/vercel');
 const { searchDomains, purchaseDomain } = require('../services/domain');
 const axios = require('axios');
