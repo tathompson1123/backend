@@ -762,6 +762,131 @@ router.post('/save', authenticateToken, async (req, res) => {
   }
 });
 
+// ============================================
+// POST - Save website V2 (JSON schema + HTML)
+// ============================================
+router.post('/save-v2', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { page_data, html_content } = req.body;
+
+    if (!page_data) {
+      return res.status(400).json({ error: 'page_data required' });
+    }
+
+    // Make HTML mobile responsive
+    let responsiveHtml = html_content;
+    if (html_content) {
+      responsiveHtml = makeMobileResponsive(html_content);
+    }
+
+    // Get current version number
+    const versionResult = await pool.query(
+      'SELECT COALESCE(MAX(version_number), 0) as max_version FROM website_versions WHERE user_id = $1',
+      [userId]
+    );
+    const nextVersion = versionResult.rows[0].max_version + 1;
+
+    // Save current state as a version BEFORE updating
+    const currentWebsite = await pool.query(
+      'SELECT html_content, pages, page_data FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (currentWebsite.rows.length > 0 && currentWebsite.rows[0].html_content) {
+      await pool.query(
+        `INSERT INTO website_versions (user_id, html_content, pages, version_number, description)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          userId,
+          currentWebsite.rows[0].html_content,
+          currentWebsite.rows[0].pages,
+          nextVersion,
+          `Auto-save ${new Date().toLocaleString()}`
+        ]
+      );
+    }
+
+    // Check if website exists
+    const existing = await pool.query(
+      'SELECT id FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (existing.rows.length > 0) {
+      // Update existing
+      await pool.query(
+        `UPDATE websites 
+         SET page_data = $1, 
+             html_content = $2, 
+             is_published = false,
+             updated_at = CURRENT_TIMESTAMP 
+         WHERE user_id = $3`,
+        [JSON.stringify(page_data), responsiveHtml, userId]
+      );
+    } else {
+      // Insert new
+      await pool.query(
+        `INSERT INTO websites (user_id, page_data, html_content, is_published, created_at, updated_at)
+         VALUES ($1, $2, $3, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [userId, JSON.stringify(page_data), responsiveHtml]
+      );
+    }
+
+    console.log(`✅ Saved V2 website for user ${userId}`);
+
+    res.json({ 
+      success: true, 
+      message: 'Website saved',
+      version: nextVersion
+    });
+
+  } catch (error) {
+    console.error('Error saving V2 website:', error);
+    res.status(500).json({ error: 'Failed to save website' });
+  }
+});
+
+// ============================================
+// GET - Get website with V2 page_data
+// ============================================
+router.get('/v2', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      'SELECT id, page_data, html_content, vercel_url, is_published, custom_domain FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ 
+        success: true,
+        website: null,
+        page_data: null
+      });
+    }
+
+    const website = result.rows[0];
+    
+    // Parse page_data if it's a string
+    let pageData = website.page_data;
+    if (pageData && typeof pageData === 'string') {
+      pageData = JSON.parse(pageData);
+    }
+
+    res.json({ 
+      success: true,
+      website: website,
+      page_data: pageData
+    });
+
+  } catch (error) {
+    console.error('Error fetching V2 website:', error);
+    res.status(500).json({ error: 'Failed to fetch website' });
+  }
+});
+
 router.post('/publish', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
