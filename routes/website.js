@@ -1520,7 +1520,7 @@ router.post('/publish', authenticateToken, async (req, res) => {
   }
 });
 
-// POST - AI Website Generation
+// POST - AI Website Generation (Schema-based)
 router.post('/generate', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -1536,6 +1536,10 @@ router.post('/generate', authenticateToken, async (req, res) => {
       targetCustomer
     } = req.body;
 
+    // Import the new prompt builder and HTML renderer
+    const { buildSchemaGenerationPrompt } = require('../utils/schema-generation-prompt');
+    const { renderPageToHtml } = require('../utils/htmlRenderer');
+
     const safeBusinessName = sanitizeForPrompt(businessName);
     const safeBusinessType = sanitizeForPrompt(businessType);
     const safeTagline = sanitizeForPrompt(tagline);
@@ -1545,7 +1549,7 @@ router.post('/generate', authenticateToken, async (req, res) => {
     const safeUSPs = sanitizeForPrompt(uniqueSellingPoints);
     const safeTargetCustomer = sanitizeForPrompt(targetCustomer);
 
-    console.log('🎨 Generating website for:', safeBusinessName);
+    console.log('🎨 Generating website schema for:', safeBusinessName);
 
     if (!safeBusinessName || !safeBusinessType) {
       return res.status(400).json({ error: 'Business name and type are required' });
@@ -1613,12 +1617,12 @@ router.post('/generate', authenticateToken, async (req, res) => {
 Description: ${sanitizeForPrompt(s.description) || 'Professional service'}
 Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_hours} hour${s.duration_hours > 1 ? 's' : ''})` : ''}
 `).join('\n'),
-          instruction: `IMPORTANT: Use these EXACT ${userServices.length} services with their real names, descriptions, and prices.`
+          instruction: `Use these EXACT ${userServices.length} services with their real names, descriptions, and prices.`
         }
       : {
           hasData: false,
           services: safeServices || `General ${safeBusinessType} services`,
-          instruction: `CRITICAL: Create 4-6 SPECIFIC ${safeBusinessType} services with realistic names, prices ($50-$5000), and durations (1-8 hours).`
+          instruction: `Create 4-6 SPECIFIC ${safeBusinessType} services with realistic names and prices.`
         };
 
     // Format business hours
@@ -1642,7 +1646,7 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
           return {
             hasData: true,
             hours: hoursText,
-            instruction: 'IMPORTANT: Use these EXACT business hours.'
+            instruction: 'Use these EXACT business hours.'
           };
         })()
       : {
@@ -1685,16 +1689,16 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
         : null;
 
     const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
-const bookingUrl = `${frontendUrl}/book/${userId}`;
+    const bookingUrl = `${frontendUrl}/book/${userId}`;
 
-    // Colors
+    // Colors based on business type
     const businessTypeLower = safeBusinessType.toLowerCase();
     let primaryColor = '#2563eb';
     let accentColor = '#10b981';
     
     if (businessTypeLower.includes('auto') || businessTypeLower.includes('detail')) {
-      primaryColor = '#000000';
-      accentColor = '#D4AF37';
+      primaryColor = '#1f2937';
+      accentColor = '#f59e0b';
     } else if (businessTypeLower.includes('land')) {
       primaryColor = '#047857';
       accentColor = '#16a34a';
@@ -1703,8 +1707,8 @@ const bookingUrl = `${frontendUrl}/book/${userId}`;
       accentColor = '#f97316';
     }
 
-    // Build prompt
-    const prompt = buildVisualSupremacyPrompt({
+    // Build the schema generation prompt
+    const prompt = buildSchemaGenerationPrompt({
       safeBusinessName,
       safeBusinessType,
       safeTagline,
@@ -1727,16 +1731,15 @@ const bookingUrl = `${frontendUrl}/book/${userId}`;
       accentColor
     });
 
-    console.log('📏 Prompt size:', prompt.length, 'characters');
-console.log('📏 Prompt size:', (prompt.length / 1024).toFixed(2), 'KB');
+    console.log('📏 Prompt size:', (prompt.length / 1024).toFixed(2), 'KB');
 
- // Call Claude API using axios (no timeout limits)
+    // Call Claude API
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
       {
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 40000,
-        temperature: 0.5,
+        max_tokens: 16000,
+        temperature: 0.7,
         messages: [{
           role: 'user',
           content: prompt
@@ -1748,55 +1751,47 @@ console.log('📏 Prompt size:', (prompt.length / 1024).toFixed(2), 'KB');
           'x-api-key': process.env.ANTHROPIC_API_KEY,
           'anthropic-version': '2023-06-01'
         },
-        timeout: 0
+        timeout: 120000
       }
     );
 
     const data = response.data;
-    const fullResponse = data.content?.[0]?.text;
+    let fullResponse = data.content?.[0]?.text;
 
     if (!fullResponse) {
-      console.error('❌ No HTML content in response');
+      console.error('❌ No content in response');
       return res.status(500).json({ error: 'No content generated' });
     }
 
-    // Parse multiple files
-    const files = {};
-    const fileSeparator = /<!-- FILE_SEPARATOR: (.+?) -->/g;
-    const parts = fullResponse.split(fileSeparator);
+    // Clean up JSON response
+    fullResponse = fullResponse.trim();
+    if (fullResponse.startsWith('```json')) {
+      fullResponse = fullResponse.slice(7);
+    }
+    if (fullResponse.startsWith('```')) {
+      fullResponse = fullResponse.slice(3);
+    }
+    if (fullResponse.endsWith('```')) {
+      fullResponse = fullResponse.slice(0, -3);
+    }
+    fullResponse = fullResponse.trim();
 
-    if (parts.length > 1) {
-      for (let i = 1; i < parts.length; i += 2) {
-        const filename = parts[i].trim();
-        const content = parts[i + 1]?.trim()
-          .replace(/```html\n?/g, '')
-          .replace(/```\n?$/g, '')
-          .replace(/```/g, '') || '';
-        
-        if (filename && content) {
-          files[filename] = content;
-        }
-      }
-      console.log('✅ Generated', Object.keys(files).length, 'pages');
-    } else {
-      const cleanContent = fullResponse.trim()
-        .replace(/```html\n?/g, '')
-        .replace(/```\n?$/g, '')
-        .replace(/```/g, '');
-      files['index.html'] = cleanContent;
-      console.log('✅ Generated single-page website');
+    // Parse JSON schema
+    let pageData;
+    try {
+      pageData = JSON.parse(fullResponse);
+      console.log('✅ Parsed JSON schema with', pageData.sections?.length || 0, 'sections');
+    } catch (parseError) {
+      console.error('❌ Failed to parse JSON:', parseError);
+      console.error('Response was:', fullResponse.substring(0, 500));
+      return res.status(500).json({ error: 'Failed to parse generated content' });
     }
 
-    const htmlContent = files['index.html'];
+    // Generate HTML from schema
+    let htmlContent = renderPageToHtml(pageData, { userId });
+    console.log('✅ Generated HTML:', (htmlContent.length / 1024).toFixed(2), 'KB');
 
-    if (!htmlContent) {
-      console.error('❌ No index.html generated');
-      return res.status(500).json({ error: 'No homepage content generated' });
-    }
-
-    // ============================================
-    // INJECT CHAT WIDGET IF DEPLOYED
-    // ============================================
+    // Inject chat widget if deployed
     const chatAgentResult = await pool.query(
       'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
       [userId, 'website_chat']
@@ -1805,46 +1800,56 @@ console.log('📏 Prompt size:', (prompt.length / 1024).toFixed(2), 'KB');
     const chatAgentDeployed = chatAgentResult.rows.length > 0 && 
                               chatAgentResult.rows[0].config?.enabled === true;
 
-   // In the /generate route, update the chat widget injection section:
-if (chatAgentDeployed) {
-  console.log('💬 Chat agent is deployed - injecting widget into website pages');
-  const websiteColors = {
-    primaryColor: '#667eea',
-    accentColor: '#764ba2',
-    textColor: '#1f2937'
-  };
-  const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config, websiteColors);
-  
-  let widgetInjected = false;
-  Object.keys(files).forEach(filename => {
-    if (files[filename].includes('</body>')) {
-      files[filename] = files[filename].replace('</body>', chatWidgetCode + '\n</body>');
-      console.log(`✅ Injected chat widget into ${filename}`);
-      widgetInjected = true;
-    } else {
-      console.log(`⚠️ No </body> tag found in ${filename}, skipping widget injection`);
+    if (chatAgentDeployed) {
+      console.log('💬 Injecting chat widget');
+      const websiteColors = { primaryColor, accentColor, textColor: '#1f2937' };
+      const chatWidgetCode = generateChatWidgetCode(userId, chatAgentResult.rows[0].config, websiteColors);
+      
+      if (htmlContent.includes('</body>')) {
+        htmlContent = htmlContent.replace('</body>', chatWidgetCode + '\n</body>');
+        console.log('✅ Chat widget injected');
+      }
     }
-  });
-  
-  if (!widgetInjected) {
-    console.error('❌ WARNING: Chat widget was NOT injected into any files!');
-  }
-} else {
-  console.log('ℹ️ Chat agent not deployed - skipping widget injection');
-}
-    // ============================================
+
+    // Save to database
+    const existing = await pool.query(
+      'SELECT id FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (existing.rows.length > 0) {
+      await pool.query(
+        `UPDATE websites 
+         SET html_content = $1, 
+             page_data = $2, 
+             pages = NULL,
+             is_published = false,
+             primary_color = $3,
+             accent_color = $4,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $5`,
+        [htmlContent, JSON.stringify(pageData), primaryColor, accentColor, userId]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO websites (user_id, html_content, page_data, is_published, primary_color, accent_color, created_at, updated_at)
+         VALUES ($1, $2, $3, false, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [userId, htmlContent, JSON.stringify(pageData), primaryColor, accentColor]
+      );
+    }
+
+    console.log('✅ Website saved for user', userId);
 
     res.json({ 
       success: true, 
-      html: files['index.html'], // Now returns the potentially updated version with chat widget
-      pages: files,
+      html: htmlContent,
+      page_data: pageData,
       businessName: safeBusinessName,
       bookingUrl,
       phoneNumber,
       address: fullAddress || null,
       serviceArea: serviceAreaText || null,
-      pageNames: Object.keys(files),
-      chatWidgetInjected: chatAgentDeployed, // Let frontend know if widget was added
+      chatWidgetInjected: chatAgentDeployed,
       usedRealData: {
         services: servicesInfo.hasData,
         hours: hoursInfo.hasData,
@@ -1860,98 +1865,6 @@ if (chatAgentDeployed) {
     res.status(500).json({ error: 'Server error', message: error.message });
   }
 });
-// POST - Deploy website to Vercel
-// POST - Deploy website to Vercel
-router.post('/deploy', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-
-    // Get website content AND pages
-    const websiteResult = await pool.query(
-      'SELECT html_content, pages FROM websites WHERE user_id = $1',
-      [userId]
-    );
-
-    if (websiteResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Website not found' });
-    }
-
-    const htmlContent = websiteResult.rows[0].html_content;
-    const pagesJson = websiteResult.rows[0].pages;
-    
-    // Parse pages if they exist
-    let pages = null;
-    if (pagesJson) {
-      pages = typeof pagesJson === 'string' ? JSON.parse(pagesJson) : pagesJson;
-    }
-
-    // Deploy to Vercel with all pages
-    const deploymentUrl = await deployToVercel(userId, htmlContent, pages);
-
-    // Save Vercel URL to database
-    await pool.query(
-      'UPDATE websites SET vercel_url = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
-      [deploymentUrl, userId]
-    );
-
-    res.json({ success: true, url: deploymentUrl });
-  } catch (error) {
-    console.error('Error deploying website:', error);
-    res.status(500).json({ error: 'Failed to deploy website' });
-  }
-});
-// POST - Connect existing website
-router.post('/connect-existing', authenticateToken, async (req, res) => {
-  try {
-    const { url } = req.body;
-    
-    // Make HTML mobile responsive
-    html_content = makeMobileResponsive(html_content);
-
-    // Validate URL format
-    let websiteUrl;
-    try {
-      websiteUrl = new URL(url);
-    } catch (error) {
-      return res.status(400).json({ error: 'Invalid URL format' });
-    }
-
-    // Fetch the website HTML
-    const response = await fetch(websiteUrl.href);
-    if (!response.ok) {
-      return res.status(400).json({ error: 'Failed to fetch website. Make sure the URL is accessible.' });
-    }
-
-    const htmlContent = await response.text();
-
-    // Save to database
-    const result = await pool.query(
-      `INSERT INTO websites (user_id, html_content, url, created_at, updated_at)
-       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-       ON CONFLICT (user_id)
-       DO UPDATE SET 
-         html_content = $2,
-         url = $3,
-         updated_at = CURRENT_TIMESTAMP
-       RETURNING id, html_content, url`,
-      [userId, htmlContent, websiteUrl.href]
-    );
-
-    console.log('✅ Connected existing website for user:', userId);
-
-    res.json({
-      success: true,
-      html_content: result.rows[0].html_content,
-      url: result.rows[0].url,
-      website_id: result.rows[0].id
-    });
-
-  } catch (error) {
-    console.error('❌ Connect website error:', error);
-    res.status(500).json({ error: 'Failed to connect website' });
-  }
-});
-
 // POST - Search for available domains
 router.post('/search-domains', authenticateToken, async (req, res) => {
   try {
