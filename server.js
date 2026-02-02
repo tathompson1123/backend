@@ -91,10 +91,8 @@ app.get('/api/groups', (req, res) => {
   res.json({ success: true, groups: [] });
 });
 
-app.post('/api/generate', (req, res, next) => {
-  req.url = '/api/website/generate';
-  websiteRoutes(req, res, next);
-});
+const generateV2 = require('./routes/generateV2');
+app.post('/api/generate-v2', authenticateToken, generateV2);
 
 // 404 handler
 app.use((req, res) => {
@@ -117,3 +115,4 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
