@@ -1,6 +1,5 @@
 // ============================================
 // CTA - Full Width Gradient
-// Extracted from: auto-detailing-template/index.html
 // ============================================
 
 module.exports = {
@@ -9,44 +8,52 @@ module.exports = {
   category: 'cta',
   description: 'Full-width gradient CTA with badge, headline, buttons, and feature pills',
 
+  suitability: {
+    autoDetailing: 0.95, landscaping: 0.9, cleaning: 0.9, hvac: 0.9,
+    salonSpa: 0.85, fitness: 0.9, dental: 0.85, restaurant: 0.8,
+    realEstate: 0.8, photography: 0.7, legal: 0.75, renovation: 0.9, petGrooming: 0.85,
+  },
+  mood: ['bold', 'friendly', 'clean'],
+
   contentSchema: {
-    badge: { type: 'text', label: 'Badge Text (optional)' },
-    headline: { type: 'text', label: 'Headline' },
-    subtitle: { type: 'textarea', label: 'Subtitle' },
-    ctaText: { type: 'text', label: 'Primary Button Text' },
-    ctaLink: { type: 'url', label: 'Primary Button Link' },
-    ctaText2: { type: 'text', label: 'Secondary Button Text (optional)' },
-    ctaLink2: { type: 'url', label: 'Secondary Button Link (optional)' },
+    badge: { type: 'text', label: 'Badge Text (optional)', default: '' },
+    headline: { type: 'text', label: 'Headline', default: 'Ready to Get Started?' },
+    subtitle: { type: 'textarea', label: 'Subtitle', default: 'Contact us today for a free estimate.' },
+    ctaText: { type: 'text', label: 'Primary Button Text', default: 'Get Started' },
+    ctaLink: { type: 'url', label: 'Primary Button Link', default: '#contact' },
+    ctaText2: { type: 'text', label: 'Secondary Button Text (optional)', default: '' },
+    ctaLink2: { type: 'url', label: 'Secondary Button Link (optional)', default: '' },
     features: {
       type: 'array',
       label: 'Feature Pills (optional)',
       itemSchema: {
-        text: { type: 'text', label: 'Feature Text' },
+        text: { type: 'text', label: 'Feature Text', default: 'Feature' },
       }
     }
   },
 
-  render(content, theme) {
-    const badge = content.badge ? `<div class="cta-g-badge">${content.badge}</div>` : '';
-    const btn2 = content.ctaText2 ? `<a href="${content.ctaLink2 || '#'}" class="cta-g-btn-secondary">${content.ctaText2}</a>` : '';
+  render(content, theme, sectionId = 'cta') {
+    const s = `section-${sectionId}`;
+    const badge = content.badge ? `<div class="${s}-badge">${content.badge}</div>` : '';
+    const btn2 = content.ctaText2 ? `<a href="${content.ctaLink2 || '#'}" class="${s}-btn-secondary">${content.ctaText2}</a>` : '';
     const features = (content.features || []).map(f =>
-      `<div class="cta-g-feature">✓ ${f.text}</div>`
+      `<div class="${s}-feature">✓ ${f.text}</div>`
     ).join('\n');
-    const featuresHtml = features ? `<div class="cta-g-features">${features}</div>` : '';
+    const featuresHtml = features ? `<div class="${s}-features">${features}</div>` : '';
 
     return `
-<section class="cta-gradient-section">
+<section class="${s}">
   ${badge}
   <h2>${content.headline || 'Ready to Get Started?'}</h2>
-  <p class="cta-g-subtitle">${content.subtitle || ''}</p>
-  <div class="cta-g-buttons">
-    <a href="${content.ctaLink || '#'}" class="cta-g-btn-primary">${content.ctaText || 'Get Started'}</a>
+  <p class="${s}-subtitle">${content.subtitle || ''}</p>
+  <div class="${s}-buttons">
+    <a href="${content.ctaLink || '#'}" class="${s}-btn-primary">${content.ctaText || 'Get Started'}</a>
     ${btn2}
   </div>
   ${featuresHtml}
 </section>
 <style>
-  .cta-gradient-section {
+  .${s} {
     padding: 6rem 3rem;
     background: linear-gradient(135deg, ${theme.primaryColor} 0%, ${theme.accentColor} 100%);
     text-align: center;
@@ -54,7 +61,7 @@ module.exports = {
     position: relative;
     padding-bottom: 6rem;
   }
-  .cta-g-badge {
+  .${s}-badge {
     display: inline-block;
     background: rgba(255,255,255,0.2);
     padding: 0.5rem 1.5rem;
@@ -65,7 +72,7 @@ module.exports = {
     letter-spacing: 2px;
     margin-bottom: 1.5rem;
   }
-  .cta-gradient-section h2 {
+  .${s} h2 {
     font-family: '${theme.headingFont}', sans-serif;
     font-size: 4rem;
     margin-bottom: 1.5rem;
@@ -73,7 +80,7 @@ module.exports = {
     text-transform: uppercase;
     letter-spacing: 2px;
   }
-  .cta-g-subtitle {
+  .${s}-subtitle {
     font-size: 1.5rem;
     margin-bottom: 2rem;
     opacity: 0.95;
@@ -81,14 +88,14 @@ module.exports = {
     margin-left: auto;
     margin-right: auto;
   }
-  .cta-g-buttons {
+  .${s}-buttons {
     display: flex;
     gap: 1.5rem;
     justify-content: center;
     flex-wrap: wrap;
     margin-top: 2rem;
   }
-  .cta-g-btn-primary {
+  .${s}-btn-primary {
     background: #ffffff;
     color: ${theme.primaryColor};
     padding: 1.5rem 3.5rem;
@@ -102,8 +109,8 @@ module.exports = {
     transition: transform 0.3s, box-shadow 0.3s;
     box-shadow: 0 10px 30px rgba(0,0,0,0.3);
   }
-  .cta-g-btn-primary:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(0,0,0,0.4); }
-  .cta-g-btn-secondary {
+  .${s}-btn-primary:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(0,0,0,0.4); }
+  .${s}-btn-secondary {
     color: #ffffff;
     padding: 1.5rem 3rem;
     border: 2px solid #ffffff;
@@ -116,8 +123,8 @@ module.exports = {
     display: inline-block;
     transition: background 0.3s, transform 0.3s;
   }
-  .cta-g-btn-secondary:hover { background: rgba(255,255,255,0.1); transform: translateY(-3px); }
-  .cta-g-features {
+  .${s}-btn-secondary:hover { background: rgba(255,255,255,0.1); transform: translateY(-3px); }
+  .${s}-features {
     display: flex;
     gap: 3rem;
     justify-content: center;
@@ -129,9 +136,9 @@ module.exports = {
     letter-spacing: 1px;
     flex-wrap: wrap;
   }
-  .cta-g-feature { display: flex; align-items: center; gap: 0.5rem; }
+  .${s}-feature { display: flex; align-items: center; gap: 0.5rem; }
 
-  .cta-gradient-section::after {
+  .${s}::after {
     content: '';
     position: absolute;
     bottom: -1px;
@@ -144,8 +151,8 @@ module.exports = {
   }
 
   @media (max-width: 768px) {
-    .cta-gradient-section h2 { font-size: 2.5rem; }
-    .cta-g-features { flex-direction: column; gap: 1rem; }
+    .${s} h2 { font-size: 2.5rem; }
+    .${s}-features { flex-direction: column; gap: 1rem; }
   }
 </style>`;
   }
