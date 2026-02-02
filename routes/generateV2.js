@@ -1,19 +1,18 @@
 // ============================================
 // GENERATE ROUTE (V2 - Section Template System)
 // AI generates JSON schema → renderer builds HTML
+// Also saves business info to DB so Business Settings auto-populates
 // ============================================
 //
 // INSTALLATION:
-// 1. Copy this file to your backend/routes/ folder (or wherever your routes live)
+// 1. Copy this file to your backend/routes/ folder
 // 2. Make sure sections/ folder is in your backend root
-// 3. Wire this into your Express app:
+// 3. Wire into Express:
 //
 //    const generateV2 = require('./routes/generateV2');
 //    app.post('/api/generate-v2', authenticateToken, generateV2);
 //
-//    Or replace your existing /api/generate route body with this logic.
-//
-// REQUIRED: npm install anthropic (if not already installed)
+// REQUIRED: npm install @anthropic-ai/sdk
 // ============================================
 
 const Anthropic = require('@anthropic-ai/sdk');
@@ -21,7 +20,6 @@ const { buildSchemaPrompt } = require('../sections/generateSchemaPrompt');
 const { renderPage } = require('../sections/renderer');
 const { getThemeForBusinessType } = require('../sections/themes');
 
-// Initialize Anthropic client
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
@@ -31,39 +29,93 @@ async function generateWebsite(req, res) {
     const {
       businessName,
       businessType,
-      phone,
-      email,
-      address,
-      city,
-      state,
+      tagline,
       services,
       description,
-      hours,
-      serviceArea,
+      uniqueSellingPoints,
+      targetCustomer,
+      yearsInBusiness,
+      certifications,
+      // Contact & location fields (NEW)
+      phone,
+      email,
+      city,
+      state,
     } = req.body;
 
     if (!businessName || !businessType) {
       return res.status(400).json({ error: 'businessName and businessType are required' });
     }
 
+    const pool = req.app.get('pool');
+    const userId = req.user.id;
+
     console.log(`🚀 Generating website for: ${businessName} (${businessType})`);
 
-    // 1. Build the AI prompt
+    // ==========================================
+    // STEP 0: Save business info to DB
+    // This seeds the Business Settings page so 
+    // the user doesn't have to re-enter anything
+    // ==========================================
+    if (pool && (phone || email || city || state)) {
+      try {
+        const existing = await pool.query(
+          'SELECT id FROM business_info WHERE user_id = $1',
+          [userId]
+        );
+
+        if (existing.rows.length > 0) {
+          // Only update fields that were provided (don't overwrite with empty)
+          const updates = [];
+          const values = [];
+          let paramIndex = 1;
+
+          if (phone) { updates.push(`phone = $${paramIndex++}`); values.push(phone); }
+          if (email) { updates.push(`email = $${paramIndex++}`); values.push(email); }
+          if (city) { updates.push(`city = $${paramIndex++}`); values.push(city); }
+          if (state) { updates.push(`state = $${paramIndex++}`); values.push(state); }
+
+          if (updates.length > 0) {
+            updates.push(`updated_at = NOW()`);
+            values.push(userId);
+            await pool.query(
+              `UPDATE business_info SET ${updates.join(', ')} WHERE user_id = $${paramIndex}`,
+              values
+            );
+            console.log('✅ Updated business_info with form data');
+          }
+        } else {
+          // Insert new row
+          await pool.query(
+            `INSERT INTO business_info (user_id, phone, email, city, state)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [userId, phone || '', email || '', city || '', state || '']
+          );
+          console.log('✅ Created business_info from form data');
+        }
+      } catch (bizErr) {
+        // Non-fatal — don't block generation if this fails
+        console.error('⚠️ Could not save business info (continuing):', bizErr.message);
+      }
+    }
+
+    // ==========================================
+    // STEP 1: Build the AI prompt
+    // ==========================================
     const prompt = buildSchemaPrompt({
       businessName,
       businessType,
-      phone,
-      email,
-      address,
-      city,
-      state,
+      phone: phone || '(555) 555-5555',
+      email: email || 'info@business.com',
+      city: city || '',
+      state: state || '',
       services,
       description,
-      hours,
-      serviceArea,
     });
 
-    // 2. Call Claude API to generate the content schema
+    // ==========================================
+    // STEP 2: Call Claude API
+    // ==========================================
     console.log('🤖 Calling Claude API for content schema...');
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -73,10 +125,11 @@ async function generateWebsite(req, res) {
       ],
     });
 
-    // 3. Parse the AI response as JSON
+    // ==========================================
+    // STEP 3: Parse JSON response
+    // ==========================================
     let rawText = message.content[0].text.trim();
     
-    // Strip markdown code fences if present
     if (rawText.startsWith('```json')) {
       rawText = rawText.slice(7);
     } else if (rawText.startsWith('```')) {
@@ -99,29 +152,29 @@ async function generateWebsite(req, res) {
       });
     }
 
-    // 4. Apply theme based on business type
+    // ==========================================
+    // STEP 4: Apply theme + render HTML
+    // ==========================================
     const theme = getThemeForBusinessType(businessType);
     pageSchema.theme = theme;
     pageSchema.version = 2;
 
-    // Add user ID if available
     if (req.user && req.user.id) {
       if (!pageSchema.meta) pageSchema.meta = {};
       pageSchema.meta.userId = req.user.id;
     }
 
-    // 5. Render the full HTML from schema + templates
     console.log('🎨 Rendering HTML from schema...');
     const html = renderPage(pageSchema);
 
-    // 6. Save to database (both schema and rendered HTML)
-    const pool = req.app.get('pool'); // Your PostgreSQL pool
+    // ==========================================
+    // STEP 5: Save website to DB
+    // ==========================================
     if (pool) {
       try {
-        // Check if website exists for this user
         const existing = await pool.query(
           'SELECT id FROM websites WHERE user_id = $1',
-          [req.user.id]
+          [userId]
         );
 
         if (existing.rows.length > 0) {
@@ -129,14 +182,14 @@ async function generateWebsite(req, res) {
             `UPDATE websites 
              SET html_content = $1, page_data = $2, business_name = $3, business_type = $4, updated_at = NOW()
              WHERE user_id = $5`,
-            [html, JSON.stringify(pageSchema), businessName, businessType, req.user.id]
+            [html, JSON.stringify(pageSchema), businessName, businessType, userId]
           );
           console.log('✅ Updated existing website');
         } else {
           await pool.query(
             `INSERT INTO websites (user_id, html_content, page_data, business_name, business_type)
              VALUES ($1, $2, $3, $4, $5)`,
-            [req.user.id, html, JSON.stringify(pageSchema), businessName, businessType]
+            [userId, html, JSON.stringify(pageSchema), businessName, businessType]
           );
           console.log('✅ Created new website');
         }
@@ -145,7 +198,9 @@ async function generateWebsite(req, res) {
       }
     }
 
-    // 7. Return both schema and HTML
+    // ==========================================
+    // STEP 6: Return response
+    // ==========================================
     console.log('✅ Website generated successfully!');
     res.json({
       success: true,
