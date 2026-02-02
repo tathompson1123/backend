@@ -1,6 +1,5 @@
 // ============================================
 // FOOTER - 4 Column Dark
-// Extracted from: auto-detailing-template
 // ============================================
 
 module.exports = {
@@ -9,30 +8,38 @@ module.exports = {
   category: 'footer',
   description: 'Dark 4-column footer with logo, services, contact, and hours',
 
+  suitability: {
+    autoDetailing: 0.95, landscaping: 0.85, cleaning: 0.8, hvac: 0.85,
+    salonSpa: 0.7, fitness: 0.9, dental: 0.7, restaurant: 0.75,
+    realEstate: 0.75, photography: 0.8, legal: 0.7, renovation: 0.85, petGrooming: 0.7,
+  },
+  mood: ['bold', 'luxury', 'rugged'],
+
   contentSchema: {
-    logo: { type: 'text', label: 'Logo/Brand Name' },
-    tagline: { type: 'text', label: 'Tagline' },
+    logo: { type: 'text', label: 'Logo/Brand Name', default: 'Business Name' },
+    tagline: { type: 'text', label: 'Tagline', default: 'Professional services you can trust' },
     services: {
       type: 'array',
       label: 'Services List',
       itemSchema: {
-        text: { type: 'text', label: 'Service Name' },
+        text: { type: 'text', label: 'Service Name', default: 'Service' },
       }
     },
-    phone: { type: 'text', label: 'Phone Number' },
-    email: { type: 'text', label: 'Email Address' },
-    hours: { type: 'textarea', label: 'Business Hours' },
+    phone: { type: 'text', label: 'Phone Number', default: '(555) 123-4567' },
+    email: { type: 'text', label: 'Email Address', default: 'contact@example.com' },
+    hours: { type: 'textarea', label: 'Business Hours', default: 'Mon-Fri: 8AM-6PM\nSat: 9AM-4PM\nSun: Closed' },
   },
 
-  render(content, theme) {
-    const services = (content.services || []).map(s => s.text).join('<br>');
+  render(content, theme, sectionId = 'footer') {
+    const s = `section-${sectionId}`;
+    const services = (content.services || []).map(svc => svc.text).join('<br>');
 
     return `
-<footer class="site-footer" style="background: ${theme.bgColor};">
-  <div class="ft-content">
+<footer class="${s}" style="background: ${theme.bgColor};">
+  <div class="${s}-content">
     <div>
-      <div class="ft-brand">${content.logo || 'Business Name'}</div>
-      <p class="ft-tagline">${content.tagline || 'Professional services you can trust'}</p>
+      <div class="${s}-brand">${content.logo || 'Business Name'}</div>
+      <p class="${s}-tagline">${content.tagline || 'Professional services you can trust'}</p>
     </div>
     <div>
       <h4>Services</h4>
@@ -47,24 +54,24 @@ module.exports = {
       <p>${(content.hours || '').replace(/\n/g, '<br>')}</p>
     </div>
   </div>
-  <div class="ft-bottom">
+  <div class="${s}-bottom">
     <p>© ${new Date().getFullYear()} ${content.logo || 'Business Name'}. All rights reserved.</p>
   </div>
 </footer>
 <style>
-  .site-footer {
+  .${s} {
     color: ${theme.textColor};
     padding: 5rem 3rem 2rem;
     border-top: 1px solid ${theme.borderAccent};
   }
-  .ft-content {
+  .${s}-content {
     max-width: 1400px;
     margin: 0 auto;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 4rem;
   }
-  .ft-brand {
+  .${s}-brand {
     font-family: '${theme.headingFont}', sans-serif;
     font-size: 2rem;
     font-weight: 800;
@@ -72,36 +79,36 @@ module.exports = {
     text-transform: uppercase;
     letter-spacing: 2px;
   }
-  .ft-tagline {
+  .${s}-tagline {
     color: ${theme.textMuted};
     margin-top: 1rem;
   }
-  .ft-content h4 {
+  .${s}-content h4 {
     color: ${theme.primaryColor};
     margin-bottom: 1rem;
     text-transform: uppercase;
     letter-spacing: 1px;
     font-family: '${theme.headingFont}', sans-serif;
   }
-  .ft-content p {
+  .${s}-content p {
     color: ${theme.textMuted};
     line-height: 2;
   }
-  .ft-bottom {
+  .${s}-bottom {
     max-width: 1400px;
     margin: 3rem auto 0;
     padding-top: 2rem;
     border-top: 1px solid ${theme.borderAccent};
     text-align: center;
   }
-  .ft-bottom p {
+  .${s}-bottom p {
     color: ${theme.textMuted};
     font-size: 0.9rem;
   }
 
   @media (max-width: 768px) {
-    .ft-content { grid-template-columns: 1fr; gap: 2rem; }
+    .${s}-content { grid-template-columns: 1fr; gap: 2rem; }
   }
 </style>`;
   }
-}
+};
