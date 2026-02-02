@@ -6,8 +6,7 @@ const { setupMiddleware } = require('./config/middleware');
 const { pool } = require('./config/database');
 const app = express();
 const PORT = process.env.PORT || 3001;
-const { authenticateToken } = require('./middleware/auth');
-
+const { authenticateToken } = require('./config/middleware');
 // Security & CORS
 app.set('trust proxy', 1);
 app.use(cors({
@@ -116,5 +115,6 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
 
 
