@@ -1,6 +1,5 @@
 // ============================================
 // BENEFITS - Numbered 3 Column
-// Extracted from: auto-detailing-template/index.html
 // ============================================
 
 module.exports = {
@@ -9,45 +8,53 @@ module.exports = {
   category: 'benefits',
   description: '3-column numbered benefits with large numbers (01, 02, 03)',
 
+  suitability: {
+    autoDetailing: 0.9, landscaping: 0.85, cleaning: 0.85, hvac: 0.9,
+    salonSpa: 0.75, fitness: 0.8, dental: 0.85, restaurant: 0.7,
+    realEstate: 0.85, photography: 0.65, legal: 0.8, renovation: 0.9, petGrooming: 0.75,
+  },
+  mood: ['bold', 'clean', 'rugged'],
+
   contentSchema: {
-    title: { type: 'text', label: 'Section Title' },
+    title: { type: 'text', label: 'Section Title', default: 'Why Choose Us?' },
     benefits: {
       type: 'array',
       label: 'Benefits',
       itemSchema: {
-        title: { type: 'text', label: 'Title' },
-        description: { type: 'textarea', label: 'Description' },
+        title: { type: 'text', label: 'Title', default: 'Benefit' },
+        description: { type: 'textarea', label: 'Description', default: 'Why this matters to you.' },
       }
     }
   },
 
-  render(content, theme) {
+  render(content, theme, sectionId = 'ben') {
+    const s = `section-${sectionId}`;
     const benefits = content.benefits || [];
 
     const benefitsHtml = benefits.map((b, i) => `
-      <div class="ben-item" style="animation-delay: ${0.1 + (i * 0.2)}s">
-        <div class="ben-number">${String(i + 1).padStart(2, '0')}</div>
+      <div class="${s}-item" style="animation-delay: ${0.1 + (i * 0.2)}s">
+        <div class="${s}-number">${String(i + 1).padStart(2, '0')}</div>
         <h3>${b.title}</h3>
         <p>${b.description}</p>
       </div>
     `).join('\n');
 
     return `
-<section class="benefits-section" style="background: ${theme.bgColor};">
-  <div class="ben-header">
+<section class="${s}" style="background: ${theme.bgColor};">
+  <div class="${s}-header">
     <h2>${content.title || 'Why Choose Us?'}</h2>
   </div>
-  <div class="ben-grid">
+  <div class="${s}-grid">
     ${benefitsHtml}
   </div>
 </section>
 <style>
-  .benefits-section {
+  .${s} {
     padding: 4rem 3rem 8rem;
     position: relative;
   }
-  .ben-header { text-align: center; margin-bottom: 3.5rem; }
-  .ben-header h2 {
+  .${s}-header { text-align: center; margin-bottom: 3.5rem; }
+  .${s}-header h2 {
     font-family: '${theme.headingFont}', sans-serif;
     font-size: 3.5rem;
     font-weight: 800;
@@ -55,23 +62,23 @@ module.exports = {
     text-transform: uppercase;
     letter-spacing: 2px;
   }
-  .ben-grid {
+  .${s}-grid {
     max-width: 1400px;
     margin: 0 auto;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 4rem;
   }
-  .ben-item {
+  .${s}-item {
     text-align: left;
     opacity: 0;
-    animation: benFadeIn 0.8s ease-out forwards;
+    animation: ${s}-fadeIn 0.8s ease-out forwards;
   }
-  @keyframes benFadeIn {
+  @keyframes ${s}-fadeIn {
     from { opacity: 0; transform: translateY(50px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  .ben-number {
+  .${s}-number {
     font-family: '${theme.headingFont}', sans-serif;
     font-size: 4rem;
     font-weight: 800;
@@ -79,7 +86,7 @@ module.exports = {
     line-height: 1;
     margin-bottom: 1rem;
   }
-  .ben-item h3 {
+  .${s}-item h3 {
     font-family: '${theme.headingFont}', sans-serif;
     font-size: 1.8rem;
     color: ${theme.textColor};
@@ -87,13 +94,13 @@ module.exports = {
     text-transform: uppercase;
     letter-spacing: 1px;
   }
-  .ben-item p {
+  .${s}-item p {
     color: ${theme.textMuted};
     line-height: 1.8;
     font-size: 1.05rem;
   }
 
-  .benefits-section::after {
+  .${s}::after {
     content: '';
     position: absolute;
     bottom: -1px;
@@ -106,8 +113,8 @@ module.exports = {
   }
 
   @media (max-width: 768px) {
-    .ben-grid { grid-template-columns: 1fr; gap: 3rem; }
-    .ben-header h2 { font-size: 2.5rem; }
+    .${s}-grid { grid-template-columns: 1fr; gap: 3rem; }
+    .${s}-header h2 { font-size: 2.5rem; }
   }
 </style>`;
   }
