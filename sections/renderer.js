@@ -6,25 +6,40 @@
 const { getSection } = require('./registry');
 
 function renderPage(pageSchema) {
+  console.log('🎨 RENDERER: renderPage called');
+  console.log('🎨 RENDERER: pageSchema exists:', !!pageSchema);
+  console.log('🎨 RENDERER: sections count:', pageSchema?.sections?.length || 0);
+  
+  if (pageSchema?.sections) {
+    console.log('🎨 RENDERER: Section templates requested:', pageSchema.sections.map(s => s.template));
+  }
+
   if (!pageSchema || !pageSchema.sections) {
+    console.log('❌ RENDERER: No pageSchema or sections!');
     return '<html><body><p>No content</p></body></html>';
   }
 
   const theme = pageSchema.theme || {};
   const meta = pageSchema.meta || {};
 
-  // Render each section — pass sectionId for scoped CSS
   const sectionsHtml = pageSchema.sections
     .map(section => {
+      console.log(`🎨 RENDERER: Looking for template: ${section.template}`);
       const template = getSection(section.template);
+      
       if (!template) {
-        console.warn(`⚠️ Unknown section template: ${section.template}`);
+        console.warn(`⚠️ RENDERER: Template NOT FOUND: ${section.template}`);
         return `<!-- Unknown section: ${section.template} -->`;
       }
+      
+      console.log(`✅ RENDERER: Found template: ${section.template}`);
+      
       try {
-        return template.render(section.content || {}, theme, section.id || section.template);
+        const html = template.render(section.content || {}, theme, section.id || section.template);
+        console.log(`✅ RENDERER: Rendered ${section.template} - ${html.length} chars`);
+        return html;
       } catch (err) {
-        console.error(`❌ Error rendering section ${section.template}:`, err);
+        console.error(`❌ RENDERER: Error rendering ${section.template}:`, err);
         return `<!-- Error rendering: ${section.template} -->`;
       }
     })
