@@ -1,5 +1,5 @@
 // ============================================
-// PAGE RENDERER
+// PAGE RENDERER (V2 - Scoped CSS)
 // Combines section templates + content + theme → full HTML
 // ============================================
 
@@ -13,7 +13,7 @@ function renderPage(pageSchema) {
   const theme = pageSchema.theme || {};
   const meta = pageSchema.meta || {};
 
-  // Render each section
+  // Render each section — pass sectionId for scoped CSS
   const sectionsHtml = pageSchema.sections
     .map(section => {
       const template = getSection(section.template);
@@ -22,7 +22,7 @@ function renderPage(pageSchema) {
         return `<!-- Unknown section: ${section.template} -->`;
       }
       try {
-        return template.render(section.content || {}, theme);
+        return template.render(section.content || {}, theme, section.id || section.template);
       } catch (err) {
         console.error(`❌ Error rendering section ${section.template}:`, err);
         return `<!-- Error rendering: ${section.template} -->`;
