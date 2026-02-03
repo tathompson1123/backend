@@ -192,9 +192,11 @@ console.log('══════════════════════�
     console.log('🎨 Rendering HTML from schema...');
     const html = renderPage(pageSchema);
 
-    const registry = require('../sections/registry');
-console.log('TEST getSection:', typeof registry.getSection);
-console.log('TEST hero:', registry.getSection('hero-fullscreen-dark'));
+    const testRegistry = require('../sections/registry');
+console.log('TEST getSection type:', typeof testRegistry.getSection);
+const testHero = testRegistry.getSection('hero-fullscreen-dark');
+console.log('TEST hero result:', testHero);
+console.log('TEST hero has render:', typeof testHero?.render);
 
     // ==========================================
     // STEP 5: Save website to DB
