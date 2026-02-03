@@ -1,120 +1,156 @@
 // ============================================
-// BENEFITS - Numbered 3 Column
+// BENEFITS - Numbered List
+// Premium numbered benefits section
 // ============================================
 
 module.exports = {
   id: 'benefits-numbered',
   name: 'Benefits - Numbered',
   category: 'benefits',
-  description: '3-column numbered benefits with large numbers (01, 02, 03)',
+  description: 'Numbered benefits list with clean layout',
 
   suitability: {
-    autoDetailing: 0.9, landscaping: 0.85, cleaning: 0.85, hvac: 0.9,
-    salonSpa: 0.75, fitness: 0.8, dental: 0.85, restaurant: 0.7,
-    realEstate: 0.85, photography: 0.65, legal: 0.8, renovation: 0.9, petGrooming: 0.75,
+    autoDetailing: 0.9, landscaping: 0.9, cleaning: 0.9, hvac: 0.9,
+    salonSpa: 0.85, fitness: 0.9, dental: 0.9, restaurant: 0.8,
+    realEstate: 0.9, photography: 0.85, legal: 0.9, renovation: 0.9, petGrooming: 0.85,
   },
-  mood: ['bold', 'clean', 'rugged'],
+  mood: ['professional', 'organized', 'clear'],
 
-  contentSchema: {
-    title: { type: 'text', label: 'Section Title', default: 'Why Choose Us?' },
-    benefits: {
-      type: 'array',
-      label: 'Benefits',
-      itemSchema: {
-        title: { type: 'text', label: 'Title', default: 'Benefit' },
-        description: { type: 'textarea', label: 'Description', default: 'Why this matters to you.' },
-      }
-    }
-  },
-
-  render(content, theme, sectionId = 'ben') {
+  render(content, theme, sectionId = 'benefits') {
     const s = `section-${sectionId}`;
     const benefits = content.benefits || [];
 
     const benefitsHtml = benefits.map((b, i) => `
-      <div class="${s}-item" style="animation-delay: ${0.1 + (i * 0.2)}s">
-        <div class="${s}-number">${String(i + 1).padStart(2, '0')}</div>
-        <h3>${b.title}</h3>
-        <p>${b.description}</p>
+      <div class="${s}-item" style="animation-delay: ${0.1 + i * 0.15}s">
+        <div class="${s}-number">0${i + 1}</div>
+        <div class="${s}-content">
+          <h3 class="${s}-title">${b.title || 'Benefit'}</h3>
+          <p class="${s}-desc">${b.description || 'Description'}</p>
+        </div>
       </div>
-    `).join('\n');
+    `).join('');
 
     return `
-<section class="${s}" style="background: ${theme.bgColor};">
-  <div class="${s}-header">
-    <h2>${content.title || 'Why Choose Us?'}</h2>
-  </div>
-  <div class="${s}-grid">
-    ${benefitsHtml}
+<section class="${s}" style="background: ${theme.bgColor || '#ffffff'};">
+  <div class="${s}-container">
+    <div class="${s}-header">
+      <span class="${s}-label">Why Choose Us</span>
+      <h2 class="${s}-heading">${content.title || 'Our Benefits'}</h2>
+    </div>
+    
+    <div class="${s}-grid">
+      ${benefitsHtml}
+    </div>
   </div>
 </section>
 <style>
   .${s} {
-    padding: 4rem 3rem 8rem;
+    padding: 6rem 2rem;
     position: relative;
   }
-  .${s}-header { text-align: center; margin-bottom: 3.5rem; }
-  .${s}-header h2 {
-    font-family: '${theme.headingFont}', sans-serif;
-    font-size: 3.5rem;
-    font-weight: 800;
-    color: ${theme.textColor};
+  
+  .${s}-container {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  
+  .${s}-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+  
+  .${s}-label {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: ${theme.primaryColor}15;
+    color: ${theme.primaryColor};
+    font-size: 0.85rem;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 2px;
+    border-radius: 50px;
+    margin-bottom: 1rem;
   }
+  
+  .${s}-heading {
+    font-family: '${theme.headingFont || 'Inter'}', sans-serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 800;
+    color: ${theme.textColor || '#1f2937'};
+  }
+  
   .${s}-grid {
-    max-width: 1400px;
-    margin: 0 auto;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
   }
+  
   .${s}-item {
-    text-align: left;
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    padding: 2rem;
+    background: ${theme.surfaceColor || '#f9fafb'};
+    border-radius: 20px;
+    border: 1px solid ${theme.borderAccent || 'rgba(0,0,0,0.05)'};
     opacity: 0;
-    animation: ${s}-fadeIn 0.8s ease-out forwards;
+    animation: ${s}-slideIn 0.6s ease-out forwards;
+    transition: all 0.3s ease;
   }
-  @keyframes ${s}-fadeIn {
-    from { opacity: 0; transform: translateY(50px); }
-    to { opacity: 1; transform: translateY(0); }
+  
+  .${s}-item:hover {
+    transform: translateX(10px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    border-color: ${theme.primaryColor}30;
   }
+  
+  @keyframes ${s}-slideIn {
+    from { opacity: 0; transform: translateX(-30px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  
   .${s}-number {
-    font-family: '${theme.headingFont}', sans-serif;
-    font-size: 4rem;
+    font-family: '${theme.headingFont || 'Inter'}', sans-serif;
+    font-size: 3rem;
     font-weight: 800;
     color: ${theme.primaryColor};
     line-height: 1;
-    margin-bottom: 1rem;
+    flex-shrink: 0;
+    opacity: 0.9;
   }
-  .${s}-item h3 {
-    font-family: '${theme.headingFont}', sans-serif;
-    font-size: 1.8rem;
-    color: ${theme.textColor};
-    margin-bottom: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+  
+  .${s}-content {
+    flex: 1;
   }
-  .${s}-item p {
-    color: ${theme.textMuted};
-    line-height: 1.8;
-    font-size: 1.05rem;
+  
+  .${s}-title {
+    font-family: '${theme.headingFont || 'Inter'}', sans-serif;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: ${theme.textColor || '#1f2937'};
+    margin-bottom: 0.5rem;
   }
-
-  .${s}::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0; right: 0;
-    width: 100%;
-    height: 80px;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 1200 80' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'%3E%3Cpath d='M 0,40 Q 300,10 600,40 T 1200,40 L 1200,80 L 0,80 Z' fill='${encodeURIComponent(theme.surfaceColor)}'/%3E%3C/svg%3E");
-    background-size: 100% 100%;
-    background-repeat: no-repeat;
+  
+  .${s}-desc {
+    font-size: 1rem;
+    color: ${theme.textMuted || '#6b7280'};
+    line-height: 1.7;
   }
-
-  @media (max-width: 768px) {
-    .${s}-grid { grid-template-columns: 1fr; gap: 3rem; }
-    .${s}-header h2 { font-size: 2.5rem; }
+  
+  @media (max-width: 640px) {
+    .${s} {
+      padding: 4rem 1.5rem;
+    }
+    
+    .${s}-item {
+      flex-direction: column;
+      gap: 1rem;
+      padding: 1.5rem;
+    }
+    
+    .${s}-number {
+      font-size: 2.5rem;
+    }
   }
 </style>`;
   }
