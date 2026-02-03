@@ -1495,20 +1495,27 @@ function fixContactFormHTML(html, pageName) {
 router.post('/publish', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { isPublished } = req.body;
-
-    const result = await pool.query(
-      `UPDATE websites 
-       SET is_published = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $2
-       RETURNING *`,
-      [isPublished, userId]
+    
+    // Fetch fresh data from database instead of using request body
+    const websiteResult = await pool.query(
+      'SELECT html_content, pages FROM websites WHERE user_id = $1',
+      [userId]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Website not found' });
+    
+    if (websiteResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No website found' });
     }
-
+    
+    let { html_content, pages } = websiteResult.rows[0];
+    
+    // Make HTML mobile responsive before publishing
+    html_content = makeMobileResponsive(html_content);
+    
+    if (pages) {
+      Object.keys(pages).forEach(pageName => {
+        pages[pageName] = makeMobileResponsive(pages[pageName]);
+      });
+    }
     res.json({ 
       success: true,
       website: result.rows[0] 
