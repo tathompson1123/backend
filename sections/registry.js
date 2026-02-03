@@ -70,7 +70,8 @@ function getSectionCategories() {
 module.exports = {
   ...sections,
   getSection,
-  getAllSections,
+  getAllSections, 
   getSectionsByCategory,
   getSectionCategories
 };
+
