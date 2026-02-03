@@ -1,244 +1,245 @@
 // ============================================
-// SCHEMA-BASED WEBSITE GENERATION PROMPT
-// Generates JSON page schema for the visual editor
+// AI SCHEMA GENERATION PROMPT
+// Tells Claude to output a page schema (JSON)
+// instead of raw HTML
 // ============================================
 
-function buildSchemaGenerationPrompt({
-  safeBusinessName,
-  safeBusinessType,
-  safeTagline,
-  safeDescription,
-  safeUSPs,
-  yearsInBusiness,
-  safeCertifications,
-  safeTargetCustomer,
-  phoneNumber,
-  phoneNumberClean,
-  contactEmail,
-  fullAddress,
-  serviceAreaText,
-  bookingUrl,
-  ownerName,
-  servicesInfo,
-  hoursInfo,
-  teamInfo,
-  primaryColor,
-  accentColor
-}) {
+function buildSchemaPrompt(businessData) {
+  const {
+    businessName = 'My Business',
+    businessType = 'service business',
+    phone = '(555) 555-5555',
+    email = 'info@business.com',
+    address = '',
+    city = '',
+    state = '',
+    services = [],
+    description = '',
+    hours = '',
+    serviceArea = '',
+  } = businessData;
 
-  // Parse services into array if possible
-  let servicesList = [];
-  if (servicesInfo.hasData && servicesInfo.services) {
-    // Try to extract service names and prices from the formatted string
-    const serviceMatches = servicesInfo.services.match(/\*\*([^*]+)\*\*[^$]*\$(\d+(?:\.\d{2})?)/g);
-    if (serviceMatches) {
-      servicesList = serviceMatches.map(match => {
-        const nameMatch = match.match(/\*\*([^*]+)\*\*/);
-        const priceMatch = match.match(/\$(\d+(?:\.\d{2})?)/);
-        return {
-          name: nameMatch ? nameMatch[1] : 'Service',
-          price: priceMatch ? priceMatch[1] : '99'
-        };
-      });
-    }
-  }
+  // Build services list for the prompt
+  const servicesList = Array.isArray(services) && services.length > 0
+    ? services.map(s => typeof s === 'string' ? s : s.name || s.title || '').filter(Boolean)
+    : ['Service 1', 'Service 2', 'Service 3'];
 
-  return `You are a website content generator. Generate a JSON schema for a professional ${safeBusinessType} business website.
+  // Clean phone for tel: links
+  const phoneClean = phone.replace(/\D/g, '');
+  
+  // Build service area string
+  const serviceAreaText = serviceArea || (city && state ? `${city}, ${state} and surrounding areas` : 'Local area');
+  
+  // Default hours
+  const hoursText = hours || 'Mon-Fri: 8AM-6PM, Sat: 9AM-4PM, Sun: Closed';
 
-═══════════════════════════════════════════════════════════════════
-🏢 BUSINESS INFORMATION
-═══════════════════════════════════════════════════════════════════
+  return `You are a website content generator for service-based businesses. Your job is to generate a JSON page schema that will be fed into a template rendering system.
 
-**Company:** ${safeBusinessName}
-**Industry:** ${safeBusinessType}
-${safeTagline ? `**Tagline:** "${safeTagline}"` : ''}
-${yearsInBusiness ? `**Experience:** ${yearsInBusiness} years` : ''}
-${safeCertifications ? `**Credentials:** ${safeCertifications}` : ''}
-${safeDescription ? `**About:** ${safeDescription}` : ''}
-${safeUSPs ? `**Differentiators:** ${safeUSPs}` : ''}
-${safeTargetCustomer ? `**Target Market:** ${safeTargetCustomer}` : ''}
+IMPORTANT: Return ONLY valid JSON. No markdown, no backticks, no explanation. Just the JSON object.
 
-**Phone:** ${phoneNumber}
-**Email:** ${contactEmail}
-${fullAddress ? `**Address:** ${fullAddress}` : ''}
-${serviceAreaText ? `**Service Area:** ${serviceAreaText}` : ''}
-${ownerName ? `**Owner:** ${ownerName}` : ''}
-**Booking URL:** ${bookingUrl}
+== BUSINESS INFO ==
+Name: ${businessName}
+Type: ${businessType}
+Phone: ${phone}
+Email: ${email}
+${address ? `Address: ${address}` : ''}
+${city ? `City: ${city}` : ''}
+${state ? `State: ${state}` : ''}
+Services: ${servicesList.join(', ')}
+${description ? `Description: ${description}` : ''}
+${hours ? `Hours: ${hours}` : ''}
+${serviceArea ? `Service Area: ${serviceArea}` : ''}
 
-═══════════════════════════════════════════════════════════════════
-💼 SERVICES
-═══════════════════════════════════════════════════════════════════
+== CRITICAL INSTRUCTIONS ==
+You MUST use these EXACT contact details in the output. DO NOT use placeholder text:
+- Phone: ${phone}
+- Email: ${email}
+- Location: ${city}${state ? ', ' + state : ''}
 
-${servicesInfo.services}
-
-═══════════════════════════════════════════════════════════════════
-🕐 BUSINESS HOURS
-═══════════════════════════════════════════════════════════════════
-
-${hoursInfo.hours}
-
-═══════════════════════════════════════════════════════════════════
-🎨 BRAND COLORS
-═══════════════════════════════════════════════════════════════════
-
-Primary Color: ${primaryColor}
-Accent Color: ${accentColor}
-
-═══════════════════════════════════════════════════════════════════
-📋 OUTPUT FORMAT - JSON SCHEMA
-═══════════════════════════════════════════════════════════════════
-
-Generate a complete website as a JSON object following this EXACT structure.
-
-**WIDGET TYPES AVAILABLE:**
-- "text" - For headings (h1, h2, h3, h4) and paragraphs (p)
-- "image" - For images (use Unsplash URLs like https://images.unsplash.com/photo-XXXXX?w=800)
-- "button" - For call-to-action buttons
-- "button-group" - For multiple buttons together
-- "spacer" - For vertical spacing
-- "divider" - For horizontal lines
-- "form" - For contact forms
-- "testimonial" - For customer reviews
-- "icon" - For decorative icons
-
-**SECTION TYPES:**
-- "hero" - Main banner section
-- "services" - Services showcase
-- "about" - About the business
-- "features" - Key features/benefits
-- "testimonials" - Customer reviews
-- "gallery" - Work/portfolio images
-- "cta" - Call to action
-- "contact" - Contact information and form
-- "faq" - Frequently asked questions
-
-**JSON STRUCTURE:**
+== YOUR TASK ==
+Generate a JSON object with this exact structure. Fill in compelling, professional content for this specific business.
 
 {
-  "id": "home-page",
-  "name": "Home",
-  "slug": "index",
-  "title": "${safeBusinessName} - ${safeBusinessType}",
-  "description": "Professional ${safeBusinessType} services...",
+  "meta": {
+    "title": "${businessName} - Professional ${businessType} Services",
+    "description": "SEO meta description for the business (150-160 chars)"
+  },
   "sections": [
     {
-      "id": "section-unique-id",
-      "type": "hero",
-      "name": "Hero",
-      "background": {
-        "type": "gradient",
-        "value": "linear-gradient(135deg, ${primaryColor} 0%, ${accentColor} 100%)",
-        "overlay": ""
-      },
-      "style": {
-        "paddingTop": "100px",
-        "paddingBottom": "100px",
-        "paddingLeft": "20px",
-        "paddingRight": "20px"
-      },
-      "rows": [
-        {
-          "id": "row-unique-id",
-          "style": {
-            "maxWidth": "1200px",
-            "margin": "0 auto",
-            "gap": "24px"
-          },
-          "columns": [
-            {
-              "id": "col-unique-id",
-              "width": "100%",
-              "widgets": [
-                {
-                  "id": "widget-unique-id",
-                  "type": "text",
-                  "content": {
-                    "text": "Your Headline Here",
-                    "tag": "h1",
-                    "alignment": "center"
-                  },
-                  "style": {
-                    "fontSize": "48px",
-                    "fontWeight": "bold",
-                    "color": "#ffffff",
-                    "marginBottom": "24px"
-                  }
-                }
-              ]
-            }
-          ]
-        }
-      ]
+      "id": "s1",
+      "template": "trust-banner-scroll",
+      "content": {
+        "reviews": [
+          { "text": "A realistic 5-star review about this business", "author": "First L.", "rating": 5 },
+          { "text": "Another realistic review", "author": "First L.", "rating": 5 },
+          { "text": "Another realistic review", "author": "First L.", "rating": 5 },
+          { "text": "Another realistic review", "author": "First L.", "rating": 5 },
+          { "text": "Another realistic review", "author": "First L.", "rating": 5 }
+        ]
+      }
+    },
+    {
+      "id": "s2",
+      "template": "nav-sticky-dark",
+      "content": {
+        "logo": "${businessName}",
+        "links": [
+          { "text": "Services", "url": "#services" },
+          { "text": "Gallery", "url": "#gallery" },
+          { "text": "Reviews", "url": "#reviews" },
+          { "text": "Contact", "url": "#contact" }
+        ],
+        "ctaText": "Get Free Quote",
+        "ctaLink": "#contact"
+      }
+    },
+    {
+      "id": "s3",
+      "template": "hero-fullscreen-dark",
+      "content": {
+        "headline": "Main headline WITHOUT the highlight word ",
+        "highlightText": "One or two highlight words",
+        "subtitle": "A compelling subtitle (1-2 sentences) about the business value prop",
+        "ctaText": "Primary CTA text",
+        "ctaLink": "#contact",
+        "ctaText2": "Secondary CTA text",
+        "ctaLink2": "#services",
+        "backgroundImage": "https://images.unsplash.com/RELEVANT-PHOTO?w=1920"
+      }
+    },
+    {
+      "id": "s4",
+      "template": "features-icon-row",
+      "content": {
+        "features": [
+          { "icon": "⭐", "title": "Feature 1 Title", "text": "Short description" },
+          { "icon": "🛡️", "title": "Feature 2 Title", "text": "Short description" },
+          { "icon": "⚡", "title": "Feature 3 Title", "text": "Short description" },
+          { "icon": "🏆", "title": "Feature 4 Title", "text": "Short description" }
+        ]
+      }
+    },
+    {
+      "id": "s5",
+      "template": "services-cards-3col",
+      "content": {
+        "title": "Our Services",
+        "ctaText": "View All Services",
+        "ctaLink": "#contact",
+        "services": [
+          {
+            "name": "Service name from list",
+            "description": "2-3 sentence description of this service",
+            "price": "From $XX",
+            "image": "https://images.unsplash.com/RELEVANT-PHOTO?w=800",
+            "link": "#contact"
+          }
+        ]
+      }
+    },
+    {
+      "id": "s6",
+      "template": "benefits-numbered",
+      "content": {
+        "title": "Why Choose ${businessName}",
+        "benefits": [
+          { "title": "Benefit 1 Title", "description": "Why this matters to the customer" },
+          { "title": "Benefit 2 Title", "description": "Why this matters to the customer" },
+          { "title": "Benefit 3 Title", "description": "Why this matters to the customer" }
+        ]
+      }
+    },
+    {
+      "id": "s7",
+      "template": "gallery-mixed-grid",
+      "content": {
+        "title": "Our Work",
+        "items": [
+          { "image": "https://images.unsplash.com/RELEVANT?w=800", "title": "Project type", "caption": "Brief caption", "large": true },
+          { "image": "https://images.unsplash.com/RELEVANT?w=800", "title": "Project type", "caption": "Brief caption", "large": false },
+          { "image": "https://images.unsplash.com/RELEVANT?w=800", "title": "Project type", "caption": "Brief caption", "large": false },
+          { "image": "https://images.unsplash.com/RELEVANT?w=800", "title": "Project type", "caption": "Brief caption", "large": false },
+          { "image": "https://images.unsplash.com/RELEVANT?w=800", "title": "Project type", "caption": "Brief caption", "large": true }
+        ]
+      }
+    },
+    {
+      "id": "s8",
+      "template": "testimonials-3col",
+      "content": {
+        "title": "What Our Clients Say",
+        "testimonials": [
+          { "quote": "Detailed realistic testimonial", "author": "First Last", "role": "Role/Context", "rating": 5 },
+          { "quote": "Detailed realistic testimonial", "author": "First Last", "role": "Role/Context", "rating": 5 },
+          { "quote": "Detailed realistic testimonial", "author": "First Last", "role": "Role/Context", "rating": 5 }
+        ]
+      }
+    },
+    {
+      "id": "s9",
+      "template": "cta-gradient-full",
+      "content": {
+        "badge": "Limited Time",
+        "headline": "Compelling CTA headline",
+        "subtitle": "Supporting text that drives action",
+        "ctaText": "Primary CTA",
+        "ctaLink": "#contact",
+        "ctaText2": "Call Now: ${phone}",
+        "ctaLink2": "tel:${phoneClean}",
+        "features": [
+          { "text": "Feature pill 1" },
+          { "text": "Feature pill 2" },
+          { "text": "Feature pill 3" }
+        ]
+      }
+    },
+    {
+      "id": "s10",
+      "template": "contact-split",
+      "content": {
+        "formTitle": "Get Your Free Quote",
+        "formSubtitle": "Fill out the form and we'll get back to you within 24 hours",
+        "submitText": "Request Quote",
+        "phone": "${phone}",
+        "phoneClean": "${phoneClean}",
+        "email": "${email}",
+        "hours": "${hoursText}",
+        "serviceArea": "${serviceAreaText}",
+        "businessName": "${businessName}",
+        "highlights": [
+          { "text": "Why choose us point 1" },
+          { "text": "Why choose us point 2" },
+          { "text": "Why choose us point 3" }
+        ]
+      }
+    },
+    {
+      "id": "s11",
+      "template": "footer-4col-dark",
+      "content": {
+        "logo": "${businessName}",
+        "tagline": "Short tagline for the business",
+        "services": ${JSON.stringify(servicesList.slice(0, 6).map(s => ({ text: s })))},
+        "phone": "${phone}",
+        "email": "${email}",
+        "hours": "${hoursText}"
+      }
     }
   ]
 }
 
-═══════════════════════════════════════════════════════════════════
-📄 REQUIRED SECTIONS (generate in this order)
-═══════════════════════════════════════════════════════════════════
-
-1. **HERO SECTION**
-   - Compelling headline mentioning ${safeBusinessName}
-   - Subheadline with value proposition
-   - Two buttons: "Get Free Quote" (link to ${bookingUrl}) and "Call Now" (tel:${phoneNumberClean})
-   - Background: gradient using ${primaryColor} and ${accentColor}
-
-2. **SERVICES SECTION**
-   - Section title: "Our Services"
-   - 3-column layout on desktop
-   - Each service card with: icon, title, description, price (if available)
-   - Use the actual services provided above
-   ${servicesList.length > 0 ? `
-   - Services to include: ${servicesList.map(s => s.name).join(', ')}` : `
-   - Generate 4-6 realistic ${safeBusinessType} services with prices`}
-
-3. **ABOUT SECTION**
-   - Two-column layout: text on left, image on right
-   - Company story/description
-   - Years in business, credentials
-   - Image: Use relevant Unsplash image for ${safeBusinessType}
-
-4. **TESTIMONIALS SECTION**
-   - Section title: "What Our Customers Say"
-   - 3 testimonial widgets
-   - Generate realistic reviews for ${safeBusinessType} business
-   - Include customer name, role (e.g., "Homeowner"), rating (5 stars), quote
-   - Background: light gray (#f9fafb)
-
-5. **CTA SECTION**
-   - Compelling headline: "Ready to Get Started?"
-   - Subheadline with urgency/value
-   - Button: "Book Now" linking to ${bookingUrl}
-   - Background: gradient using brand colors
-
-6. **CONTACT SECTION**
-   - Two-column layout
-   - Left: Contact info (phone: ${phoneNumber}, email: ${contactEmail}${fullAddress ? `, address: ${fullAddress}` : ''})
-   - Right: Contact form widget with fields for name, email, phone, message
-   - Business hours: ${hoursInfo.hours}
-
-═══════════════════════════════════════════════════════════════════
-⚠️ CRITICAL RULES
-═══════════════════════════════════════════════════════════════════
-
-1. Every ID must be unique (use format: "section-1", "row-1-1", "col-1-1-1", "widget-1-1-1-1")
-2. All button links to booking should use: "${bookingUrl}"
-3. All phone links should use: "tel:${phoneNumberClean}"
-4. Use brand colors: primary ${primaryColor}, accent ${accentColor}
-5. Text on dark/gradient backgrounds should be white (#ffffff)
-6. Text on light backgrounds should be dark (#1f2937)
-7. Use realistic Unsplash image URLs (format: https://images.unsplash.com/photo-XXXXXXXXX?w=800)
-8. Generate REAL, compelling copy - not placeholder text
-9. Include the contact form in the contact section
-
-═══════════════════════════════════════════════════════════════════
-🎯 OUTPUT
-═══════════════════════════════════════════════════════════════════
-
-Return ONLY the JSON object. No markdown code fences, no explanation, no additional text.
-Start your response with { and end with }
-
-Generate the complete JSON schema now:`;
+== RULES ==
+1. Return ONLY the JSON object. No other text.
+2. Use REAL Unsplash URLs that match the business type. Format: https://images.unsplash.com/photo-XXXXX?w=1920 (hero) or ?w=800 (cards/gallery). Pick specific photo IDs that relate to ${businessType}.
+3. Write compelling, specific copy — not generic placeholder text. Tailor everything to ${businessType}.
+4. Reviews and testimonials should sound realistic and specific to the services offered.
+5. Include 3-6 services in the services section based on what was provided.
+6. Keep the sections in the exact order shown above (trust → nav → hero → features → services → benefits → gallery → testimonials → cta → contact → footer).
+7. Make the headline punchy and benefit-focused, not just the business name.
+8. Feature icons should be relevant emoji for the business type.
+9. Gallery images should showcase different aspects of the work.
+10. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.
+11. CRITICAL: Use the EXACT phone (${phone}) and email (${email}) provided. Do NOT substitute with placeholders.`;
 }
 
-module.exports = { buildSchemaGenerationPrompt };
+module.exports = { buildSchemaPrompt };
