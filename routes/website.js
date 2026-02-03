@@ -991,6 +991,59 @@ router.post('/publish', authenticateToken, async (req, res) => {
   }
 });
 
+router.post('/save-schema', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { page_data } = req.body;
+
+    if (!page_data) {
+      return res.status(400).json({ error: 'page_data is required' });
+    }
+
+    const { renderPage } = require('../sections/renderer');
+    const { getThemeForBusinessType } = require('../sections/themes');
+
+    const existing = await pool.query(
+      'SELECT business_type FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (!page_data.theme || Object.keys(page_data.theme).length === 0) {
+      const businessType = existing.rows[0]?.business_type || 'general';
+      page_data.theme = getThemeForBusinessType(businessType);
+    }
+
+    if (!page_data.meta) page_data.meta = {};
+    page_data.meta.userId = userId;
+
+    console.log('🎨 Re-rendering HTML from updated schema...');
+    const html = renderPage(page_data);
+    console.log('✅ Rendered HTML:', html.length, 'chars');
+
+    const pages = { 'index.html': html };
+
+    await pool.query(
+      `UPDATE websites 
+       SET html_content = $1, page_data = $2, pages = $3, updated_at = NOW()
+       WHERE user_id = $4`,
+      [html, JSON.stringify(page_data), JSON.stringify(pages), userId]
+    );
+
+    console.log('✅ Saved schema and HTML for user', userId);
+
+    res.json({ 
+      success: true, 
+      html,
+      message: 'Schema saved and HTML regenerated'
+    });
+
+  } catch (error) {
+    console.error('❌ Save schema error:', error);
+    res.status(500).json({ error: 'Failed to save', details: error.message });
+  }
+});
+
+
 router.get('/check-contact-form', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
