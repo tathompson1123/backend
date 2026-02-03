@@ -13,7 +13,8 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-async function generateWebsite(req, res) {
+async function generateWebsite(req, res) 
+{console.log('🔍 req.user:', req.user);
   try {
     const {
       businessName,
