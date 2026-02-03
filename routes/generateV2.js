@@ -36,7 +36,7 @@ async function generateWebsite(req, res) {
     }
 
     const pool = req.app.get('pool');
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
     console.log(`🚀 Generating website for: ${businessName} (${businessType})`);
 
