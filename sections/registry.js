@@ -67,4 +67,10 @@ function getSectionCategories() {
   ];
 }
 
-module.exports = { getSection, getAllSections, getSectionsByCategory, getSectionCategories };
+module.exports = {
+  ...sections,
+  getSection,
+  getAllSections,
+  getSectionsByCategory,
+  getSectionCategories
+};
