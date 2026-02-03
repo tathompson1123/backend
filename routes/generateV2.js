@@ -152,6 +152,31 @@ async function generateWebsite(req, res) {
       });
     }
 
+    // Add this RIGHT AFTER the AI returns the schema (after JSON.parse)
+console.log('═══════════════════════════════════════════');
+console.log('🔍 FULL DIAGNOSTIC');
+console.log('═══════════════════════════════════════════');
+console.log('1. SCHEMA SECTIONS:');
+pageSchema.sections.forEach((s, i) => {
+  console.log(`   ${i + 1}. template: "${s.template}" | id: "${s.id}"`);
+});
+console.log('');
+console.log('2. REGISTRY CHECK:');
+const registry = require('../sections/registry');
+console.log('   Registered templates:', Object.keys(registry));
+console.log('');
+console.log('3. MISSING TEMPLATES:');
+pageSchema.sections.forEach(s => {
+  if (!registry[s.template]) {
+    console.log(`   ❌ MISSING: "${s.template}"`);
+  }
+});
+console.log('');
+console.log('4. HTML OUTPUT LENGTH:', html.length);
+console.log('5. HTML FIRST 500 CHARS:');
+console.log(html.substring(0, 500));
+console.log('═══════════════════════════════════════════');
+
     // ==========================================
     // STEP 4: Apply theme + render HTML
     // ==========================================
