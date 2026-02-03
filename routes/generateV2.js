@@ -154,6 +154,9 @@ async function generateWebsite(req, res) {
     // ==========================================
     // STEP 5: Save website to DB
     // ==========================================
+
+    console.log('📝 Saving with:', { businessName, businessType, userId });
+    
     if (pool) {
       try {
         const existing = await pool.query(
