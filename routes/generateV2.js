@@ -3,17 +3,6 @@
 // AI generates JSON schema → renderer builds HTML
 // Also saves business info to DB so Business Settings auto-populates
 // ============================================
-//
-// INSTALLATION:
-// 1. Copy this file to your backend/routes/ folder
-// 2. Make sure sections/ folder is in your backend root
-// 3. Wire into Express:
-//
-//    const generateV2 = require('./routes/generateV2');
-//    app.post('/api/generate-v2', authenticateToken, generateV2);
-//
-// REQUIRED: npm install @anthropic-ai/sdk
-// ============================================
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { buildSchemaPrompt } = require('../sections/generateSchemaPrompt');
@@ -36,7 +25,6 @@ async function generateWebsite(req, res) {
       targetCustomer,
       yearsInBusiness,
       certifications,
-      // Contact & location fields (NEW)
       phone,
       email,
       city,
@@ -54,8 +42,6 @@ async function generateWebsite(req, res) {
 
     // ==========================================
     // STEP 0: Save business info to DB
-    // This seeds the Business Settings page so 
-    // the user doesn't have to re-enter anything
     // ==========================================
     if (pool && (phone || email || city || state)) {
       try {
@@ -65,7 +51,6 @@ async function generateWebsite(req, res) {
         );
 
         if (existing.rows.length > 0) {
-          // Only update fields that were provided (don't overwrite with empty)
           const updates = [];
           const values = [];
           let paramIndex = 1;
@@ -85,7 +70,6 @@ async function generateWebsite(req, res) {
             console.log('✅ Updated business_info with form data');
           }
         } else {
-          // Insert new row
           await pool.query(
             `INSERT INTO business_info (user_id, phone, email, city, state)
              VALUES ($1, $2, $3, $4, $5)`,
@@ -94,7 +78,6 @@ async function generateWebsite(req, res) {
           console.log('✅ Created business_info from form data');
         }
       } catch (bizErr) {
-        // Non-fatal — don't block generation if this fails
         console.error('⚠️ Could not save business info (continuing):', bizErr.message);
       }
     }
@@ -152,31 +135,6 @@ async function generateWebsite(req, res) {
       });
     }
 
-    // Add this RIGHT AFTER the AI returns the schema (after JSON.parse)
-console.log('═══════════════════════════════════════════');
-console.log('🔍 FULL DIAGNOSTIC');
-console.log('═══════════════════════════════════════════');
-console.log('1. SCHEMA SECTIONS:');
-pageSchema.sections.forEach((s, i) => {
-  console.log(`   ${i + 1}. template: "${s.template}" | id: "${s.id}"`);
-});
-console.log('');
-console.log('2. REGISTRY CHECK:');
-const registry = require('../sections/registry');
-console.log('   Registered templates:', Object.keys(registry));
-console.log('');
-console.log('3. MISSING TEMPLATES:');
-pageSchema.sections.forEach(s => {
-  if (!registry[s.template]) {
-    console.log(`   ❌ MISSING: "${s.template}"`);
-  }
-});
-console.log('');
-console.log('4. HTML OUTPUT LENGTH:', html.length);
-console.log('5. HTML FIRST 500 CHARS:');
-console.log(html.substring(0, 500));
-console.log('═══════════════════════════════════════════');
-
     // ==========================================
     // STEP 4: Apply theme + render HTML
     // ==========================================
@@ -191,12 +149,7 @@ console.log('══════════════════════�
 
     console.log('🎨 Rendering HTML from schema...');
     const html = renderPage(pageSchema);
-
-    const testRegistry = require('../sections/registry');
-console.log('TEST getSection type:', typeof testRegistry.getSection);
-const testHero = testRegistry.getSection('hero-fullscreen-dark');
-console.log('TEST hero result:', testHero);
-console.log('TEST hero has render:', typeof testHero?.render);
+    console.log('✅ HTML generated, length:', html.length);
 
     // ==========================================
     // STEP 5: Save website to DB
