@@ -160,6 +160,8 @@ async function generateWebsite(req, res)
     
     if (pool) {
       try {
+        const pages = { 'index.html': html };
+        
         const existing = await pool.query(
           'SELECT id FROM websites WHERE user_id = $1',
           [userId]
