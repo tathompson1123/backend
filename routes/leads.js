@@ -55,61 +55,22 @@ async function triggerLeadFormAgent(userId, lead) {
     const config = agentConfig.rows[0].config;
     const smsTemplate = agentConfig.rows[0].sms_template;
 
-    // Send SMS if enabled, phone exists, AND user gave SMS consent
+    // Schedule SMS in DB — picked up by cron job every 30s
     if (config.smsEnabled && lead.phone && lead.sms_consent && smsTemplate) {
-      // Random delay between 45-75 seconds to mimic human response time
-      const delay = 45000 + Math.random() * 30000; // 45-75 seconds
-      
-      console.log(`⏰ Scheduling SMS to ${lead.phone} in ${Math.round(delay / 1000)} seconds...`);
-      
-      setTimeout(async () => {
-        try {
-          const personalizedSms = smsTemplate
-            .replace(/\{\{name\}\}/g, lead.name || 'there')
-            .replace(/\{\{email\}\}/g, lead.email || '')
-            .replace(/\{\{phone\}\}/g, lead.phone)
-            .replace(/\{\{service\}\}/g, lead.service || 'our services')
-            .replace(/\{\{message\}\}/g, lead.message || '');
+      const delaySeconds = 45 + Math.floor(Math.random() * 30); // 45-75 seconds
 
-          // Get user's Twilio phone number
-          const userResult = await pool.query(
-            'SELECT twilio_phone_number FROM users WHERE id = $1',
-            [userId]
-          );
+      await pool.query(
+        `UPDATE leads
+           SET status = 'sms_pending',
+               sms_scheduled_at = NOW() + ($1 * INTERVAL '1 second')
+         WHERE id = $2`,
+        [delaySeconds, lead.id]
+      );
 
-          if (!userResult.rows[0]?.twilio_phone_number) {
-            console.log(`⚠️ No Twilio phone number for user ${userId}`);
-            return;
-          }
-
-          const fromNumber = userResult.rows[0].twilio_phone_number;
-
-          // Send via Twilio
-          const smsResult = await sendSMS(lead.phone, fromNumber, personalizedSms);
-
-          // Store the message
-          await pool.query(
-            `INSERT INTO sms_messages 
-             (lead_id, user_id, direction, to_number, message, twilio_message_sid, created_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
-            [lead.id, userId, 'outgoing', lead.phone, personalizedSms, smsResult.messageSid]
-          );
-
-          await pool.query(
-            `UPDATE leads SET status = 'contacted_sms', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
-            [lead.id]
-          );
-
-          console.log(`✅ Lead form agent: SMS sent to ${lead.phone} via Twilio from ${fromNumber}`);
-        } catch (error) {
-          console.error('Error sending SMS via Twilio:', error);
-        }
-      }, delay);
-      
+      console.log(`⏰ SMS scheduled for lead ${lead.id} in ${delaySeconds}s (cron will send)`);
     } else if (config.smsEnabled && lead.phone && !lead.sms_consent) {
       console.log(`⚠️ Lead form agent: SMS NOT sent to ${lead.phone} - no SMS consent`);
     }
-
     console.log(`✅ Lead form agent scheduled for lead ${lead.id} (source: ${lead.source})`);
   } catch (error) {
     console.error('Error in triggerLeadFormAgent:', error);

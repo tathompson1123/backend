@@ -221,8 +221,7 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
     console.log('📄 Found website with', Object.keys(pages).length, 'pages');
 
     // 3. Generate chat widget code
-    const websiteModule = require('./website');
-    const generateChatWidgetCode = websiteModule.generateChatWidgetCode || websiteModule;
+    const { generateChatWidgetCode } = require('../utils/chatWidget');
     const websiteColors = {
   primaryColor: website.primary_color || '#667eea',
   accentColor: website.accent_color || '#764ba2', 

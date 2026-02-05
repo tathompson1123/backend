@@ -1,0 +1,54 @@
+// ============================================
+// AGENT INJECTION HELPER
+// Checks whether the user has a deployed chat agent
+// and injects the widget into rendered HTML automatically.
+// Call this after every renderPage() so agents survive
+// regeneration and editor saves.
+// ============================================
+
+const { generateChatWidgetCode } = require('./chatWidget');
+
+/**
+ * Injects the chat widget into HTML if the user has one deployed.
+ * @param {string} html       - The rendered page HTML
+ * @param {string} userId    - The business owner's user ID
+ * @param {object} pool       - pg connection pool
+ * @param {object} theme      - The page theme object (has primaryColor, etc.)
+ * @returns {Promise<string>} - HTML with widget injected (or unchanged)
+ */
+async function injectAgents(html, userId, pool, theme) {
+  if (!html || !userId || !pool) return html;
+
+  // Skip if already injected (idempotent)
+  if (html.includes('sorce-chat-widget')) return html;
+
+  try {
+    const result = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'website_chat']
+    );
+
+    if (result.rows.length > 0 && result.rows[0].config?.enabled) {
+      const config = result.rows[0].config;
+      const websiteColors = {
+        primaryColor: theme?.primaryColor || '#667eea',
+        accentColor: theme?.accentColor || '#764ba2',
+        textColor: theme?.textColor || '#1f2937'
+      };
+
+      const widgetCode = generateChatWidgetCode(userId, config, websiteColors);
+
+      if (html.includes('</body>')) {
+        html = html.replace('</body>', widgetCode + '\n</body>');
+        console.log('✅ injectAgents: chat widget injected');
+      }
+    }
+  } catch (err) {
+    // Non-fatal: website still renders, widget just won't be present
+    console.error('⚠️ injectAgents: could not check chat agent config:', err.message);
+  }
+
+  return html;
+}
+
+module.exports = { injectAgents };

@@ -149,8 +149,12 @@ async function generateWebsite(req, res)
     }
 
     console.log('🎨 Rendering HTML from schema...');
-    const html = renderPage(pageSchema);
+    let html = renderPage(pageSchema);
     console.log('✅ HTML generated, length:', html.length);
+
+    // Auto-inject chat widget if the user has one deployed
+    const { injectAgents } = require('../utils/injectAgents');
+    html = await injectAgents(html, userId, pool, pageSchema.theme);
 
     // ==========================================
     // STEP 5: Save website to DB

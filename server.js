@@ -70,6 +70,7 @@ const reviewRoutes = require('./routes/reviews');
 const smsRoutes = require('./routes/sms');
 const marketResearchRoutes = require('./routes/market-research');
 const chatRoutes = require('./routes/chat');
+const templateRoutes = require('./routes/templates');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -85,6 +86,7 @@ app.use('/api/sms', smsRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/market-research', marketResearchRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/templates', templateRoutes);
 
 app.get('/api/business-hours', (req, res) => {
   res.json({ success: true, hours: [] });
@@ -95,6 +97,80 @@ app.get('/api/groups', (req, res) => {
 
 const generateV2 = require('./routes/generateV2');
 app.post('/api/generate-v2', authenticateToken, generateV2);
+
+// ── Startup: ensure SMS scheduling column exists ────────
+(async () => {
+  try {
+    await pool.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS sms_scheduled_at TIMESTAMP');
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_leads_sms_pending ON leads(sms_scheduled_at) WHERE status = 'sms_pending'");
+    console.log('✅ SMS scheduling columns verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify sms_scheduled_at column:', e.message);
+  }
+})();
+
+// ── SMS processing cron job ──────────────────────────────
+// Runs every 30 seconds. Picks up leads in 'sms_pending' status
+// whose sms_scheduled_at has passed, sends the SMS via Twilio,
+// and updates the lead status. Survives server restarts.
+const cron = require('node-cron');
+const { sendSMS } = require('./utils/twilio');
+
+cron.schedule('*/30 * * * * *', async () => {
+  try {
+    const pending = await pool.query(
+      `SELECT l.*, u.twilio_phone_number
+       FROM leads l
+       JOIN users u ON u.id = l.user_id
+       WHERE l.status = 'sms_pending'
+         AND l.sms_scheduled_at IS NOT NULL
+         AND l.sms_scheduled_at <= NOW()
+         AND u.twilio_phone_number IS NOT NULL`
+    );
+
+    for (const lead of pending.rows) {
+      try {
+        const agentResult = await pool.query(
+          'SELECT config, sms_template FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+          [lead.user_id, 'lead_form']
+        );
+
+        if (agentResult.rows.length === 0 || !agentResult.rows[0].config?.smsEnabled || !agentResult.rows[0].sms_template) {
+          await pool.query("UPDATE leads SET status = 'new' WHERE id = $1", [lead.id]);
+          continue;
+        }
+
+        const smsTemplate = agentResult.rows[0].sms_template;
+        const personalizedSms = smsTemplate
+          .replace(/\{\{name\}\}/g, lead.name || 'there')
+          .replace(/\{\{email\}\}/g, lead.email || '')
+          .replace(/\{\{phone\}\}/g, lead.phone)
+          .replace(/\{\{service\}\}/g, lead.service || 'our services')
+          .replace(/\{\{message\}\}/g, lead.message || '');
+
+        const smsResult = await sendSMS(lead.phone, lead.twilio_phone_number, personalizedSms);
+
+        await pool.query(
+          `INSERT INTO sms_messages (lead_id, user_id, direction, to_number, message, twilio_message_sid, created_at)
+           VALUES ($1, $2, 'outgoing', $3, $4, $5, CURRENT_TIMESTAMP)`,
+          [lead.id, lead.user_id, lead.phone, personalizedSms, smsResult.messageSid]
+        );
+
+        await pool.query(
+          `UPDATE leads SET status = 'contacted_sms', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [lead.id]
+        );
+
+        console.log(`✅ Cron: SMS sent to lead ${lead.id} (${lead.phone})`);
+      } catch (sendErr) {
+        console.error(`❌ Cron: SMS failed for lead ${lead.id}:`, sendErr.message);
+        await pool.query("UPDATE leads SET status = 'sms_failed' WHERE id = $1", [lead.id]);
+      }
+    }
+  } catch (err) {
+    console.error('❌ SMS cron error:', err.message);
+  }
+});
 
 // 404 handler
 app.use((req, res) => {
