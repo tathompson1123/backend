@@ -167,7 +167,7 @@ async function generateWebsite(req, res)
         const pages = { 'index.html': html };
         
         const existing = await pool.query(
-          'SELECT id FROM websites WHERE user_id = $1',
+          'SELECT id, is_published FROM websites WHERE user_id = $1',
           [userId]
         );
 
@@ -179,6 +179,41 @@ async function generateWebsite(req, res)
             [html, JSON.stringify(pageSchema), JSON.stringify(pages), businessName, businessType, userId]
           );
           console.log('✅ Updated existing website');
+
+          // Auto-redeploy if already published
+          if (existing.rows[0].is_published) {
+            try {
+              const vercelToken = process.env.VERCEL_TOKEN;
+              if (vercelToken) {
+                const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${vercelToken}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    name: `website-${userId}`,
+                    files: [{ file: 'index.html', data: Buffer.from(html).toString('base64') }],
+                    projectSettings: { framework: null }
+                  })
+                });
+
+                if (deployResponse.ok) {
+                  const deployData = await deployResponse.json();
+                  const deployUrl = `https://${deployData.url}`;
+                  await pool.query(
+                    'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
+                    [deployUrl, deployData.id, userId]
+                  );
+                  console.log(`✅ Auto-redeployed to ${deployUrl}`);
+                } else {
+                  console.error('⚠️ Auto-redeploy failed:', await deployResponse.text());
+                }
+              }
+            } catch (deployErr) {
+              console.error('⚠️ Auto-redeploy error:', deployErr.message);
+            }
+          }
         } else {
           await pool.query(
             `INSERT INTO websites (user_id, html_content, page_data, pages, business_name, business_type)

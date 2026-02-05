@@ -627,7 +627,7 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
     const { getThemeForBusinessType } = require('../sections/themes');
 
     const existing = await pool.query(
-      'SELECT business_type FROM websites WHERE user_id = $1',
+      'SELECT business_type, is_published FROM websites WHERE user_id = $1',
       [userId]
     );
 
@@ -658,10 +658,50 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
 
     console.log('✅ Saved schema and HTML for user', userId);
 
-    res.json({ 
-      success: true, 
+    // Auto-redeploy if already published
+    let deployed = false;
+    let deployUrl = null;
+    if (existing.rows[0]?.is_published) {
+      try {
+        const vercelToken = process.env.VERCEL_TOKEN;
+        if (vercelToken) {
+          const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${vercelToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: `website-${userId}`,
+              files: [{ file: 'index.html', data: Buffer.from(html).toString('base64') }],
+              projectSettings: { framework: null }
+            })
+          });
+
+          if (deployResponse.ok) {
+            const deployData = await deployResponse.json();
+            deployUrl = `https://${deployData.url}`;
+            await pool.query(
+              'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
+              [deployUrl, deployData.id, userId]
+            );
+            deployed = true;
+            console.log(`✅ Auto-redeployed to ${deployUrl}`);
+          } else {
+            console.error('⚠️ Auto-redeploy failed:', await deployResponse.text());
+          }
+        }
+      } catch (deployErr) {
+        console.error('⚠️ Auto-redeploy error:', deployErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
       html,
-      message: 'Schema saved and HTML regenerated'
+      deployed,
+      url: deployUrl,
+      message: deployed ? 'Schema saved and redeployed' : 'Schema saved and HTML regenerated'
     });
 
   } catch (error) {
