@@ -70,7 +70,7 @@ function buildSchemaPrompt(businessData) {
       break;
     case 'autoDetailing':
       mainSections = autoDetailingSections({ businessName, phone, phoneClean });
-      sectionOrder = 'reviews → nav → hero → features → services → benefits → gallery → testimonials → cta → contact → footer';
+      sectionOrder = 'nav → hero → reviews → features → services → benefits → gallery → testimonials → cta → contact → footer';
       contactId    = 'contact';
       footerId     = 'footer';
       break;
@@ -294,20 +294,6 @@ function organicSections({ businessName }) {
 // ── Auto-detailing layout (cars, ceramic coatings, etc.) ────────────
 function autoDetailingSections({ businessName, phone, phoneClean }) {
   return `    {
-      "id": "reviews",
-      "template": "review-marquee",
-      "content": {
-        "reviews": [
-          { "name": "David K.",  "stars": 5, "text": "A realistic 5-star review about this auto detailing business", "date": "3 days ago",  "avatarColor": "#d97706" },
-          { "name": "Maria S.",  "stars": 5, "text": "Another realistic review about the quality and finish",       "date": "1 week ago",  "avatarColor": "#f59e0b" },
-          { "name": "Chris T.",  "stars": 5, "text": "Review highlighting ceramic coating or paint correction",      "date": "2 weeks ago", "avatarColor": "#b45309" },
-          { "name": "Lisa R.",   "stars": 5, "text": "Review about interior cleaning or full detail package",        "date": "4 days ago",  "avatarColor": "#d97706" },
-          { "name": "James W.",  "stars": 5, "text": "Review about how the car looks brand new after service",       "date": "1 month ago", "avatarColor": "#f59e0b" },
-          { "name": "Karen M.",  "stars": 4, "text": "A measured but still positive review about the experience",    "date": "10 days ago", "avatarColor": "#92400e" }
-        ]
-      }
-    },
-    {
       "id": "nav",
       "template": "nav-sticky-dark",
       "content": {
@@ -334,6 +320,20 @@ function autoDetailingSections({ businessName, phone, phoneClean }) {
         "ctaText2": "View Our Work",
         "ctaLink2": "#gallery",
         "backgroundImage": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=1920"
+      }
+    },
+    {
+      "id": "reviews",
+      "template": "review-marquee",
+      "content": {
+        "reviews": [
+          { "name": "David K.",  "stars": 5, "text": "A realistic 5-star review about this auto detailing business", "date": "3 days ago",  "avatarColor": "#d97706" },
+          { "name": "Maria S.",  "stars": 5, "text": "Another realistic review about the quality and finish",       "date": "1 week ago",  "avatarColor": "#f59e0b" },
+          { "name": "Chris T.",  "stars": 5, "text": "Review highlighting ceramic coating or paint correction",      "date": "2 weeks ago", "avatarColor": "#b45309" },
+          { "name": "Lisa R.",   "stars": 5, "text": "Review about interior cleaning or full detail package",        "date": "4 days ago",  "avatarColor": "#d97706" },
+          { "name": "James W.",  "stars": 5, "text": "Review about how the car looks brand new after service",       "date": "1 month ago", "avatarColor": "#f59e0b" },
+          { "name": "Karen M.",  "stars": 4, "text": "A measured but still positive review about the experience",    "date": "10 days ago", "avatarColor": "#92400e" }
+        ]
       }
     },
     {
