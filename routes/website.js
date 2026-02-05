@@ -253,6 +253,7 @@ router.get('/my-ip', async (req, res) => {
 
 // GET - Fetch user's website
 router.get('/', authenticateToken, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   try {
     const userId = req.user.userId;
 

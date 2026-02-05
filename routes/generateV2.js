@@ -173,17 +173,17 @@ async function generateWebsite(req, res)
 
         if (existing.rows.length > 0) {
           await pool.query(
-            `UPDATE websites 
-             SET html_content = $1, page_data = $2, business_name = $3, business_type = $4, updated_at = NOW()
-             WHERE user_id = $5`,
-            [html, JSON.stringify(pageSchema), businessName, businessType, userId]
+            `UPDATE websites
+             SET html_content = $1, page_data = $2, pages = $3, business_name = $4, business_type = $5, updated_at = NOW()
+             WHERE user_id = $6`,
+            [html, JSON.stringify(pageSchema), JSON.stringify(pages), businessName, businessType, userId]
           );
           console.log('✅ Updated existing website');
         } else {
           await pool.query(
-            `INSERT INTO websites (user_id, html_content, page_data, business_name, business_type)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [userId, html, JSON.stringify(pageSchema), businessName, businessType]
+            `INSERT INTO websites (user_id, html_content, page_data, pages, business_name, business_type)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [userId, html, JSON.stringify(pageSchema), JSON.stringify(pages), businessName, businessType]
           );
           console.log('✅ Created new website');
         }
