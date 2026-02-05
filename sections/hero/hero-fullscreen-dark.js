@@ -81,7 +81,7 @@ module.exports = {
     min-height: 100vh;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     background: url('${bgImage}') center/cover no-repeat fixed;
     color: #ffffff;
     position: relative;
@@ -92,10 +92,10 @@ module.exports = {
     position: absolute;
     inset: 0;
     background: linear-gradient(
-      135deg,
-      rgba(0, 0, 0, 0.85) 0%,
-      rgba(0, 0, 0, 0.7) 50%,
-      rgba(0, 0, 0, 0.8) 100%
+      to right,
+      rgba(0, 0, 0, 0.9) 0%,
+      rgba(0, 0, 0, 0.75) 50%,
+      rgba(0, 0, 0, 0.4) 100%
     );
     z-index: 1;
   }
@@ -120,10 +120,10 @@ module.exports = {
   .${s}-content {
     position: relative;
     z-index: 10;
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 6rem 2rem;
-    text-align: center;
+    max-width: 620px;
+    margin: 0;
+    padding: 6rem 2rem 6rem 10vw;
+    text-align: left;
   }
   
   .${s}-badge {
@@ -163,15 +163,15 @@ module.exports = {
     font-size: clamp(1rem, 2vw, 1.25rem);
     line-height: 1.7;
     color: rgba(255, 255, 255, 0.85);
-    max-width: 600px;
-    margin: 0 auto 2.5rem;
+    max-width: 520px;
+    margin: 0 0 2.5rem;
     animation: ${s}-fadeInUp 0.8s ease-out 0.4s both;
   }
   
   .${s}-buttons {
     display: flex;
     gap: 1rem;
-    justify-content: center;
+    justify-content: flex-start;
     flex-wrap: wrap;
     margin-bottom: 3rem;
     animation: ${s}-fadeInUp 0.8s ease-out 0.6s both;
@@ -228,7 +228,7 @@ module.exports = {
   
   .${s}-stats {
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     gap: 2rem;
     padding: 1.5rem 2rem;
@@ -236,6 +236,7 @@ module.exports = {
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
+    width: fit-content;
     animation: ${s}-fadeInUp 0.8s ease-out 0.8s both;
   }
   
@@ -314,24 +315,26 @@ module.exports = {
   @media (max-width: 768px) {
     .${s}-content {
       padding: 4rem 1.5rem;
+      max-width: 100%;
     }
-    
+
     .${s}-stats {
       flex-direction: column;
       gap: 1rem;
       padding: 1.5rem;
+      width: 100%;
     }
-    
+
     .${s}-stat-divider {
       width: 60px;
       height: 1px;
     }
-    
+
     .${s}-buttons {
       flex-direction: column;
-      align-items: center;
+      align-items: flex-start;
     }
-    
+
     .${s}-btn-primary,
     .${s}-btn-secondary {
       width: 100%;

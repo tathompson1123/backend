@@ -35,9 +35,11 @@ function renderPage(pageSchema) {
       console.log(`✅ RENDERER: Found template: ${section.template}`);
       
       try {
-        const html = template.render(section.content || {}, theme, section.id || section.template);
+        const sectionId = section.id || section.template;
+        const html = template.render(section.content || {}, theme, sectionId);
         console.log(`✅ RENDERER: Rendered ${section.template} - ${html.length} chars`);
-        return html;
+        // Wrap in an id-tagged div so anchor links (#services, #contact, etc.) resolve
+        return `<div id="${sectionId}">${html}</div>`;
       } catch (err) {
         console.error(`❌ RENDERER: Error rendering ${section.template}:`, err);
         return `<!-- Error rendering: ${section.template} -->`;
@@ -68,27 +70,37 @@ function renderPage(pageSchema) {
     img { max-width: 100%; height: auto; }
     a { color: inherit; text-decoration: none; }
     ::selection { background: ${theme.primaryColor || '#DC143C'}33; }
+    .reveal {
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
   </style>
 </head>
 <body>
 ${sectionsHtml}
 
 <script>
-// Intersection Observer for scroll animations
-const observerOptions = { threshold: 0.1, rootMargin: '0px 0px -50px 0px' };
-const observer = new IntersectionObserver((entries) => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      entry.target.style.animationPlayState = 'running';
-    }
-  });
-}, observerOptions);
-
 document.addEventListener('DOMContentLoaded', () => {
+  // Scroll-reveal animations
+  var revealObserver = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        revealObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
+  document.querySelectorAll('.reveal').forEach(function(el) { revealObserver.observe(el); });
+
   // Smooth scroll for anchor links
-  document.querySelectorAll('a[href^="#"]').forEach(link => {
-    link.addEventListener('click', (e) => {
-      const target = document.querySelector(link.getAttribute('href'));
+  document.querySelectorAll('a[href^="#"]').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      var target = document.querySelector(link.getAttribute('href'));
       if (target) {
         e.preventDefault();
         target.scrollIntoView({ behavior: 'smooth', block: 'start' });

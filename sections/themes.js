@@ -7,19 +7,19 @@ const THEMES = {
   autoDetailing: {
     id: 'autoDetailing',
     name: 'Auto Detailing',
-    primaryColor: '#DC143C',
-    accentColor: '#8B0000',
-    bgColor: '#0a0a0a',
-    surfaceColor: '#2a2a2a',
+    primaryColor: '#d97706',
+    accentColor: '#f59e0b',
+    bgColor: '#020617',
+    surfaceColor: '#0f172a',
     textColor: '#ffffff',
-    textMuted: 'rgba(255,255,255,0.7)',
+    textMuted: 'rgba(255,255,255,0.6)',
     headingFont: 'Montserrat',
     bodyFont: 'Rajdhani',
     fontImport: "https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap",
-    borderRadius: '15px',
+    borderRadius: '16px',
     buttonRadius: '50px',
-    borderAccent: 'rgba(220, 20, 60, 0.2)',
-    borderAccentHover: 'rgba(220, 20, 60, 0.4)',
+    borderAccent: 'rgba(255,255,255,0.1)',
+    borderAccentHover: 'rgba(217, 119, 6, 0.4)',
   },
   landscaping: {
     id: 'landscaping',
@@ -208,6 +208,23 @@ const THEMES = {
     borderAccent: 'rgba(71, 85, 105, 0.2)',
     borderAccentHover: 'rgba(71, 85, 105, 0.4)',
   },
+  organic: {
+    id: 'organic',
+    name: 'Organic',
+    primaryColor: '#6b8f5e',
+    accentColor: '#85a378',
+    bgColor: '#faf8f5',
+    surfaceColor: '#f0ece5',
+    textColor: '#1b2216',
+    textMuted: 'rgba(27,34,22,0.65)',
+    headingFont: 'Cormorant Garamond',
+    bodyFont: 'Inter',
+    fontImport: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap",
+    borderRadius: '16px',
+    buttonRadius: '50px',
+    borderAccent: 'rgba(107,143,94,0.2)',
+    borderAccentHover: 'rgba(107,143,94,0.4)',
+  },
   petGrooming: {
     id: 'petGrooming',
     name: 'Pet Grooming',
@@ -243,7 +260,7 @@ function getThemeForBusinessType(businessType) {
     renovation: ['renovation', 'remodeling', 'contractor', 'construction', 'remodel', 'builder'],
     salonSpa: ['salon', 'spa', 'massage', 'facial', 'beauty', 'wellness', 'hair', 'nail', 'esthetician'],
     autoDetailing: ['detailing', 'car', 'auto', 'vehicle', 'ceramic', 'paint', 'wash'],
-    landscaping: ['landscaping', 'lawn', 'garden', 'tree', 'outdoor', 'yard'],
+    organic: ['landscaping', 'lawn', 'garden', 'tree', 'outdoor', 'yard'],
   };
 
   for (const [themeKey, keywords] of Object.entries(keywordMap)) {
@@ -251,7 +268,7 @@ function getThemeForBusinessType(businessType) {
       return THEMES[themeKey];
     }
   }
-  return THEMES.landscaping; // default
+  return THEMES.organic; // default
 }
 
 module.exports = { THEMES, getThemeForBusinessType };

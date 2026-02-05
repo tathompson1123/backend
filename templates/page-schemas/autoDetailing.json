@@ -1,0 +1,522 @@
+{
+  "meta": {
+    "title": "Precision Auto Detailing",
+    "description": "Premium auto detailing and ceramic coating services in Los Angeles. Expert care, showroom results."
+  },
+  "theme": {
+    "id": "autoDetailing",
+    "name": "Auto Detailing",
+    "primaryColor": "#d97706",
+    "accentColor": "#f59e0b",
+    "bgColor": "#020617",
+    "surfaceColor": "#0f172a",
+    "textColor": "#ffffff",
+    "textMuted": "rgba(255,255,255,0.6)",
+    "headingFont": "Montserrat",
+    "bodyFont": "Rajdhani",
+    "fontImport": "https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap",
+    "borderRadius": "16px",
+    "buttonRadius": "50px",
+    "borderAccent": "rgba(255,255,255,0.1)",
+    "borderAccentHover": "rgba(217,119,6,0.4)"
+  },
+  "pages": {
+    "index": {
+      "title": "Precision Auto Detailing — Premium Car Care",
+      "sections": [
+        {
+          "template": "nav-sticky-dark",
+          "id": "nav",
+          "content": {
+            "logo": "PrecisionAuto",
+            "links": [
+              { "text": "Home",     "url": "index.html" },
+              { "text": "Services","url": "services.html" },
+              { "text": "Gallery", "url": "gallery.html" },
+              { "text": "Contact","url": "contact.html" }
+            ],
+            "ctaText": "Book Now",
+            "ctaLink": "contact.html"
+          }
+        },
+        {
+          "template": "hero-fullscreen-dark",
+          "id": "hero",
+          "content": {
+            "headline": "BEYOND",
+            "highlightText": "CLEAN.",
+            "subtitle": "Experience showroom perfection. Professional ceramic coatings and detailing services that transform and protect your vehicle.",
+            "ctaText": "Book Appointment",
+            "ctaLink": "contact.html",
+            "ctaText2": "View Services",
+            "ctaLink2": "services.html",
+            "backgroundImage": "https://images.unsplash.com/photo-1619405399517-d7fce0f13302?w=1920"
+          }
+        },
+        {
+          "template": "review-marquee",
+          "id": "reviews",
+          "content": {
+            "reviews": [
+              {
+                "name": "Michael Turner",
+                "date": "2 days ago",
+                "text": "Absolutely incredible work on my BMW M3. The ceramic coating looks flawless and the paint correction removed scratches I thought were permanent. Definitely worth every penny.",
+                "stars": 5,
+                "avatarColor": "#d97706"
+              },
+              {
+                "name": "Sarah Jenkins",
+                "date": "1 week ago",
+                "text": "Had the full detail done on my Tesla Model S. The team was incredibly thorough — every inch of the car looks brand new. The attention to detail is unmatched in this city.",
+                "stars": 5,
+                "avatarColor": "#7c3aed"
+              },
+              {
+                "name": "David Chen",
+                "date": "3 weeks ago",
+                "text": "Got the Ceramic Pro package and I'm blown away by the results. My Porsche 911 has never looked better. The coating is already repelling water beautifully.",
+                "stars": 5,
+                "avatarColor": "#0891b2"
+              },
+              {
+                "name": "Emily Rodriguez",
+                "date": "1 month ago",
+                "text": "The interior restoration on my Range Rover was phenomenal. They removed years of wear and tear — the leather looks and feels like new. Highly recommend their interior packages.",
+                "stars": 5,
+                "avatarColor": "#059669"
+              },
+              {
+                "name": "James Wilson",
+                "date": "2 months ago",
+                "text": "Paint correction service was spot on. They completely removed the swirl marks and door dings from my Audi. The mirror finish they achieved is absolutely stunning.",
+                "stars": 5,
+                "avatarColor": "#dc2626"
+              },
+              {
+                "name": "Robert Fox",
+                "date": "2 months ago",
+                "text": "Third time using Precision Auto and they never disappoint. The team is professional, efficient, and genuinely cares about quality. My McLaren is always in good hands here.",
+                "stars": 5,
+                "avatarColor": "#ea580c"
+              }
+            ]
+          }
+        },
+        {
+          "template": "importance-split",
+          "id": "importance",
+          "content": {
+            "badge": "Why It Matters",
+            "headline": "PROTECT YOUR INVESTMENT",
+            "body1": "Your vehicle is one of your most significant investments. Without proper protection, environmental contaminants like acid rain, UV rays, road salt, and tree sap can permanently damage your paint within months.",
+            "body2": "Professional ceramic coatings and regular detailing aren't just about looks — they actively shield your vehicle's finish, maintaining both appearance and resale value for years to come.",
+            "highlights": [
+              { "icon": "⚠", "text": "Acid Etching Risk" },
+              { "icon": "☀", "text": "UV Fading" },
+              { "icon": "💧", "text": "Water Spots" },
+              { "icon": "🌿", "text": "Tree Sap Damage" }
+            ],
+            "image": "https://images.unsplash.com/photo-1550523825-d937538dca56?w=800",
+            "imageAlt": "Professional detailing process"
+          }
+        },
+        {
+          "template": "services-carousel",
+          "id": "carousel",
+          "content": {
+            "title": "Our Packages",
+            "subtitle": "Each package crafted for showroom-quality results",
+            "services": [
+              {
+                "title": "The Refresh",
+                "category": "Maintenance",
+                "price": "$199",
+                "image": "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=600",
+                "features": ["Foam Cannon Pre-Soak", "Two-Bucket Hand Wash", "Wheel Faces Cleaned", "Light Vacuum", "Spray Sealant"],
+                "recommended": false
+              },
+              {
+                "title": "The Enthusiast",
+                "category": "Full Detail",
+                "price": "$499",
+                "image": "https://images.unsplash.com/photo-1542362567-b07e54358753?w=600",
+                "features": ["Deep Iron Decon", "1-Step Polish", "Steam Cleaning", "Leather Conditioning", "6-Month Sealant"],
+                "recommended": true
+              },
+              {
+                "title": "Ceramic Pro",
+                "category": "Ceramic Coating",
+                "price": "$899",
+                "image": "https://images.unsplash.com/photo-1552519507-22b3bf9e3b05?w=600",
+                "features": ["Paint Correction", "5-Year Coating", "Wheels-off Detail", "Glass Coating", "Warranty Included"],
+                "recommended": false
+              },
+              {
+                "title": "Interior Restore",
+                "category": "Interior",
+                "price": "$299",
+                "image": "https://images.unsplash.com/photo-1563720223185-52a9abc0e67b?w=600",
+                "features": ["Hot Water Extraction", "Leather Deep Clean", "Ozone Odor Removal", "Pet Hair Removal", "UV Protection"],
+                "recommended": false
+              },
+              {
+                "title": "Paint Correction",
+                "category": "Correction",
+                "price": "$600",
+                "image": "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=600",
+                "features": ["Multi-stage Polishing", "Defect Removal", "Mirror Finish", "Paint Depth Check", "Sealant Application"],
+                "recommended": false
+              },
+              {
+                "title": "Engine Bay Detail",
+                "category": "Specialty",
+                "price": "$149",
+                "image": "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=600",
+                "features": ["Degrease & Steam Clean", "Plastic Dressing", "Hose Conditioning", "Debris Removal", "Safe Pressure Wash"],
+                "recommended": false
+              },
+              {
+                "title": "Headlight Restoration",
+                "category": "Restoration",
+                "price": "$129",
+                "image": "https://images.unsplash.com/photo-1616422285623-d0478c67571e?w=600",
+                "features": ["Wet Sanding", "Compounding", "Polishing", "UV Ceramic Coating", "1-Year Warranty"],
+                "recommended": false
+              }
+            ]
+          }
+        },
+        {
+          "template": "benefits-cards",
+          "id": "benefits",
+          "content": {
+            "title": "Why Choose Precision Auto",
+            "benefits": [
+              {
+                "icon": "✓",
+                "title": "5+ Years Experience",
+                "description": "Over half a decade of perfecting our craft. We've detailed thousands of vehicles and earned the trust of Los Angeles's most discerning car enthusiasts."
+              },
+              {
+                "icon": "🎓",
+                "title": "Professionally Trained",
+                "description": "Our technicians undergo rigorous certification training in ceramic coating application, paint correction, and advanced detailing techniques."
+              },
+              {
+                "icon": "🛡",
+                "title": "Licensed & Insured",
+                "description": "Fully licensed and comprehensively insured. Your vehicle is in safe hands with full coverage from the moment it arrives at our facility."
+              }
+            ]
+          }
+        },
+        {
+          "template": "split-image-cta",
+          "id": "splitcta",
+          "content": {
+            "image": "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800",
+            "imageAlt": "Paint correction close-up",
+            "headline": "RESTORE FACTORY GLORY",
+            "body": "Years of driving have left their mark — swirl marks, scratches, and paint imperfections that dull your vehicle's shine. Our paint correction process uses advanced multi-stage polishing to eliminate these defects and bring your paint back to its original, mirror-like finish.",
+            "checkpoints": [
+              "Advanced multi-stage paint correction",
+              "Ceramic coating application",
+              "Complete paint decontamination",
+              "Professional finishing and sealant"
+            ],
+            "ctaText": "Book Now",
+            "ctaLink": "contact.html"
+          }
+        },
+        {
+          "template": "cta-card",
+          "id": "ctacard",
+          "content": {
+            "headline": "Ready for a Transformation?",
+            "subtitle": "Book your appointment today and experience the Precision Auto difference. Your dream finish is closer than you think.",
+            "ctaText": "Book Now",
+            "ctaLink": "contact.html",
+            "ctaText2": "View Gallery",
+            "ctaLink2": "gallery.html"
+          }
+        },
+        {
+          "template": "footer-4col-dark",
+          "id": "footer",
+          "content": {
+            "logo": "PrecisionAuto",
+            "tagline": "Premium detailing excellence",
+            "services": ["Ceramic Coating", "Full Detailing", "Paint Correction", "Interior Restore"],
+            "address": "123 Detailing Blvd, Suite 100\nLos Angeles, CA 90012",
+            "hours": "Mon-Fri: 8AM-6PM\nSat: 9AM-4PM\nSunday: Closed",
+            "phone": "(555) 279-9274",
+            "email": "info@precisionauto.com"
+          }
+        }
+      ]
+    },
+    "services": {
+      "title": "Our Services — Precision Auto Detailing",
+      "sections": [
+        {
+          "template": "nav-sticky-dark",
+          "id": "nav",
+          "content": {
+            "logo": "PrecisionAuto",
+            "links": [
+              { "text": "Home",     "url": "index.html" },
+              { "text": "Services","url": "services.html" },
+              { "text": "Gallery", "url": "gallery.html" },
+              { "text": "Contact","url": "contact.html" }
+            ],
+            "ctaText": "Book Now",
+            "ctaLink": "contact.html"
+          }
+        },
+        {
+          "template": "services-carousel",
+          "id": "carousel",
+          "content": {
+            "title": "Choose Your Package",
+            "subtitle": "Swipe through our carefully crafted service packages",
+            "services": [
+              {
+                "title": "The Refresh",
+                "category": "Maintenance",
+                "price": "$199",
+                "image": "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=600",
+                "features": ["Foam Cannon Pre-Soak", "Two-Bucket Hand Wash", "Wheel Faces Cleaned", "Light Vacuum", "Spray Sealant"],
+                "recommended": false
+              },
+              {
+                "title": "The Enthusiast",
+                "category": "Full Detail",
+                "price": "$499",
+                "image": "https://images.unsplash.com/photo-1542362567-b07e54358753?w=600",
+                "features": ["Deep Iron Decon", "1-Step Polish", "Steam Cleaning", "Leather Conditioning", "6-Month Sealant"],
+                "recommended": true
+              },
+              {
+                "title": "Ceramic Pro",
+                "category": "Ceramic Coating",
+                "price": "$899",
+                "image": "https://images.unsplash.com/photo-1552519507-22b3bf9e3b05?w=600",
+                "features": ["Paint Correction", "5-Year Coating", "Wheels-off Detail", "Glass Coating", "Warranty Included"],
+                "recommended": false
+              },
+              {
+                "title": "Interior Restore",
+                "category": "Interior",
+                "price": "$299",
+                "image": "https://images.unsplash.com/photo-1563720223185-52a9abc0e67b?w=600",
+                "features": ["Hot Water Extraction", "Leather Deep Clean", "Ozone Odor Removal", "Pet Hair Removal", "UV Protection"],
+                "recommended": false
+              },
+              {
+                "title": "Paint Correction",
+                "category": "Correction",
+                "price": "$600",
+                "image": "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=600",
+                "features": ["Multi-stage Polishing", "Defect Removal", "Mirror Finish", "Paint Depth Check", "Sealant Application"],
+                "recommended": false
+              },
+              {
+                "title": "Engine Bay Detail",
+                "category": "Specialty",
+                "price": "$149",
+                "image": "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=600",
+                "features": ["Degrease & Steam Clean", "Plastic Dressing", "Hose Conditioning", "Debris Removal", "Safe Pressure Wash"],
+                "recommended": false
+              },
+              {
+                "title": "Headlight Restoration",
+                "category": "Restoration",
+                "price": "$129",
+                "image": "https://images.unsplash.com/photo-1616422285623-d0478c67571e?w=600",
+                "features": ["Wet Sanding", "Compounding", "Polishing", "UV Ceramic Coating", "1-Year Warranty"],
+                "recommended": false
+              }
+            ]
+          }
+        },
+        {
+          "template": "cta-card",
+          "id": "ctacard",
+          "content": {
+            "headline": "Can't Decide?",
+            "subtitle": "Our team will help you pick the perfect package for your vehicle. Give us a call or fill out our contact form.",
+            "ctaText": "Call Us",
+            "ctaLink": "tel:5552799274",
+            "ctaText2": "Contact Form",
+            "ctaLink2": "contact.html"
+          }
+        },
+        {
+          "template": "footer-4col-dark",
+          "id": "footer",
+          "content": {
+            "logo": "PrecisionAuto",
+            "tagline": "Premium detailing excellence",
+            "services": ["Ceramic Coating", "Full Detailing", "Paint Correction", "Interior Restore"],
+            "address": "123 Detailing Blvd, Suite 100\nLos Angeles, CA 90012",
+            "hours": "Mon-Fri: 8AM-6PM\nSat: 9AM-4PM\nSunday: Closed",
+            "phone": "(555) 279-9274",
+            "email": "info@precisionauto.com"
+          }
+        }
+      ]
+    },
+    "gallery": {
+      "title": "Our Work — Precision Auto Detailing",
+      "sections": [
+        {
+          "template": "nav-sticky-dark",
+          "id": "nav",
+          "content": {
+            "logo": "PrecisionAuto",
+            "links": [
+              { "text": "Home",     "url": "index.html" },
+              { "text": "Services","url": "services.html" },
+              { "text": "Gallery", "url": "gallery.html" },
+              { "text": "Contact","url": "contact.html" }
+            ],
+            "ctaText": "Book Now",
+            "ctaLink": "contact.html"
+          }
+        },
+        {
+          "template": "gallery-filtered",
+          "id": "galfilter",
+          "content": {
+            "title": "Recent Work",
+            "subtitle": "A showcase of our finest detailing and coating work",
+            "highlight": "Work",
+            "categories": ["All", "Ceramic Coating", "Paint Correction", "Interior", "Restoration"],
+            "items": [
+              {
+                "url": "https://images.unsplash.com/photo-1552519507-22b3bf9e3b05?w=800",
+                "title": "Porsche 911 GT3",
+                "category": "Ceramic Coating"
+              },
+              {
+                "url": "https://images.unsplash.com/photo-1563720223185-52a9abc0e67b?w=800",
+                "title": "Mercedes AMG Interior",
+                "category": "Interior"
+              },
+              {
+                "url": "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800",
+                "title": "BMW M4 Competition",
+                "category": "Paint Correction"
+              },
+              {
+                "url": "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=800",
+                "title": "Tesla Model S Plaid",
+                "category": "Ceramic Coating"
+              },
+              {
+                "url": "https://images.unsplash.com/photo-1525609004556-c46c7d6cf023?w=800",
+                "title": "Range Rover Sport",
+                "category": "Restoration"
+              },
+              {
+                "url": "https://images.unsplash.com/photo-1542362567-b07e54358753?w=800",
+                "title": "BMW M3 E30",
+                "category": "Restoration"
+              },
+              {
+                "url": "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=800",
+                "title": "Leather Treatment",
+                "category": "Interior"
+              },
+              {
+                "url": "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800",
+                "title": "McLaren 720s",
+                "category": "Ceramic Coating"
+              }
+            ]
+          }
+        },
+        {
+          "template": "cta-card",
+          "id": "ctacard",
+          "content": {
+            "headline": "Ready for a Transformation?",
+            "subtitle": "Book your appointment today and experience the Precision Auto difference.",
+            "ctaText": "Book Now",
+            "ctaLink": "contact.html",
+            "ctaText2": "View Services",
+            "ctaLink2": "services.html"
+          }
+        },
+        {
+          "template": "footer-4col-dark",
+          "id": "footer",
+          "content": {
+            "logo": "PrecisionAuto",
+            "tagline": "Premium detailing excellence",
+            "services": ["Ceramic Coating", "Full Detailing", "Paint Correction", "Interior Restore"],
+            "address": "123 Detailing Blvd, Suite 100\nLos Angeles, CA 90012",
+            "hours": "Mon-Fri: 8AM-6PM\nSat: 9AM-4PM\nSunday: Closed",
+            "phone": "(555) 279-9274",
+            "email": "info@precisionauto.com"
+          }
+        }
+      ]
+    },
+    "contact": {
+      "title": "Contact Us — Precision Auto Detailing",
+      "sections": [
+        {
+          "template": "nav-sticky-dark",
+          "id": "nav",
+          "content": {
+            "logo": "PrecisionAuto",
+            "links": [
+              { "text": "Home",     "url": "index.html" },
+              { "text": "Services","url": "services.html" },
+              { "text": "Gallery", "url": "gallery.html" },
+              { "text": "Contact","url": "contact.html" }
+            ],
+            "ctaText": "Book Now",
+            "ctaLink": "contact.html"
+          }
+        },
+        {
+          "template": "contact-split",
+          "id": "contact",
+          "content": {
+            "formTitle": "How Can We Help?",
+            "formSubtitle": "Tell us about your vehicle and we'll get back to you within 24 hours",
+            "submitText": "Request Quote",
+            "phone": "(555) 279-9274",
+            "phoneClean": "5552799274",
+            "email": "info@precisionauto.com",
+            "hours": "Mon-Fri: 8AM-6PM | Sat: 9AM-4PM | Sunday: Closed",
+            "serviceArea": "Greater Los Angeles Area",
+            "businessName": "Precision Auto Detailing",
+            "highlights": [
+              { "text": "Certified Detailing Professionals" },
+              { "text": "Premium Products Only" },
+              { "text": "100% Satisfaction Guarantee" },
+              { "text": "Mobile Service Available" }
+            ]
+          }
+        },
+        {
+          "template": "footer-4col-dark",
+          "id": "footer",
+          "content": {
+            "logo": "PrecisionAuto",
+            "tagline": "Premium detailing excellence",
+            "services": ["Ceramic Coating", "Full Detailing", "Paint Correction", "Interior Restore"],
+            "address": "123 Detailing Blvd, Suite 100\nLos Angeles, CA 90012",
+            "hours": "Mon-Fri: 8AM-6PM\nSat: 9AM-4PM\nSunday: Closed",
+            "phone": "(555) 279-9274",
+            "email": "info@precisionauto.com"
+          }
+        }
+      ]
+    }
+  }
+}

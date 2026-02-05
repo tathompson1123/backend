@@ -50,14 +50,15 @@ module.exports = {
   </div>
 </nav>
 <style>
-  .${s} { background: rgba(10, 10, 10, 0.95); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; backdrop-filter: blur(10px); border-bottom: 1px solid ${theme.borderAccent}; }
+  .${s} { background: transparent; padding: 1.5rem 0; position: fixed; top: 0; left: 0; right: 0; z-index: 1000; transition: background 0.4s, backdrop-filter 0.4s, border-color 0.4s; border-bottom: 1px solid transparent; }
+  .${s}.scrolled { background: rgba(10, 10, 10, 0.95); backdrop-filter: blur(10px); border-bottom-color: ${theme.borderAccent}; }
   .${s}-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
   .${s}-logo { font-family: '${theme.headingFont}', sans-serif; font-size: 1.8rem; font-weight: 800; color: ${theme.primaryColor}; text-transform: uppercase; letter-spacing: 2px; text-decoration: none; }
   .${s}-links { display: flex; gap: 3rem; align-items: center; }
   .${s}-links a { color: #ffffff; text-decoration: none; font-weight: 600; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; transition: color 0.3s; }
   .${s}-links a:hover { color: ${theme.primaryColor}; }
   .${s}-cta { background: ${theme.primaryColor} !important; color: #ffffff !important; padding: 0.875rem 2rem !important; border-radius: ${theme.buttonRadius}; font-weight: 700 !important; transition: transform 0.3s, box-shadow 0.3s !important; }
-  .${s}-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 25px ${theme.borderAccentHover}; }
+  .${s}-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 25px ${theme.primaryColor}40; }
   .${s}-mobile { display: none; background: none; border: none; cursor: pointer; padding: 0.5rem; flex-direction: column; gap: 5px; }
   .${s}-mobile span { display: block; width: 25px; height: 2px; background: #ffffff; transition: 0.3s; }
 
@@ -68,6 +69,14 @@ module.exports = {
     .${s}-links.${s}-open { display: flex; }
     .${s}-cta { text-align: center; }
   }
-</style>`;
+</style>
+<script>
+(function(){
+  var nav = document.querySelector('.${s}');
+  function onScroll() { nav.classList.toggle('scrolled', window.scrollY > 80); }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>`;
   }
 };
