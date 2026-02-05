@@ -314,7 +314,7 @@ module.exports = {
   
   @media (max-width: 768px) {
     .${s}-content {
-      padding: 4rem 1.5rem;
+      padding: 8rem 1.5rem 4rem;
       max-width: 100%;
     }
 

@@ -81,6 +81,9 @@ module.exports = {
   .hero-grad-feature { display: flex; align-items: center; gap: 0.5rem; }
 
   @media (max-width: 768px) {
+    .hero-gradient {
+      padding-top: 8rem;
+    }
     .hero-gradient h1 { font-size: 3rem; }
     .hero-grad-features { flex-direction: column; gap: 1rem; }
   }

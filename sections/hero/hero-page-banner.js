@@ -87,7 +87,7 @@ module.exports = {
   }
   @media (max-width: 600px) {
     .${s} {
-      padding: 4rem 1.5rem 3rem;
+      padding: 7rem 1.5rem 3rem;
       min-height: 220px;
     }
   }

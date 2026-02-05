@@ -211,7 +211,7 @@ module.exports = {
     .${s}-container {
       grid-template-columns: 1fr;
       text-align: center;
-      padding: 5rem 2rem;
+      padding: 7rem 2rem 5rem;
     }
     .${s}-content { order: 2; }
     .${s}-portrait-wrap { order: 1; max-width: 380px; margin: 0 auto; }
@@ -219,7 +219,7 @@ module.exports = {
     .${s}-buttons { justify-content: center; }
   }
   @media (max-width: 600px) {
-    .${s}-container { padding: 4rem 1.5rem; }
+    .${s}-container { padding: 8rem 1.5rem 4rem; }
     .${s}-float-badge { position: relative; bottom: auto; left: auto; margin: 1rem auto 0; }
   }
 </style>`;
