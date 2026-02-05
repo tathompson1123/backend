@@ -49,6 +49,9 @@ const sections = {
   'cta-gradient-full': require('./cta/cta-gradient-full'),
   'cta-card':          require('./cta/cta-card'),
 
+  // Content
+  'content-block': require('./content/content-block'),
+
   // Contact
   'contact-split': require('./contact/contact-split'),
 
@@ -110,7 +113,8 @@ function getSectionCategories() {
     { id: 'benefits',     name: 'Benefits',        icon: '💎' },
     { id: 'gallery',      name: 'Gallery',         icon: '🖼️' },
     { id: 'testimonials', name: 'Testimonials',    icon: '💬' },
-    { id: 'cta',          name: 'Call to Action',   icon: '📣' },
+    { id: 'cta',          name: 'Call to Action',  icon: '📣' },
+    { id: 'content',      name: 'Content',         icon: '📝' },
     { id: 'contact',      name: 'Contact',         icon: '📞' },
     { id: 'footer',       name: 'Footer',          icon: '📍' },
     { id: 'pricing',      name: 'Pricing',         icon: '💰' },
