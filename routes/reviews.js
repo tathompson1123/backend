@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken } = require('../config/middleware');
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
 
