@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
 const puppeteer = require('puppeteer-core');
-const chromium = require('chrome-aws-lambda');
+const chromium = require('@sparticuz/chromium');
 
 router.post('/import-google', authenticateToken, async (req, res) => {
   let browser;
@@ -31,9 +31,9 @@ router.post('/import-google', authenticateToken, async (req, res) => {
     // Launch headless browser
     browser = await puppeteer.launch({
       args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath || '/usr/bin/chromium-browser',
-      headless: chromium.headless,
+      defaultViewport: { width: 1920, height: 1080 },
+      executablePath: await chromium.executablePath(),
+      headless: 'new',
       ignoreHTTPSErrors: true,
     });
 
