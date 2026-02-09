@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
-const authenticateToken = require('../middleware/auth');
+const { pool } = require('../config/database');
+const { authenticateToken } = require('../config/middleware');
 
 // Get business hours for the authenticated user
 router.get('/', authenticateToken, async (req, res) => {
