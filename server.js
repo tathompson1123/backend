@@ -88,9 +88,8 @@ app.use('/api/market-research', marketResearchRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/templates', templateRoutes);
 
-app.get('/api/business-hours', (req, res) => {
-  res.json({ success: true, hours: [] });
-});
+const businessHoursRoutes = require('./routes/business-hours');
+app.use('/api/business-hours', businessHoursRoutes);
 app.get('/api/groups', (req, res) => {
   res.json({ success: true, groups: [] });
 });
@@ -98,7 +97,7 @@ app.get('/api/groups', (req, res) => {
 const generateV2 = require('./routes/generateV2');
 app.post('/api/generate-v2', authenticateToken, generateV2);
 
-// ── Startup: ensure SMS scheduling column exists ────────
+// ── Startup: ensure required tables/columns exist ────────
 (async () => {
   try {
     await pool.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS sms_scheduled_at TIMESTAMP');
@@ -106,6 +105,25 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     console.log('✅ SMS scheduling columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify sms_scheduled_at column:', e.message);
+  }
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS business_hours (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        day_name VARCHAR(20) NOT NULL,
+        is_open BOOLEAN DEFAULT true,
+        open_time TIME DEFAULT '09:00',
+        close_time TIME DEFAULT '17:00',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, day_name)
+      )
+    `);
+    console.log('✅ Business hours table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify business_hours table:', e.message);
   }
 })();
 
