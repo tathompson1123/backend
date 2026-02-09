@@ -155,4 +155,116 @@ function getRandomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
+// ============================================
+// REVIEW REPLY GENERATION
+// ============================================
+
+const Anthropic = require('@anthropic-ai/sdk');
+const { pool } = require('../config/database');
+
+// GET - Stats for reply generation
+router.get('/stats', authenticateToken, async (req, res) => {
+  try {
+    const todayResult = await pool.query(
+      `SELECT COUNT(*) as count FROM review_replies
+       WHERE user_id = $1 AND created_at >= CURRENT_DATE`,
+      [req.user.userId]
+    );
+
+    const weekResult = await pool.query(
+      `SELECT COUNT(*) as count FROM review_replies
+       WHERE user_id = $1 AND created_at >= CURRENT_DATE - INTERVAL '7 days'`,
+      [req.user.userId]
+    );
+
+    res.json({
+      success: true,
+      stats: {
+        today: parseInt(todayResult.rows[0]?.count || 0),
+        week: parseInt(weekResult.rows[0]?.count || 0)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching review stats:', error);
+    res.json({ success: true, stats: { today: 0, week: 0 } });
+  }
+});
+
+// GET - Review requests history
+router.get('/review-requests', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM review_requests
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [req.user.userId]
+    );
+
+    res.json({ success: true, requests: result.rows });
+  } catch (error) {
+    console.error('Error fetching review requests:', error);
+    res.json({ success: true, requests: [] });
+  }
+});
+
+// POST - Generate AI reply to a review
+router.post('/generate-reply', authenticateToken, async (req, res) => {
+  try {
+    const { reviewText, rating, businessName, customerName } = req.body;
+
+    if (!reviewText) {
+      return res.status(400).json({ success: false, error: 'Review text is required' });
+    }
+
+    const anthropic = new Anthropic();
+
+    const sentiment = rating >= 4 ? 'positive' : rating >= 3 ? 'neutral' : 'negative';
+
+    const prompt = `You are a professional business owner responding to a customer review. Generate a warm, authentic reply.
+
+Business Name: ${businessName || 'Our Business'}
+Customer Name: ${customerName || 'Customer'}
+Star Rating: ${rating}/5 (${sentiment} review)
+Review Text: "${reviewText}"
+
+Guidelines:
+- Be genuine and personal, not corporate
+- Thank them for their feedback
+- If positive: express gratitude and invite them back
+- If negative: apologize sincerely, offer to make it right, provide contact info
+- Keep it concise (2-4 sentences)
+- Don't be overly formal or use generic phrases
+- Match the tone to the review sentiment
+
+Generate ONLY the reply text, no quotes or labels.`;
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const reply = message.content[0].text.trim();
+
+    // Log the reply generation
+    try {
+      await pool.query(
+        `INSERT INTO review_replies (user_id, review_text, rating, generated_reply, created_at)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+        [req.user.userId, reviewText.substring(0, 500), rating, reply]
+      );
+    } catch (dbErr) {
+      console.warn('Could not log review reply:', dbErr.message);
+    }
+
+    console.log(`✅ Generated review reply for user ${req.user.userId}`);
+    res.json({ success: true, reply });
+
+  } catch (error) {
+    console.error('Error generating review reply:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate reply' });
+  }
+});
+
 module.exports = router;

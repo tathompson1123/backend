@@ -157,6 +157,50 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
   } catch (e) {
     console.warn('⚠️ Could not verify review_configs table:', e.message);
   }
+
+  // Review replies table (for tracking AI-generated replies)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS review_replies (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        review_text TEXT,
+        rating INTEGER,
+        generated_reply TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Review replies table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify review_replies table:', e.message);
+  }
+
+  // Review requests table (for tracking automated review request campaigns)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS review_requests (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        customer_name VARCHAR(255),
+        customer_email VARCHAR(255),
+        customer_phone VARCHAR(50),
+        service_name VARCHAR(255),
+        status VARCHAR(50) DEFAULT 'pending',
+        scheduled_send_time TIMESTAMP,
+        actual_send_time TIMESTAMP,
+        sms_sent BOOLEAN DEFAULT false,
+        email_sent BOOLEAN DEFAULT false,
+        link_clicked BOOLEAN DEFAULT false,
+        review_completed BOOLEAN DEFAULT false,
+        review_completed_at TIMESTAMP,
+        incentive_code VARCHAR(50),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Review requests table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify review_requests table:', e.message);
+  }
 })();
 
 // ── SMS processing cron job ──────────────────────────────
