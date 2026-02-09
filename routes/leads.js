@@ -427,34 +427,40 @@ router.post('/:id/convert', authenticateToken, async (req, res) => {
       [userId, lead.email]
     );
 
-    let customerId;
+    let customer;
 
     if (existingCustomer.rows.length > 0) {
-      customerId = existingCustomer.rows[0].id;
+      // Get existing customer data
+      const existingResult = await pool.query(
+        'SELECT * FROM customers WHERE id = $1',
+        [existingCustomer.rows[0].id]
+      );
+      customer = existingResult.rows[0];
     } else {
       // Create new customer
       const customerResult = await pool.query(
         `INSERT INTO customers (user_id, name, email, phone, notes, created_at)
          VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
-         RETURNING id`,
+         RETURNING *`,
         [userId, lead.name, lead.email, lead.phone, lead.message]
       );
-      customerId = customerResult.rows[0].id;
+      customer = customerResult.rows[0];
     }
 
     // Update lead status
     await pool.query(
-      `UPDATE leads 
+      `UPDATE leads
        SET status = 'converted', customer_id = $1
        WHERE id = $2`,
-      [customerId, id]
+      [customer.id, id]
     );
 
-    console.log(`✅ Lead ${id} converted to customer ${customerId}`);
+    console.log(`✅ Lead ${id} converted to customer ${customer.id}`);
 
     res.json({
       success: true,
-      customerId,
+      customer,
+      customerId: customer.id,
       message: 'Lead converted to customer'
     });
 

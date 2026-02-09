@@ -140,6 +140,8 @@ async function generateWebsite(req, res)
     // STEP 4: Apply theme + render HTML
     // ==========================================
     const theme = getThemeForBusinessType(businessType);
+    console.log(`🎨 Using theme: ${theme.name}`);
+
     pageSchema.theme = theme;
     pageSchema.version = 2;
 

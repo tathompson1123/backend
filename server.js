@@ -186,7 +186,7 @@ cron.schedule('*/30 * * * * *', async () => {
       }
     }
   } catch (err) {
-    console.error('❌ SMS cron error:', err.message);
+    console.error('❌ SMS cron error:', err.message || err);
   }
 });
 

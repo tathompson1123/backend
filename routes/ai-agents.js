@@ -328,8 +328,8 @@ router.post('/lead-form/config', authenticateToken, async (req, res) => {
     if (existing.rows.length > 0) {
       // Update existing
       await pool.query(
-        `UPDATE agent_configs 
-         SET config = $1, email_template = $2, sms_template = $3, updated_at = CURRENT_TIMESTAMP 
+        `UPDATE agent_configs
+         SET config = $1, email_template = $2, sms_template = $3, updated_at = CURRENT_TIMESTAMP
          WHERE user_id = $4 AND agent_type = $5`,
         [settings, emailTemplate, smsTemplate, userId, 'lead_form']
       );
@@ -346,6 +346,85 @@ router.post('/lead-form/config', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error saving lead-form config:', error);
     res.status(500).json({ error: 'Failed to save configuration' });
+  }
+});
+
+// POST /api/agents/lead-form/training - Save AI training data
+router.post('/lead-form/training', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const {
+      responseTone,
+      businessContext,
+      faqs,
+      commonObjections,
+      agentName,
+      servicesInfo
+    } = req.body;
+
+    const trainingData = {
+      responseTone: responseTone || 'friendly',
+      businessContext: businessContext || '',
+      faqs: faqs || [],
+      commonObjections: commonObjections || [],
+      agentName: agentName || '',
+      servicesInfo: servicesInfo || ''
+    };
+
+    // Get existing config
+    const existing = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
+    );
+
+    if (existing.rows.length > 0) {
+      const currentConfig = existing.rows[0].config || {};
+      await pool.query(
+        `UPDATE agent_configs
+         SET config = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $2 AND agent_type = $3`,
+        [{ ...currentConfig, training: trainingData }, userId, 'lead_form']
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [userId, 'lead_form', { training: trainingData }]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving lead-form training:', error);
+    res.status(500).json({ error: 'Failed to save training data' });
+  }
+});
+
+// GET /api/agents/lead-form/training - Get AI training data
+router.get('/lead-form/training', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].config?.training) {
+      return res.json({
+        responseTone: 'friendly',
+        businessContext: '',
+        faqs: [],
+        commonObjections: [],
+        agentName: '',
+        servicesInfo: ''
+      });
+    }
+
+    res.json(result.rows[0].config.training);
+  } catch (error) {
+    console.error('Error loading lead-form training:', error);
+    res.status(500).json({ error: 'Failed to load training data' });
   }
 });
 
