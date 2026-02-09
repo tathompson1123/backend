@@ -71,6 +71,8 @@ const smsRoutes = require('./routes/sms');
 const marketResearchRoutes = require('./routes/market-research');
 const chatRoutes = require('./routes/chat');
 const templateRoutes = require('./routes/templates');
+const userRoutes = require('./routes/user');
+const reviewConfigRoutes = require('./routes/review-config');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -87,6 +89,8 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/market-research', marketResearchRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/templates', templateRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/review-config', reviewConfigRoutes);
 
 const businessHoursRoutes = require('./routes/business-hours');
 app.use('/api/business-hours', businessHoursRoutes);
@@ -124,6 +128,34 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     console.log('✅ Business hours table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify business_hours table:', e.message);
+  }
+
+  // Google review link column on users
+  try {
+    await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS google_review_link TEXT');
+    console.log('✅ Google review link column verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify google_review_link column:', e.message);
+  }
+
+  // Review configs table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS review_configs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        message_template TEXT,
+        incentive TEXT,
+        incentive_enabled BOOLEAN DEFAULT true,
+        auto_send_enabled BOOLEAN DEFAULT true,
+        send_delay INTEGER DEFAULT 24,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Review configs table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify review_configs table:', e.message);
   }
 })();
 
