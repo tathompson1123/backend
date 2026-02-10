@@ -6,7 +6,7 @@ class SquareProcessor extends PaymentProcessor {
     const { Client, Environment } = require('square');
     this.client = new Client({
       accessToken: connection.square_access_token,
-      environment: process.env.NODE_ENV === 'production' ? Environment.Production : Environment.Sandbox,
+      environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
     });
     this.locationId = connection.square_location_id;
   }
@@ -137,13 +137,16 @@ class SquareProcessor extends PaymentProcessor {
   static getOAuthUrl(userId) {
     const clientId = process.env.SQUARE_APPLICATION_ID;
     const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/payment-connections/square/callback`;
-    return `https://connect.squareup.com/oauth2/authorize?client_id=${clientId}&scope=PAYMENTS_WRITE+PAYMENTS_READ+ORDERS_WRITE+ORDERS_READ&session=false&state=${userId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    const baseUrl = process.env.SQUARE_ENVIRONMENT === 'sandbox'
+      ? 'https://connect.squareupsandbox.com'
+      : 'https://connect.squareup.com';
+    return `${baseUrl}/oauth2/authorize?client_id=${clientId}&scope=PAYMENTS_WRITE+PAYMENTS_READ+ORDERS_WRITE+ORDERS_READ&session=false&state=${userId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
   }
 
   static async handleOAuthCallback(code) {
     const { Client, Environment } = require('square');
     const client = new Client({
-      environment: process.env.NODE_ENV === 'production' ? Environment.Production : Environment.Sandbox,
+      environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
     });
 
     const { result } = await client.oAuthApi.obtainToken({
