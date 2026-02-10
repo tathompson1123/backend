@@ -31,9 +31,13 @@ app.use(cors({
   credentials: true
 }));
 
-// IMPORTANT: Stripe webhook MUST use raw body, so it comes BEFORE express.json()
+// IMPORTANT: Webhooks MUST use raw body for signature verification, so they come BEFORE express.json()
 const billingRoutes = require('./routes/billing');
+const paymentWebhooks = require('./routes/payment-webhooks');
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), billingRoutes);
+app.post('/api/webhooks/stripe-connect', express.raw({ type: 'application/json' }), paymentWebhooks.stripeConnect);
+app.post('/api/webhooks/square', express.raw({ type: 'application/json' }), paymentWebhooks.square);
+app.post('/api/webhooks/paypal', express.raw({ type: 'application/json' }), paymentWebhooks.paypal);
 
 // Regular JSON parsing for all other routes
 app.use(express.json({ limit: '50mb' }));
@@ -93,6 +97,20 @@ app.use('/api/review-config', reviewConfigRoutes);
 
 const businessHoursRoutes = require('./routes/business-hours');
 app.use('/api/business-hours', businessHoursRoutes);
+
+const employeeAuthRoutes = require('./routes/employee-auth');
+const employeeApiRoutes = require('./routes/employee-api');
+app.use('/api/employee-auth', employeeAuthRoutes);
+app.use('/api/employee', employeeApiRoutes);
+
+const invoiceRoutes = require('./routes/invoices');
+const paymentRoutes = require('./routes/payments');
+const paymentConnectionRoutes = require('./routes/payment-connections');
+const paymentPublicRoutes = require('./routes/payment-public');
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/payment-connections', paymentConnectionRoutes);
+app.use('/api/pay', paymentPublicRoutes);
 app.get('/api/groups', (req, res) => {
   res.json({ success: true, groups: [] });
 });
@@ -199,6 +217,174 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     console.log('✅ Review requests table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify review_requests table:', e.message);
+  }
+
+  // Employee credentials table (for employee mobile app auth)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS employee_credentials (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER REFERENCES employees(id) ON DELETE CASCADE UNIQUE,
+        email VARCHAR(255) NOT NULL,
+        password_hash VARCHAR(255),
+        invite_token VARCHAR(255),
+        invite_token_expires TIMESTAMP,
+        invite_accepted_at TIMESTAMP,
+        last_login_at TIMESTAMP,
+        push_token VARCHAR(500),
+        device_platform VARCHAR(20),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_credentials_email ON employee_credentials(email)');
+    console.log('✅ Employee credentials table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify employee_credentials table:', e.message);
+  }
+
+  // Add invite_status column to employees
+  try {
+    await pool.query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS invite_status VARCHAR(20) DEFAULT 'none'");
+    console.log('✅ Employee invite_status column verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify invite_status column:', e.message);
+  }
+
+  // Payment connections table (multi-processor payment integration)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS payment_connections (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        processor VARCHAR(20) NOT NULL,
+        is_active BOOLEAN DEFAULT true,
+        is_primary BOOLEAN DEFAULT false,
+        stripe_account_id VARCHAR(255),
+        stripe_access_token TEXT,
+        square_merchant_id VARCHAR(255),
+        square_access_token TEXT,
+        square_refresh_token TEXT,
+        square_location_id VARCHAR(255),
+        paypal_merchant_id VARCHAR(255),
+        paypal_client_id VARCHAR(255),
+        paypal_client_secret TEXT,
+        connected_at TIMESTAMP DEFAULT NOW(),
+        last_verified_at TIMESTAMP,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, processor)
+      )
+    `);
+    console.log('✅ Payment connections table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify payment_connections table:', e.message);
+  }
+
+  // Invoices table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+        customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+        invoice_number VARCHAR(50) UNIQUE NOT NULL,
+        customer_name VARCHAR(255),
+        customer_email VARCHAR(255),
+        customer_phone VARCHAR(50),
+        subtotal DECIMAL(10,2) DEFAULT 0,
+        tax_rate DECIMAL(5,4) DEFAULT 0,
+        tax_amount DECIMAL(10,2) DEFAULT 0,
+        discount_amount DECIMAL(10,2) DEFAULT 0,
+        total_amount DECIMAL(10,2) DEFAULT 0,
+        amount_paid DECIMAL(10,2) DEFAULT 0,
+        amount_due DECIMAL(10,2) DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'draft',
+        issue_date DATE DEFAULT CURRENT_DATE,
+        due_date DATE,
+        paid_at TIMESTAMP,
+        payment_processor VARCHAR(20),
+        payment_link VARCHAR(500),
+        payment_link_token VARCHAR(255) UNIQUE,
+        notes TEXT,
+        terms TEXT,
+        sent_at TIMESTAMP,
+        viewed_at TIMESTAMP,
+        reminder_sent_at TIMESTAMP,
+        pdf_url TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_invoices_payment_link_token ON invoices(payment_link_token)');
+    console.log('✅ Invoices table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify invoices table:', e.message);
+  }
+
+  // Invoice items table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS invoice_items (
+        id SERIAL PRIMARY KEY,
+        invoice_id INTEGER REFERENCES invoices(id) ON DELETE CASCADE,
+        description VARCHAR(500) NOT NULL,
+        quantity DECIMAL(10,2) DEFAULT 1,
+        unit_price DECIMAL(10,2) NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        service_id INTEGER REFERENCES services(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Invoice items table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify invoice_items table:', e.message);
+  }
+
+  // Payments table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL,
+        booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+        customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        currency VARCHAR(3) DEFAULT 'USD',
+        processor VARCHAR(20) NOT NULL,
+        processor_payment_id VARCHAR(255),
+        processor_fee DECIMAL(10,2),
+        payment_method VARCHAR(30),
+        card_last_four VARCHAR(4),
+        card_brand VARCHAR(20),
+        status VARCHAR(20) DEFAULT 'pending',
+        failure_reason TEXT,
+        refund_amount DECIMAL(10,2) DEFAULT 0,
+        refunded_at TIMESTAMP,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments(invoice_id)');
+    console.log('✅ Payments table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify payments table:', e.message);
+  }
+
+  // Add payment_status and invoice_id to bookings
+  try {
+    await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT 'unpaid'");
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS invoice_id INTEGER REFERENCES invoices(id)');
+    console.log('✅ Booking payment columns verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify booking payment columns:', e.message);
   }
 })();
 

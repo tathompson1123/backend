@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
+const { sendPushToEmployee } = require('../utils/pushNotifications');
 
 // Helper: Update customer from booking
 async function updateCustomerFromBooking(booking, userId) {
@@ -207,8 +208,16 @@ router.post('/create', authenticateToken, async (req, res) => {
 
     const empResult = await pool.query('SELECT name FROM employees WHERE id = $1', [assignedEmployeeId]);
 
-    res.json({ 
-      success: true, 
+    // Send push notification to assigned employee
+    if (assignedEmployeeId) {
+      sendPushToEmployee(assignedEmployeeId, 'New Booking Assigned',
+        `${customerInfo.name} - ${service.name} on ${bookingDate} at ${startTime}`,
+        { bookingId: booking.id, type: 'new_booking' }
+      ).catch(err => console.error('Push notification error:', err));
+    }
+
+    res.json({
+      success: true,
       booking,
       assignedEmployee: empResult.rows[0].name,
       message: 'Booking confirmed!'
