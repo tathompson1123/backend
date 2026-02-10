@@ -68,4 +68,96 @@ router.post('/google-review-link', authenticateToken, async (req, res) => {
   }
 });
 
+// PUT - Update user profile
+router.put('/profile', authenticateToken, async (req, res) => {
+  try {
+    const { businessName, email } = req.body;
+
+    if (!businessName?.trim() && !email?.trim()) {
+      return res.status(400).json({ success: false, error: 'At least one field is required' });
+    }
+
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (businessName?.trim()) {
+      updates.push(`business_name = $${paramIndex++}`);
+      values.push(businessName.trim());
+    }
+
+    if (email?.trim()) {
+      // Check if email is already taken by another user
+      const existing = await pool.query(
+        'SELECT id FROM users WHERE email = $1 AND id != $2',
+        [email.toLowerCase(), req.user.userId]
+      );
+      if (existing.rows.length > 0) {
+        return res.status(409).json({ success: false, error: 'Email already in use' });
+      }
+      updates.push(`email = $${paramIndex++}`);
+      values.push(email.toLowerCase().trim());
+    }
+
+    values.push(req.user.userId);
+
+    await pool.query(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+      values
+    );
+
+    console.log(`✅ Profile updated for user ${req.user.userId}`);
+    res.json({ success: true, message: 'Profile updated successfully' });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ success: false, error: 'Failed to update profile' });
+  }
+});
+
+// PUT - Change password
+router.put('/password', authenticateToken, async (req, res) => {
+  const bcrypt = require('bcrypt');
+
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Current and new password are required' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ success: false, error: 'New password must be at least 8 characters' });
+    }
+
+    // Get current password hash
+    const result = await pool.query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // Verify current password
+    const passwordMatch = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
+    if (!passwordMatch) {
+      return res.status(401).json({ success: false, error: 'Current password is incorrect' });
+    }
+
+    // Hash and save new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    await pool.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
+      [hashedPassword, req.user.userId]
+    );
+
+    console.log(`✅ Password changed for user ${req.user.userId}`);
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ success: false, error: 'Failed to change password' });
+  }
+});
+
 module.exports = router;

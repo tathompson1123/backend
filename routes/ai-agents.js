@@ -568,7 +568,7 @@ router.post('/lead-form/deploy', authenticateToken, async (req, res) => {
 router.get('/leadform/status', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    
+
     const result = await pool.query(
       'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
       [userId, 'lead_form']
@@ -579,6 +579,349 @@ router.get('/leadform/status', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error checking lead form agent status:', error);
     res.status(500).json({ error: 'Failed to check status' });
+  }
+});
+
+// ============================================
+// PREVIEW & ASSISTANT ENDPOINTS
+// ============================================
+
+// POST /api/agents/preview-chat - Test agent responses in preview mode
+router.post('/preview-chat', authenticateToken, async (req, res) => {
+  try {
+    const { message, config, agentType, history = [] } = req.body;
+    const userId = req.user.userId;
+
+    if (!message || !config) {
+      return res.status(400).json({ error: 'Message and config are required' });
+    }
+
+    // Get user's business info for context
+    const userResult = await pool.query(
+      'SELECT business_name FROM users WHERE id = $1',
+      [userId]
+    );
+    const businessName = userResult.rows[0]?.business_name || 'Our business';
+
+    // Get services for context
+    const servicesResult = await pool.query(
+      'SELECT name, description, price, duration_hours FROM services WHERE user_id = $1 LIMIT 10',
+      [userId]
+    );
+    const services = servicesResult.rows;
+
+    // Build system prompt based on agent type and config
+    let systemPrompt = '';
+
+    if (agentType === 'chat') {
+      systemPrompt = `You are ${config.agentName || 'Kurt'}, a helpful AI assistant for ${businessName}.
+
+Personality: ${config.personality || 'friendly'}
+Response style: Be ${config.responseLength || 'concise'} in your responses.
+
+${config.customInstructions ? `Additional instructions: ${config.customInstructions}` : ''}
+
+Available services:
+${services.map(s => `- ${s.name}: ${s.description || 'No description'} ($${s.price || 'Quote'}, ${s.duration_hours ? s.duration_hours + ' hrs' : '30 min'})`).join('\n') || 'Services are being configured.'}
+
+Your goals:
+${config.enableLeadCapture ? '- Naturally gather contact info (name, email, phone) when appropriate' : ''}
+${config.enableBooking ? '- Help customers book appointments when they express interest' : ''}
+- Answer questions about services professionally
+- Keep responses natural and conversational
+
+Lead capture strategy: ${config.captureStrategy === 'early' ? 'Ask for contact info within the first 2-3 messages' : config.captureStrategy === 'booking' ? 'Only ask for contact info when booking' : 'Ask naturally when relevant'}`;
+    } else {
+      // Lead form agent - SMS style
+      systemPrompt = `You are ${config.agentName || 'Kurt'}, responding via SMS for ${businessName}.
+
+Tone: ${config.responseTone || 'friendly'}
+
+Business context: ${config.businessContext || 'Local service business'}
+Services info: ${config.servicesInfo || services.map(s => s.name).join(', ') || 'Various services available'}
+
+Keep responses SHORT (under 160 characters ideally for SMS).
+Be conversational and helpful.
+${config.followUpEnabled ? 'If they seem interested, try to schedule a call or appointment.' : ''}
+${config.autoBookingEnabled ? 'If they mention a date/time, confirm booking details.' : ''}`;
+    }
+
+    // Build conversation history for Claude
+    const messages = [
+      ...history.map(h => ({
+        role: h.role,
+        content: h.content
+      })),
+      { role: 'user', content: message }
+    ];
+
+    // Call Claude API
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic();
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 300,
+      system: systemPrompt,
+      messages: messages
+    });
+
+    const reply = response.content[0]?.text || "I'm here to help! How can I assist you today?";
+
+    res.json({ reply });
+  } catch (error) {
+    console.error('Error in preview-chat:', error);
+    res.status(500).json({ error: 'Failed to generate preview response' });
+  }
+});
+
+// POST /api/agents/assistant - Claude assistant to help configure agents
+router.post('/assistant', authenticateToken, async (req, res) => {
+  try {
+    const { prompt, currentConfig, agentType, conversationHistory = [] } = req.body;
+    const userId = req.user.userId;
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+
+    // Get user's business info for context
+    const userResult = await pool.query(
+      'SELECT business_name FROM users WHERE id = $1',
+      [userId]
+    );
+    const businessName = userResult.rows[0]?.business_name || '';
+
+    // Get services for context
+    const servicesResult = await pool.query(
+      'SELECT name, description, price FROM services WHERE user_id = $1 LIMIT 10',
+      [userId]
+    );
+    const services = servicesResult.rows;
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic();
+
+    const systemPrompt = agentType === 'chat'
+      ? `You are the SORCE AI Assistant, helping users configure their Website Chat Agent through an interview process.
+
+YOUR ROLE: Ask specific questions to understand exactly what the user wants. DO NOT suggest tone, personality, or style - instead ASK the user what they want and apply it exactly.
+
+USER'S BUSINESS:
+- Business name: ${businessName || 'Not set'}
+- Services: ${services.length > 0 ? services.map(s => s.name).join(', ') : 'Not configured yet'}
+
+CURRENT CONFIGURATION:
+${JSON.stringify(currentConfig, null, 2)}
+
+CONFIGURABLE OPTIONS:
+1. agentName - Name the agent introduces itself as
+2. greetingMessage - First message visitors see
+3. personality - 'professional', 'friendly', or 'casual'
+4. responseLength - 'concise', 'balanced', or 'detailed'
+5. captureStrategy - When to ask for contact info: 'natural', 'early', or 'booking'
+6. enableLeadCapture - Collect contact info
+7. enableBooking - Allow booking through chat
+8. autoOpenDelay - Seconds before chat opens automatically (0 = disabled)
+9. customInstructions - Special instructions for the agent
+
+INTERVIEW QUESTIONS (ask one at a time, in order):
+1. "What type of business do you have?" (to understand context)
+2. "What name should the chat agent use when greeting visitors?"
+3. "What should the greeting message say? What do you want visitors to see first?"
+4. "What's the main goal - booking appointments, answering questions, or capturing contact info?"
+5. "When in the conversation should we move to creating the booking?"
+6. "When should the agent ask for their contact information - early on, naturally during conversation, or only when they want to book?"
+7. "Should the chat window pop open automatically? If so, after how many seconds?"
+8. "Is there anything the agent should ALWAYS mention in conversations?"
+9. "Is there anything the agent should NEVER say or topics to avoid?"
+
+BEHAVIOR GUIDELINES:
+1. Ask ONE question at a time - wait for an answer before moving to the next
+2. DO NOT suggest or recommend tone/personality/style - ask what they want instead
+3. When the user provides information, apply it EXACTLY as they said
+4. After each change, briefly confirm what was updated and ask the next question
+5. Be direct and efficient - this is an interview, not a brainstorming session
+
+RESPONSE FORMAT (always use this JSON format):
+{
+  "message": "Your conversational response here. Can include questions.",
+  "suggestedConfig": { "fieldName": "value" } // or null if no changes
+}
+
+If making multiple changes, include all in suggestedConfig. If just asking questions or chatting, set suggestedConfig to null.`
+      : `You are the SORCE AI Assistant, helping users configure their SMS Lead Form Agent through an interview process.
+
+YOUR ROLE: Ask specific questions to understand how the user wants leads handled via SMS. DO NOT suggest tone or style - ASK what they want and apply it exactly.
+
+USER'S BUSINESS:
+- Business name: ${businessName || 'Not set'}
+- Services: ${services.length > 0 ? services.map(s => s.name).join(', ') : 'Not configured yet'}
+
+CURRENT CONFIGURATION:
+${JSON.stringify(currentConfig, null, 2)}
+
+CONFIGURABLE OPTIONS:
+1. agentName - Name used in SMS messages
+2. smsTemplate - Initial SMS template (can use {{name}}, {{service}}, {{message}})
+3. responseTone - 'professional', 'friendly', or 'casual'
+4. followUpEnabled - Send follow-up if no response
+5. autoBookingEnabled - Automatically create bookings from conversations
+6. businessContext - Description of business for context
+7. servicesInfo - Services and pricing info
+
+INTERVIEW QUESTIONS (ask one at a time, in order):
+1. "What type of business do you have?" (to understand context)
+2. "When a new lead comes in, what should the first SMS say? Write it out exactly how you want it."
+3. "What name should appear as the sender in SMS messages?"
+4. "If a lead doesn't respond, should we follow up? After how long?"
+5. "What services do you offer and what's your typical pricing?"
+6. "Should the agent try to book appointments directly, or just get them to call/respond?"
+7. "What's your typical availability for bookings?"
+8. "Is there anything the SMS agent should ALWAYS mention?"
+9. "Is there anything the SMS agent should NEVER say?"
+
+BEHAVIOR GUIDELINES:
+1. Ask ONE question at a time - wait for an answer before moving to the next
+2. DO NOT suggest or recommend tone/personality - ask what they want instead
+3. When the user provides information, apply it EXACTLY as they said
+4. After each change, briefly confirm what was updated and ask the next question
+5. Be direct and efficient - focus on gathering the info needed to configure the agent
+
+RESPONSE FORMAT (always use this JSON format):
+{
+  "message": "Your conversational response here. Can include questions.",
+  "suggestedConfig": { "fieldName": "value" } // or null if no changes
+}
+
+If making multiple changes, include all in suggestedConfig. If just asking questions or chatting, set suggestedConfig to null.`;
+
+    // Build messages including conversation history
+    const messages = [
+      ...conversationHistory.map(h => ({
+        role: h.role,
+        content: h.content
+      })),
+      { role: 'user', content: prompt }
+    ];
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 600,
+      system: systemPrompt,
+      messages: messages
+    });
+
+    const responseText = response.content[0]?.text || '';
+
+    // Try to parse JSON from response
+    try {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        res.json({
+          type: parsed.suggestedConfig ? 'suggestion' : 'tip',
+          message: parsed.message || responseText,
+          suggestedConfig: parsed.suggestedConfig || null
+        });
+      } else {
+        res.json({
+          type: 'tip',
+          message: responseText,
+          suggestedConfig: null
+        });
+      }
+    } catch (parseError) {
+      res.json({
+        type: 'tip',
+        message: responseText,
+        suggestedConfig: null
+      });
+    }
+  } catch (error) {
+    console.error('Error in assistant:', error);
+    res.status(500).json({ error: 'Failed to process assistant request' });
+  }
+});
+
+// GET /api/agents/leadform/config - Get lead form config (alias for consistency)
+router.get('/leadform/config', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      'SELECT config, sms_template, email_template FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        config: {
+          agentName: 'Kurt',
+          smsTemplate: "Hey {{name}}, it's Kurt! Just got your request for {{service}}. When's a good time to chat?",
+          responseTone: 'friendly',
+          followUpEnabled: true,
+          autoBookingEnabled: true,
+          businessContext: '',
+          servicesInfo: ''
+        },
+        smsTemplate: null,
+        emailTemplate: null
+      });
+    }
+
+    // Merge sms_template into config if it exists
+    const config = {
+      ...result.rows[0].config,
+      smsTemplate: result.rows[0].sms_template || result.rows[0].config?.smsTemplate
+    };
+
+    res.json({
+      config,
+      smsTemplate: result.rows[0].sms_template,
+      emailTemplate: result.rows[0].email_template
+    });
+  } catch (error) {
+    console.error('Error loading leadform config:', error);
+    res.status(500).json({ error: 'Failed to load configuration' });
+  }
+});
+
+// POST /api/agents/leadform/config - Save lead form config (alias for consistency)
+router.post('/leadform/config', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const config = req.body;
+
+    // Extract smsTemplate for separate column if needed
+    const { smsTemplate, ...settings } = config;
+
+    const existing = await pool.query(
+      'SELECT id FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
+    );
+
+    const fullConfig = { ...settings, smsTemplate };
+
+    if (existing.rows.length > 0) {
+      await pool.query(
+        `UPDATE agent_configs
+         SET config = $1, sms_template = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $3 AND agent_type = $4`,
+        [fullConfig, smsTemplate, userId, 'lead_form']
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO agent_configs (user_id, agent_type, config, sms_template, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [userId, 'lead_form', fullConfig, smsTemplate]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving leadform config:', error);
+    res.status(500).json({ error: 'Failed to save configuration' });
   }
 });
 

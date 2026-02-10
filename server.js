@@ -15,8 +15,7 @@ app.use(cors({
   origin: function(origin, callback) {
     const allowedOrigins = [
       /\.vercel\.app$/,
-      'http://localhost:5173',
-      'http://localhost:3000',
+      /^http:\/\/localhost:\d+$/,  // Allow any localhost port for development
       'https://sorceintegrations.com',
       'https://www.sorceintegrations.com'
     ];
@@ -116,13 +115,13 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
       CREATE TABLE IF NOT EXISTS business_hours (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        day_name VARCHAR(20) NOT NULL,
+        day_of_week INTEGER NOT NULL,
         is_open BOOLEAN DEFAULT true,
         open_time TIME DEFAULT '09:00',
         close_time TIME DEFAULT '17:00',
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(user_id, day_name)
+        UNIQUE(user_id, day_of_week)
       )
     `);
     console.log('✅ Business hours table verified');

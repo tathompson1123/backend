@@ -7,11 +7,7 @@ const { authenticateToken } = require('../config/middleware');
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM business_hours WHERE user_id = $1 
-       ORDER BY CASE day_name 
-         WHEN 'monday' THEN 1 WHEN 'tuesday' THEN 2 WHEN 'wednesday' THEN 3 
-         WHEN 'thursday' THEN 4 WHEN 'friday' THEN 5 WHEN 'saturday' THEN 6 
-         WHEN 'sunday' THEN 7 END`,
+      `SELECT * FROM business_hours WHERE user_id = $1 ORDER BY day_of_week`,
       [req.user.userId]
     );
     res.json({ success: true, hours: result.rows });
@@ -40,9 +36,9 @@ router.post('/', authenticateToken, async (req, res) => {
     // Insert new hours
     for (const day of hours) {
       await client.query(
-        `INSERT INTO business_hours (user_id, day_name, is_open, open_time, close_time)
+        `INSERT INTO business_hours (user_id, day_of_week, is_open, open_time, close_time)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user.userId, day.day_name, day.is_open, day.open_time, day.close_time]
+        [req.user.userId, day.day_of_week, day.is_open, day.open_time, day.close_time]
       );
     }
 
