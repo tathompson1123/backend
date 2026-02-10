@@ -169,12 +169,20 @@ router.put('/my-bookings/:id/notes', async (req, res) => {
 router.get('/my-schedule', async (req, res) => {
   try {
     const { employeeId, userId } = req.employee;
-    const { date } = req.query; // optional, defaults to today
+    const { date, showAll } = req.query;
 
     const targetDate = date || new Date().toISOString().split('T')[0];
 
+    const params = [userId, targetDate];
+    let employeeFilter = 'AND b.employee_id = $3';
+    if (showAll === 'true') {
+      employeeFilter = '';
+    } else {
+      params.push(employeeId);
+    }
+
     const result = await pool.query(
-      `SELECT b.*,
+      `SELECT b.*, e.name as employee_name,
         json_agg(
           json_build_object(
             'service_name', bi.service_name,
@@ -185,12 +193,14 @@ router.get('/my-schedule', async (req, res) => {
         ) as items
        FROM bookings b
        LEFT JOIN booking_items bi ON b.id = bi.booking_id
-       WHERE b.user_id = $1 AND b.employee_id = $2
-         AND b.booking_date = $3
+       LEFT JOIN employees e ON e.id = b.employee_id
+       WHERE b.user_id = $1
+         AND b.booking_date = $2
+         ${employeeFilter}
          AND b.status NOT IN ('cancelled')
-       GROUP BY b.id
+       GROUP BY b.id, e.name
        ORDER BY b.start_time`,
-      [userId, employeeId, targetDate]
+      params
     );
 
     res.json({ date: targetDate, bookings: result.rows });
