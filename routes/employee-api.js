@@ -76,9 +76,9 @@ router.get('/my-bookings/:id', async (req, res) => {
         ) as items
        FROM bookings b
        LEFT JOIN booking_items bi ON b.id = bi.booking_id
-       WHERE b.id = $1 AND b.user_id = $2 AND b.employee_id = $3
+       WHERE b.id = $1 AND b.user_id = $2
        GROUP BY b.id`,
-      [id, userId, employeeId]
+      [id, userId]
     );
 
     if (result.rows.length === 0) {
