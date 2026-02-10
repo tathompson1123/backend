@@ -83,7 +83,7 @@ router.get('/square/callback', async (req, res) => {
     const { Client, Environment } = require('square');
     const client = new Client({
       accessToken: result.accessToken,
-      environment: process.env.NODE_ENV === 'production' ? Environment.Production : Environment.Sandbox,
+      environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
     });
     const { result: locResult } = await client.locationsApi.listLocations();
     const locationId = locResult.locations?.[0]?.id;
