@@ -16,11 +16,17 @@ router.get('/website/config', authenticateToken, requirePlan('pro'), async (req,
     if (result.rows.length === 0) {
       return res.json({
         config: {
-  enabled: true,
-  agentName: 'Kurt',
-  greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
-  autoOpenDelay: 14  // Changed from 3
-}
+          enabled: true,
+          agentName: 'Kurt',
+          greetingMessage: "Hey it's Kurt, I just happened to look and saw you were browsing. What are you looking to get done?",
+          autoOpenDelay: 14,
+          personality: 'friendly',
+          responseLength: 'concise',
+          captureStrategy: 'natural',
+          customInstructions: '',
+          enableBooking: true,
+          enableLeadCapture: true
+        }
       });
     }
 
@@ -72,9 +78,18 @@ router.get('/leadform/status', authenticateToken, async (req, res) => {
 router.post('/website/config', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { agentName, greetingMessage, autoOpenDelay } = req.body;
+    const {
+      agentName, greetingMessage, autoOpenDelay,
+      personality, responseLength, captureStrategy,
+      customInstructions, enableBooking, enableLeadCapture
+    } = req.body;
 
-    const config = { agentName, greetingMessage, autoOpenDelay, enabled: true };
+    const config = {
+      agentName, greetingMessage, autoOpenDelay,
+      personality, responseLength, captureStrategy,
+      customInstructions, enableBooking, enableLeadCapture,
+      enabled: true
+    };
 
     const result = await pool.query(
       `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at) 
