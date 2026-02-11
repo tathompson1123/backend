@@ -778,6 +778,8 @@ BEHAVIOR GUIDELINES:
 3. When the user provides information, apply it EXACTLY as they said
 4. After each change, briefly confirm what was updated and ask the next question
 5. Be direct and efficient - this is an interview, not a brainstorming session
+6. IMPORTANT: Look at CURRENT CONFIGURATION above. If fields already have non-default values (e.g. agentName is not 'Kurt', greetingMessage has been customized, customInstructions is not empty, objectionServices is set), that means the user has ALREADY configured this agent. Do NOT restart the interview from scratch. Instead, greet them with something like "Your agent is configured. What would you like to change?" and let them modify specific settings.
+7. Only run the full interview if the configuration is clearly still at defaults (all values are generic/empty).
 
 RESPONSE FORMAT (always use this JSON format):
 {
@@ -823,6 +825,8 @@ BEHAVIOR GUIDELINES:
 3. When the user provides information, apply it EXACTLY as they said
 4. After each change, briefly confirm what was updated and ask the next question
 5. Be direct and efficient - focus on gathering the info needed to configure the agent
+6. IMPORTANT: Look at CURRENT CONFIGURATION above. If fields already have non-default values (e.g. smsTemplate is customized, businessContext is set, servicesInfo is not empty), that means the user has ALREADY configured this agent. Do NOT restart the interview from scratch. Instead, greet them with something like "Your SMS agent is configured. What would you like to change?" and let them modify specific settings.
+7. Only run the full interview if the configuration is clearly still at defaults (all values are generic/empty).
 
 RESPONSE FORMAT (always use this JSON format):
 {
