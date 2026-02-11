@@ -3,8 +3,8 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
 
-// Website Chat Agent - Get config
-router.get('/website/config', authenticateToken, requirePlan('pro'), async (req, res) => {
+// Website Chat Agent - Get config (no plan gate — users can configure before upgrading)
+router.get('/website/config', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     
@@ -75,7 +75,8 @@ router.get('/leadform/status', authenticateToken, async (req, res) => {
 });
 
 // Website Chat Agent - Save config
-router.post('/website/config', authenticateToken, requirePlan('pro'), async (req, res) => {
+// Save config (no plan gate — users can configure before upgrading, deployment still requires pro)
+router.post('/website/config', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const {
