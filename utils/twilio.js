@@ -61,8 +61,8 @@ async function purchasePhoneNumber(areaCode, userId) {
   }
 }
 
-// Send SMS via Messaging Service (automatic number selection)
-async function sendSMS(to, message, userId) {
+// Send SMS/MMS via Messaging Service
+async function sendSMS(to, message, userId, mediaUrl) {
   try {
     const twilioClient = getClient();
 
@@ -74,18 +74,23 @@ async function sendSMS(to, message, userId) {
     );
 
     if (!userResult.rows[0]?.twilio_phone_number) {
-      throw new Error('No phone number assigned to this user');
+      throw new Error(`No phone number assigned to this user (userId: ${userId})`);
     }
 
     const from = userResult.rows[0].twilio_phone_number;
 
-    // Send via Messaging Service
-    const result = await twilioClient.messages.create({
+    const msgParams = {
       body: message,
       to: to,
       messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
-      from: from // Explicitly use their number
-    });
+      from: from
+    };
+
+    if (mediaUrl) {
+      msgParams.mediaUrl = Array.isArray(mediaUrl) ? mediaUrl : [mediaUrl];
+    }
+
+    const result = await twilioClient.messages.create(msgParams);
 
     return {
       success: true,

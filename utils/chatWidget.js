@@ -249,10 +249,10 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
 
     addMessage(message, 'user');
     input.value = '';
-    showTypingIndicator();
 
     try {
-      const response = await fetch(apiUrl + '/api/chat/message', {
+      // Fetch response in background while we do the initial delay
+      const fetchPromise = fetch(apiUrl + '/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -261,8 +261,19 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
           message: message
         })
       });
+
+      // 5 second "reading" delay before typing indicator appears
+      await new Promise(r => setTimeout(r, 5000));
+      showTypingIndicator();
+
+      const response = await fetchPromise;
       if (response.ok) {
         const data = await response.json();
+        // Human typing delay: 60-80 WPM (80WPM=150ms/char, 60WPM=200ms/char)
+        const replyLen = (data.reply || '').length;
+        const msPerChar = 150 + Math.random() * 50; // 150-200ms per char
+        const typingMs = Math.min(Math.max(replyLen * msPerChar, 2000), 15000);
+        await new Promise(r => setTimeout(r, typingMs));
         hideTypingIndicator();
         addMessage(data.reply, 'agent');
       } else {

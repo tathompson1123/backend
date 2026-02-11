@@ -458,7 +458,7 @@ cron.schedule('*/30 * * * * *', async () => {
           .replace(/\{\{service\}\}/g, lead.service || 'our services')
           .replace(/\{\{message\}\}/g, lead.message || '');
 
-        const smsResult = await sendSMS(lead.phone, lead.twilio_phone_number, personalizedSms);
+        const smsResult = await sendSMS(lead.phone, personalizedSms, lead.user_id);
 
         await pool.query(
           `INSERT INTO sms_messages (lead_id, user_id, direction, to_number, message, twilio_message_sid, created_at)

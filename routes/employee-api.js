@@ -216,7 +216,7 @@ router.get('/my-bookings/:id/messages', async (req, res) => {
 
     // Get messages for this customer phone, prefer booking-tagged ones but also show general ones
     const result = await pool.query(
-      `SELECT id, direction, message, media_url, created_at
+      `SELECT id, direction, message AS body, media_url, created_at, from_number, to_number
        FROM sms_messages
        WHERE user_id = $1 AND (booking_id = $2 OR (booking_id IS NULL AND (from_number = $3 OR to_number = $3)))
        ORDER BY created_at ASC`,

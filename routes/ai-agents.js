@@ -81,13 +81,15 @@ router.post('/website/config', authenticateToken, requirePlan('pro'), async (req
     const {
       agentName, greetingMessage, autoOpenDelay,
       personality, responseLength, captureStrategy,
-      customInstructions, enableBooking, enableLeadCapture
+      customInstructions, enableBooking, enableLeadCapture,
+      objectionServices, objectionNotes
     } = req.body;
 
     const config = {
       agentName, greetingMessage, autoOpenDelay,
       personality, responseLength, captureStrategy,
       customInstructions, enableBooking, enableLeadCapture,
+      objectionServices, objectionNotes,
       enabled: true
     };
 
@@ -645,7 +647,16 @@ ${config.enableBooking ? '- Help customers book appointments when they express i
 - Answer questions about services professionally
 - Keep responses natural and conversational
 
-Lead capture strategy: ${config.captureStrategy === 'early' ? 'Ask for contact info within the first 2-3 messages' : config.captureStrategy === 'booking' ? 'Only ask for contact info when booking' : 'Ask naturally when relevant'}`;
+Lead capture strategy: ${config.captureStrategy === 'early' ? 'Ask for contact info within the first 2-3 messages' : config.captureStrategy === 'booking' ? 'Only ask for contact info when booking' : 'Ask naturally when relevant'}
+
+OBJECTION HANDLING (always active):
+- When a customer expresses hesitation about price, timing, or need, acknowledge their concern first
+- Use social proof: mention how many customers you've helped, satisfaction rates
+- If price is the objection, highlight the value and long-term savings
+${config.objectionServices ? `- You may offer these complimentary add-ons to close hesitant customers: ${config.objectionServices}` : '- If appropriate, offer to include a small bonus service to sweeten the deal'}
+${config.objectionNotes ? `- Additional objection handling notes: ${config.objectionNotes}` : ''}
+- Never be pushy — be understanding and helpful while gently addressing concerns
+- If they still decline, leave the door open: "No problem at all! We're here whenever you're ready."`;
     } else {
       // Lead form agent - SMS style
       systemPrompt = `You are ${config.agentName || 'Kurt'}, responding via SMS for ${businessName}.
@@ -739,6 +750,8 @@ CONFIGURABLE OPTIONS:
 7. enableBooking - Allow booking through chat
 8. autoOpenDelay - Seconds before chat opens automatically (0 = disabled)
 9. customInstructions - Special instructions for the agent
+10. objectionServices - Services the business is willing to throw in free to close hesitant customers
+11. objectionNotes - Additional notes on how to handle objections
 
 INTERVIEW QUESTIONS (ask one at a time, in order):
 1. "What type of business do you have?" (to understand context)
@@ -748,8 +761,10 @@ INTERVIEW QUESTIONS (ask one at a time, in order):
 5. "When in the conversation should we move to creating the booking?"
 6. "When should the agent ask for their contact information - early on, naturally during conversation, or only when they want to book?"
 7. "Should the chat window pop open automatically? If so, after how many seconds?"
-8. "Is there anything the agent should ALWAYS mention in conversations?"
-9. "Is there anything the agent should NEVER say or topics to avoid?"
+8. "When a customer hesitates on price or isn't sure they need the service, would you be comfortable offering to throw in any additional services for free to close the deal? If so, which services and on what types of jobs?"
+9. "Any other tips for how the agent should handle objections? For example, things to emphasize about your quality, guarantees, or experience?"
+10. "Is there anything the agent should ALWAYS mention in conversations?"
+11. "Is there anything the agent should NEVER say or topics to avoid?"
 
 BEHAVIOR GUIDELINES:
 1. Ask ONE question at a time - wait for an answer before moving to the next
