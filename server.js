@@ -408,6 +408,15 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
   } catch (e) {
     console.warn('⚠️ Could not verify status_update_templates table:', e.message);
   }
+
+  // Add booking_id column to sms_messages for booking chat
+  try {
+    await pool.query('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS booking_id INTEGER REFERENCES bookings(id)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_sms_booking_id ON sms_messages(booking_id)');
+    console.log('✅ sms_messages booking_id column verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify sms_messages booking_id:', e.message);
+  }
 })();
 
 // ── SMS processing cron job ──────────────────────────────

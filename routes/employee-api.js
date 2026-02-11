@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { authenticateEmployee } = require('../config/employee-middleware');
 
@@ -162,6 +163,256 @@ router.put('/my-bookings/:id/notes', async (req, res) => {
   } catch (error) {
     console.error('Error updating job notes:', error);
     res.status(500).json({ error: 'Failed to update notes' });
+  }
+});
+
+// GET /api/employee/my-bookings/:id/messages - Chat history for a booking
+router.get('/my-bookings/:id/messages', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+
+    // Verify booking belongs to this business
+    const booking = await pool.query(
+      'SELECT customer_phone FROM bookings WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (booking.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+
+    const phone = booking.rows[0].customer_phone;
+    if (!phone) return res.json({ messages: [] });
+
+    // Get messages for this customer phone, prefer booking-tagged ones but also show general ones
+    const result = await pool.query(
+      `SELECT id, direction, message, media_url, created_at
+       FROM sms_messages
+       WHERE user_id = $1 AND (booking_id = $2 OR (booking_id IS NULL AND (from_number = $3 OR to_number = $3)))
+       ORDER BY created_at ASC`,
+      [userId, id, phone]
+    );
+
+    res.json({ messages: result.rows });
+  } catch (error) {
+    console.error('Error fetching booking messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// POST /api/employee/my-bookings/:id/messages - Send SMS to customer from booking
+router.post('/my-bookings/:id/messages', async (req, res) => {
+  try {
+    const { employeeId, userId } = req.employee;
+    const { id } = req.params;
+    const { message } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const booking = await pool.query(
+      'SELECT customer_phone, customer_name FROM bookings WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (booking.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+
+    const phone = booking.rows[0].customer_phone;
+    if (!phone) return res.status(400).json({ error: 'Customer has no phone number' });
+
+    // Send via Twilio
+    const { sendSMS } = require('../utils/twilio');
+    const smsResult = await sendSMS(phone, message.trim(), userId);
+
+    // Store message
+    await pool.query(
+      `INSERT INTO sms_messages (user_id, booking_id, direction, to_number, message, twilio_message_sid, status, created_at)
+       VALUES ($1, $2, 'outgoing', $3, $4, $5, 'sent', NOW())`,
+      [userId, id, phone, message.trim(), smsResult.messageSid]
+    );
+
+    res.json({ success: true, messageSid: smsResult.messageSid });
+  } catch (error) {
+    console.error('Error sending booking message:', error);
+    res.status(500).json({ error: error.message || 'Failed to send message' });
+  }
+});
+
+// POST /api/employee/my-bookings/:id/invoice - Auto-create invoice from booking
+router.post('/my-bookings/:id/invoice', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+
+    // Get booking with items
+    const bookingResult = await pool.query(
+      `SELECT b.*, json_agg(json_build_object(
+        'service_name', bi.service_name, 'service_price', bi.service_price,
+        'quantity', bi.quantity, 'service_id', bi.service_id
+       )) as items
+       FROM bookings b
+       LEFT JOIN booking_items bi ON b.id = bi.booking_id
+       WHERE b.id = $1 AND b.user_id = $2
+       GROUP BY b.id`,
+      [id, userId]
+    );
+
+    if (bookingResult.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+    const booking = bookingResult.rows[0];
+
+    // Check if invoice already exists
+    if (booking.invoice_id) {
+      const existing = await pool.query('SELECT * FROM invoices WHERE id = $1', [booking.invoice_id]);
+      if (existing.rows.length > 0) {
+        return res.json({ invoice: existing.rows[0], existing: true });
+      }
+    }
+
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSuffix = crypto.randomBytes(2).toString('hex').toUpperCase();
+    const invoiceNumber = `INV-${dateStr}-${randomSuffix}`;
+    const paymentLinkToken = crypto.randomBytes(32).toString('hex');
+    const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    const invoiceResult = await pool.query(
+      `INSERT INTO invoices (
+        user_id, booking_id, customer_id, invoice_number, customer_name, customer_email, customer_phone,
+        subtotal, total_amount, amount_due, status, due_date, payment_link_token
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'draft', $11, $12)
+      RETURNING *`,
+      [userId, id, booking.customer_id, invoiceNumber, booking.customer_name,
+       booking.customer_email, booking.customer_phone, booking.subtotal || booking.total_amount,
+       booking.total_amount, booking.total_amount, dueDate, paymentLinkToken]
+    );
+
+    const invoice = invoiceResult.rows[0];
+
+    // Create line items from booking items
+    for (const item of (booking.items || [])) {
+      if (item.service_name) {
+        await pool.query(
+          `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount, service_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [invoice.id, item.service_name, item.quantity || 1, item.service_price, item.service_price * (item.quantity || 1), item.service_id]
+        );
+      }
+    }
+
+    // Link invoice to booking
+    await pool.query(
+      "UPDATE bookings SET invoice_id = $1, payment_status = 'invoiced' WHERE id = $2",
+      [invoice.id, id]
+    );
+
+    res.json({ invoice, existing: false });
+  } catch (error) {
+    console.error('Error creating invoice from booking:', error);
+    res.status(500).json({ error: 'Failed to create invoice' });
+  }
+});
+
+// POST /api/employee/my-bookings/:id/invoice/send - Send invoice to customer via payment link
+router.post('/my-bookings/:id/invoice/send', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+    const { method } = req.body; // 'sms' or 'email'
+
+    const booking = await pool.query(
+      `SELECT b.*, i.id as invoice_id, i.payment_link_token, i.invoice_number, i.amount_due, i.status as invoice_status
+       FROM bookings b
+       JOIN invoices i ON i.id = b.invoice_id
+       WHERE b.id = $1 AND b.user_id = $2`,
+      [id, userId]
+    );
+
+    if (booking.rows.length === 0) return res.status(404).json({ error: 'Booking or invoice not found' });
+    const data = booking.rows[0];
+
+    // Try to create a checkout session via connected payment processor
+    const { getProcessorForUser } = require('../payment/ProcessorFactory');
+    const processor = await getProcessorForUser(userId, pool);
+
+    let paymentUrl;
+    if (processor) {
+      const frontendUrl = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
+      const session = await processor.createCheckoutSession({
+        amount: parseFloat(data.amount_due),
+        currency: 'USD',
+        description: `Invoice ${data.invoice_number}`,
+        customerEmail: data.customer_email,
+        successUrl: `${frontendUrl}/pay/${data.payment_link_token}?success=true`,
+        cancelUrl: `${frontendUrl}/pay/${data.payment_link_token}?cancelled=true`,
+        metadata: { invoiceId: data.invoice_id.toString(), invoiceNumber: data.invoice_number }
+      });
+      paymentUrl = session.checkoutUrl;
+    } else {
+      // Fallback to our payment page
+      paymentUrl = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/pay/${data.payment_link_token}`;
+    }
+
+    // Update invoice status
+    await pool.query(
+      "UPDATE invoices SET status = 'sent', sent_at = NOW(), payment_link = $1 WHERE id = $2",
+      [paymentUrl, data.invoice_id]
+    );
+
+    // Send via SMS if requested and customer has phone
+    if (method === 'sms' && data.customer_phone) {
+      try {
+        const { sendSMS } = require('../utils/twilio');
+        const msg = `Invoice ${data.invoice_number} for $${parseFloat(data.amount_due).toFixed(2)}. Pay here: ${paymentUrl}`;
+        await sendSMS(data.customer_phone, msg, userId);
+      } catch (smsErr) {
+        console.error('Failed to send invoice SMS:', smsErr);
+      }
+    }
+
+    res.json({ success: true, paymentUrl, invoiceId: data.invoice_id });
+  } catch (error) {
+    console.error('Error sending invoice:', error);
+    res.status(500).json({ error: 'Failed to send invoice' });
+  }
+});
+
+// POST /api/employee/my-bookings/:id/invoice/record-payment - Record cash/manual payment
+router.post('/my-bookings/:id/invoice/record-payment', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+    const { method } = req.body; // 'cash', 'check', 'other'
+
+    const booking = await pool.query(
+      `SELECT b.invoice_id, i.amount_due, i.total_amount
+       FROM bookings b JOIN invoices i ON i.id = b.invoice_id
+       WHERE b.id = $1 AND b.user_id = $2`,
+      [id, userId]
+    );
+
+    if (booking.rows.length === 0) return res.status(404).json({ error: 'Booking or invoice not found' });
+    const { invoice_id, amount_due, total_amount } = booking.rows[0];
+
+    // Record payment
+    await pool.query(
+      `INSERT INTO payments (user_id, invoice_id, booking_id, amount, processor, payment_method, status, created_at)
+       VALUES ($1, $2, $3, $4, 'manual', $5, 'completed', NOW())`,
+      [userId, invoice_id, id, amount_due, method || 'cash']
+    );
+
+    // Update invoice
+    await pool.query(
+      "UPDATE invoices SET status = 'paid', amount_paid = total_amount, amount_due = 0, paid_at = NOW() WHERE id = $1",
+      [invoice_id]
+    );
+
+    // Update booking
+    await pool.query(
+      "UPDATE bookings SET payment_status = 'paid' WHERE id = $1",
+      [id]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error recording payment:', error);
+    res.status(500).json({ error: 'Failed to record payment' });
   }
 });
 
