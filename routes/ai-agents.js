@@ -79,30 +79,47 @@ router.get('/leadform/status', authenticateToken, async (req, res) => {
 router.post('/website/config', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const {
-      agentName, greetingMessage, autoOpenDelay,
-      personality, responseLength, captureStrategy,
-      customInstructions, enableBooking, enableLeadCapture,
-      objectionServices, objectionNotes
-    } = req.body;
 
-    const config = {
-      agentName, greetingMessage, autoOpenDelay,
-      personality, responseLength, captureStrategy,
-      customInstructions, enableBooking, enableLeadCapture,
-      objectionServices, objectionNotes,
-      enabled: true
-    };
+    // Get existing config to merge (prevents losing fields on partial updates)
+    const existing = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'website_chat']
+    );
+    const existingConfig = existing.rows[0]?.config || {};
+
+    // Whitelist allowed fields, filter out null/undefined
+    const allowedFields = [
+      'agentName', 'greetingMessage', 'autoOpenDelay',
+      'personality', 'responseLength', 'captureStrategy',
+      'customInstructions', 'enableBooking', 'enableLeadCapture',
+      'objectionServices', 'objectionNotes'
+    ];
+
+    const incoming = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined && req.body[field] !== null) {
+        incoming[field] = req.body[field];
+      }
+    }
+    // Allow explicit false/empty string (only filter null/undefined)
+    if (req.body.enableBooking === false) incoming.enableBooking = false;
+    if (req.body.enableLeadCapture === false) incoming.enableLeadCapture = false;
+    if (req.body.customInstructions === '') incoming.customInstructions = '';
+
+    const config = { ...existingConfig, ...incoming, enabled: true };
+
+    console.log('💾 Saving chat config for user', userId, ':', Object.keys(incoming).join(', '));
 
     const result = await pool.query(
-      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at) 
-       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
-       ON CONFLICT (user_id, agent_type) 
-       DO UPDATE SET config = $3, updated_at = CURRENT_TIMESTAMP 
+      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, agent_type)
+       DO UPDATE SET config = $3, updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [userId, 'website_chat', JSON.stringify(config)]
     );
 
+    console.log('✅ Chat config saved for user', userId);
     res.json({ success: true, config: result.rows[0].config });
   } catch (error) {
     console.error('Error saving website agent config:', error);
@@ -611,6 +628,7 @@ router.get('/leadform/status', authenticateToken, async (req, res) => {
 // ============================================
 
 // POST /api/agents/preview-chat - Test agent responses in preview mode
+// Uses the SAME system prompt as the deployed chat.js endpoint + agent config
 router.post('/preview-chat', authenticateToken, async (req, res) => {
   try {
     const { message, config, agentType, history = [] } = req.body;
@@ -620,50 +638,95 @@ router.post('/preview-chat', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Message and config are required' });
     }
 
-    // Get user's business info for context
-    const userResult = await pool.query(
-      'SELECT business_name FROM users WHERE id = $1',
+    // Get user's business info (same queries as deployed chat.js)
+    const userInfoResult = await pool.query(
+      `SELECT u.business_name, u.phone, u.email,
+              bi.address, bi.city, bi.state
+       FROM users u
+       LEFT JOIN business_information bi ON u.id = bi.user_id
+       WHERE u.id = $1`,
       [userId]
     );
-    const businessName = userResult.rows[0]?.business_name || 'Our business';
+    const userInfo = userInfoResult.rows[0] || {};
+    const businessName = userInfo.business_name || 'Our business';
 
-    // Get services for context
+    // Get services with IDs (same as deployed)
     const servicesResult = await pool.query(
-      'SELECT name, description, price, duration_hours FROM services WHERE user_id = $1 LIMIT 10',
+      'SELECT id, name, description, price, duration_hours FROM services WHERE user_id = $1 AND active = true',
       [userId]
     );
-    const services = servicesResult.rows;
 
-    // Build system prompt based on agent type and config
+    // Get business hours (same as deployed)
+    const hoursResult = await pool.query(
+      'SELECT day_of_week, open_time, close_time, is_open FROM business_hours WHERE user_id = $1 ORDER BY day_of_week',
+      [userId]
+    );
+    const daysMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const businessHours = hoursResult.rows
+      .filter(h => h.is_open)
+      .map(h => `${daysMap[h.day_of_week]}: ${h.open_time} - ${h.close_time}`)
+      .join('\n');
+
     let systemPrompt = '';
 
     if (agentType === 'chat') {
-      systemPrompt = `You are ${config.agentName || 'Kurt'}, a helpful AI assistant for ${businessName}.
+      // Matches deployed chat.js structure + agent config personality/objection handling
+      systemPrompt = `You are ${config.agentName || 'Kurt'}, a ${config.personality || 'friendly'} assistant for ${businessName} helping customers book services.
 
-Personality: ${config.personality || 'friendly'}
 Response style: Be ${config.responseLength || 'concise'} in your responses.
-
-${config.customInstructions ? `Additional instructions: ${config.customInstructions}` : ''}
+${config.customInstructions ? `\nSpecial instructions: ${config.customInstructions}` : ''}
 
 Available services:
-${services.map(s => `- ${s.name}: ${s.description || 'No description'} ($${s.price || 'Quote'}, ${s.duration_hours ? s.duration_hours + ' hrs' : '30 min'})`).join('\n') || 'Services are being configured.'}
+${servicesResult.rows.map(s => `- ${s.name} (ID: ${s.id}): $${s.price} - ${s.description || 'No description'} (${s.duration_hours} hours)`).join('\n') || 'No services configured yet.'}
 
-Your goals:
-${config.enableLeadCapture ? '- Naturally gather contact info (name, email, phone) when appropriate' : ''}
-${config.enableBooking ? '- Help customers book appointments when they express interest' : ''}
-- Answer questions about services professionally
-- Keep responses natural and conversational
+Business Hours:
+${businessHours || 'Monday-Friday: 9:00 AM - 5:00 PM'}
 
-Lead capture strategy: ${config.captureStrategy === 'early' ? 'Ask for contact info within the first 2-3 messages' : config.captureStrategy === 'booking' ? 'Only ask for contact info when booking' : 'Ask naturally when relevant'}
+Contact: ${userInfo.phone || 'N/A'}
+Email: ${userInfo.email || 'N/A'}
 
-OBJECTION HANDLING (always active):
+CONVERSATION FLOW - Follow these stages in order:
+
+STAGE 1 - IDENTIFY THE PROBLEM:
+- Ask what they're looking to get done
+- Listen to their needs and pain points
+- Be conversational and ${config.personality || 'friendly'}
+
+STAGE 2 - RECOMMEND SERVICES:
+- Based on their problem, suggest 1-3 relevant services from the list above
+- Explain briefly why each service fits their needs
+- Mention the price and duration for each
+- Ask which service interests them most
+
+STAGE 3 - GATHER BOOKING DETAILS (only after they choose a service):
+Ask ONE question at a time in this order:
+1. First, ask: "What day works best for you?"
+2. Then ask: "What time would you prefer?"
+3. Then ask: "Can I get your name?"
+4. Then ask: "What's the best email to send your confirmation?"
+5. Finally ask: "And your phone number?"
+
+STAGE 4 - CONFIRM AND BOOK:
+Once you have ALL information, confirm the booking details and let them know it's booked.
+
+OBJECTION HANDLING:
 - When a customer expresses hesitation about price, timing, or need, acknowledge their concern first
-- Use social proof: mention how many customers you've helped, satisfaction rates
+- Use social proof: mention satisfaction rates and experience
 - If price is the objection, highlight the value and long-term savings
 ${config.objectionServices ? `- You may offer these complimentary add-ons to close hesitant customers: ${config.objectionServices}` : '- If appropriate, offer to include a small bonus service to sweeten the deal'}
 ${config.objectionNotes ? `- Additional objection handling notes: ${config.objectionNotes}` : ''}
 - Never be pushy — be understanding and helpful while gently addressing concerns
-- If they still decline, leave the door open: "No problem at all! We're here whenever you're ready."`;
+- If they still decline, leave the door open: "No problem at all! We're here whenever you're ready."
+
+Lead capture strategy: ${config.captureStrategy === 'early' ? 'Ask for contact info within the first 2-3 messages' : config.captureStrategy === 'booking' ? 'Only ask for contact info when booking' : 'Ask naturally when relevant'}
+
+IMPORTANT RULES:
+- Only ask for ONE piece of information per message
+- Don't skip stages - follow the order
+- Use natural, conversational language
+- If they're just asking questions, answer them and don't force the booking flow
+- This is a preview — simulate the full experience naturally
+- Today's date is ${new Date().toISOString().split('T')[0]}`;
     } else {
       // Lead form agent - SMS style
       systemPrompt = `You are ${config.agentName || 'Kurt'}, responding via SMS for ${businessName}.
@@ -671,7 +734,7 @@ ${config.objectionNotes ? `- Additional objection handling notes: ${config.objec
 Tone: ${config.responseTone || 'friendly'}
 
 Business context: ${config.businessContext || 'Local service business'}
-Services info: ${config.servicesInfo || services.map(s => s.name).join(', ') || 'Various services available'}
+Services info: ${config.servicesInfo || servicesResult.rows.map(s => s.name).join(', ') || 'Various services available'}
 
 Keep responses SHORT (under 160 characters ideally for SMS).
 Be conversational and helpful.
@@ -699,7 +762,10 @@ ${config.autoBookingEnabled ? 'If they mention a date/time, confirm booking deta
       messages: messages
     });
 
-    const reply = response.content[0]?.text || "I'm here to help! How can I assist you today?";
+    let reply = response.content[0]?.text || "I'm here to help! How can I assist you today?";
+
+    // Strip any BOOKING_REQUEST lines (preview doesn't create real bookings)
+    reply = reply.replace(/BOOKING_REQUEST\|[^\n]+\n?/g, '');
 
     res.json({ reply });
   } catch (error) {
@@ -736,7 +802,16 @@ router.post('/assistant', authenticateToken, async (req, res) => {
     const anthropic = new Anthropic();
 
     const systemPrompt = agentType === 'chat'
-      ? `You are the SORCE AI Assistant, helping users configure their Website Chat Agent through an interview process.
+      ? `You are the SORCE AI Assistant, helping users configure their Website Chat Agent.
+
+CRITICAL — CHECK FIRST:
+Look at the CURRENT CONFIGURATION below. If ANY of these are true, the agent is ALREADY configured:
+- agentName is NOT "Kurt"
+- greetingMessage does NOT contain "Hey it's Kurt"
+- customInstructions is NOT empty
+- objectionServices is set
+If the agent IS already configured: greet with "Your agent is configured. What would you like to change?" and let them modify specific settings. Do NOT restart the interview.
+Only run the full interview below if ALL fields are clearly still defaults.
 
 YOUR ROLE: Ask specific questions to understand exactly what the user wants. DO NOT suggest tone, personality, or style - instead ASK the user what they want and apply it exactly.
 
@@ -747,7 +822,7 @@ USER'S BUSINESS:
 CURRENT CONFIGURATION:
 ${JSON.stringify(currentConfig, null, 2)}
 
-CONFIGURABLE OPTIONS:
+CONFIGURABLE OPTIONS (only include changed fields in suggestedConfig — do NOT include null for fields you aren't changing):
 1. agentName - Name the agent introduces itself as
 2. greetingMessage - First message visitors see
 3. personality - 'professional', 'friendly', or 'casual'
@@ -760,7 +835,7 @@ CONFIGURABLE OPTIONS:
 10. objectionServices - Services the business is willing to throw in free to close hesitant customers
 11. objectionNotes - Additional notes on how to handle objections
 
-INTERVIEW QUESTIONS (ask one at a time, in order):
+INTERVIEW QUESTIONS (ask one at a time, in order — ONLY if config is at defaults):
 1. "What type of business do you have?" (to understand context)
 2. "What name should the chat agent use when greeting visitors?"
 3. "What should the greeting message say? What do you want visitors to see first?"
@@ -779,17 +854,24 @@ BEHAVIOR GUIDELINES:
 3. When the user provides information, apply it EXACTLY as they said
 4. After each change, briefly confirm what was updated and ask the next question
 5. Be direct and efficient - this is an interview, not a brainstorming session
-6. IMPORTANT: Look at CURRENT CONFIGURATION above. If fields already have non-default values (e.g. agentName is not 'Kurt', greetingMessage has been customized, customInstructions is not empty, objectionServices is set), that means the user has ALREADY configured this agent. Do NOT restart the interview from scratch. Instead, greet them with something like "Your agent is configured. What would you like to change?" and let them modify specific settings.
-7. Only run the full interview if the configuration is clearly still at defaults (all values are generic/empty).
 
 RESPONSE FORMAT (always use this JSON format):
 {
   "message": "Your conversational response here. Can include questions.",
-  "suggestedConfig": { "fieldName": "value" } // or null if no changes
+  "suggestedConfig": { "fieldName": "value" }
 }
 
-If making multiple changes, include all in suggestedConfig. If just asking questions or chatting, set suggestedConfig to null.`
-      : `You are the SORCE AI Assistant, helping users configure their SMS Lead Form Agent through an interview process.
+IMPORTANT: Only include fields in suggestedConfig that you are CHANGING. Set suggestedConfig to null if no changes. NEVER include null values for fields — just omit fields you aren't changing.`
+      : `You are the SORCE AI Assistant, helping users configure their SMS Lead Form Agent.
+
+CRITICAL — CHECK FIRST:
+Look at the CURRENT CONFIGURATION below. If ANY of these are true, the agent is ALREADY configured:
+- agentName is NOT "Kurt"
+- businessContext is NOT empty
+- servicesInfo is NOT empty
+- smsTemplate has been customized
+If the agent IS already configured: greet with "Your SMS agent is configured. What would you like to change?" and let them modify specific settings. Do NOT restart the interview.
+Only run the full interview below if ALL fields are clearly still defaults.
 
 YOUR ROLE: Ask specific questions to understand how the user wants leads handled via SMS. DO NOT suggest tone or style - ASK what they want and apply it exactly.
 
@@ -800,7 +882,7 @@ USER'S BUSINESS:
 CURRENT CONFIGURATION:
 ${JSON.stringify(currentConfig, null, 2)}
 
-CONFIGURABLE OPTIONS:
+CONFIGURABLE OPTIONS (only include changed fields in suggestedConfig — do NOT include null for fields you aren't changing):
 1. agentName - Name used in SMS messages
 2. smsTemplate - Initial SMS template (can use {{name}}, {{service}}, {{message}})
 3. responseTone - 'professional', 'friendly', or 'casual'
@@ -809,7 +891,7 @@ CONFIGURABLE OPTIONS:
 6. businessContext - Description of business for context
 7. servicesInfo - Services and pricing info
 
-INTERVIEW QUESTIONS (ask one at a time, in order):
+INTERVIEW QUESTIONS (ask one at a time, in order — ONLY if config is at defaults):
 1. "What type of business do you have?" (to understand context)
 2. "When a new lead comes in, what should the first SMS say? Write it out exactly how you want it."
 3. "What name should appear as the sender in SMS messages?"
@@ -826,16 +908,14 @@ BEHAVIOR GUIDELINES:
 3. When the user provides information, apply it EXACTLY as they said
 4. After each change, briefly confirm what was updated and ask the next question
 5. Be direct and efficient - focus on gathering the info needed to configure the agent
-6. IMPORTANT: Look at CURRENT CONFIGURATION above. If fields already have non-default values (e.g. smsTemplate is customized, businessContext is set, servicesInfo is not empty), that means the user has ALREADY configured this agent. Do NOT restart the interview from scratch. Instead, greet them with something like "Your SMS agent is configured. What would you like to change?" and let them modify specific settings.
-7. Only run the full interview if the configuration is clearly still at defaults (all values are generic/empty).
 
 RESPONSE FORMAT (always use this JSON format):
 {
   "message": "Your conversational response here. Can include questions.",
-  "suggestedConfig": { "fieldName": "value" } // or null if no changes
+  "suggestedConfig": { "fieldName": "value" }
 }
 
-If making multiple changes, include all in suggestedConfig. If just asking questions or chatting, set suggestedConfig to null.`;
+IMPORTANT: Only include fields in suggestedConfig that you are CHANGING. Set suggestedConfig to null if no changes. NEVER include null values for fields — just omit fields you aren't changing.`;
 
     // Build messages including conversation history
     const messages = [

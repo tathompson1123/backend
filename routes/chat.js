@@ -178,6 +178,13 @@ router.post('/message', async (req, res) => {
 
     const userInfo = userInfoResult.rows[0] || {};
 
+    // Get agent config for personality/objection handling
+    const agentConfigResult = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'website_chat']
+    );
+    const agentConfig = agentConfigResult.rows[0]?.config || {};
+
     // Get services with IDs
     const servicesResult = await pool.query(
       'SELECT id, name, description, price, duration_hours FROM services WHERE user_id = $1 AND active = true',
@@ -196,7 +203,10 @@ router.post('/message', async (req, res) => {
       .map(h => `${daysMap[h.day_of_week]}: ${h.open_time} - ${h.close_time}`)
       .join('\n');
 
-    const systemPrompt = `You are ${userInfo.business_name || 'a helpful'} assistant helping customers book services.
+    const systemPrompt = `You are ${agentConfig.agentName || 'Kurt'}, a ${agentConfig.personality || 'friendly'} assistant for ${userInfo.business_name || 'our business'} helping customers book services.
+
+Response style: Be ${agentConfig.responseLength || 'concise'} in your responses.
+${agentConfig.customInstructions ? `\nSpecial instructions: ${agentConfig.customInstructions}` : ''}
 
 Available services:
 ${servicesResult.rows.map(s => `- ${s.name} (ID: ${s.id}): $${s.price} - ${s.description} (${s.duration_hours} hours)`).join('\n')}
@@ -212,7 +222,7 @@ CONVERSATION FLOW - Follow these stages in order:
 STAGE 1 - IDENTIFY THE PROBLEM:
 - Ask what they're looking to get done
 - Listen to their needs and pain points
-- Be conversational and friendly
+- Be conversational and ${agentConfig.personality || 'friendly'}
 
 STAGE 2 - RECOMMEND SERVICES:
 - Based on their problem, suggest 1-3 relevant services from the list above
@@ -232,6 +242,17 @@ STAGE 4 - CONFIRM AND BOOK:
 Once you have ALL information (service, date, time, name, email, phone), respond with:
 BOOKING_REQUEST|serviceId|YYYY-MM-DD|HH:MM|customerName|customerEmail|customerPhone
 
+OBJECTION HANDLING:
+- When a customer expresses hesitation about price, timing, or need, acknowledge their concern first
+- Use social proof: mention satisfaction rates and experience
+- If price is the objection, highlight the value and long-term savings
+${agentConfig.objectionServices ? `- You may offer these complimentary add-ons to close hesitant customers: ${agentConfig.objectionServices}` : '- If appropriate, offer to include a small bonus service to sweeten the deal'}
+${agentConfig.objectionNotes ? `- Additional objection handling notes: ${agentConfig.objectionNotes}` : ''}
+- Never be pushy — be understanding and helpful while gently addressing concerns
+- If they still decline, leave the door open: "No problem at all! We're here whenever you're ready."
+
+Lead capture strategy: ${agentConfig.captureStrategy === 'early' ? 'Ask for contact info within the first 2-3 messages' : agentConfig.captureStrategy === 'booking' ? 'Only ask for contact info when booking' : 'Ask naturally when relevant'}
+
 IMPORTANT RULES:
 - Only ask for ONE piece of information per message
 - Don't skip stages - follow the order
@@ -240,33 +261,7 @@ IMPORTANT RULES:
 - Convert times to 24-hour format (2pm = 14:00, 9am = 09:00)
 - Only send BOOKING_REQUEST when you have ALL 6 pieces of information
 - Don't mention "BOOKING_REQUEST" to the customer - it's internal
-- If they're just asking questions, answer them and don't force the booking flow
-
-Examples of good responses:
-
-User: "I need help with my car"
-You: "I'd be happy to help! What specifically are you looking to get done with your car?"
-
-User: "It needs to be detailed"
-You: "Perfect! We have a Full Exterior Detail for $150 (2 hours) which includes wash, clay bar, polish, and wax. We also offer an Interior Detail for $120 (1.5 hours) with deep vacuum, shampoo, and leather conditioning. Which one sounds better for what you need?"
-
-User: "The full exterior sounds great"
-You: "Awesome choice! What day works best for you?"
-
-User: "How about next Monday?"
-You: "Monday works! What time would you prefer?"
-
-User: "Maybe 2pm?"
-You: "2pm is perfect. Can I get your name?"
-
-User: "John Smith"
-You: "Thanks John! What's the best email to send your confirmation?"
-
-User: "john@email.com"  
-You: "Got it! And your phone number?"
-
-User: "555-123-4567"
-You: [Then create BOOKING_REQUEST]`;
+- If they're just asking questions, answer them and don't force the booking flow`;
 
     // Call Claude API
     const response = await anthropic.messages.create({
