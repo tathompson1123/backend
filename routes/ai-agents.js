@@ -3,17 +3,44 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
 
+// Debug endpoint to verify agent config state
+router.get('/debug/config', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const result = await pool.query(
+      'SELECT id, user_id, agent_type, config, updated_at FROM agent_configs WHERE user_id = $1',
+      [userId]
+    );
+    console.log('🔍 Debug config for user', userId, ':', result.rows.length, 'rows');
+    res.json({
+      userId,
+      rows: result.rows.map(r => ({
+        id: r.id,
+        agent_type: r.agent_type,
+        config: r.config,
+        updated_at: r.updated_at
+      }))
+    });
+  } catch (error) {
+    console.error('Debug config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Website Chat Agent - Get config (no plan gate — users can configure before upgrading)
 router.get('/website/config', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    
+
     const result = await pool.query(
       'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
       [userId, 'website_chat']
     );
 
+    console.log('📖 Loading chat config for user', userId, '- found:', result.rows.length, 'rows');
+
     if (result.rows.length === 0) {
+      console.log('📖 No config found, returning defaults');
       return res.json({
         config: {
           enabled: true,
@@ -30,6 +57,7 @@ router.get('/website/config', authenticateToken, async (req, res) => {
       });
     }
 
+    console.log('📖 Returning saved config:', Object.keys(result.rows[0].config || {}).join(', '));
     res.json({ config: result.rows[0].config });
   } catch (error) {
     console.error('Error fetching website agent config:', error);

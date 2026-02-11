@@ -390,6 +390,27 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     console.warn('⚠️ Could not verify booking payment columns:', e.message);
   }
 
+  // Agent configs table (chat agents, lead form agents)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS agent_configs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        agent_type VARCHAR(50) NOT NULL,
+        config JSONB,
+        email_template TEXT,
+        sms_template TEXT,
+        enabled BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, agent_type)
+      )
+    `);
+    console.log('✅ Agent configs table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify agent_configs table:', e.message);
+  }
+
   // Status update templates table
   try {
     await pool.query(`
