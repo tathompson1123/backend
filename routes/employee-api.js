@@ -116,7 +116,7 @@ router.put('/my-bookings/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    // If completed, update customer lifetime value
+    // If completed, update customer lifetime value + create review request
     if (status === 'completed') {
       const booking = result.rows[0];
       try {
@@ -131,6 +131,38 @@ router.put('/my-bookings/:id/status', async (req, res) => {
         );
       } catch (custErr) {
         console.error('Error updating customer on complete:', custErr);
+      }
+
+      // Create review request
+      try {
+        const reviewConfig = await pool.query('SELECT * FROM review_configs WHERE user_id = $1', [userId]);
+        const config = reviewConfig.rows[0];
+        const autoSend = config ? config.auto_send_enabled : true;
+
+        if (autoSend && (booking.customer_email || booking.customer_phone)) {
+          const itemsResult = await pool.query('SELECT service_name FROM booking_items WHERE booking_id = $1 LIMIT 1', [id]);
+          const serviceName = itemsResult.rows[0]?.service_name || 'Service';
+          const scheduledTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
+          const incentiveCode = config?.incentive_enabled
+            ? `REV-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
+            : null;
+
+          const existing = await pool.query(
+            'SELECT id FROM review_requests WHERE user_id = $1 AND customer_email = $2 AND service_name = $3 AND created_at > NOW() - INTERVAL \'24 hours\'',
+            [userId, booking.customer_email || '', serviceName]
+          );
+
+          if (existing.rows.length === 0) {
+            await pool.query(
+              `INSERT INTO review_requests (user_id, customer_name, customer_email, customer_phone, service_name, status, scheduled_send_time, incentive_code, created_at)
+               VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, NOW())`,
+              [userId, booking.customer_name, booking.customer_email, booking.customer_phone, serviceName, scheduledTime, incentiveCode]
+            );
+            console.log(`✅ Review request created for booking ${id} (via employee app)`);
+          }
+        }
+      } catch (reviewErr) {
+        console.warn('⚠️ Could not create review request:', reviewErr.message);
       }
     }
 
