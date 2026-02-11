@@ -210,6 +210,74 @@ router.get('/my-schedule', async (req, res) => {
   }
 });
 
+// GET /api/employee/contacts - All customers for this business
+router.get('/contacts', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { search } = req.query;
+
+    let query = `
+      SELECT id, name, email, phone, last_service, last_service_date, total_jobs, lifetime_value
+      FROM customers
+      WHERE user_id = $1
+    `;
+    const params = [userId];
+
+    if (search && search.trim()) {
+      query += ` AND (name ILIKE $2 OR phone ILIKE $2 OR email ILIKE $2)`;
+      params.push(`%${search.trim()}%`);
+    }
+
+    query += ' ORDER BY name';
+
+    const result = await pool.query(query, params);
+    res.json({ customers: result.rows });
+  } catch (error) {
+    console.error('Error fetching contacts:', error);
+    res.status(500).json({ error: 'Failed to fetch contacts' });
+  }
+});
+
+// GET /api/employee/status-templates - Enabled status update templates for this business
+router.get('/status-templates', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+
+    // Check if templates exist, seed defaults if not
+    const existing = await pool.query(
+      'SELECT * FROM status_update_templates WHERE user_id = $1 ORDER BY status',
+      [userId]
+    );
+
+    if (existing.rows.length === 0) {
+      const defaults = [
+        { status: 'in_progress', message: 'Hey {{customerFirstName}}, this is {{employeeFirstName}} with {{businessName}}. Your technician has begun the service!', enabled: true },
+        { status: 'completed', message: 'Hey {{customerFirstName}}, this is {{employeeFirstName}} with {{businessName}}. Your service has been completed! Thank you for choosing us.', enabled: true },
+        { status: 'no_show', message: 'Hey {{customerFirstName}}, this is {{employeeFirstName}} with {{businessName}}. We attempted to service your appointment but were unable to reach you. Please contact us to reschedule.', enabled: false },
+        { status: 'progress_update', message: 'Hey {{customerFirstName}}, this is {{employeeFirstName}} with {{businessName}}. Updating you on our progress.', enabled: true },
+      ];
+
+      for (const d of defaults) {
+        await pool.query(
+          'INSERT INTO status_update_templates (user_id, status, message_template, enabled) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, status) DO NOTHING',
+          [userId, d.status, d.message, d.enabled]
+        );
+      }
+
+      const seeded = await pool.query(
+        'SELECT * FROM status_update_templates WHERE user_id = $1 ORDER BY status',
+        [userId]
+      );
+      return res.json({ templates: seeded.rows });
+    }
+
+    res.json({ templates: existing.rows });
+  } catch (error) {
+    console.error('Error fetching status templates:', error);
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
 // GET /api/employee/services - Services this employee is assigned to
 router.get('/services', async (req, res) => {
   try {

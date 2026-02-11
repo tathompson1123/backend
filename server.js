@@ -111,6 +111,9 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/payment-connections', paymentConnectionRoutes);
 app.use('/api/pay', paymentPublicRoutes);
+
+const statusTemplateRoutes = require('./routes/status-templates');
+app.use('/api/status-templates', statusTemplateRoutes);
 app.get('/api/groups', (req, res) => {
   res.json({ success: true, groups: [] });
 });
@@ -385,6 +388,25 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     console.log('✅ Booking payment columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify booking payment columns:', e.message);
+  }
+
+  // Status update templates table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS status_update_templates (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        status VARCHAR(50) NOT NULL,
+        message_template TEXT NOT NULL,
+        enabled BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, status)
+      )
+    `);
+    console.log('✅ Status update templates table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify status_update_templates table:', e.message);
   }
 })();
 

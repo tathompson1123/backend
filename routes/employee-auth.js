@@ -129,7 +129,7 @@ router.post('/login', async (req, res) => {
 
     const result = await pool.query(
       `SELECT ec.*, e.name as employee_name, e.user_id, e.color, e.active,
-              u.business_name
+              u.business_name, u.plan
        FROM employee_credentials ec
        JOIN employees e ON e.id = ec.employee_id
        JOIN users u ON u.id = e.user_id
@@ -177,7 +177,8 @@ router.post('/login', async (req, res) => {
         name: cred.employee_name,
         email: cred.email,
         color: cred.color,
-        businessName: cred.business_name
+        businessName: cred.business_name,
+        plan: cred.plan
       }
     });
   } catch (error) {
@@ -190,7 +191,7 @@ router.post('/login', async (req, res) => {
 router.get('/verify', authenticateEmployee, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT e.id, e.name, e.email, e.color, e.active, u.business_name
+      `SELECT e.id, e.name, e.email, e.color, e.active, u.business_name, u.plan
        FROM employees e
        JOIN users u ON u.id = e.user_id
        WHERE e.id = $1`,
@@ -213,7 +214,8 @@ router.get('/verify', authenticateEmployee, async (req, res) => {
         name: emp.name,
         email: emp.email,
         color: emp.color,
-        businessName: emp.business_name
+        businessName: emp.business_name,
+        plan: emp.plan
       }
     });
   } catch (error) {
