@@ -19,9 +19,6 @@ const { generateChatWidgetCode } = require('./chatWidget');
 async function injectAgents(html, userId, pool, theme) {
   if (!html || !userId || !pool) return html;
 
-  // Skip if already injected (idempotent)
-  if (html.includes('sorce-chat-widget')) return html;
-
   try {
     const result = await pool.query(
       'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
@@ -38,7 +35,12 @@ async function injectAgents(html, userId, pool, theme) {
 
       const widgetCode = generateChatWidgetCode(userId, config, websiteColors);
 
-      if (html.includes('</body>')) {
+      // Replace existing widget if present, otherwise inject fresh
+      const widgetRegex = /<!-- SORCE Chat Agent -->[\s\S]*?<!-- End SORCE Chat Agent -->/;
+      if (html.includes('sorce-chat-widget')) {
+        html = html.replace(widgetRegex, widgetCode.trim());
+        console.log('🔄 injectAgents: chat widget replaced with latest version');
+      } else if (html.includes('</body>')) {
         html = html.replace('</body>', widgetCode + '\n</body>');
         console.log('✅ injectAgents: chat widget injected');
       }

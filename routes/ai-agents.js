@@ -247,27 +247,33 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
 const chatWidgetCode = generateChatWidgetCode(userId, config, websiteColors);
     console.log('🔧 Generated chat widget code');
 
-    // 4. Inject widget into all pages
+    // 4. Inject/replace widget into all pages
     let pagesUpdated = [];
-    
+    const widgetRegex = /<!-- SORCE Chat Agent -->[\s\S]*?<!-- End SORCE Chat Agent -->/;
+
     if (pages && Object.keys(pages).length > 0) {
       Object.keys(pages).forEach(pageKey => {
-        if (pages[pageKey].includes('</body>') && !pages[pageKey].includes('sorce-chat-widget')) {
+        if (pages[pageKey].includes('sorce-chat-widget')) {
+          // Replace existing widget with updated version
+          pages[pageKey] = pages[pageKey].replace(widgetRegex, chatWidgetCode.trim());
+          pagesUpdated.push(pageKey);
+          console.log(`🔄 Replaced widget in ${pageKey}`);
+        } else if (pages[pageKey].includes('</body>')) {
           pages[pageKey] = pages[pageKey].replace('</body>', chatWidgetCode + '\n</body>');
           pagesUpdated.push(pageKey);
           console.log(`✅ Injected widget into ${pageKey}`);
-        } else if (pages[pageKey].includes('sorce-chat-widget')) {
-          console.log(`ℹ️ Widget already exists in ${pageKey}`);
         }
       });
     }
 
-    if (htmlContent && htmlContent.includes('</body>') && !htmlContent.includes('sorce-chat-widget')) {
+    if (htmlContent && htmlContent.includes('sorce-chat-widget')) {
+      htmlContent = htmlContent.replace(widgetRegex, chatWidgetCode.trim());
+      pagesUpdated.push('index.html');
+      console.log('🔄 Replaced widget in main html_content');
+    } else if (htmlContent && htmlContent.includes('</body>')) {
       htmlContent = htmlContent.replace('</body>', chatWidgetCode + '\n</body>');
       pagesUpdated.push('index.html');
       console.log('✅ Injected widget into main html_content');
-    } else if (htmlContent && htmlContent.includes('sorce-chat-widget')) {
-      console.log('ℹ️ Widget already exists in main html_content');
     }
 
     // 5. Update database
