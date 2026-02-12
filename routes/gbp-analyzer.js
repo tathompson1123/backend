@@ -453,6 +453,41 @@ router.get('/maps-key', (req, res) => {
   res.json({ key: GOOGLE_API_KEY });
 });
 
+// GET /search — Autocomplete business search
+router.get('/search', async (req, res) => {
+  try {
+    if (!GOOGLE_API_KEY) {
+      return res.status(500).json({ error: 'Google Places API key not configured' });
+    }
+    const { q } = req.query;
+    if (!q || q.length < 2) {
+      return res.json({ results: [] });
+    }
+
+    const body = { textQuery: q, maxResultCount: 5 };
+    const apiRes = await fetch(`${PLACES_BASE}/places:searchText`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_API_KEY,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.primaryTypeDisplayName'
+      },
+      body: JSON.stringify(body)
+    });
+    const data = await apiRes.json();
+    const results = (data.places || []).map(p => ({
+      placeId: p.id || p.name?.split('/').pop(),
+      name: p.displayName?.text || '',
+      address: p.formattedAddress || '',
+      category: p.primaryTypeDisplayName?.text || ''
+    }));
+    res.json({ results });
+  } catch (error) {
+    console.error('GBP search error:', error);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
 // POST /analyze — Analyze a Google Business Profile
 router.post('/analyze', async (req, res) => {
   try {
@@ -460,22 +495,25 @@ router.post('/analyze', async (req, res) => {
       return res.status(500).json({ error: 'Google Places API key not configured' });
     }
 
-    const { googleUrl } = req.body;
-    if (!googleUrl) {
-      return res.status(400).json({ error: 'googleUrl is required' });
+    const { googleUrl, placeId: directPlaceId } = req.body;
+    if (!googleUrl && !directPlaceId) {
+      return res.status(400).json({ error: 'googleUrl or placeId is required' });
     }
 
-    // Parse URL for search hints
-    const parsed = parseGoogleUrl(googleUrl);
-    const searchQuery = parsed.name || googleUrl;
+    let placeId = directPlaceId;
 
-    // Find the place
-    const found = await searchPlace(searchQuery, parsed.lat, parsed.lng);
-    if (!found) {
-      return res.status(404).json({ error: 'Could not find a business at that URL. Try pasting the full Google Maps URL.' });
+    if (!placeId) {
+      // Parse URL for search hints
+      const parsed = parseGoogleUrl(googleUrl);
+      const searchQuery = parsed.name || googleUrl;
+
+      // Find the place
+      const found = await searchPlace(searchQuery, parsed.lat, parsed.lng);
+      if (!found) {
+        return res.status(404).json({ error: 'Could not find a business at that URL. Try pasting the full Google Maps URL.' });
+      }
+      placeId = found.id || found.name?.split('/').pop();
     }
-
-    const placeId = found.id || found.name?.split('/').pop();
 
     // Get full details
     const details = await getPlaceDetails(placeId);
