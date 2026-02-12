@@ -673,4 +673,83 @@ router.put('/profile', async (req, res) => {
   }
 });
 
+// GET /api/employee/square-credentials - Get Square SDK credentials for tap-to-pay
+router.get('/square-credentials', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+
+    const result = await pool.query(
+      `SELECT square_access_token, square_location_id, square_merchant_id
+       FROM payment_connections
+       WHERE user_id = $1 AND processor = 'square' AND is_active = true
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].square_access_token) {
+      return res.json({ connected: false });
+    }
+
+    const { square_access_token, square_location_id } = result.rows[0];
+
+    res.json({
+      connected: true,
+      accessToken: square_access_token,
+      locationId: square_location_id,
+      environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? 'sandbox' : 'production'
+    });
+  } catch (error) {
+    console.error('Error fetching Square credentials:', error);
+    res.status(500).json({ error: 'Failed to fetch Square credentials' });
+  }
+});
+
+// POST /api/employee/my-bookings/:id/invoice/tap-payment - Record Square tap-to-pay payment
+router.post('/my-bookings/:id/invoice/tap-payment', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+    const { squarePaymentId, amount, cardBrand, cardLastFour } = req.body;
+
+    if (!squarePaymentId) {
+      return res.status(400).json({ error: 'squarePaymentId is required' });
+    }
+
+    const booking = await pool.query(
+      `SELECT b.invoice_id, b.customer_id, i.amount_due, i.total_amount
+       FROM bookings b JOIN invoices i ON i.id = b.invoice_id
+       WHERE b.id = $1 AND b.user_id = $2`,
+      [id, userId]
+    );
+
+    if (booking.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking or invoice not found' });
+    }
+
+    const { invoice_id, customer_id, amount_due } = booking.rows[0];
+    const paymentAmount = amount || parseFloat(amount_due);
+
+    const { recordPayment } = require('./payment-webhooks');
+
+    await recordPayment({
+      userId,
+      invoiceId: invoice_id,
+      bookingId: parseInt(id),
+      customerId: customer_id,
+      amount: paymentAmount,
+      processor: 'square',
+      processorPaymentId: squarePaymentId,
+      paymentMethod: 'tap_to_pay',
+      cardLastFour: cardLastFour || null,
+      cardBrand: cardBrand || null,
+      processorFee: null
+    });
+
+    res.json({ success: true, squarePaymentId });
+  } catch (error) {
+    console.error('Error recording tap payment:', error);
+    res.status(500).json({ error: 'Failed to record tap payment' });
+  }
+});
+
 module.exports = router;

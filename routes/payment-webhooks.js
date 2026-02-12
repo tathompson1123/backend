@@ -183,4 +183,4 @@ async function paypal(req, res) {
   }
 }
 
-module.exports = { stripeConnect, square, paypal };
+module.exports = { stripeConnect, square, paypal, recordPayment };

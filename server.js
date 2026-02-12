@@ -95,6 +95,9 @@ app.use('/api/templates', templateRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/review-config', reviewConfigRoutes);
 
+const gbpAnalyzerRoutes = require('./routes/gbp-analyzer');
+app.use('/api/gbp-analyzer', gbpAnalyzerRoutes);
+
 const businessHoursRoutes = require('./routes/business-hours');
 app.use('/api/business-hours', businessHoursRoutes);
 
@@ -376,6 +379,7 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     `);
     await pool.query('CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id)');
     await pool.query('CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments(invoice_id)');
+    await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_processor_payment_id ON payments(processor_payment_id) WHERE processor_payment_id IS NOT NULL');
     console.log('✅ Payments table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify payments table:', e.message);
@@ -437,6 +441,77 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     console.log('✅ sms_messages booking_id column verified');
   } catch (e) {
     console.warn('⚠️ Could not verify sms_messages booking_id:', e.message);
+  }
+
+  // GBP Analyzer tables
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gbp_profiles (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        place_id TEXT NOT NULL,
+        google_url TEXT,
+        business_name TEXT,
+        primary_category TEXT,
+        additional_categories JSONB DEFAULT '[]',
+        address TEXT,
+        phone TEXT,
+        website TEXT,
+        has_website_utm BOOLEAN DEFAULT false,
+        description TEXT,
+        hours JSONB,
+        hours_complete BOOLEAN DEFAULT false,
+        total_photos INTEGER DEFAULT 0,
+        total_reviews INTEGER DEFAULT 0,
+        average_rating NUMERIC(3,1),
+        review_response_rate INTEGER DEFAULT 0,
+        latest_review_date TIMESTAMP,
+        profile_data JSONB,
+        audit_scores JSONB,
+        audit_good JSONB DEFAULT '[]',
+        audit_improvements JSONB DEFAULT '[]',
+        overall_score INTEGER DEFAULT 0,
+        last_analyzed_at TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gbp_ranking_scans (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        keyword TEXT NOT NULL,
+        grid_size INTEGER DEFAULT 7,
+        radius_miles NUMERIC DEFAULT 5,
+        center_lat NUMERIC NOT NULL,
+        center_lng NUMERIC NOT NULL,
+        grid_points JSONB NOT NULL,
+        average_rank NUMERIC,
+        top3_count INTEGER DEFAULT 0,
+        total_points INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_gbp_ranking_user ON gbp_ranking_scans(user_id, created_at DESC)');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gbp_action_items (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        description TEXT,
+        why_it_matters TEXT,
+        priority VARCHAR(20) NOT NULL,
+        cadence VARCHAR(20) DEFAULT 'one-time',
+        category VARCHAR(50),
+        status VARCHAR(20) DEFAULT 'not_started',
+        due_date DATE,
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_gbp_actions_user ON gbp_action_items(user_id)');
+    console.log('✅ GBP Analyzer tables verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify GBP Analyzer tables:', e.message);
   }
 })();
 
