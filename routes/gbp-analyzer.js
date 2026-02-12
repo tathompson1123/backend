@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
-const { authenticateToken } = require('../middleware/auth');
+const { pool } = require('../config/database');
+const { authenticateToken } = require('../config/middleware');
 
 const GOOGLE_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 const PLACES_BASE = 'https://places.googleapis.com/v1';
@@ -444,6 +444,14 @@ async function rankAtPoint(keyword, lat, lng, targetPlaceId) {
 
 // All routes require authentication
 router.use(authenticateToken);
+
+// GET /maps-key — Return API key for frontend Google Maps display
+router.get('/maps-key', (req, res) => {
+  if (!GOOGLE_API_KEY) {
+    return res.json({ key: null });
+  }
+  res.json({ key: GOOGLE_API_KEY });
+});
 
 // POST /analyze — Analyze a Google Business Profile
 router.post('/analyze', async (req, res) => {
