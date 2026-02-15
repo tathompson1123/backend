@@ -74,8 +74,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /scrape - Scrape services from a website URL using AI
+// POST /scrape - Scrape services from a website URL using headless browser + AI
 router.post('/scrape', authenticateToken, async (req, res) => {
+  let browser;
   try {
     const { url } = req.body;
 
@@ -83,32 +84,93 @@ router.post('/scrape', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Website URL is required' });
     }
 
-    // Fetch the website HTML
-    const axios = require('axios');
-    let html;
-    try {
-      const response = await axios.get(url, {
-        timeout: 15000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SORCEBot/1.0)' },
-        maxRedirects: 5
-      });
-      html = response.data;
-    } catch (fetchErr) {
-      return res.status(400).json({ error: `Could not fetch website: ${fetchErr.message}` });
+    // Launch headless browser to render JavaScript
+    const puppeteer = require('puppeteer-core');
+    const chromium = require('@sparticuz/chromium');
+
+    console.log('🌐 Launching browser to scrape services from:', url);
+
+    browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: { width: 1920, height: 1080 },
+      executablePath: await chromium.executablePath(),
+      headless: 'new',
+      ignoreHTTPSErrors: true,
+    });
+
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+    // Navigate to the provided URL and wait for JS to render
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+    await page.waitForTimeout(3000); // Extra wait for dynamic content
+
+    // Scroll down to trigger lazy-loaded content
+    await page.evaluate(async () => {
+      for (let i = 0; i < 5; i++) {
+        window.scrollBy(0, window.innerHeight);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      window.scrollTo(0, 0);
+    });
+    await page.waitForTimeout(1000);
+
+    // Extract text content from the rendered page
+    let mainText = await page.evaluate(() => document.body.innerText);
+
+    // Also look for service-related links to scrape additional pages
+    const serviceLinks = await page.evaluate((baseUrl) => {
+      const links = Array.from(document.querySelectorAll('a[href]'));
+      const keywords = ['service', 'pricing', 'book', 'menu', 'offerings', 'packages', 'what-we-do', 'our-work'];
+      const found = [];
+      const base = new URL(baseUrl);
+
+      for (const link of links) {
+        const href = link.href;
+        const text = (link.textContent || '').toLowerCase();
+        const hrefLower = href.toLowerCase();
+
+        if (href.startsWith(base.origin) || href.startsWith('/')) {
+          const isRelevant = keywords.some(kw => hrefLower.includes(kw) || text.includes(kw));
+          if (isRelevant && !found.includes(href) && found.length < 3) {
+            found.push(href);
+          }
+        }
+      }
+      return found;
+    }, url);
+
+    // Scrape up to 3 additional service-related pages
+    for (const link of serviceLinks) {
+      try {
+        console.log('  → Also scraping linked page:', link);
+        await page.goto(link, { waitUntil: 'networkidle2', timeout: 20000 });
+        await page.waitForTimeout(2000);
+        await page.evaluate(async () => {
+          for (let i = 0; i < 3; i++) {
+            window.scrollBy(0, window.innerHeight);
+            await new Promise(r => setTimeout(r, 400));
+          }
+        });
+        await page.waitForTimeout(500);
+        const pageText = await page.evaluate(() => document.body.innerText);
+        mainText += '\n\n--- ADDITIONAL PAGE ---\n\n' + pageText;
+      } catch (e) {
+        console.warn('  ⚠️ Could not scrape linked page:', link, e.message);
+      }
     }
 
-    // Strip HTML to text (remove scripts, styles, tags)
-    const textContent = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 12000); // Limit context to ~12k chars
+    await browser.close();
+    browser = null;
+
+    // Trim to reasonable context size
+    const textContent = mainText.replace(/\s+/g, ' ').trim().slice(0, 20000);
 
     if (textContent.length < 50) {
       return res.status(400).json({ error: 'Could not extract meaningful content from the website' });
     }
+
+    console.log(`📄 Extracted ${textContent.length} chars of text content, sending to AI...`);
 
     // Use Claude to extract services
     const Anthropic = require('@anthropic-ai/sdk');
@@ -140,7 +202,6 @@ ${textContent}`
     try {
       extractedServices = JSON.parse(aiText);
     } catch (parseErr) {
-      // Try to extract JSON from the response
       const jsonMatch = aiText.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         extractedServices = JSON.parse(jsonMatch[0]);
@@ -153,10 +214,15 @@ ${textContent}`
       return res.status(500).json({ error: 'Invalid AI response format' });
     }
 
+    console.log(`✅ Found ${extractedServices.length} services`);
     res.json({ services: extractedServices });
   } catch (error) {
     console.error('Error scraping services:', error);
     res.status(500).json({ error: 'Failed to scrape services from website' });
+  } finally {
+    if (browser) {
+      try { await browser.close(); } catch (e) {}
+    }
   }
 });
 
