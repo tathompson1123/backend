@@ -257,6 +257,31 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     console.warn('⚠️ Could not verify invite_status column:', e.message);
   }
 
+  // Add permissions column to employees
+  try {
+    await pool.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '{"view_bookings":true,"manage_bookings":true,"view_customers":true,"view_all_bookings":false,"send_messages":true,"process_payments":false,"view_reports":false}'`);
+    console.log('✅ Employee permissions column verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify permissions column:', e.message);
+  }
+
+  // Permission templates table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS permission_templates (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(100) NOT NULL,
+        permissions JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Permission templates table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify permission_templates table:', e.message);
+  }
+
   // Payment connections table (multi-processor payment integration)
   try {
     await pool.query(`

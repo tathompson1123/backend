@@ -308,37 +308,39 @@ async function purchaseDomain(domain, userInfo) {
 
     console.log('💳 Purchasing domain via Dynadot:', domain);
 
-    // Build request params
+    // Build request params — Dynadot API3 register command
     const params = {
       key: DYNADOT_API_KEY,
       command: 'register',
       domain: domain,
       duration: 1, // 1 year
-      // Contact info
-      'contact0.name': userInfo.businessName || 'Business Owner',
-      'contact0.email': userInfo.email,
-      'contact0.phone': '+1.2065551234', // Default phone
-      // Use Dynadot privacy service
+      // Use Dynadot privacy/WHOIS proxy
       privacy: 'full',
       // Set nameservers to Vercel
-      'ns0': 'ns1.vercel-dns.com',
-      'ns1': 'ns2.vercel-dns.com'
+      ns0: 'ns1.vercel-dns.com',
+      ns1: 'ns2.vercel-dns.com'
     };
-    
+
     // Add secret key if provided
     if (DYNADOT_SECRET_KEY) {
       params.secret = DYNADOT_SECRET_KEY;
     }
 
+    console.log('  Register params:', { ...params, key: '***', secret: '***' });
+
     // Register domain
     const response = await axios.get(DYNADOT_API_URL, { params });
-
     const xmlData = response.data;
-    
-    // Check if successful
-    if (xmlData.includes('<Status>success</Status>')) {
+
+    console.log('  Dynadot register response:', xmlData.substring(0, 1000));
+
+    // Dynadot API3 uses <SuccessCode>0</SuccessCode> for success
+    const isSuccess = xmlData.includes('<SuccessCode>0</SuccessCode>') ||
+                      xmlData.includes('<Status>success</Status>');
+
+    if (isSuccess) {
       console.log(`✅ Domain ${domain} purchased via Dynadot`);
-      
+
       return {
         success: true,
         domain,
@@ -346,12 +348,28 @@ async function purchaseDomain(domain, userInfo) {
         message: 'Domain purchased successfully'
       };
     } else {
-      // Extract error message from XML
-      const errorMatch = xmlData.match(/<Error>(.+?)<\/Error>/);
-      const errorMessage = errorMatch ? errorMatch[1] : 'Domain registration failed';
+      // Extract error message from XML (try multiple patterns)
+      const errorPatterns = [
+        /<Error>(.+?)<\/Error>/i,
+        /<ErrorMessage>(.+?)<\/ErrorMessage>/i,
+        /<Message>(.+?)<\/Message>/i,
+        /<ResponseMessage>(.+?)<\/ResponseMessage>/i
+      ];
+
+      let errorMessage = 'Domain registration failed';
+      for (const pattern of errorPatterns) {
+        const match = xmlData.match(pattern);
+        if (match) {
+          errorMessage = match[1];
+          break;
+        }
+      }
+
+      console.error(`❌ Dynadot registration failed: ${errorMessage}`);
+      console.error('  Full response:', xmlData);
       throw new Error(errorMessage);
     }
-    
+
   } catch (error) {
     console.error('Dynadot purchase error:', error.message);
     throw new Error(error.message || 'Failed to purchase domain');

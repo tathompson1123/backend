@@ -117,6 +117,10 @@ function setupMiddleware(app) {
   app.use('/api/website/generate', aiLimiter);
   app.use('/api/website/ai-edit', aiLimiter);
   
+  // Employee auth endpoints (prevents brute force on employee login)
+  app.use('/api/employee-auth/login', strictAuthLimiter);
+  app.use('/api/employee-auth/accept-invite', strictAuthLimiter);
+
   // Public endpoints that need rate limiting (SPECIFIC PATHS ONLY)
   app.use('/api/leads/public', publicApiLimiter);
   

@@ -2,16 +2,33 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const { pool } = require('../config/database');
-const { authenticateEmployee } = require('../config/employee-middleware');
+const { authenticateEmployee, requirePermission } = require('../config/employee-middleware');
+
+// Validation helpers
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+function isValidId(id) { return Number.isInteger(Number(id)) && Number(id) > 0; }
 
 // All routes require employee authentication
 router.use(authenticateEmployee);
 
 // GET /api/employee/my-bookings - Bookings assigned to this employee
-router.get('/my-bookings', async (req, res) => {
+router.get('/my-bookings', requirePermission('view_bookings'), async (req, res) => {
   try {
     const { employeeId, userId } = req.employee;
     const { startDate, endDate, status } = req.query;
+
+    if (startDate && !DATE_REGEX.test(startDate)) {
+      return res.status(400).json({ error: 'startDate must be YYYY-MM-DD format' });
+    }
+    if (endDate && !DATE_REGEX.test(endDate)) {
+      return res.status(400).json({ error: 'endDate must be YYYY-MM-DD format' });
+    }
+    if (status) {
+      const validStatuses = ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: `Invalid status filter` });
+      }
+    }
 
     let query = `
       SELECT b.*,
@@ -60,10 +77,14 @@ router.get('/my-bookings', async (req, res) => {
 });
 
 // GET /api/employee/my-bookings/:id - Single booking detail
-router.get('/my-bookings/:id', async (req, res) => {
+router.get('/my-bookings/:id', requirePermission('view_bookings'), async (req, res) => {
   try {
     const { employeeId, userId } = req.employee;
     const { id } = req.params;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid booking ID' });
+    }
 
     const result = await pool.query(
       `SELECT b.*,
@@ -77,9 +98,9 @@ router.get('/my-bookings/:id', async (req, res) => {
         ) as items
        FROM bookings b
        LEFT JOIN booking_items bi ON b.id = bi.booking_id
-       WHERE b.id = $1 AND b.user_id = $2
+       WHERE b.id = $1 AND b.user_id = $2 AND b.employee_id = $3
        GROUP BY b.id`,
-      [id, userId]
+      [id, userId, employeeId]
     );
 
     if (result.rows.length === 0) {
@@ -94,11 +115,15 @@ router.get('/my-bookings/:id', async (req, res) => {
 });
 
 // PUT /api/employee/my-bookings/:id/status - Update booking status (limited options)
-router.put('/my-bookings/:id/status', async (req, res) => {
+router.put('/my-bookings/:id/status', requirePermission('manage_bookings'), async (req, res) => {
   try {
     const { employeeId, userId } = req.employee;
     const { id } = req.params;
     const { status } = req.body;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid booking ID' });
+    }
 
     const allowedStatuses = ['in_progress', 'completed', 'no_show'];
     if (!allowedStatuses.includes(status)) {
@@ -174,11 +199,19 @@ router.put('/my-bookings/:id/status', async (req, res) => {
 });
 
 // PUT /api/employee/my-bookings/:id/notes - Update job notes
-router.put('/my-bookings/:id/notes', async (req, res) => {
+router.put('/my-bookings/:id/notes', requirePermission('manage_bookings'), async (req, res) => {
   try {
     const { employeeId, userId } = req.employee;
     const { id } = req.params;
     const { jobNotes } = req.body;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid booking ID' });
+    }
+
+    if (jobNotes && jobNotes.length > 5000) {
+      return res.status(400).json({ error: 'Job notes must be under 5000 characters' });
+    }
 
     const result = await pool.query(
       `UPDATE bookings SET job_notes = $1, updated_at = NOW()
@@ -203,6 +236,10 @@ router.get('/my-bookings/:id/messages', async (req, res) => {
   try {
     const { userId } = req.employee;
     const { id } = req.params;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid booking ID' });
+    }
 
     // Verify booking belongs to this business
     const booking = await pool.query(
@@ -231,14 +268,22 @@ router.get('/my-bookings/:id/messages', async (req, res) => {
 });
 
 // POST /api/employee/my-bookings/:id/messages - Send SMS to customer from booking
-router.post('/my-bookings/:id/messages', async (req, res) => {
+router.post('/my-bookings/:id/messages', requirePermission('send_messages'), async (req, res) => {
   try {
     const { employeeId, userId } = req.employee;
     const { id } = req.params;
     const { message } = req.body;
 
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid booking ID' });
+    }
+
     if (!message || !message.trim()) {
       return res.status(400).json({ error: 'Message is required' });
+    }
+
+    if (message.length > 1600) {
+      return res.status(400).json({ error: 'Message must be under 1600 characters' });
     }
 
     const booking = await pool.query(
@@ -269,10 +314,14 @@ router.post('/my-bookings/:id/messages', async (req, res) => {
 });
 
 // POST /api/employee/my-bookings/:id/invoice - Auto-create invoice from booking
-router.post('/my-bookings/:id/invoice', async (req, res) => {
+router.post('/my-bookings/:id/invoice', requirePermission('process_payments'), async (req, res) => {
   try {
     const { userId } = req.employee;
     const { id } = req.params;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid booking ID' });
+    }
 
     // Get booking with items
     const bookingResult = await pool.query(
@@ -298,43 +347,54 @@ router.post('/my-bookings/:id/invoice', async (req, res) => {
       }
     }
 
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const randomSuffix = crypto.randomBytes(2).toString('hex').toUpperCase();
-    const invoiceNumber = `INV-${dateStr}-${randomSuffix}`;
-    const paymentLinkToken = crypto.randomBytes(32).toString('hex');
-    const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const invoiceResult = await pool.query(
-      `INSERT INTO invoices (
-        user_id, booking_id, customer_id, invoice_number, customer_name, customer_email, customer_phone,
-        subtotal, total_amount, amount_due, status, due_date, payment_link_token
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'draft', $11, $12)
-      RETURNING *`,
-      [userId, id, booking.customer_id, invoiceNumber, booking.customer_name,
-       booking.customer_email, booking.customer_phone, booking.subtotal || booking.total_amount,
-       booking.total_amount, booking.total_amount, dueDate, paymentLinkToken]
-    );
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const randomSuffix = crypto.randomBytes(2).toString('hex').toUpperCase();
+      const invoiceNumber = `INV-${dateStr}-${randomSuffix}`;
+      const paymentLinkToken = crypto.randomBytes(32).toString('hex');
+      const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    const invoice = invoiceResult.rows[0];
+      const invoiceResult = await client.query(
+        `INSERT INTO invoices (
+          user_id, booking_id, customer_id, invoice_number, customer_name, customer_email, customer_phone,
+          subtotal, total_amount, amount_due, status, due_date, payment_link_token
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'draft', $11, $12)
+        RETURNING *`,
+        [userId, id, booking.customer_id, invoiceNumber, booking.customer_name,
+         booking.customer_email, booking.customer_phone, booking.subtotal || booking.total_amount,
+         booking.total_amount, booking.total_amount, dueDate, paymentLinkToken]
+      );
 
-    // Create line items from booking items
-    for (const item of (booking.items || [])) {
-      if (item.service_name) {
-        await pool.query(
-          `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount, service_id)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [invoice.id, item.service_name, item.quantity || 1, item.service_price, item.service_price * (item.quantity || 1), item.service_id]
-        );
+      const invoice = invoiceResult.rows[0];
+
+      // Create line items from booking items
+      for (const item of (booking.items || [])) {
+        if (item.service_name) {
+          await client.query(
+            `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount, service_id)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [invoice.id, item.service_name, item.quantity || 1, item.service_price, item.service_price * (item.quantity || 1), item.service_id]
+          );
+        }
       }
+
+      // Link invoice to booking
+      await client.query(
+        "UPDATE bookings SET invoice_id = $1, payment_status = 'invoiced' WHERE id = $2",
+        [invoice.id, id]
+      );
+
+      await client.query('COMMIT');
+      res.json({ invoice, existing: false });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
     }
-
-    // Link invoice to booking
-    await pool.query(
-      "UPDATE bookings SET invoice_id = $1, payment_status = 'invoiced' WHERE id = $2",
-      [invoice.id, id]
-    );
-
-    res.json({ invoice, existing: false });
   } catch (error) {
     console.error('Error creating invoice from booking:', error);
     res.status(500).json({ error: 'Failed to create invoice' });
@@ -342,11 +402,19 @@ router.post('/my-bookings/:id/invoice', async (req, res) => {
 });
 
 // POST /api/employee/my-bookings/:id/invoice/send - Send invoice to customer via payment link
-router.post('/my-bookings/:id/invoice/send', async (req, res) => {
+router.post('/my-bookings/:id/invoice/send', requirePermission('process_payments'), async (req, res) => {
   try {
     const { userId } = req.employee;
     const { id } = req.params;
     const { method } = req.body; // 'sms' or 'email'
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid booking ID' });
+    }
+
+    if (method && !['sms', 'email'].includes(method)) {
+      return res.status(400).json({ error: 'Method must be sms or email' });
+    }
 
     const booking = await pool.query(
       `SELECT b.*, i.id as invoice_id, i.payment_link_token, i.invoice_number, i.amount_due, i.status as invoice_status
@@ -406,11 +474,20 @@ router.post('/my-bookings/:id/invoice/send', async (req, res) => {
 });
 
 // POST /api/employee/my-bookings/:id/invoice/record-payment - Record cash/manual payment
-router.post('/my-bookings/:id/invoice/record-payment', async (req, res) => {
+router.post('/my-bookings/:id/invoice/record-payment', requirePermission('process_payments'), async (req, res) => {
   try {
     const { userId } = req.employee;
     const { id } = req.params;
     const { method } = req.body; // 'cash', 'check', 'other'
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid booking ID' });
+    }
+
+    const allowedMethods = ['cash', 'check', 'other'];
+    if (method && !allowedMethods.includes(method)) {
+      return res.status(400).json({ error: 'Payment method must be cash, check, or other' });
+    }
 
     const booking = await pool.query(
       `SELECT b.invoice_id, i.amount_due, i.total_amount
@@ -422,24 +499,36 @@ router.post('/my-bookings/:id/invoice/record-payment', async (req, res) => {
     if (booking.rows.length === 0) return res.status(404).json({ error: 'Booking or invoice not found' });
     const { invoice_id, amount_due, total_amount } = booking.rows[0];
 
-    // Record payment
-    await pool.query(
-      `INSERT INTO payments (user_id, invoice_id, booking_id, amount, processor, payment_method, status, created_at)
-       VALUES ($1, $2, $3, $4, 'manual', $5, 'completed', NOW())`,
-      [userId, invoice_id, id, amount_due, method || 'cash']
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    // Update invoice
-    await pool.query(
-      "UPDATE invoices SET status = 'paid', amount_paid = total_amount, amount_due = 0, paid_at = NOW() WHERE id = $1",
-      [invoice_id]
-    );
+      // Record payment
+      await client.query(
+        `INSERT INTO payments (user_id, invoice_id, booking_id, amount, processor, payment_method, status, created_at)
+         VALUES ($1, $2, $3, $4, 'manual', $5, 'completed', NOW())`,
+        [userId, invoice_id, id, amount_due, method || 'cash']
+      );
 
-    // Update booking
-    await pool.query(
-      "UPDATE bookings SET payment_status = 'paid' WHERE id = $1",
-      [id]
-    );
+      // Update invoice
+      await client.query(
+        "UPDATE invoices SET status = 'paid', amount_paid = total_amount, amount_due = 0, paid_at = NOW() WHERE id = $1",
+        [invoice_id]
+      );
+
+      // Update booking
+      await client.query(
+        "UPDATE bookings SET payment_status = 'paid' WHERE id = $1",
+        [id]
+      );
+
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     res.json({ success: true });
   } catch (error) {
@@ -453,6 +542,10 @@ router.get('/my-schedule', async (req, res) => {
   try {
     const { employeeId, userId } = req.employee;
     const { date, showAll } = req.query;
+
+    if (date && !DATE_REGEX.test(date)) {
+      return res.status(400).json({ error: 'date must be YYYY-MM-DD format' });
+    }
 
     const targetDate = date || new Date().toISOString().split('T')[0];
 
@@ -494,10 +587,14 @@ router.get('/my-schedule', async (req, res) => {
 });
 
 // GET /api/employee/contacts - All customers for this business
-router.get('/contacts', async (req, res) => {
+router.get('/contacts', requirePermission('view_customers'), async (req, res) => {
   try {
     const { userId } = req.employee;
     const { search } = req.query;
+
+    if (search && search.length > 100) {
+      return res.status(400).json({ error: 'Search query too long' });
+    }
 
     let query = `
       SELECT id, name, email, phone, last_service, last_service_date, total_jobs, lifetime_value
@@ -634,6 +731,17 @@ router.put('/profile', async (req, res) => {
     const { employeeId } = req.employee;
     const { phone, email } = req.body;
 
+    if (email !== undefined) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+    }
+
+    if (phone !== undefined && phone && phone.length > 20) {
+      return res.status(400).json({ error: 'Phone number too long' });
+    }
+
     const updates = [];
     const values = [];
     let paramIndex = 1;
@@ -674,7 +782,7 @@ router.put('/profile', async (req, res) => {
 });
 
 // GET /api/employee/square-credentials - Get Square SDK credentials for tap-to-pay
-router.get('/square-credentials', async (req, res) => {
+router.get('/square-credentials', requirePermission('process_payments'), async (req, res) => {
   try {
     const { userId } = req.employee;
 
@@ -705,14 +813,18 @@ router.get('/square-credentials', async (req, res) => {
 });
 
 // POST /api/employee/my-bookings/:id/invoice/tap-payment - Record Square tap-to-pay payment
-router.post('/my-bookings/:id/invoice/tap-payment', async (req, res) => {
+router.post('/my-bookings/:id/invoice/tap-payment', requirePermission('process_payments'), async (req, res) => {
   try {
     const { userId } = req.employee;
     const { id } = req.params;
-    const { squarePaymentId, amount, cardBrand, cardLastFour } = req.body;
+    const { squarePaymentId, cardBrand, cardLastFour } = req.body;
 
-    if (!squarePaymentId) {
-      return res.status(400).json({ error: 'squarePaymentId is required' });
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid booking ID' });
+    }
+
+    if (!squarePaymentId || typeof squarePaymentId !== 'string' || squarePaymentId.length > 255) {
+      return res.status(400).json({ error: 'Valid squarePaymentId is required' });
     }
 
     const booking = await pool.query(
@@ -727,7 +839,7 @@ router.post('/my-bookings/:id/invoice/tap-payment', async (req, res) => {
     }
 
     const { invoice_id, customer_id, amount_due } = booking.rows[0];
-    const paymentAmount = amount || parseFloat(amount_due);
+    const paymentAmount = parseFloat(amount_due); // Always use server-side amount — never trust client
 
     const { recordPayment } = require('./payment-webhooks');
 

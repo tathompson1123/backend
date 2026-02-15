@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
-const { authenticateToken } = require('../config/middleware');
+const { authenticateToken, requirePlan } = require('../config/middleware');
 const { deployToVercel, addDomainToVercel, checkDomainVerification, removeDomainFromVercel } = require('../services/vercel');
 const { searchDomains, purchaseDomain } = require('../services/domain');
 const axios = require('axios');
@@ -509,11 +509,11 @@ router.get('/v2', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/publish', authenticateToken, async (req, res) => {
+router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res) => {
   try {
     const userId = req.user.userId;
     let { html_content, pages } = req.body;
-    
+
     // Make HTML mobile responsive before publishing
     html_content = makeMobileResponsive(html_content);
     
@@ -1645,7 +1645,7 @@ router.get('/test-porkbun', authenticateToken, async (req, res) => {
 });
 
 // POST - Purchase domain (managed by us)
-router.post('/purchase-domain', authenticateToken, async (req, res) => {
+router.post('/purchase-domain', authenticateToken, requirePlan('basic'), async (req, res) => {
   try {
     const userId = req.user.userId;
     const { domain } = req.body;
@@ -1706,7 +1706,7 @@ router.post('/purchase-domain', authenticateToken, async (req, res) => {
 });
 
 // POST - Add custom domain (user already owns it)
-router.post('/add-domain', authenticateToken, async (req, res) => {
+router.post('/add-domain', authenticateToken, requirePlan('basic'), async (req, res) => {
   try {
     const userId = req.user.userId;
     const { domain } = req.body;
@@ -1832,6 +1832,63 @@ router.delete('/remove-domain', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error removing domain:', error);
     res.status(500).json({ error: 'Failed to remove domain' });
+  }
+});
+
+// POST - AI Domain Assistant (helps users configure nameservers)
+router.post('/domain-assistant', authenticateToken, async (req, res) => {
+  try {
+    const { message, registrar, domain } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const systemPrompt = `You are SORCE Assistant, helping a user connect their domain "${domain || 'their domain'}" to their SORCE website.
+The user needs to change their nameservers to:
+- ns1.vercel-dns.com
+- ns2.vercel-dns.com
+
+${registrar ? `The user says their domain registrar is: ${registrar}` : "You don't know their registrar yet — ask them."}
+
+Provide step-by-step instructions specific to their registrar. Be concise and friendly.
+If the user mentions a registrar, give exact navigation steps (e.g., "Click Domain Manager > select your domain > Nameservers > Custom DNS").
+Common registrars and their paths:
+- GoDaddy: My Products > DNS > Nameservers > Change > Enter my own nameservers
+- Namecheap: Domain List > Manage > Nameservers > Custom DNS
+- Google Domains (now Squarespace): DNS > Custom name servers
+- Cloudflare: DNS > Records (note: they need to remove Cloudflare proxy first)
+- Hostinger: Domains > Manage > DNS/Nameservers
+- Bluehost: Domains > assign > nameservers
+- 1&1 IONOS: Domains > DNS > Nameservers
+- Porkbun: Domain Management > Authoritative Nameservers
+- Hover: DNS > Edit Nameservers
+- Name.com: My Domains > domain > Nameservers
+
+If the user is confused, offer the CNAME alternative: "Add a CNAME record pointing 'www' to 'cname.vercel-dns.com' and an A record pointing @ to 76.76.21.21"
+
+Keep responses under 200 words. Use numbered steps.`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 512,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: message.trim() }]
+      })
+    });
+
+    const data = await response.json();
+    res.json({ reply: data.content[0].text });
+  } catch (error) {
+    console.error('Domain assistant error:', error);
+    res.status(500).json({ error: 'Failed to get help' });
   }
 });
 

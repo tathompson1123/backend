@@ -270,10 +270,8 @@ router.post('/:leadId/send-sms', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'No phone number provisioned. Please set up Twilio first.' });
     }
     
-    const fromNumber = userResult.rows[0].twilio_phone_number;
-    
-    // Send via Twilio
-    const smsResult = await sendSMS(lead.phone, fromNumber, message);
+    // Send via Twilio — sendSMS(to, message, userId) looks up the from number internally
+    const smsResult = await sendSMS(lead.phone, message, userId);
     
     // Store outgoing message
     await pool.query(

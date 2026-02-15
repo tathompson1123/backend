@@ -4,8 +4,16 @@ const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 
+// Validation helpers
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
+function isValidId(id) { return Number.isInteger(Number(id)) && Number(id) > 0; }
+
+// All routes require business owner authentication
+router.use(authenticateToken);
+
 // GET - Fetch all employees
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const userId = req.user.userId;
 
@@ -26,20 +34,40 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // POST - Create new employee
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const userId = req.user.userId;
     const { name, email, phone, color, serviceIds } = req.body;
 
-    if (!name) {
-      return res.status(400).json({ error: 'name required' });
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    if (name.trim().length > 100) {
+      return res.status(400).json({ error: 'Name must be under 100 characters' });
+    }
+
+    if (email && !EMAIL_REGEX.test(email.trim())) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    if (phone && phone.length > 20) {
+      return res.status(400).json({ error: 'Phone number too long' });
+    }
+
+    if (color && !COLOR_REGEX.test(color)) {
+      return res.status(400).json({ error: 'Color must be a valid hex color (e.g. #3b82f6)' });
+    }
+
+    if (serviceIds && (!Array.isArray(serviceIds) || serviceIds.some(id => !isValidId(id)))) {
+      return res.status(400).json({ error: 'serviceIds must be an array of valid IDs' });
     }
 
     const result = await pool.query(
       `INSERT INTO employees (user_id, name, email, phone, color)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [userId, name, email, phone, color || '#3b82f6']
+      [userId, name.trim(), email ? email.trim() : null, phone ? phone.trim() : null, color || '#3b82f6']
     );
 
     const employee = result.rows[0];
@@ -63,11 +91,35 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // PUT - Update employee
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
     const { name, email, phone, color, active, serviceIds } = req.body;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid employee ID' });
+    }
+
+    if (name !== undefined && (typeof name !== 'string' || name.trim().length > 100)) {
+      return res.status(400).json({ error: 'Name must be under 100 characters' });
+    }
+
+    if (email && !EMAIL_REGEX.test(email.trim())) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    if (phone && phone.length > 20) {
+      return res.status(400).json({ error: 'Phone number too long' });
+    }
+
+    if (color && !COLOR_REGEX.test(color)) {
+      return res.status(400).json({ error: 'Color must be a valid hex color (e.g. #3b82f6)' });
+    }
+
+    if (serviceIds !== undefined && serviceIds !== null && (!Array.isArray(serviceIds) || serviceIds.some(sid => !isValidId(sid)))) {
+      return res.status(400).json({ error: 'serviceIds must be an array of valid IDs' });
+    }
 
     const result = await pool.query(
       `UPDATE employees
@@ -108,10 +160,14 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // DELETE - Delete employee
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid employee ID' });
+    }
 
     const bookingsCheck = await pool.query(
       `SELECT COUNT(*) as count FROM bookings 
@@ -137,10 +193,14 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 });
 
 // POST - Send invite to employee for mobile app access
-router.post('/:id/invite', authenticateToken, async (req, res) => {
+router.post('/:id/invite', async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid employee ID' });
+    }
 
     // Verify employee belongs to this user
     const empResult = await pool.query(
@@ -215,17 +275,12 @@ router.post('/:id/invite', authenticateToken, async (req, res) => {
     if (employee.phone && process.env.TWILIO_ACCOUNT_SID) {
       try {
         const { sendSMS } = require('../utils/twilio');
-        const userPhone = await pool.query('SELECT twilio_phone_number FROM users WHERE id = $1', [userId]);
-        const fromPhone = userPhone.rows[0]?.twilio_phone_number;
-
-        if (fromPhone) {
-          await sendSMS(
-            fromPhone,
-            employee.phone,
-            `${businessName} invited you to SORCE! Set up your account: ${inviteUrl}`
-          );
-          console.log(`✅ Invite SMS sent to ${employee.phone}`);
-        }
+        await sendSMS(
+          employee.phone,
+          `${businessName} invited you to SORCE! Set up your account: ${inviteUrl}`,
+          userId
+        );
+        console.log(`✅ Invite SMS sent to ${employee.phone}`);
       } catch (smsErr) {
         console.error('⚠️ Failed to send invite SMS:', smsErr.message);
       }
@@ -243,10 +298,14 @@ router.post('/:id/invite', authenticateToken, async (req, res) => {
 });
 
 // POST - Revoke employee access
-router.post('/:id/revoke', authenticateToken, async (req, res) => {
+router.post('/:id/revoke', async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid employee ID' });
+    }
 
     // Verify employee belongs to this user
     const empResult = await pool.query(
@@ -272,7 +331,7 @@ router.post('/:id/revoke', authenticateToken, async (req, res) => {
 });
 
 // GET - Fetch groups
-router.get('/groups', authenticateToken, async (req, res) => {
+router.get('/groups', async (req, res) => {
   try {
     const userId = req.user.userId;
 
@@ -289,18 +348,22 @@ router.get('/groups', authenticateToken, async (req, res) => {
 });
 
 // POST - Create group
-router.post('/groups', authenticateToken, async (req, res) => {
+router.post('/groups', async (req, res) => {
   try {
     const userId = req.user.userId;
     const { name, employeeIds } = req.body;
 
-    if (!name || !employeeIds || !Array.isArray(employeeIds)) {
-      return res.status(400).json({ error: 'name and employeeIds (array) required' });
+    if (!name || typeof name !== 'string' || !name.trim() || name.trim().length > 100) {
+      return res.status(400).json({ error: 'Group name is required (max 100 characters)' });
+    }
+
+    if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.some(eid => !isValidId(eid))) {
+      return res.status(400).json({ error: 'employeeIds must be an array of valid IDs' });
     }
 
     const result = await pool.query(
       'INSERT INTO groups (user_id, name, employee_ids) VALUES ($1, $2, $3) RETURNING *',
-      [userId, name, employeeIds]
+      [userId, name.trim(), employeeIds]
     );
 
     res.json({ success: true, group: result.rows[0] });
@@ -311,19 +374,27 @@ router.post('/groups', authenticateToken, async (req, res) => {
 });
 
 // PUT - Update group
-router.put('/groups/:id', authenticateToken, async (req, res) => {
+router.put('/groups/:id', async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
     const { name, employeeIds } = req.body;
 
-    if (!name || !employeeIds || !Array.isArray(employeeIds)) {
-      return res.status(400).json({ error: 'name and employeeIds (array) required' });
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid group ID' });
+    }
+
+    if (!name || typeof name !== 'string' || !name.trim() || name.trim().length > 100) {
+      return res.status(400).json({ error: 'Group name is required (max 100 characters)' });
+    }
+
+    if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.some(eid => !isValidId(eid))) {
+      return res.status(400).json({ error: 'employeeIds must be an array of valid IDs' });
     }
 
     const result = await pool.query(
       'UPDATE groups SET name = $1, employee_ids = $2 WHERE id = $3 AND user_id = $4 RETURNING *',
-      [name, employeeIds, id, userId]
+      [name.trim(), employeeIds, id, userId]
     );
 
     if (result.rows.length === 0) {
@@ -338,10 +409,14 @@ router.put('/groups/:id', authenticateToken, async (req, res) => {
 });
 
 // DELETE - Delete group
-router.delete('/groups/:id', authenticateToken, async (req, res) => {
+router.delete('/groups/:id', async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid group ID' });
+    }
 
     const result = await pool.query(
       'DELETE FROM groups WHERE id = $1 AND user_id = $2 RETURNING *',
@@ -356,6 +431,182 @@ router.delete('/groups/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error deleting group:', error);
     res.status(500).json({ error: 'Failed to delete group' });
+  }
+});
+
+// ===== EMPLOYEE PERMISSIONS =====
+
+const VALID_PERMISSIONS = [
+  'view_bookings', 'manage_bookings', 'view_customers',
+  'view_all_bookings', 'send_messages', 'process_payments', 'view_reports'
+];
+
+// PUT - Update individual employee permissions
+router.put('/:id/permissions', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { permissions } = req.body;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid employee ID' });
+    }
+
+    if (!permissions || typeof permissions !== 'object') {
+      return res.status(400).json({ error: 'Permissions object required' });
+    }
+
+    // Validate all keys are allowed
+    const invalidKeys = Object.keys(permissions).filter(k => !VALID_PERMISSIONS.includes(k));
+    if (invalidKeys.length > 0) {
+      return res.status(400).json({ error: `Invalid permission keys: ${invalidKeys.join(', ')}` });
+    }
+
+    const result = await pool.query(
+      'UPDATE employees SET permissions = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3 RETURNING id, permissions',
+      [JSON.stringify(permissions), id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    res.json({ success: true, permissions: result.rows[0].permissions });
+  } catch (error) {
+    console.error('Error updating permissions:', error);
+    res.status(500).json({ error: 'Failed to update permissions' });
+  }
+});
+
+// ===== PERMISSION TEMPLATES =====
+
+// GET - Fetch all permission templates
+router.get('/permission-templates', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const result = await pool.query(
+      'SELECT * FROM permission_templates WHERE user_id = $1 ORDER BY name',
+      [userId]
+    );
+    res.json({ templates: result.rows });
+  } catch (error) {
+    console.error('Error fetching permission templates:', error);
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
+// POST - Create permission template
+router.post('/permission-templates', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { name, permissions } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Template name required' });
+    }
+
+    if (!permissions || typeof permissions !== 'object') {
+      return res.status(400).json({ error: 'Permissions object required' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO permission_templates (user_id, name, permissions) VALUES ($1, $2, $3) RETURNING *',
+      [userId, name.trim(), JSON.stringify(permissions)]
+    );
+
+    res.status(201).json({ template: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating permission template:', error);
+    res.status(500).json({ error: 'Failed to create template' });
+  }
+});
+
+// PUT - Update permission template
+router.put('/permission-templates/:id', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { name, permissions } = req.body;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid template ID' });
+    }
+
+    const result = await pool.query(
+      'UPDATE permission_templates SET name = COALESCE($1, name), permissions = COALESCE($2, permissions), updated_at = NOW() WHERE id = $3 AND user_id = $4 RETURNING *',
+      [name?.trim() || null, permissions ? JSON.stringify(permissions) : null, id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    res.json({ template: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating permission template:', error);
+    res.status(500).json({ error: 'Failed to update template' });
+  }
+});
+
+// DELETE - Delete permission template
+router.delete('/permission-templates/:id', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid template ID' });
+    }
+
+    const result = await pool.query(
+      'DELETE FROM permission_templates WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting permission template:', error);
+    res.status(500).json({ error: 'Failed to delete template' });
+  }
+});
+
+// POST - Apply template to employees
+router.post('/apply-template', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { templateId, employeeIds } = req.body;
+
+    if (!isValidId(templateId) || !Array.isArray(employeeIds) || employeeIds.length === 0) {
+      return res.status(400).json({ error: 'templateId and employeeIds array required' });
+    }
+
+    // Get template
+    const templateResult = await pool.query(
+      'SELECT permissions FROM permission_templates WHERE id = $1 AND user_id = $2',
+      [templateId, userId]
+    );
+
+    if (templateResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    const permissions = templateResult.rows[0].permissions;
+
+    // Update all specified employees
+    const validIds = employeeIds.filter(id => isValidId(id));
+    const result = await pool.query(
+      'UPDATE employees SET permissions = $1, updated_at = NOW() WHERE id = ANY($2::int[]) AND user_id = $3 RETURNING id',
+      [JSON.stringify(permissions), validIds, userId]
+    );
+
+    res.json({ success: true, updatedCount: result.rows.length });
+  } catch (error) {
+    console.error('Error applying template:', error);
+    res.status(500).json({ error: 'Failed to apply template' });
   }
 });
 

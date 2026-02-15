@@ -84,7 +84,7 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
         // Schedule the response
         setTimeout(async () => {
           try {
-            await sendSMS(From, To, aiResponse);
+            await sendSMS(From, aiResponse, user.id);
             
             await pool.query(
               `INSERT INTO sms_messages 

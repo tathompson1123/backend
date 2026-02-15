@@ -15,8 +15,8 @@ router.post('/accept-invite', async (req, res) => {
       return res.status(400).json({ error: 'Token and password are required' });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
     // Find credential by invite token
@@ -40,7 +40,7 @@ router.post('/accept-invite', async (req, res) => {
     }
 
     // Hash password and update credentials
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12);
 
     await pool.query(
       `UPDATE employee_credentials
@@ -125,6 +125,11 @@ router.post('/login', async (req, res) => {
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return res.status(400).json({ error: 'Invalid email format' });
     }
 
     const result = await pool.query(
@@ -229,15 +234,22 @@ router.put('/push-token', authenticateEmployee, async (req, res) => {
   try {
     const { pushToken, platform } = req.body;
 
-    if (!pushToken) {
+    if (!pushToken || typeof pushToken !== 'string') {
       return res.status(400).json({ error: 'Push token is required' });
     }
+
+    if (pushToken.length > 500) {
+      return res.status(400).json({ error: 'Push token too long' });
+    }
+
+    const allowedPlatforms = ['ios', 'android', 'unknown'];
+    const safePlatform = allowedPlatforms.includes(platform) ? platform : 'unknown';
 
     await pool.query(
       `UPDATE employee_credentials
        SET push_token = $1, device_platform = $2, updated_at = NOW()
        WHERE employee_id = $3`,
-      [pushToken, platform || 'unknown', req.employee.employeeId]
+      [pushToken, safePlatform, req.employee.employeeId]
     );
 
     res.json({ success: true });

@@ -102,6 +102,78 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   res.json({ received: true });
 });
 
+// Create Embedded Checkout Session (for PublishWizard — stays in modal)
+router.post('/create-embedded-checkout', authenticateToken, async (req, res) => {
+  try {
+    const { plan } = req.body;
+    const userId = req.user.userId;
+
+    const userResult = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
+    const userEmail = userResult.rows[0]?.email;
+
+    const prices = {
+      basic: { amount: 2995, name: 'Basic Plan' },
+      pro: { amount: 6995, name: 'Pro Plan' },
+      expert: { amount: 9995, name: 'Expert Plan' }
+    };
+
+    const selectedPrice = prices[plan];
+    if (!selectedPrice) {
+      return res.status(400).json({ error: 'Invalid plan' });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer_email: userEmail,
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: selectedPrice.name,
+            description: `Monthly subscription to SORCE ${plan} plan`,
+          },
+          unit_amount: selectedPrice.amount,
+          recurring: { interval: 'month' },
+        },
+        quantity: 1,
+      }],
+      mode: 'subscription',
+      ui_mode: 'embedded',
+      redirect_on_completion: 'if_required',
+      return_url: `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/dashboard?tab=website&flow=publish&plan=${plan}`,
+      metadata: {
+        userId: userId.toString(),
+        plan: plan,
+      },
+    });
+
+    res.json({ clientSecret: session.client_secret });
+  } catch (error) {
+    console.error('Embedded checkout error:', error);
+    res.status(500).json({ error: 'Failed to create embedded checkout session' });
+  }
+});
+
+// Check Checkout Session status (for 3DS redirect return)
+router.get('/checkout-session-status', authenticateToken, async (req, res) => {
+  try {
+    const { session_id } = req.query;
+    if (!session_id) {
+      return res.status(400).json({ error: 'session_id required' });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(session_id);
+    res.json({
+      status: session.status,
+      payment_status: session.payment_status,
+      plan: session.metadata?.plan,
+    });
+  } catch (error) {
+    console.error('Session status error:', error);
+    res.status(500).json({ error: 'Failed to check session status' });
+  }
+});
+
 // Get current subscription status
 router.get('/subscription', authenticateToken, async (req, res) => {
   try {
