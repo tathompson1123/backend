@@ -101,6 +101,9 @@ app.use('/api/gbp-analyzer', gbpAnalyzerRoutes);
 const businessHoursRoutes = require('./routes/business-hours');
 app.use('/api/business-hours', businessHoursRoutes);
 
+const businessInfoRoutes = require('./routes/business-info');
+app.use('/api/business-info', businessInfoRoutes);
+
 const employeeAuthRoutes = require('./routes/employee-auth');
 const employeeApiRoutes = require('./routes/employee-api');
 app.use('/api/employee-auth', employeeAuthRoutes);
@@ -151,6 +154,31 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     console.log('✅ Business hours table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify business_hours table:', e.message);
+  }
+
+  // Business information table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS business_information (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        phone VARCHAR(50) DEFAULT '',
+        email VARCHAR(255) DEFAULT '',
+        address VARCHAR(500) DEFAULT '',
+        city VARCHAR(100) DEFAULT '',
+        state VARCHAR(100) DEFAULT '',
+        zip_code VARCHAR(20) DEFAULT '',
+        service_area_type VARCHAR(20) DEFAULT 'zipcodes',
+        service_zip_codes JSONB DEFAULT '[]',
+        service_radius INTEGER DEFAULT 25,
+        center_zip_code VARCHAR(20) DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Business information table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify business_information table:', e.message);
   }
 
   // Google review link column on users

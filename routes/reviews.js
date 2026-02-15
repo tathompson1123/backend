@@ -156,6 +156,82 @@ function getRandomColor() {
 }
 
 // ============================================
+// FETCH REVIEWS VIA GOOGLE PLACES API
+// ============================================
+
+const GOOGLE_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
+const PLACES_BASE = 'https://places.googleapis.com/v1';
+
+router.post('/fetch-reviews', authenticateToken, async (req, res) => {
+  try {
+    const { placeId, query } = req.body;
+
+    if (!GOOGLE_API_KEY) {
+      return res.status(500).json({ error: 'Google Places API key not configured' });
+    }
+
+    let targetPlaceId = placeId;
+
+    // If no placeId, search by query
+    if (!targetPlaceId && query) {
+      const searchRes = await fetch(`${PLACES_BASE}/places:searchText`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GOOGLE_API_KEY,
+          'X-Goog-FieldMask': 'places.id,places.displayName'
+        },
+        body: JSON.stringify({ textQuery: query, maxResultCount: 1 })
+      });
+      const searchData = await searchRes.json();
+      targetPlaceId = searchData.places?.[0]?.id;
+
+      if (!targetPlaceId) {
+        return res.status(404).json({ error: 'Business not found. Try a more specific search.' });
+      }
+    }
+
+    if (!targetPlaceId) {
+      return res.status(400).json({ error: 'Please provide a Place ID or search query' });
+    }
+
+    // Fetch place details with reviews
+    const detailRes = await fetch(`${PLACES_BASE}/places/${targetPlaceId}`, {
+      headers: {
+        'X-Goog-Api-Key': GOOGLE_API_KEY,
+        'X-Goog-FieldMask': 'id,displayName,reviews,rating,userRatingCount'
+      }
+    });
+    const place = await detailRes.json();
+
+    if (!place.reviews || place.reviews.length === 0) {
+      return res.json({ reviews: [], message: 'No reviews found for this business.', placeId: targetPlaceId });
+    }
+
+    const transformedReviews = place.reviews.map(r => ({
+      name: r.authorAttribution?.displayName || 'Customer',
+      text: r.text?.text || r.originalText?.text || '',
+      stars: r.rating || 5,
+      date: r.relativePublishTimeDescription || 'Recently',
+      avatarColor: getRandomColor(),
+      author: r.authorAttribution?.displayName || 'Customer',
+      rating: r.rating || 5
+    })).filter(r => r.text);
+
+    res.json({
+      reviews: transformedReviews,
+      totalReviews: place.userRatingCount || transformedReviews.length,
+      averageRating: place.rating || 0,
+      businessName: place.displayName?.text || '',
+      placeId: targetPlaceId
+    });
+  } catch (error) {
+    console.error('Error fetching Google reviews:', error);
+    res.status(500).json({ error: 'Failed to fetch reviews' });
+  }
+});
+
+// ============================================
 // REVIEW REPLY GENERATION
 // ============================================
 

@@ -74,4 +74,90 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /scrape - Scrape services from a website URL using AI
+router.post('/scrape', authenticateToken, async (req, res) => {
+  try {
+    const { url } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: 'Website URL is required' });
+    }
+
+    // Fetch the website HTML
+    const axios = require('axios');
+    let html;
+    try {
+      const response = await axios.get(url, {
+        timeout: 15000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SORCEBot/1.0)' },
+        maxRedirects: 5
+      });
+      html = response.data;
+    } catch (fetchErr) {
+      return res.status(400).json({ error: `Could not fetch website: ${fetchErr.message}` });
+    }
+
+    // Strip HTML to text (remove scripts, styles, tags)
+    const textContent = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 12000); // Limit context to ~12k chars
+
+    if (textContent.length < 50) {
+      return res.status(400).json({ error: 'Could not extract meaningful content from the website' });
+    }
+
+    // Use Claude to extract services
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const aiResponse = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: `Extract all services/offerings from this business website content. For each service found, provide:
+- name: The service name
+- description: A brief 1-2 sentence description
+- price: The price if mentioned (number only, no $ sign). If not found, estimate a reasonable price or use 0.
+- durationHours: Estimated duration in hours. If not mentioned, estimate reasonably (1-4 hours typical).
+
+Return ONLY a valid JSON array. No markdown, no explanation. Example:
+[{"name": "Service Name", "description": "What it includes", "price": 99, "durationHours": 2}]
+
+If no services are found, return an empty array: []
+
+Website content:
+${textContent}`
+      }]
+    });
+
+    const aiText = aiResponse.content[0].text.trim();
+    let extractedServices;
+    try {
+      extractedServices = JSON.parse(aiText);
+    } catch (parseErr) {
+      // Try to extract JSON from the response
+      const jsonMatch = aiText.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        extractedServices = JSON.parse(jsonMatch[0]);
+      } else {
+        return res.status(500).json({ error: 'Could not parse AI response' });
+      }
+    }
+
+    if (!Array.isArray(extractedServices)) {
+      return res.status(500).json({ error: 'Invalid AI response format' });
+    }
+
+    res.json({ services: extractedServices });
+  } catch (error) {
+    console.error('Error scraping services:', error);
+    res.status(500).json({ error: 'Failed to scrape services from website' });
+  }
+});
+
 module.exports = router;

@@ -18,6 +18,8 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Save/update business hours
+const dayNameToNumber = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+
 router.post('/', authenticateToken, async (req, res) => {
   const { hours } = req.body;
 
@@ -33,12 +35,14 @@ router.post('/', authenticateToken, async (req, res) => {
     // Delete existing hours for this user
     await client.query('DELETE FROM business_hours WHERE user_id = $1', [req.user.userId]);
 
-    // Insert new hours
+    // Insert new hours — accept day_name (string) or day_of_week (integer)
     for (const day of hours) {
+      const dayOfWeek = day.day_of_week != null ? day.day_of_week : dayNameToNumber[day.day_name?.toLowerCase()];
+      if (dayOfWeek == null) continue;
       await client.query(
         `INSERT INTO business_hours (user_id, day_of_week, is_open, open_time, close_time)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user.userId, day.day_of_week, day.is_open, day.open_time, day.close_time]
+        [req.user.userId, dayOfWeek, day.is_open, day.open_time, day.close_time]
       );
     }
 

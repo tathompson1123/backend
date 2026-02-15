@@ -47,7 +47,7 @@ async function generateWebsite(req, res)
     if (pool && (phone || email || city || state)) {
       try {
         const existing = await pool.query(
-          'SELECT id FROM business_info WHERE user_id = $1',
+          'SELECT id FROM business_information WHERE user_id = $1',
           [userId]
         );
 
@@ -65,18 +65,18 @@ async function generateWebsite(req, res)
             updates.push(`updated_at = NOW()`);
             values.push(userId);
             await pool.query(
-              `UPDATE business_info SET ${updates.join(', ')} WHERE user_id = $${paramIndex}`,
+              `UPDATE business_information SET ${updates.join(', ')} WHERE user_id = $${paramIndex}`,
               values
             );
-            console.log('✅ Updated business_info with form data');
+            console.log('✅ Updated business_information with form data');
           }
         } else {
           await pool.query(
-            `INSERT INTO business_info (user_id, phone, email, city, state)
+            `INSERT INTO business_information (user_id, phone, email, city, state)
              VALUES ($1, $2, $3, $4, $5)`,
             [userId, phone || '', email || '', city || '', state || '']
           );
-          console.log('✅ Created business_info from form data');
+          console.log('✅ Created business_information from form data');
         }
       } catch (bizErr) {
         console.error('⚠️ Could not save business info (continuing):', bizErr.message);
