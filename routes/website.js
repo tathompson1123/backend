@@ -477,7 +477,7 @@ router.get('/v2', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
 
     const result = await pool.query(
-      'SELECT id, page_data, html_content, vercel_url, is_published, custom_domain FROM websites WHERE user_id = $1',
+      'SELECT id, page_data, html_content, vercel_url, is_published, custom_domain, domain_verified FROM websites WHERE user_id = $1',
       [userId]
     );
 
@@ -545,7 +545,8 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
         if (!addedFiles.has(pageKey)) {
           files.push({
             file: pageKey,
-            data: Buffer.from(pages[pageKey]).toString('base64')
+            data: Buffer.from(pages[pageKey]).toString('base64'),
+            encoding: 'base64'
           });
           addedFiles.add(pageKey);
           console.log(`📄 Added ${pageKey} to deployment`);
@@ -557,7 +558,8 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
     if (html_content && !addedFiles.has('index.html')) {
       files.push({
         file: 'index.html',
-        data: Buffer.from(html_content).toString('base64')
+        data: Buffer.from(html_content).toString('base64'),
+        encoding: 'base64'
       });
       addedFiles.add('index.html');
       console.log(`📄 Added index.html to deployment`);
@@ -673,7 +675,7 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
             },
             body: JSON.stringify({
               name: `website-${userId}`,
-              files: [{ file: 'index.html', data: Buffer.from(html).toString('base64') }],
+              files: [{ file: 'index.html', data: Buffer.from(html).toString('base64'), encoding: 'base64' }],
               projectSettings: { framework: null }
             })
           });
@@ -1139,7 +1141,8 @@ function fixContactFormHTML(html, pageName) {
             if (!addedFiles.has(pageKey)) {
               files.push({
                 file: pageKey,
-                data: Buffer.from(updatedPages[pageKey]).toString('base64')
+                data: Buffer.from(updatedPages[pageKey]).toString('base64'),
+                encoding: 'base64'
               });
               addedFiles.add(pageKey);
             }
@@ -1150,7 +1153,8 @@ function fixContactFormHTML(html, pageName) {
         if (updatedHtmlContent && !addedFiles.has('index.html')) {
           files.push({
             file: 'index.html',
-            data: Buffer.from(updatedHtmlContent).toString('base64')
+            data: Buffer.from(updatedHtmlContent).toString('base64'),
+            encoding: 'base64'
           });
           addedFiles.add('index.html');
         }

@@ -48,7 +48,7 @@ router.get('/stripe/callback', async (req, res) => {
     const { code, state: userId, error: oauthError } = req.query;
 
     if (oauthError) {
-      return res.redirect(`${process.env.FRONTEND_URL}/dashboard?view=payment-settings&error=${oauthError}`);
+      return res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=${oauthError}`);
     }
 
     const result = await StripeConnectProcessor.handleOAuthCallback(code);
@@ -61,10 +61,10 @@ router.get('/stripe/callback', async (req, res) => {
       [userId, result.stripeAccountId, result.accessToken]
     );
 
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard?view=payment-settings&connected=stripe`);
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&connected=stripe`);
   } catch (error) {
     console.error('Stripe OAuth callback error:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard?view=payment-settings&error=stripe_failed`);
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=stripe_failed`);
   }
 });
 
@@ -74,7 +74,7 @@ router.get('/square/callback', async (req, res) => {
     const { code, state: userId, error: oauthError } = req.query;
 
     if (oauthError) {
-      return res.redirect(`${process.env.FRONTEND_URL}/dashboard?view=payment-settings&error=${oauthError}`);
+      return res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=${oauthError}`);
     }
 
     const result = await SquareProcessor.handleOAuthCallback(code);
@@ -96,10 +96,10 @@ router.get('/square/callback', async (req, res) => {
       [userId, result.merchantId, result.accessToken, result.refreshToken, locationId]
     );
 
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard?view=payment-settings&connected=square`);
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&connected=square`);
   } catch (error) {
     console.error('Square OAuth callback error:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard?view=payment-settings&error=square_failed`);
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=square_failed`);
   }
 });
 
