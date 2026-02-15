@@ -568,6 +568,33 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
   }
 })();
 
+// ── Market Research tables ──────────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS competitor_reports (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        report_data JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_competitor_reports_user ON competitor_reports(user_id, created_at DESC)');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS upsell_reports (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        report_data JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_upsell_reports_user ON upsell_reports(user_id, created_at DESC)');
+    console.log('✅ Market Research tables verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify Market Research tables:', e.message);
+  }
+})();
+
 // ── SMS processing cron job ──────────────────────────────
 // Runs every 30 seconds. Picks up leads in 'sms_pending' status
 // whose sms_scheduled_at has passed, sends the SMS via Twilio,
