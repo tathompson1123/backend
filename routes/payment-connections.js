@@ -80,9 +80,9 @@ router.get('/square/callback', async (req, res) => {
     const result = await SquareProcessor.handleOAuthCallback(code);
 
     // Get first location
-    const { Client, Environment } = require('square');
+    const { Client, Environment } = require('square/legacy');
     const client = new Client({
-      accessToken: result.accessToken,
+      bearerAuthCredentials: { accessToken: result.accessToken },
       environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
     });
     const { result: locResult } = await client.locationsApi.listLocations();

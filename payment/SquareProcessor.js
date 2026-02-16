@@ -3,9 +3,9 @@ const PaymentProcessor = require('./PaymentProcessor');
 class SquareProcessor extends PaymentProcessor {
   constructor(connection) {
     super(connection);
-    const { Client, Environment } = require('square');
+    const { Client, Environment } = require('square/legacy');
     this.client = new Client({
-      accessToken: connection.square_access_token,
+      bearerAuthCredentials: { accessToken: connection.square_access_token },
       environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
     });
     this.locationId = connection.square_location_id;
@@ -106,7 +106,7 @@ class SquareProcessor extends PaymentProcessor {
   }
 
   async verifyWebhook(rawBody, signature) {
-    const { WebhooksHelper } = require('square');
+    const { WebhooksHelper } = require('square/legacy');
     const signatureKey = process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
     const notificationUrl = `${process.env.BACKEND_URL}/api/webhooks/square`;
 
@@ -144,7 +144,7 @@ class SquareProcessor extends PaymentProcessor {
   }
 
   static async handleOAuthCallback(code) {
-    const { Client, Environment } = require('square');
+    const { Client, Environment } = require('square/legacy');
     const client = new Client({
       environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
     });
