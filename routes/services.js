@@ -109,7 +109,7 @@ async function scrapeWithPuppeteer(url) {
     // Find and scrape service-related linked pages
     const serviceLinks = await page.evaluate((baseUrl) => {
       const links = Array.from(document.querySelectorAll('a[href]'));
-      const keywords = ['service', 'pricing', 'book', 'menu', 'offerings', 'packages', 'what-we-do', 'our-work'];
+      const keywords = ['service', 'pricing', 'book', 'menu', 'offerings', 'packages', 'what-we-do', 'our-work', 'schedule', 'appointment', 'detail', 'wash', 'clean', 'repair', 'maintain'];
       const found = [];
       const base = new URL(baseUrl);
       for (const link of links) {
@@ -157,7 +157,7 @@ async function scrapeWithAxios(url) {
   const html = response.data;
 
   // Find service-related links in the HTML
-  const linkRegex = /href=["']([^"']*(?:service|pricing|book|menu|offerings|packages|what-we-do|our-work)[^"']*)["']/gi;
+  const linkRegex = /href=["']([^"']*(?:service|pricing|book|menu|offerings|packages|what-we-do|our-work|schedule|appointment|detail|wash|clean|repair|maintain)[^"']*)["']/gi;
   const baseUrl = new URL(url);
   const extraLinks = [];
   let match;
@@ -220,13 +220,16 @@ router.post('/scrape', authenticateToken, async (req, res) => {
       }
     }
 
-    const textContent = mainText.replace(/\s+/g, ' ').trim().slice(0, 20000);
+    const textContent = mainText.replace(/\s+/g, ' ').trim().slice(0, 40000);
 
     if (textContent.length < 50) {
       return res.status(400).json({ error: 'Could not extract meaningful content from the website' });
     }
 
-    console.log(`📄 Extracted ${textContent.length} chars of text content, sending to AI...`);
+    // Log a preview of extracted content for debugging
+    console.log(`📄 Extracted ${textContent.length} chars of text content`);
+    console.log(`📄 Text preview (first 500 chars): ${textContent.slice(0, 500)}`);
+    console.log(`📄 Text preview (last 500 chars): ${textContent.slice(-500)}`);
 
     // Use Claude to extract services
     const Anthropic = require('@anthropic-ai/sdk');
@@ -234,19 +237,28 @@ router.post('/scrape', authenticateToken, async (req, res) => {
 
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
+      max_tokens: 4000,
       messages: [{
         role: 'user',
-        content: `Extract all services/offerings from this business website content. For each service found, provide:
-- name: The service name
-- description: A brief 1-2 sentence description
-- price: The price if mentioned (number only, no $ sign). If not found, estimate a reasonable price or use 0.
-- durationHours: Estimated duration in hours. If not mentioned, estimate reasonably (1-4 hours typical).
+        content: `You are extracting services from a business website. Your job is to find EVERY SINGLE service listed on the page. Do NOT skip any. Do NOT summarize or combine services. If there are 15 services listed, return all 15.
 
-Return ONLY a valid JSON array. No markdown, no explanation. Example:
-[{"name": "Service Name", "description": "What it includes", "price": 99, "durationHours": 2}]
+For each service found, provide:
+- name: The exact service name as shown on the website
+- description: A brief 1-2 sentence description (from the website text if available, or a reasonable description)
+- price: The price if mentioned (number only, no $ sign). Use 0 if price is not found — do NOT estimate.
+- durationHours: The duration in hours if mentioned. Use 0 if not found — do NOT estimate.
 
-If no services are found, return an empty array: []
+IMPORTANT RULES:
+- Include EVERY service, package, add-on, and upgrade you can find
+- If services appear under different categories or sections, include them ALL
+- Look for service names in headings, lists, pricing tables, booking menus, etc.
+- Each variation counts as a separate service (e.g., "Basic Wash" and "Premium Wash" are 2 services)
+- Check ALL sections of the content including "ADDITIONAL PAGE" sections
+
+Return ONLY a valid JSON array. No markdown, no explanation, no commentary.
+Example: [{"name": "Service Name", "description": "What it includes", "price": 99, "durationHours": 2}]
+
+If no services are found, return: []
 
 Website content:
 ${textContent}`
