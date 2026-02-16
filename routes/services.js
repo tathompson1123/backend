@@ -106,21 +106,45 @@ async function scrapeWithPuppeteer(url) {
 
     let mainText = await page.evaluate(() => document.body.innerText);
 
-    // Find and scrape service-related linked pages
+    // Find and scrape service-related linked pages + all nav links
     const serviceLinks = await page.evaluate((baseUrl) => {
-      const links = Array.from(document.querySelectorAll('a[href]'));
-      const keywords = ['service', 'pricing', 'book', 'menu', 'offerings', 'packages', 'what-we-do', 'our-work', 'schedule', 'appointment', 'detail', 'wash', 'clean', 'repair', 'maintain'];
-      const found = [];
       const base = new URL(baseUrl);
-      for (const link of links) {
-        const href = link.href;
-        const text = (link.textContent || '').toLowerCase();
-        const hrefLower = href.toLowerCase();
-        if (href.startsWith(base.origin) || href.startsWith('/')) {
-          const isRelevant = keywords.some(kw => hrefLower.includes(kw) || text.includes(kw));
-          if (isRelevant && !found.includes(href) && found.length < 3) found.push(href);
-        }
+      const found = [];
+      const seen = new Set();
+      seen.add(base.pathname); // skip the current page
+
+      function addLink(href) {
+        if (found.length >= 6) return;
+        try {
+          const u = new URL(href, base.origin);
+          if (u.origin !== base.origin) return;
+          const path = u.pathname;
+          if (seen.has(path) || path === '/' || path === '') return;
+          // skip non-page resources
+          if (/\.(jpg|jpeg|png|gif|svg|pdf|css|js|ico|webp|mp4|mp3)$/i.test(path)) return;
+          seen.add(path);
+          found.push(u.href);
+        } catch {}
       }
+
+      const keywords = ['service', 'pricing', 'price', 'book', 'menu', 'offerings', 'packages', 'what-we-do', 'our-work', 'schedule', 'appointment', 'detail', 'wash', 'clean', 'repair', 'maintain', 'rate', 'cost', 'catalog', 'shop', 'order', 'gallery', 'portfolio'];
+
+      // Priority 1: Links matching service-related keywords
+      const allLinks = Array.from(document.querySelectorAll('a[href]'));
+      for (const link of allLinks) {
+        const href = link.href;
+        const text = (link.textContent || '').toLowerCase().trim();
+        const hrefLower = href.toLowerCase();
+        const isRelevant = keywords.some(kw => hrefLower.includes(kw) || text.includes(kw));
+        if (isRelevant) addLink(href);
+      }
+
+      // Priority 2: All nav/header links (these are almost always important pages)
+      const navLinks = document.querySelectorAll('nav a[href], header a[href], [role="navigation"] a[href]');
+      for (const link of navLinks) {
+        addLink(link.href);
+      }
+
       return found;
     }, url);
 
@@ -156,15 +180,37 @@ async function scrapeWithAxios(url) {
   });
   const html = response.data;
 
-  // Find service-related links in the HTML
-  const linkRegex = /href=["']([^"']*(?:service|pricing|book|menu|offerings|packages|what-we-do|our-work|schedule|appointment|detail|wash|clean|repair|maintain)[^"']*)["']/gi;
+  // Find service-related links + nav links in the HTML
   const baseUrl = new URL(url);
   const extraLinks = [];
+  const seenPaths = new Set([baseUrl.pathname]);
+  const keywords = ['service', 'pricing', 'price', 'book', 'menu', 'offerings', 'packages', 'what-we-do', 'our-work', 'schedule', 'appointment', 'detail', 'wash', 'clean', 'repair', 'maintain', 'rate', 'cost', 'catalog', 'shop', 'order', 'gallery', 'portfolio'];
+
+  // Find all hrefs in the HTML
+  const allHrefRegex = /href=["']([^"'#]+)["']/gi;
   let match;
-  while ((match = linkRegex.exec(html)) !== null && extraLinks.length < 3) {
+  // Also extract nav section links specifically
+  const navSection = (html.match(/<nav[^>]*>[\s\S]*?<\/nav>/gi) || []).join(' ') +
+                     (html.match(/<header[^>]*>[\s\S]*?<\/header>/gi) || []).join(' ');
+  const combinedHtml = html + '\n' + navSection; // nav links get checked twice = higher priority
+
+  while ((match = allHrefRegex.exec(combinedHtml)) !== null && extraLinks.length < 6) {
     let href = match[1];
     if (href.startsWith('/')) href = baseUrl.origin + href;
-    if (href.startsWith(baseUrl.origin) && !extraLinks.includes(href)) extraLinks.push(href);
+    try {
+      const u = new URL(href);
+      if (u.origin !== baseUrl.origin) continue;
+      if (seenPaths.has(u.pathname) || u.pathname === '/' || u.pathname === '') continue;
+      if (/\.(jpg|jpeg|png|gif|svg|pdf|css|js|ico|webp|mp4|mp3)$/i.test(u.pathname)) continue;
+      const hrefLower = href.toLowerCase();
+      const isRelevant = keywords.some(kw => hrefLower.includes(kw));
+      // Accept keyword matches or nav links
+      const isNavLink = navSection.includes(match[0]);
+      if (isRelevant || isNavLink) {
+        seenPaths.add(u.pathname);
+        extraLinks.push(u.href);
+      }
+    } catch {}
   }
 
   let mainText = html
@@ -220,7 +266,7 @@ router.post('/scrape', authenticateToken, async (req, res) => {
       }
     }
 
-    const textContent = mainText.replace(/\s+/g, ' ').trim().slice(0, 40000);
+    const textContent = mainText.replace(/\s+/g, ' ').trim().slice(0, 60000);
 
     if (textContent.length < 50) {
       return res.status(400).json({ error: 'Could not extract meaningful content from the website' });

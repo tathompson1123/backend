@@ -32,14 +32,21 @@ router.post('/competitors', async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    // Get user's business info
+    // Get user's business info from multiple tables
     const userResult = await pool.query(
-      'SELECT business_name, business_type, city, state, phone, email FROM users WHERE id = $1',
+      'SELECT business_name, email FROM users WHERE id = $1',
       [userId]
     );
-    const user = userResult.rows[0];
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const userRow = userResult.rows[0];
+    if (!userRow) return res.status(404).json({ error: 'User not found' });
 
+    // Get business_type from websites table
+    const websiteResult = await pool.query(
+      'SELECT business_type FROM websites WHERE user_id = $1 LIMIT 1',
+      [userId]
+    );
+
+    // Get city/state from business_information table
     const bizInfoResult = await pool.query(
       'SELECT * FROM business_information WHERE user_id = $1',
       [userId]
@@ -52,10 +59,10 @@ router.post('/competitors', async (req, res) => {
     );
     const userServices = servicesResult.rows;
 
-    const city = bizInfo.city || user.city || '';
-    const state = bizInfo.state || user.state || '';
-    const businessType = user.business_type || '';
-    const businessName = user.business_name || '';
+    const city = bizInfo.city || '';
+    const state = bizInfo.state || '';
+    const businessType = websiteResult.rows[0]?.business_type || '';
+    const businessName = userRow.business_name || '';
 
     if (!businessType || !city) {
       return res.status(400).json({ error: 'Business type and city are required. Please update your business settings.' });
@@ -216,11 +223,22 @@ router.post('/upsells', async (req, res) => {
     const userId = req.user.userId;
 
     const userResult = await pool.query(
-      'SELECT business_name, business_type FROM users WHERE id = $1',
+      'SELECT business_name FROM users WHERE id = $1',
       [userId]
     );
-    const user = userResult.rows[0];
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const userRow = userResult.rows[0];
+    if (!userRow) return res.status(404).json({ error: 'User not found' });
+
+    // Get business_type from websites table
+    const websiteResult = await pool.query(
+      'SELECT business_type FROM websites WHERE user_id = $1 LIMIT 1',
+      [userId]
+    );
+
+    const user = {
+      business_name: userRow.business_name || '',
+      business_type: websiteResult.rows[0]?.business_type || ''
+    };
 
     const servicesResult = await pool.query(
       'SELECT name, description, price, duration_hours FROM services WHERE user_id = $1 AND active = true ORDER BY price DESC',
