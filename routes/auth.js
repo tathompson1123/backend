@@ -61,7 +61,7 @@ const result = await pool.query(
 });
 
   } catch (error) {
-    console.error('❌ Signup error:', error);
+    console.error('❌ Signup error:', error.message);
     res.status(500).json({ error: 'Registration failed', message: error.message });
   }
 });
@@ -112,7 +112,7 @@ router.post('/login', async (req, res) => {
 });
 
   } catch (error) {
-    console.error('❌ Login error:', error);
+    console.error('❌ Login error:', error.message);
     res.status(500).json({ error: 'Login failed', message: error.message });
   }
 });
@@ -156,7 +156,7 @@ router.post('/verify', async (req, res) => {
 });
 
   } catch (error) {
-    console.error('❌ Verify error:', error);
+    console.error('❌ Verify error:', error.message);
     res.status(401).json({ error: 'Invalid token' });
   }
 });
@@ -183,7 +183,7 @@ router.post('/welcome-seen', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error marking welcome as seen:', error);
+    console.error('Error marking welcome as seen:', error.message);
     res.status(500).json({ error: 'Failed to mark welcome as seen' });
   }
 });
@@ -206,7 +206,7 @@ router.post('/onboarding/progress', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error saving onboarding progress:', error);
+    console.error('Error saving onboarding progress:', error.message);
     res.status(500).json({ error: 'Failed to save progress' });
   }
 });
@@ -227,7 +227,7 @@ router.post('/onboarding/skip', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error skipping onboarding:', error);
+    console.error('Error skipping onboarding:', error.message);
     res.status(500).json({ error: 'Failed to skip onboarding' });
   }
 });
@@ -247,7 +247,7 @@ router.post('/onboarding/complete', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error completing onboarding:', error);
+    console.error('Error completing onboarding:', error.message);
     res.status(500).json({ error: 'Failed to complete onboarding' });
   }
 });
@@ -273,7 +273,7 @@ router.get('/onboarding/status', authenticateToken, async (req, res) => {
       onboarding: result.rows[0]
     });
   } catch (error) {
-    console.error('Error getting onboarding status:', error);
+    console.error('Error getting onboarding status:', error.message);
     res.status(500).json({ error: 'Failed to get status' });
   }
 });

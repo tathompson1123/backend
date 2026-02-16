@@ -15,7 +15,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json({ services: result.rows });
   } catch (error) {
-    console.error('Error fetching services:', error);
+    console.error('Error fetching services:', error.message);
     res.status(500).json({ error: 'Failed to fetch services' });
   }
 });
@@ -39,7 +39,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
     res.json({ service: result.rows[0] });
   } catch (error) {
-    console.error('Error creating service:', error);
+    console.error('Error creating service:', error.message);
     res.status(500).json({ error: 'Failed to create service' });
   }
 });
@@ -69,7 +69,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     res.json({ service: result.rows[0] });
   } catch (error) {
-    console.error('Error updating service:', error);
+    console.error('Error updating service:', error.message);
     res.status(500).json({ error: 'Failed to update service' });
   }
 });
@@ -331,7 +331,7 @@ ${textContent}`
     console.log(`✅ Found ${extractedServices.length} services`);
     res.json({ services: extractedServices });
   } catch (error) {
-    console.error('Error scraping services:', error);
+    console.error('Error scraping services:', error.message);
     res.status(500).json({ error: 'Failed to scrape services from website' });
   }
 });

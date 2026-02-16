@@ -95,7 +95,7 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
             
             console.log(`🤖 AI replied to ${From} after ${Math.round(totalDelay / 1000)}s delay`);
           } catch (error) {
-            console.error('Error sending delayed AI response:', error);
+            console.error('Error sending delayed AI response:', error.message);
           }
         }, totalDelay);
       }
@@ -104,7 +104,7 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     // Always respond to Twilio immediately so it doesn't retry
     res.status(200).send('<Response></Response>');
   } catch (error) {
-    console.error('SMS webhook error:', error);
+    console.error('SMS webhook error:', error.message);
     res.status(500).send('<Response></Response>');
   }
 });
@@ -183,7 +183,7 @@ Keep it casual and brief. Don't be overly formal.`;
     const data = await response.json();
     return data.content[0].text;
   } catch (error) {
-    console.error('AI error:', error);
+    console.error('AI error:', error.message);
     return null;
   }
 }

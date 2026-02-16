@@ -71,7 +71,7 @@ router.get('/my-bookings', requirePermission('view_bookings'), async (req, res) 
     const result = await pool.query(query, params);
     res.json({ bookings: result.rows });
   } catch (error) {
-    console.error('Error fetching employee bookings:', error);
+    console.error('Error fetching employee bookings:', error.message);
     res.status(500).json({ error: 'Failed to fetch bookings' });
   }
 });
@@ -109,7 +109,7 @@ router.get('/my-bookings/:id', requirePermission('view_bookings'), async (req, r
 
     res.json({ booking: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching booking detail:', error);
+    console.error('Error fetching booking detail:', error.message);
     res.status(500).json({ error: 'Failed to fetch booking' });
   }
 });
@@ -155,7 +155,7 @@ router.put('/my-bookings/:id/status', requirePermission('manage_bookings'), asyn
           [booking.total_amount || 0, booking.booking_date, userId, booking.customer_email, booking.customer_phone]
         );
       } catch (custErr) {
-        console.error('Error updating customer on complete:', custErr);
+        console.error('Error updating customer on complete:', custErr.message);
       }
 
       // Create review request
@@ -193,7 +193,7 @@ router.put('/my-bookings/:id/status', requirePermission('manage_bookings'), asyn
 
     res.json({ success: true, booking: result.rows[0] });
   } catch (error) {
-    console.error('Error updating booking status:', error);
+    console.error('Error updating booking status:', error.message);
     res.status(500).json({ error: 'Failed to update booking status' });
   }
 });
@@ -226,7 +226,7 @@ router.put('/my-bookings/:id/notes', requirePermission('manage_bookings'), async
 
     res.json({ success: true, booking: result.rows[0] });
   } catch (error) {
-    console.error('Error updating job notes:', error);
+    console.error('Error updating job notes:', error.message);
     res.status(500).json({ error: 'Failed to update notes' });
   }
 });
@@ -262,7 +262,7 @@ router.get('/my-bookings/:id/messages', async (req, res) => {
 
     res.json({ messages: result.rows });
   } catch (error) {
-    console.error('Error fetching booking messages:', error);
+    console.error('Error fetching booking messages:', error.message);
     res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
@@ -308,7 +308,7 @@ router.post('/my-bookings/:id/messages', requirePermission('send_messages'), asy
 
     res.json({ success: true, messageSid: smsResult.messageSid });
   } catch (error) {
-    console.error('Error sending booking message:', error);
+    console.error('Error sending booking message:', error.message);
     res.status(500).json({ error: error.message || 'Failed to send message' });
   }
 });
@@ -396,7 +396,7 @@ router.post('/my-bookings/:id/invoice', requirePermission('process_payments'), a
       client.release();
     }
   } catch (error) {
-    console.error('Error creating invoice from booking:', error);
+    console.error('Error creating invoice from booking:', error.message);
     res.status(500).json({ error: 'Failed to create invoice' });
   }
 });
@@ -462,13 +462,13 @@ router.post('/my-bookings/:id/invoice/send', requirePermission('process_payments
         const msg = `Invoice ${data.invoice_number} for $${parseFloat(data.amount_due).toFixed(2)}. Pay here: ${paymentUrl}`;
         await sendSMS(data.customer_phone, msg, userId);
       } catch (smsErr) {
-        console.error('Failed to send invoice SMS:', smsErr);
+        console.error('Failed to send invoice SMS:', smsErr.message);
       }
     }
 
     res.json({ success: true, paymentUrl, invoiceId: data.invoice_id });
   } catch (error) {
-    console.error('Error sending invoice:', error);
+    console.error('Error sending invoice:', error.message);
     res.status(500).json({ error: 'Failed to send invoice' });
   }
 });
@@ -532,7 +532,7 @@ router.post('/my-bookings/:id/invoice/record-payment', requirePermission('proces
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error recording payment:', error);
+    console.error('Error recording payment:', error.message);
     res.status(500).json({ error: 'Failed to record payment' });
   }
 });
@@ -581,7 +581,7 @@ router.get('/my-schedule', async (req, res) => {
 
     res.json({ date: targetDate, bookings: result.rows });
   } catch (error) {
-    console.error('Error fetching schedule:', error);
+    console.error('Error fetching schedule:', error.message);
     res.status(500).json({ error: 'Failed to fetch schedule' });
   }
 });
@@ -613,7 +613,7 @@ router.get('/contacts', requirePermission('view_customers'), async (req, res) =>
     const result = await pool.query(query, params);
     res.json({ customers: result.rows });
   } catch (error) {
-    console.error('Error fetching contacts:', error);
+    console.error('Error fetching contacts:', error.message);
     res.status(500).json({ error: 'Failed to fetch contacts' });
   }
 });
@@ -653,7 +653,7 @@ router.get('/status-templates', async (req, res) => {
 
     res.json({ templates: existing.rows });
   } catch (error) {
-    console.error('Error fetching status templates:', error);
+    console.error('Error fetching status templates:', error.message);
     res.status(500).json({ error: 'Failed to fetch templates' });
   }
 });
@@ -693,7 +693,7 @@ router.get('/services', async (req, res) => {
 
     res.json({ services: result.rows });
   } catch (error) {
-    console.error('Error fetching employee services:', error);
+    console.error('Error fetching employee services:', error.message);
     res.status(500).json({ error: 'Failed to fetch services' });
   }
 });
@@ -720,7 +720,7 @@ router.get('/profile', async (req, res) => {
 
     res.json({ profile: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching employee profile:', error);
+    console.error('Error fetching employee profile:', error.message);
     res.status(500).json({ error: 'Failed to fetch profile' });
   }
 });
@@ -776,7 +776,7 @@ router.put('/profile', async (req, res) => {
 
     res.json({ success: true, profile: result.rows[0] });
   } catch (error) {
-    console.error('Error updating employee profile:', error);
+    console.error('Error updating employee profile:', error.message);
     res.status(500).json({ error: 'Failed to update profile' });
   }
 });
@@ -807,7 +807,7 @@ router.get('/square-credentials', requirePermission('process_payments'), async (
       environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? 'sandbox' : 'production'
     });
   } catch (error) {
-    console.error('Error fetching Square credentials:', error);
+    console.error('Error fetching Square credentials:', error.message);
     res.status(500).json({ error: 'Failed to fetch Square credentials' });
   }
 });
@@ -859,7 +859,7 @@ router.post('/my-bookings/:id/invoice/tap-payment', requirePermission('process_p
 
     res.json({ success: true, squarePaymentId });
   } catch (error) {
-    console.error('Error recording tap payment:', error);
+    console.error('Error recording tap payment:', error.message);
     res.status(500).json({ error: 'Failed to record tap payment' });
   }
 });

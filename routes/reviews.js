@@ -137,7 +137,7 @@ router.post('/import-google', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error scraping Google reviews:', error);
+    console.error('Error scraping Google reviews:', error.message);
 
     if (browser) {
       await browser.close().catch(e => console.error('Error closing browser:', e));
@@ -226,7 +226,7 @@ router.post('/fetch-reviews', authenticateToken, async (req, res) => {
       placeId: targetPlaceId
     });
   } catch (error) {
-    console.error('Error fetching Google reviews:', error);
+    console.error('Error fetching Google reviews:', error.message);
     res.status(500).json({ error: 'Failed to fetch reviews' });
   }
 });
@@ -261,7 +261,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching review stats:', error);
+    console.error('Error fetching review stats:', error.message);
     res.json({ success: true, stats: { today: 0, week: 0 } });
   }
 });
@@ -279,7 +279,7 @@ router.get('/review-requests', authenticateToken, async (req, res) => {
 
     res.json({ success: true, requests: result.rows });
   } catch (error) {
-    console.error('Error fetching review requests:', error);
+    console.error('Error fetching review requests:', error.message);
     res.json({ success: true, requests: [] });
   }
 });
@@ -338,7 +338,7 @@ Generate ONLY the reply text, no quotes or labels.`;
     res.json({ success: true, reply });
 
   } catch (error) {
-    console.error('Error generating review reply:', error);
+    console.error('Error generating review reply:', error.message);
     res.status(500).json({ success: false, error: 'Failed to generate reply' });
   }
 });

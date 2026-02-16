@@ -62,7 +62,7 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
 
     res.json({ sessionId: session.id, url: session.url });
   } catch (error) {
-    console.error('Stripe checkout error:', error);
+    console.error('Stripe checkout error:', error.message);
     res.status(500).json({ error: 'Failed to create checkout session' });
   }
 });
@@ -95,7 +95,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       );
       console.log(`✅ User ${userId} upgraded to ${plan} plan`);
     } catch (error) {
-      console.error('Error updating user plan:', error);
+      console.error('Error updating user plan:', error.message);
     }
   }
 
@@ -149,7 +149,7 @@ router.post('/create-embedded-checkout', authenticateToken, async (req, res) => 
 
     res.json({ clientSecret: session.client_secret });
   } catch (error) {
-    console.error('Embedded checkout error:', error);
+    console.error('Embedded checkout error:', error.message);
     res.status(500).json({ error: 'Failed to create embedded checkout session' });
   }
 });
@@ -169,7 +169,7 @@ router.get('/checkout-session-status', authenticateToken, async (req, res) => {
       plan: session.metadata?.plan,
     });
   } catch (error) {
-    console.error('Session status error:', error);
+    console.error('Session status error:', error.message);
     res.status(500).json({ error: 'Failed to check session status' });
   }
 });
@@ -196,7 +196,7 @@ router.get('/subscription', authenticateToken, async (req, res) => {
       res.json({ plan: user.plan, status: 'none' });
     }
   } catch (error) {
-    console.error('Error fetching subscription:', error);
+    console.error('Error fetching subscription:', error.message);
     res.status(500).json({ error: 'Failed to fetch subscription' });
   }
 });

@@ -57,7 +57,7 @@ router.get('/:token', async (req, res) => {
       processors: connections.rows.map(c => ({ name: c.processor, primary: c.is_primary }))
     });
   } catch (error) {
-    console.error('Error fetching payment page:', error);
+    console.error('Error fetching payment page:', error.message);
     res.status(500).json({ error: 'Failed to load invoice' });
   }
 });
@@ -121,7 +121,7 @@ router.post('/:token/create-session', async (req, res) => {
       processor: processor.processorName
     });
   } catch (error) {
-    console.error('Error creating payment session:', error);
+    console.error('Error creating payment session:', error.message);
     res.status(500).json({ error: 'Failed to create payment session' });
   }
 });

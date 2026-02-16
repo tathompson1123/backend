@@ -15,7 +15,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json({ customers: result.rows });
   } catch (error) {
-    console.error('Error fetching customers:', error);
+    console.error('Error fetching customers:', error.message);
     res.status(500).json({ error: 'Failed to fetch customers' });
   }
 });
@@ -44,7 +44,7 @@ router.post('/', authenticateToken, async (req, res) => {
       customer: result.rows[0]
     });
   } catch (error) {
-    console.error('Error creating customer:', error);
+    console.error('Error creating customer:', error.message);
     res.status(500).json({ error: 'Failed to create customer' });
   }
 });
@@ -77,7 +77,7 @@ router.patch('/:id', authenticateToken, async (req, res) => {
       customer: result.rows[0]
     });
   } catch (error) {
-    console.error('Error updating customer:', error);
+    console.error('Error updating customer:', error.message);
     res.status(500).json({ error: 'Failed to update customer' });
   }
 });
@@ -101,7 +101,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error deleting customer:', error);
+    console.error('Error deleting customer:', error.message);
     res.status(500).json({ error: 'Failed to delete customer' });
   }
 });

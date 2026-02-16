@@ -50,7 +50,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const result = await pool.query(query, params);
     res.json({ invoices: result.rows });
   } catch (error) {
-    console.error('Error fetching invoices:', error);
+    console.error('Error fetching invoices:', error.message);
     res.status(500).json({ error: 'Failed to fetch invoices' });
   }
 });
@@ -80,7 +80,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     res.json({ invoice: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching invoice:', error);
+    console.error('Error fetching invoice:', error.message);
     res.status(500).json({ error: 'Failed to fetch invoice' });
   }
 });
@@ -136,7 +136,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
     res.json({ success: true, invoice });
   } catch (error) {
-    console.error('Error creating invoice:', error);
+    console.error('Error creating invoice:', error.message);
     res.status(500).json({ error: 'Failed to create invoice' });
   }
 });
@@ -220,7 +220,7 @@ router.post('/from-booking/:bookingId', authenticateToken, async (req, res) => {
 
     res.json({ success: true, invoice });
   } catch (error) {
-    console.error('Error creating invoice from booking:', error);
+    console.error('Error creating invoice from booking:', error.message);
     res.status(500).json({ error: 'Failed to create invoice' });
   }
 });
@@ -271,7 +271,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error updating invoice:', error);
+    console.error('Error updating invoice:', error.message);
     res.status(500).json({ error: 'Failed to update invoice' });
   }
 });
@@ -325,7 +325,7 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
         `
       });
     } catch (emailErr) {
-      console.error('Failed to send invoice email:', emailErr);
+      console.error('Failed to send invoice email:', emailErr.message);
       return res.status(500).json({ error: 'Failed to send email' });
     }
 
@@ -337,7 +337,7 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
 
     res.json({ success: true, message: `Invoice sent to ${invoice.customer_email}` });
   } catch (error) {
-    console.error('Error sending invoice:', error);
+    console.error('Error sending invoice:', error.message);
     res.status(500).json({ error: 'Failed to send invoice' });
   }
 });
@@ -383,7 +383,7 @@ router.post('/:id/remind', authenticateToken, async (req, res) => {
 
     res.json({ success: true, message: 'Reminder sent' });
   } catch (error) {
-    console.error('Error sending reminder:', error);
+    console.error('Error sending reminder:', error.message);
     res.status(500).json({ error: 'Failed to send reminder' });
   }
 });
@@ -411,7 +411,7 @@ router.post('/:id/void', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error voiding invoice:', error);
+    console.error('Error voiding invoice:', error.message);
     res.status(500).json({ error: 'Failed to void invoice' });
   }
 });
@@ -430,7 +430,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Draft invoice not found' });
     res.json({ success: true });
   } catch (error) {
-    console.error('Error deleting invoice:', error);
+    console.error('Error deleting invoice:', error.message);
     res.status(500).json({ error: 'Failed to delete invoice' });
   }
 });

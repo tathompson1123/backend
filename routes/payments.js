@@ -35,7 +35,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const result = await pool.query(query, params);
     res.json({ payments: result.rows });
   } catch (error) {
-    console.error('Error fetching payments:', error);
+    console.error('Error fetching payments:', error.message);
     res.status(500).json({ error: 'Failed to fetch payments' });
   }
 });
@@ -50,7 +50,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Payment not found' });
     res.json({ payment: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching payment:', error);
+    console.error('Error fetching payment:', error.message);
     res.status(500).json({ error: 'Failed to fetch payment' });
   }
 });
@@ -108,7 +108,7 @@ router.post('/:id/refund', authenticateToken, async (req, res) => {
 
     res.json({ success: true, refund: refundResult });
   } catch (error) {
-    console.error('Error processing refund:', error);
+    console.error('Error processing refund:', error.message);
     res.status(500).json({ error: 'Failed to process refund' });
   }
 });
@@ -163,7 +163,7 @@ router.post('/record-manual', authenticateToken, async (req, res) => {
 
     res.json({ success: true, payment: paymentResult.rows[0] });
   } catch (error) {
-    console.error('Error recording manual payment:', error);
+    console.error('Error recording manual payment:', error.message);
     res.status(500).json({ error: 'Failed to record payment' });
   }
 });

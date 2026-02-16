@@ -98,7 +98,7 @@ function requirePlan(requiredPlan) {
       
       next();
     } catch (error) {
-      console.error('Plan check error:', error);
+      console.error('Plan check error:', error.message);
       res.status(500).json({ error: 'Failed to verify plan' });
     }
   };

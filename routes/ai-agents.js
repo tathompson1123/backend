@@ -22,7 +22,7 @@ router.get('/debug/config', authenticateToken, async (req, res) => {
       }))
     });
   } catch (error) {
-    console.error('Debug config error:', error);
+    console.error('Debug config error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -60,7 +60,7 @@ router.get('/website/config', authenticateToken, async (req, res) => {
     console.log('📖 Returning saved config:', Object.keys(result.rows[0].config || {}).join(', '));
     res.json({ config: result.rows[0].config });
   } catch (error) {
-    console.error('Error fetching website agent config:', error);
+    console.error('Error fetching website agent config:', error.message);
     res.status(500).json({ error: 'Failed to fetch configuration' });
   }
 });
@@ -78,7 +78,7 @@ router.get('/website/status', authenticateToken, async (req, res) => {
     
     res.json({ isDeployed });
   } catch (error) {
-    console.error('Error checking website agent status:', error);
+    console.error('Error checking website agent status:', error.message);
     res.status(500).json({ error: 'Failed to check status' });
   }
 });
@@ -97,7 +97,7 @@ router.get('/leadform/status', authenticateToken, async (req, res) => {
     
     res.json({ isDeployed });
   } catch (error) {
-    console.error('Error checking lead form agent status:', error);
+    console.error('Error checking lead form agent status:', error.message);
     res.status(500).json({ error: 'Failed to check status' });
   }
 });
@@ -150,7 +150,7 @@ router.post('/website/config', authenticateToken, async (req, res) => {
     console.log('✅ Chat config saved for user', userId);
     res.json({ success: true, config: result.rows[0].config });
   } catch (error) {
-    console.error('Error saving website agent config:', error);
+    console.error('Error saving website agent config:', error.message);
     res.status(500).json({ error: 'Failed to save configuration' });
   }
 });
@@ -185,7 +185,7 @@ router.get('/website/stats', authenticateToken, requirePlan('pro'), async (req, 
       bookingsCreated: parseInt(bookingsResult.rows[0].count)
     });
   } catch (error) {
-    console.error('Error fetching website agent stats:', error);
+    console.error('Error fetching website agent stats:', error.message);
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });
@@ -223,7 +223,7 @@ router.patch('/website', authenticateToken, requirePlan('pro'), async (req, res)
 
     res.json({ success: true, enabled });
   } catch (error) {
-    console.error('Error toggling website agent:', error);
+    console.error('Error toggling website agent:', error.message);
     res.status(500).json({ error: 'Failed to toggle agent' });
   }
 });
@@ -338,7 +338,7 @@ const chatWidgetCode = generateChatWidgetCode(userId, config, websiteColors);
     });
 
   } catch (error) {
-    console.error('Error deploying website agent:', error);
+    console.error('Error deploying website agent:', error.message);
     res.status(500).json({ error: 'Failed to deploy agent' });
   }
 });
@@ -375,7 +375,7 @@ router.get('/lead-form/config', authenticateToken, async (req, res) => {
       emailTemplate: result.rows[0].email_template
     });
   } catch (error) {
-    console.error('Error loading lead-form config:', error);
+    console.error('Error loading lead-form config:', error.message);
     res.status(500).json({ error: 'Failed to load configuration' });
   }
 });
@@ -413,7 +413,7 @@ router.post('/lead-form/config', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error saving lead-form config:', error);
+    console.error('Error saving lead-form config:', error.message);
     res.status(500).json({ error: 'Failed to save configuration' });
   }
 });
@@ -464,7 +464,7 @@ router.post('/lead-form/training', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error saving lead-form training:', error);
+    console.error('Error saving lead-form training:', error.message);
     res.status(500).json({ error: 'Failed to save training data' });
   }
 });
@@ -492,7 +492,7 @@ router.get('/lead-form/training', authenticateToken, async (req, res) => {
 
     res.json(result.rows[0].config.training);
   } catch (error) {
-    console.error('Error loading lead-form training:', error);
+    console.error('Error loading lead-form training:', error.message);
     res.status(500).json({ error: 'Failed to load training data' });
   }
 });
@@ -539,7 +539,7 @@ router.get('/lead-form/stats', authenticateToken, async (req, res) => {
       bookingsCreated: parseInt(bookings.rows[0].count) || 0
     });
   } catch (error) {
-    console.error('Error loading lead-form stats:', error);
+    console.error('Error loading lead-form stats:', error.message);
     res.status(500).json({ error: 'Failed to load stats' });
   }
 });
@@ -573,7 +573,7 @@ router.post('/lead-form/deploy', authenticateToken, async (req, res) => {
         phoneNumber = result.phoneNumber;
         console.log(`✅ Auto-provisioned ${phoneNumber} for user ${userId}`);
       } catch (error) {
-        console.error('Error provisioning phone:', error);
+        console.error('Error provisioning phone:', error.message);
         return res.status(500).json({ 
           error: 'Failed to provision phone number. Please contact support.',
           details: error.message 
@@ -628,7 +628,7 @@ router.post('/lead-form/deploy', authenticateToken, async (req, res) => {
       phoneNumber 
     });
   } catch (error) {
-    console.error('Error deploying lead form agent:', error);
+    console.error('Error deploying lead form agent:', error.message);
     res.status(500).json({ error: 'Failed to deploy agent' });
   }
 });
@@ -646,7 +646,7 @@ router.get('/leadform/status', authenticateToken, async (req, res) => {
     const isDeployed = result.rows.length > 0 && result.rows[0].config?.enabled === true;
     res.json({ isDeployed });
   } catch (error) {
-    console.error('Error checking lead form agent status:', error);
+    console.error('Error checking lead form agent status:', error.message);
     res.status(500).json({ error: 'Failed to check status' });
   }
 });
@@ -797,7 +797,7 @@ ${config.autoBookingEnabled ? 'If they mention a date/time, confirm booking deta
 
     res.json({ reply });
   } catch (error) {
-    console.error('Error in preview-chat:', error);
+    console.error('Error in preview-chat:', error.message);
     res.status(500).json({ error: 'Failed to generate preview response' });
   }
 });
@@ -988,7 +988,7 @@ IMPORTANT: Only include fields in suggestedConfig that you are CHANGING. Set sug
       });
     }
   } catch (error) {
-    console.error('Error in assistant:', error);
+    console.error('Error in assistant:', error.message);
     res.status(500).json({ error: 'Failed to process assistant request' });
   }
 });
@@ -1031,7 +1031,7 @@ router.get('/leadform/config', authenticateToken, async (req, res) => {
       emailTemplate: result.rows[0].email_template
     });
   } catch (error) {
-    console.error('Error loading leadform config:', error);
+    console.error('Error loading leadform config:', error.message);
     res.status(500).json({ error: 'Failed to load configuration' });
   }
 });
@@ -1069,7 +1069,7 @@ router.post('/leadform/config', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error saving leadform config:', error);
+    console.error('Error saving leadform config:', error.message);
     res.status(500).json({ error: 'Failed to save configuration' });
   }
 });

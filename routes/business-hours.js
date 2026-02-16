@@ -12,7 +12,7 @@ router.get('/', authenticateToken, async (req, res) => {
     );
     res.json({ success: true, hours: result.rows });
   } catch (error) {
-    console.error('Error fetching business hours:', error);
+    console.error('Error fetching business hours:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch business hours' });
   }
 });
@@ -50,7 +50,7 @@ router.post('/', authenticateToken, async (req, res) => {
     res.json({ success: true, message: 'Business hours saved successfully' });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error saving business hours:', error);
+    console.error('Error saving business hours:', error.message);
     res.status(500).json({ success: false, error: 'Failed to save business hours' });
   } finally {
     client.release();

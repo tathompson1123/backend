@@ -483,7 +483,7 @@ router.get('/search', async (req, res) => {
     }));
     res.json({ results });
   } catch (error) {
-    console.error('GBP search error:', error);
+    console.error('GBP search error:', error.message);
     res.status(500).json({ error: 'Search failed' });
   }
 });
@@ -578,7 +578,7 @@ router.post('/analyze', async (req, res) => {
       actionItems: storedItems.rows
     });
   } catch (error) {
-    console.error('GBP analyze error:', error);
+    console.error('GBP analyze error:', error.message);
     res.status(500).json({ error: 'Failed to analyze Google Business Profile' });
   }
 });
@@ -605,7 +605,7 @@ router.get('/profile', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('GBP profile fetch error:', error);
+    console.error('GBP profile fetch error:', error.message);
     res.status(500).json({ error: 'Failed to fetch profile' });
   }
 });
@@ -681,7 +681,7 @@ router.post('/re-analyze', async (req, res) => {
       actionItems: storedItems.rows
     });
   } catch (error) {
-    console.error('GBP re-analyze error:', error);
+    console.error('GBP re-analyze error:', error.message);
     res.status(500).json({ error: 'Failed to re-analyze profile' });
   }
 });
@@ -749,7 +749,7 @@ router.post('/rank-scan', async (req, res) => {
 
     res.json({ scan: scanResult.rows[0] });
   } catch (error) {
-    console.error('GBP rank scan error:', error);
+    console.error('GBP rank scan error:', error.message);
     res.status(500).json({ error: 'Failed to run ranking scan' });
   }
 });
@@ -763,7 +763,7 @@ router.get('/rank-scans', async (req, res) => {
     );
     res.json({ scans: result.rows });
   } catch (error) {
-    console.error('GBP scan history error:', error);
+    console.error('GBP scan history error:', error.message);
     res.status(500).json({ error: 'Failed to fetch scan history' });
   }
 });
@@ -780,7 +780,7 @@ router.get('/action-items', async (req, res) => {
     );
     res.json({ actionItems: result.rows });
   } catch (error) {
-    console.error('GBP action items error:', error);
+    console.error('GBP action items error:', error.message);
     res.status(500).json({ error: 'Failed to fetch action items' });
   }
 });
@@ -803,7 +803,7 @@ router.put('/action-items/:id/status', async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('GBP action item update error:', error);
+    console.error('GBP action item update error:', error.message);
     res.status(500).json({ error: 'Failed to update action item' });
   }
 });
@@ -892,7 +892,7 @@ router.get('/monitoring', async (req, res) => {
       alerts
     });
   } catch (error) {
-    console.error('GBP monitoring error:', error);
+    console.error('GBP monitoring error:', error.message);
     res.status(500).json({ error: 'Failed to fetch monitoring data' });
   }
 });

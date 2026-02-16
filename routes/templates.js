@@ -29,7 +29,7 @@ router.post('/register', authenticateToken, async (req, res) => {
     console.log(`✅ Template registered at runtime: ${id}`);
     res.json({ success: true, id, name: template.name, category: template.category });
   } catch (error) {
-    console.error('Error registering template:', error);
+    console.error('Error registering template:', error.message);
     res.status(400).json({ error: error.message });
   }
 });
@@ -52,7 +52,7 @@ router.get('/', authenticateToken, async (req, res) => {
       }))
     });
   } catch (error) {
-    console.error('Error listing templates:', error);
+    console.error('Error listing templates:', error.message);
     res.status(500).json({ error: 'Failed to list templates' });
   }
 });
@@ -76,7 +76,7 @@ router.get('/industry', authenticateToken, async (req, res) => {
     });
     res.json({ industries });
   } catch (error) {
-    console.error('Error listing industry schemas:', error);
+    console.error('Error listing industry schemas:', error.message);
     res.status(500).json({ error: 'Failed to list industry schemas' });
   }
 });
@@ -92,7 +92,7 @@ router.get('/industry/:key', authenticateToken, async (req, res) => {
     const schema = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     res.json(schema);
   } catch (error) {
-    console.error('Error loading industry schema:', error);
+    console.error('Error loading industry schema:', error.message);
     res.status(500).json({ error: 'Failed to load industry schema' });
   }
 });

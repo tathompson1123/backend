@@ -88,12 +88,8 @@ async function searchDomainsDynadot(query, extensions) {
           params.secret = DYNADOT_SECRET_KEY;
         }
         
-        console.log(`  API params:`, params);
         const response = await axios.get(DYNADOT_API_URL, { params });
-
-        console.log(`  ✅ Got response from Dynadot`);
         const xmlData = response.data;
-        console.log(`  Raw XML:`, xmlData.substring(0, 800)); // First 800 chars
 
         // Parse Dynadot XML response
         let available = false;
@@ -164,11 +160,7 @@ async function searchDomainsDynadot(query, extensions) {
         });
         
       } catch (error) {
-        console.error(`  ❌ ERROR checking ${domainName}:`);
-        console.error(`     Message:`, error.message);
-        console.error(`     Status:`, error.response?.status);
-        console.error(`     Response:`, error.response?.data?.substring(0, 500));
-        console.error(`     Full error:`, error.toString());
+        console.error(`  ❌ ERROR checking ${domainName}:`, error.message);
         
         domains.push({
           name: domainName,
@@ -326,13 +318,9 @@ async function purchaseDomain(domain, userInfo) {
       params.secret = DYNADOT_SECRET_KEY;
     }
 
-    console.log('  Register params:', { ...params, key: '***', secret: '***' });
-
     // Register domain
     const response = await axios.get(DYNADOT_API_URL, { params });
     const xmlData = response.data;
-
-    console.log('  Dynadot register response:', xmlData.substring(0, 1000));
 
     // Dynadot API3 uses <SuccessCode>0</SuccessCode> for success
     const isSuccess = xmlData.includes('<SuccessCode>0</SuccessCode>') ||

@@ -178,7 +178,7 @@ router.get('/versions', authenticateToken, async (req, res) => {
     
     res.json({ versions: result.rows });
   } catch (error) {
-    console.error('Error fetching versions:', error);
+    console.error('Error fetching versions:', error.message);
     res.status(500).json({ error: 'Failed to fetch versions' });
   }
 });
@@ -195,7 +195,7 @@ router.post('/mark-unpublished', authenticateToken, async (req, res) => {
     
     res.json({ success: true });
   } catch (error) {
-    console.error('Error marking unpublished:', error);
+    console.error('Error marking unpublished:', error.message);
     res.status(500).json({ error: 'Failed to mark unpublished' });
   }
 });
@@ -233,7 +233,7 @@ router.post('/restore-version/:versionId', authenticateToken, async (req, res) =
       pages: version.pages
     });
   } catch (error) {
-    console.error('Error restoring version:', error);
+    console.error('Error restoring version:', error.message);
     res.status(500).json({ error: 'Failed to restore version' });
   }
 });
@@ -279,7 +279,7 @@ router.get('/', authenticateToken, async (req, res) => {
       website: website
     });
   } catch (error) {
-    console.error('Error fetching website:', error);
+    console.error('Error fetching website:', error.message);
     res.status(500).json({ 
       success: false,
       error: 'Failed to fetch website' 
@@ -325,7 +325,7 @@ router.post('/', authenticateToken, async (req, res) => {
       website: result.rows[0] 
     });
   } catch (error) {
-    console.error('Error saving website:', error);
+    console.error('Error saving website:', error.message);
     res.status(500).json({ error: 'Failed to save website' });
   }
 });
@@ -379,7 +379,7 @@ router.post('/save', authenticateToken, async (req, res) => {
     
     res.json({ success: true, message: 'Changes saved', version: nextVersion });
   } catch (error) {
-    console.error('Error saving website:', error);
+    console.error('Error saving website:', error.message);
     res.status(500).json({ error: 'Failed to save website' });
   }
 });
@@ -464,7 +464,7 @@ router.post('/save-v2', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error saving V2 website:', error);
+    console.error('Error saving V2 website:', error.message);
     res.status(500).json({ error: 'Failed to save website' });
   }
 });
@@ -504,7 +504,7 @@ router.get('/v2', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching V2 website:', error);
+    console.error('Error fetching V2 website:', error.message);
     res.status(500).json({ error: 'Failed to fetch website' });
   }
 });
@@ -611,7 +611,7 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
     });
 
   } catch (error) {
-    console.error('Error publishing website:', error);
+    console.error('Error publishing website:', error.message);
     res.status(500).json({ error: 'Failed to publish website', details: error.message });
   }
 });
@@ -707,7 +707,7 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Save schema error:', error);
+    console.error('❌ Save schema error:', error.message);
     res.status(500).json({ error: 'Failed to save', details: error.message });
   }
 });
@@ -790,7 +790,7 @@ router.get('/check-contact-form', authenticateToken, async (req, res) => {
     res.json({ isValid, issues });
 
   } catch (error) {
-    console.error('Error checking contact form:', error);
+    console.error('Error checking contact form:', error.message);
     res.status(500).json({ error: 'Failed to check contact form' });
   }
 });
@@ -849,7 +849,7 @@ router.get('/check-chat-widget', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error checking chat widget:', error);
+    console.error('Error checking chat widget:', error.message);
     res.status(500).json({ error: 'Failed to check chat widget' });
   }
 });
@@ -1051,7 +1051,7 @@ function fixContactFormHTML(html, pageName) {
         throw new Error('Submission failed');
       }
     } catch (error) {
-      console.error('Form error:', error);
+      console.error('Form error:', error.message);
       if (statusEl) {
         statusEl.textContent = '❌ Something went wrong. Please try again or call us directly.';
         statusEl.style.display = 'block';
@@ -1195,7 +1195,7 @@ function fixContactFormHTML(html, pageName) {
         }
       }
     } catch (error) {
-      console.error('Auto-deploy error:', error);
+      console.error('Auto-deploy error:', error.message);
       // Don't fail the whole request - just mark as not redeployed
     }
 
@@ -1210,7 +1210,7 @@ function fixContactFormHTML(html, pageName) {
     });
 
   } catch (error) {
-    console.error('Error fixing contact form:', error);
+    console.error('Error fixing contact form:', error.message);
     res.status(500).json({ error: 'Failed to fix contact form' });
   }
 });
@@ -1245,7 +1245,7 @@ router.post('/publish', authenticateToken, async (req, res) => {
       website: result.rows[0] 
     });
   } catch (error) {
-    console.error('Error toggling publish:', error);
+    console.error('Error toggling publish:', error.message);
     res.status(500).json({ error: 'Failed to toggle publish' });
   }
 });
@@ -1335,7 +1335,7 @@ router.post('/generate', authenticateToken, async (req, res) => {
 
       console.log('✅ Fetched user data');
     } catch (error) {
-      console.error('⚠️ Error fetching user data:', error);
+      console.error('⚠️ Error fetching user data:', error.message);
     }
 
     // Format services
@@ -1591,7 +1591,7 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
     });
 
   } catch (error) {
-    console.error('❌ Error generating website:', error);
+    console.error('❌ Error generating website:', error.message);
     res.status(500).json({ error: 'Server error', message: error.message });
   }
 });
@@ -1613,7 +1613,7 @@ router.post('/search-domains', authenticateToken, async (req, res) => {
 
     res.json({ success: true, domains });
   } catch (error) {
-    console.error('Error searching domains:', error);
+    console.error('Error searching domains:', error.message);
     res.status(500).json({ error: 'Failed to search domains' });
   }
 });
@@ -1704,7 +1704,7 @@ router.post('/purchase-domain', authenticateToken, requirePlan('basic'), async (
       message: 'Domain purchased and configured successfully'
     });
   } catch (error) {
-    console.error('Error purchasing domain:', error);
+    console.error('Error purchasing domain:', error.message);
     res.status(500).json({ error: error.message || 'Failed to purchase domain' });
   }
 });
@@ -1741,7 +1741,7 @@ router.post('/add-domain', authenticateToken, requirePlan('basic'), async (req, 
 
     res.json({ success: true, domain });
   } catch (error) {
-    console.error('Error adding domain:', error);
+    console.error('Error adding domain:', error.message);
     res.status(500).json({ error: 'Failed to add domain' });
   }
 });
@@ -1780,7 +1780,7 @@ router.get('/domain-status', authenticateToken, async (req, res) => {
 
     res.json({ verified: isVerified });
   } catch (error) {
-    console.error('Error checking domain status:', error);
+    console.error('Error checking domain status:', error.message);
     res.status(500).json({ error: 'Failed to check domain status' });
   }
 });
@@ -1834,7 +1834,7 @@ router.delete('/remove-domain', authenticateToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error removing domain:', error);
+    console.error('Error removing domain:', error.message);
     res.status(500).json({ error: 'Failed to remove domain' });
   }
 });
@@ -1891,7 +1891,7 @@ Keep responses under 200 words. Use numbered steps.`;
     const data = await response.json();
     res.json({ reply: data.content[0].text });
   } catch (error) {
-    console.error('Domain assistant error:', error);
+    console.error('Domain assistant error:', error.message);
     res.status(500).json({ error: 'Failed to get help' });
   }
 });

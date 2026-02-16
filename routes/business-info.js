@@ -17,7 +17,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json({ businessInfo: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching business info:', error);
+    console.error('Error fetching business info:', error.message);
     res.status(500).json({ error: 'Failed to fetch business information' });
   }
 });
@@ -67,7 +67,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
     res.json({ success: true, businessInfo: result.rows[0] });
   } catch (error) {
-    console.error('Error saving business info:', error);
+    console.error('Error saving business info:', error.message);
     res.status(500).json({ error: 'Failed to save business information' });
   }
 });

@@ -22,7 +22,7 @@ router.get('/competitors/latest', async (req, res) => {
     );
     res.json({ report: result.rows[0]?.report_data || null, generatedAt: result.rows[0]?.created_at || null });
   } catch (error) {
-    console.error('Error fetching competitor report:', error);
+    console.error('Error fetching competitor report:', error.message);
     res.status(500).json({ error: 'Failed to fetch competitor report' });
   }
 });
@@ -104,7 +104,7 @@ router.post('/competitors', async (req, res) => {
             mapsUrl: p.googleMapsUri || ''
           }));
       } catch (gErr) {
-        console.error('Google Places search error:', gErr);
+        console.error('Google Places search error:', gErr.message);
       }
     }
 
@@ -198,7 +198,7 @@ Return ONLY valid JSON in this exact format:
 
     res.json({ report });
   } catch (error) {
-    console.error('Error running competitor analysis:', error);
+    console.error('Error running competitor analysis:', error.message);
     res.status(500).json({ error: 'Failed to run competitor analysis' });
   }
 });
@@ -212,7 +212,7 @@ router.get('/upsells/latest', async (req, res) => {
     );
     res.json({ analysis: result.rows[0]?.report_data || null, generatedAt: result.rows[0]?.created_at || null });
   } catch (error) {
-    console.error('Error fetching upsell report:', error);
+    console.error('Error fetching upsell report:', error.message);
     res.status(500).json({ error: 'Failed to fetch upsell report' });
   }
 });
@@ -308,7 +308,7 @@ Return ONLY valid JSON:
 
     res.json({ analysis });
   } catch (error) {
-    console.error('Error running upsell analysis:', error);
+    console.error('Error running upsell analysis:', error.message);
     res.status(500).json({ error: 'Failed to run upsell analysis' });
   }
 });

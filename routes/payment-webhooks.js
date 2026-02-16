@@ -102,7 +102,7 @@ async function stripeConnect(req, res) {
 
     res.json({ received: true });
   } catch (error) {
-    console.error('Stripe webhook error:', error);
+    console.error('Stripe webhook error:', error.message);
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 }
@@ -140,7 +140,7 @@ async function square(req, res) {
 
     res.json({ received: true });
   } catch (error) {
-    console.error('Square webhook error:', error);
+    console.error('Square webhook error:', error.message);
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 }
@@ -178,7 +178,7 @@ async function paypal(req, res) {
 
     res.json({ received: true });
   } catch (error) {
-    console.error('PayPal webhook error:', error);
+    console.error('PayPal webhook error:', error.message);
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 }

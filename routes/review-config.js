@@ -27,7 +27,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json({ success: true, config: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching review config:', error);
+    console.error('Error fetching review config:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch config' });
   }
 });
@@ -55,7 +55,7 @@ router.post('/', authenticateToken, async (req, res) => {
     console.log(`✅ Review config saved for user ${req.user.userId}`);
     res.json({ success: true, message: 'Review config saved successfully' });
   } catch (error) {
-    console.error('Error saving review config:', error);
+    console.error('Error saving review config:', error.message);
     res.status(500).json({ success: false, error: 'Failed to save config' });
   }
 });

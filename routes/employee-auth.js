@@ -78,7 +78,7 @@ router.post('/accept-invite', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error accepting invite:', error);
+    console.error('Error accepting invite:', error.message);
     res.status(500).json({ error: 'Failed to accept invite' });
   }
 });
@@ -113,7 +113,7 @@ router.get('/invite-info/:token', async (req, res) => {
       businessName: info.business_name
     });
   } catch (error) {
-    console.error('Error fetching invite info:', error);
+    console.error('Error fetching invite info:', error.message);
     res.status(500).json({ error: 'Failed to fetch invite info' });
   }
 });
@@ -187,7 +187,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error during employee login:', error);
+    console.error('Error during employee login:', error.message);
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -224,7 +224,7 @@ router.get('/verify', authenticateEmployee, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error verifying employee token:', error);
+    console.error('Error verifying employee token:', error.message);
     res.status(500).json({ error: 'Verification failed' });
   }
 });
@@ -254,7 +254,7 @@ router.put('/push-token', authenticateEmployee, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error saving push token:', error);
+    console.error('Error saving push token:', error.message);
     res.status(500).json({ error: 'Failed to save push token' });
   }
 });

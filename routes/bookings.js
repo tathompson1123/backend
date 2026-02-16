@@ -51,7 +51,7 @@ async function updateCustomerFromBooking(booking, userId) {
       console.log(`✅ Customer updated: ${booking.customer_name}`);
     }
   } catch (error) {
-    console.error('Error updating customer from booking:', error);
+    console.error('Error updating customer from booking:', error.message);
   }
 }
 
@@ -102,7 +102,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const result = await pool.query(query, params);
     res.json({ bookings: result.rows });
   } catch (error) {
-    console.error('Error fetching bookings:', error);
+    console.error('Error fetching bookings:', error.message);
     res.status(500).json({ error: 'Failed to fetch bookings' });
   }
 });
@@ -213,7 +213,7 @@ router.post('/create', authenticateToken, async (req, res) => {
       sendPushToEmployee(assignedEmployeeId, 'New Booking Assigned',
         `${customerInfo.name} - ${service.name} on ${bookingDate} at ${startTime}`,
         { bookingId: booking.id, type: 'new_booking' }
-      ).catch(err => console.error('Push notification error:', err));
+      ).catch(err => console.error('Push notification error:', err.message));
     }
 
     res.json({
@@ -224,7 +224,7 @@ router.post('/create', authenticateToken, async (req, res) => {
     });
       
   } catch (error) {
-    console.error('Error creating booking:', error);
+    console.error('Error creating booking:', error.message);
     res.status(500).json({ error: 'Failed to create booking' });
   }
 });
@@ -320,7 +320,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error updating booking:', error);
+    console.error('Error updating booking:', error.message);
     res.status(500).json({ error: 'Failed to update booking' });
   }
 });
@@ -400,7 +400,7 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
       message: 'Booking completed'
     });
   } catch (error) {
-    console.error('Error completing booking:', error);
+    console.error('Error completing booking:', error.message);
     res.status(500).json({ error: 'Failed to complete booking' });
   }
 });
@@ -429,7 +429,7 @@ router.put('/:id/notes', authenticateToken, async (req, res) => {
       booking: result.rows[0]
     });
   } catch (error) {
-    console.error('Error updating booking notes:', error);
+    console.error('Error updating booking notes:', error.message);
     res.status(500).json({ error: 'Failed to update notes' });
   }
 });

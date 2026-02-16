@@ -21,7 +21,7 @@ router.post('/start', async (req, res) => {
 
     res.json({ conversationId: result.rows[0].id });
   } catch (error) {
-    console.error('Error starting conversation:', error);
+    console.error('Error starting conversation:', error.message);
     res.status(500).json({ error: 'Failed to start conversation' });
   }
 });
@@ -141,7 +141,7 @@ async function createBookingFromChat(userId, bookingData) {
     };
 
   } catch (error) {
-    console.error('Error creating booking from chat:', error);
+    console.error('Error creating booking from chat:', error.message);
     return { success: false, error: error.message };
   }
 }
@@ -394,7 +394,7 @@ IMPORTANT RULES:
 
     res.json({ reply });
   } catch (error) {
-    console.error('Error processing message:', error);
+    console.error('Error processing message:', error.message);
     res.status(500).json({ error: 'Failed to process message' });
   }
 });

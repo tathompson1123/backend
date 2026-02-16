@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
 
     res.json({ employees: result.rows });
   } catch (error) {
-    console.error('Error fetching employees:', error);
+    console.error('Error fetching employees:', error.message);
     res.status(500).json({ error: 'Failed to fetch employees' });
   }
 });
@@ -85,7 +85,7 @@ router.post('/', async (req, res) => {
 
     res.json({ employee });
   } catch (error) {
-    console.error('Error creating employee:', error);
+    console.error('Error creating employee:', error.message);
     res.status(500).json({ error: 'Failed to create employee' });
   }
 });
@@ -154,7 +154,7 @@ router.put('/:id', async (req, res) => {
 
     res.json({ employee: result.rows[0] });
   } catch (error) {
-    console.error('Error updating employee:', error);
+    console.error('Error updating employee:', error.message);
     res.status(500).json({ error: 'Failed to update employee' });
   }
 });
@@ -187,7 +187,7 @@ router.delete('/:id', async (req, res) => {
     await pool.query('DELETE FROM employees WHERE id = $1 AND user_id = $2', [id, userId]);
     res.json({ success: true, message: 'Employee deleted' });
   } catch (error) {
-    console.error('Error deleting employee:', error);
+    console.error('Error deleting employee:', error.message);
     res.status(500).json({ error: 'Failed to delete employee' });
   }
 });
@@ -292,7 +292,7 @@ router.post('/:id/invite', async (req, res) => {
       inviteStatus: 'pending'
     });
   } catch (error) {
-    console.error('Error sending employee invite:', error);
+    console.error('Error sending employee invite:', error.message);
     res.status(500).json({ error: 'Failed to send invite' });
   }
 });
@@ -325,7 +325,7 @@ router.post('/:id/revoke', async (req, res) => {
 
     res.json({ success: true, message: 'Employee access revoked' });
   } catch (error) {
-    console.error('Error revoking employee access:', error);
+    console.error('Error revoking employee access:', error.message);
     res.status(500).json({ error: 'Failed to revoke access' });
   }
 });
@@ -342,7 +342,7 @@ router.get('/groups', async (req, res) => {
 
     res.json({ groups: result.rows });
   } catch (error) {
-    console.error('Error fetching groups:', error);
+    console.error('Error fetching groups:', error.message);
     res.status(500).json({ error: 'Failed to fetch groups' });
   }
 });
@@ -368,7 +368,7 @@ router.post('/groups', async (req, res) => {
 
     res.json({ success: true, group: result.rows[0] });
   } catch (error) {
-    console.error('Error creating group:', error);
+    console.error('Error creating group:', error.message);
     res.status(500).json({ error: 'Failed to create group' });
   }
 });
@@ -403,7 +403,7 @@ router.put('/groups/:id', async (req, res) => {
 
     res.json({ success: true, group: result.rows[0] });
   } catch (error) {
-    console.error('Error updating group:', error);
+    console.error('Error updating group:', error.message);
     res.status(500).json({ error: 'Failed to update group' });
   }
 });
@@ -429,7 +429,7 @@ router.delete('/groups/:id', async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error deleting group:', error);
+    console.error('Error deleting group:', error.message);
     res.status(500).json({ error: 'Failed to delete group' });
   }
 });
@@ -473,7 +473,7 @@ router.put('/:id/permissions', async (req, res) => {
 
     res.json({ success: true, permissions: result.rows[0].permissions });
   } catch (error) {
-    console.error('Error updating permissions:', error);
+    console.error('Error updating permissions:', error.message);
     res.status(500).json({ error: 'Failed to update permissions' });
   }
 });
@@ -490,7 +490,7 @@ router.get('/permission-templates', async (req, res) => {
     );
     res.json({ templates: result.rows });
   } catch (error) {
-    console.error('Error fetching permission templates:', error);
+    console.error('Error fetching permission templates:', error.message);
     res.status(500).json({ error: 'Failed to fetch templates' });
   }
 });
@@ -516,7 +516,7 @@ router.post('/permission-templates', async (req, res) => {
 
     res.status(201).json({ template: result.rows[0] });
   } catch (error) {
-    console.error('Error creating permission template:', error);
+    console.error('Error creating permission template:', error.message);
     res.status(500).json({ error: 'Failed to create template' });
   }
 });
@@ -543,7 +543,7 @@ router.put('/permission-templates/:id', async (req, res) => {
 
     res.json({ template: result.rows[0] });
   } catch (error) {
-    console.error('Error updating permission template:', error);
+    console.error('Error updating permission template:', error.message);
     res.status(500).json({ error: 'Failed to update template' });
   }
 });
@@ -569,7 +569,7 @@ router.delete('/permission-templates/:id', async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error deleting permission template:', error);
+    console.error('Error deleting permission template:', error.message);
     res.status(500).json({ error: 'Failed to delete template' });
   }
 });
@@ -605,7 +605,7 @@ router.post('/apply-template', async (req, res) => {
 
     res.json({ success: true, updatedCount: result.rows.length });
   } catch (error) {
-    console.error('Error applying template:', error);
+    console.error('Error applying template:', error.message);
     res.status(500).json({ error: 'Failed to apply template' });
   }
 });

@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
 
     res.json({ templates: existing.rows });
   } catch (error) {
-    console.error('Error fetching status templates:', error);
+    console.error('Error fetching status templates:', error.message);
     res.status(500).json({ error: 'Failed to fetch templates' });
   }
 });
@@ -90,7 +90,7 @@ router.put('/:status', async (req, res) => {
 
     res.json({ success: true, template: result.rows[0] });
   } catch (error) {
-    console.error('Error updating status template:', error);
+    console.error('Error updating status template:', error.message);
     res.status(500).json({ error: 'Failed to update template' });
   }
 });

@@ -10,7 +10,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const connections = await getConnectionsForUser(req.user.userId, pool);
     res.json({ connections });
   } catch (error) {
-    console.error('Error fetching payment connections:', error);
+    console.error('Error fetching payment connections:', error.message);
     res.status(500).json({ error: 'Failed to fetch connections' });
   }
 });
@@ -37,7 +37,7 @@ router.get('/:processor/oauth-url', authenticateToken, async (req, res) => {
 
     res.json({ oauthUrl: url });
   } catch (error) {
-    console.error('Error generating OAuth URL:', error);
+    console.error('Error generating OAuth URL:', error.message);
     res.status(500).json({ error: 'Failed to generate OAuth URL' });
   }
 });
@@ -63,7 +63,7 @@ router.get('/stripe/callback', async (req, res) => {
 
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&connected=stripe`);
   } catch (error) {
-    console.error('Stripe OAuth callback error:', error);
+    console.error('Stripe OAuth callback error:', error.message);
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=stripe_failed`);
   }
 });
@@ -98,7 +98,7 @@ router.get('/square/callback', async (req, res) => {
 
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&connected=square`);
   } catch (error) {
-    console.error('Square OAuth callback error:', error);
+    console.error('Square OAuth callback error:', error.message);
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=square_failed`);
   }
 });
@@ -140,7 +140,7 @@ router.post('/:processor/connect', authenticateToken, async (req, res) => {
 
     res.json({ success: true, message: 'PayPal connected successfully' });
   } catch (error) {
-    console.error('Error connecting PayPal:', error);
+    console.error('Error connecting PayPal:', error.message);
     res.status(500).json({ error: 'Failed to connect PayPal' });
   }
 });
@@ -163,7 +163,7 @@ router.put('/:id/primary', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Connection not found' });
     res.json({ success: true, connection: result.rows[0] });
   } catch (error) {
-    console.error('Error setting primary processor:', error);
+    console.error('Error setting primary processor:', error.message);
     res.status(500).json({ error: 'Failed to update' });
   }
 });
@@ -182,7 +182,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Connection not found' });
     res.json({ success: true });
   } catch (error) {
-    console.error('Error disconnecting processor:', error);
+    console.error('Error disconnecting processor:', error.message);
     res.status(500).json({ error: 'Failed to disconnect' });
   }
 });
@@ -207,7 +207,7 @@ router.post('/:id/verify', authenticateToken, async (req, res) => {
 
     res.json(verification);
   } catch (error) {
-    console.error('Error verifying connection:', error);
+    console.error('Error verifying connection:', error.message);
     res.status(500).json({ error: 'Failed to verify' });
   }
 });

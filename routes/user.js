@@ -32,7 +32,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching user profile:', error);
+    console.error('Error fetching user profile:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch profile' });
   }
 });
@@ -63,7 +63,7 @@ router.post('/google-review-link', authenticateToken, async (req, res) => {
     console.log(`✅ Google review link saved for user ${req.user.userId}`);
     res.json({ success: true, message: 'Google review link saved successfully' });
   } catch (error) {
-    console.error('Error saving Google review link:', error);
+    console.error('Error saving Google review link:', error.message);
     res.status(500).json({ success: false, error: 'Failed to save review link' });
   }
 });
@@ -109,7 +109,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
     console.log(`✅ Profile updated for user ${req.user.userId}`);
     res.json({ success: true, message: 'Profile updated successfully' });
   } catch (error) {
-    console.error('Error updating profile:', error);
+    console.error('Error updating profile:', error.message);
     res.status(500).json({ success: false, error: 'Failed to update profile' });
   }
 });
@@ -155,7 +155,7 @@ router.put('/password', authenticateToken, async (req, res) => {
     console.log(`✅ Password changed for user ${req.user.userId}`);
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
-    console.error('Error changing password:', error);
+    console.error('Error changing password:', error.message);
     res.status(500).json({ success: false, error: 'Failed to change password' });
   }
 });

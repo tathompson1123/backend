@@ -28,7 +28,7 @@ router.get('/', authenticateToken, async (req, res) => {
       leads: result.rows 
     });
   } catch (error) {
-    console.error('Error fetching leads:', error);
+    console.error('Error fetching leads:', error.message);
     res.status(500).json({ error: 'Failed to fetch leads' });
   }
 });
@@ -73,7 +73,7 @@ async function triggerLeadFormAgent(userId, lead) {
     }
     console.log(`✅ Lead form agent scheduled for lead ${lead.id} (source: ${lead.source})`);
   } catch (error) {
-    console.error('Error in triggerLeadFormAgent:', error);
+    console.error('Error in triggerLeadFormAgent:', error.message);
   }
 }
 
@@ -117,7 +117,7 @@ router.post('/public/:userId', async (req, res) => {
 
     // Trigger Lead Form Agent
     triggerLeadFormAgent(userId, newLead).catch(err => 
-      console.error('Error triggering lead form agent:', err)
+      console.error('Error triggering lead form agent:', err.message)
     );
 
     res.json({
@@ -125,7 +125,7 @@ router.post('/public/:userId', async (req, res) => {
       message: 'Thank you! We\'ll be in touch soon.'
     });
   } catch (error) {
-    console.error('Error creating public lead:', error);
+    console.error('Error creating public lead:', error.message);
     res.status(500).json({ error: 'Failed to submit form' });
   }
 });
@@ -157,7 +157,7 @@ router.post('/', authenticateToken, async (req, res) => {
     if (source === 'lead_form') {
       // Don't await - let it run in background
       triggerLeadFormAgent(userId, newLead).catch(err => 
-        console.error('Error triggering lead form agent:', err)
+        console.error('Error triggering lead form agent:', err.message)
       );
     }
 
@@ -166,7 +166,7 @@ router.post('/', authenticateToken, async (req, res) => {
       lead: newLead
     });
   } catch (error) {
-    console.error('Error creating lead:', error);
+    console.error('Error creating lead:', error.message);
     res.status(500).json({ error: 'Failed to create lead' });
   }
 });
@@ -201,7 +201,7 @@ router.patch('/:id', authenticateToken, async (req, res) => {
       lead: result.rows[0]
     });
   } catch (error) {
-    console.error('Error updating lead:', error);
+    console.error('Error updating lead:', error.message);
     res.status(500).json({ error: 'Failed to update lead' });
   }
 });
@@ -226,7 +226,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     console.log(`✅ Lead deleted: ${result.rows[0].name}`);
     res.json({ success: true });
   } catch (error) {
-    console.error('Error deleting lead:', error);
+    console.error('Error deleting lead:', error.message);
     res.status(500).json({ error: 'Failed to delete lead' });
   }
 });
@@ -290,7 +290,7 @@ router.post('/:leadId/send-sms', authenticateToken, async (req, res) => {
     res.json({ success: true, messageId: smsResult.messageSid });
     
   } catch (error) {
-    console.error('Error sending SMS:', error);
+    console.error('Error sending SMS:', error.message);
     res.status(500).json({ error: 'Failed to send SMS', details: error.message });
   }
 });
@@ -323,7 +323,7 @@ router.get('/:leadId/sms-conversation', authenticateToken, async (req, res) => {
     
     res.json({ messages: messagesResult.rows });
   } catch (error) {
-    console.error('Error fetching SMS conversation:', error);
+    console.error('Error fetching SMS conversation:', error.message);
     res.status(500).json({ error: 'Failed to fetch conversation' });
   }
 });
@@ -394,7 +394,7 @@ Return ONLY the message text, no quotes or formatting.`
     });
 
   } catch (error) {
-    console.error('Error generating AI response:', error);
+    console.error('Error generating AI response:', error.message);
     res.status(500).json({ error: 'Failed to generate response' });
   }
 });
@@ -463,7 +463,7 @@ router.post('/:id/convert', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error converting lead:', error);
+    console.error('Error converting lead:', error.message);
     res.status(500).json({ error: 'Failed to convert lead' });
   }
 });
