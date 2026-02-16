@@ -74,38 +74,27 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /scrape - Scrape services from a website URL using headless browser + AI
-router.post('/scrape', authenticateToken, async (req, res) => {
-  let browser;
+// Helper: Scrape page with Puppeteer (JS-rendered sites)
+async function scrapeWithPuppeteer(url) {
+  const puppeteer = require('puppeteer-core');
+  const chromium = require('@sparticuz/chromium');
+
+  const browser = await puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: { width: 1920, height: 1080 },
+    executablePath: await chromium.executablePath(),
+    headless: 'new',
+    ignoreHTTPSErrors: true,
+  });
+
   try {
-    const { url } = req.body;
-
-    if (!url) {
-      return res.status(400).json({ error: 'Website URL is required' });
-    }
-
-    // Launch headless browser to render JavaScript
-    const puppeteer = require('puppeteer-core');
-    const chromium = require('@sparticuz/chromium');
-
-    console.log('🌐 Launching browser to scrape services from:', url);
-
-    browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: { width: 1920, height: 1080 },
-      executablePath: await chromium.executablePath(),
-      headless: 'new',
-      ignoreHTTPSErrors: true,
-    });
-
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    // Navigate to the provided URL and wait for JS to render
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-    await page.waitForTimeout(3000); // Extra wait for dynamic content
+    await page.waitForTimeout(3000);
 
-    // Scroll down to trigger lazy-loaded content
+    // Scroll to trigger lazy-loaded content
     await page.evaluate(async () => {
       for (let i = 0; i < 5; i++) {
         window.scrollBy(0, window.innerHeight);
@@ -115,42 +104,33 @@ router.post('/scrape', authenticateToken, async (req, res) => {
     });
     await page.waitForTimeout(1000);
 
-    // Extract text content from the rendered page
     let mainText = await page.evaluate(() => document.body.innerText);
 
-    // Also look for service-related links to scrape additional pages
+    // Find and scrape service-related linked pages
     const serviceLinks = await page.evaluate((baseUrl) => {
       const links = Array.from(document.querySelectorAll('a[href]'));
       const keywords = ['service', 'pricing', 'book', 'menu', 'offerings', 'packages', 'what-we-do', 'our-work'];
       const found = [];
       const base = new URL(baseUrl);
-
       for (const link of links) {
         const href = link.href;
         const text = (link.textContent || '').toLowerCase();
         const hrefLower = href.toLowerCase();
-
         if (href.startsWith(base.origin) || href.startsWith('/')) {
           const isRelevant = keywords.some(kw => hrefLower.includes(kw) || text.includes(kw));
-          if (isRelevant && !found.includes(href) && found.length < 3) {
-            found.push(href);
-          }
+          if (isRelevant && !found.includes(href) && found.length < 3) found.push(href);
         }
       }
       return found;
     }, url);
 
-    // Scrape up to 3 additional service-related pages
     for (const link of serviceLinks) {
       try {
         console.log('  → Also scraping linked page:', link);
         await page.goto(link, { waitUntil: 'networkidle2', timeout: 20000 });
         await page.waitForTimeout(2000);
         await page.evaluate(async () => {
-          for (let i = 0; i < 3; i++) {
-            window.scrollBy(0, window.innerHeight);
-            await new Promise(r => setTimeout(r, 400));
-          }
+          for (let i = 0; i < 3; i++) { window.scrollBy(0, window.innerHeight); await new Promise(r => setTimeout(r, 400)); }
         });
         await page.waitForTimeout(500);
         const pageText = await page.evaluate(() => document.body.innerText);
@@ -160,10 +140,86 @@ router.post('/scrape', authenticateToken, async (req, res) => {
       }
     }
 
+    return mainText;
+  } finally {
     await browser.close();
-    browser = null;
+  }
+}
 
-    // Trim to reasonable context size
+// Helper: Scrape page with axios (fallback when Puppeteer/Chromium unavailable)
+async function scrapeWithAxios(url) {
+  const axios = require('axios');
+  const response = await axios.get(url, {
+    timeout: 15000,
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+    maxRedirects: 5
+  });
+  const html = response.data;
+
+  // Find service-related links in the HTML
+  const linkRegex = /href=["']([^"']*(?:service|pricing|book|menu|offerings|packages|what-we-do|our-work)[^"']*)["']/gi;
+  const baseUrl = new URL(url);
+  const extraLinks = [];
+  let match;
+  while ((match = linkRegex.exec(html)) !== null && extraLinks.length < 3) {
+    let href = match[1];
+    if (href.startsWith('/')) href = baseUrl.origin + href;
+    if (href.startsWith(baseUrl.origin) && !extraLinks.includes(href)) extraLinks.push(href);
+  }
+
+  let mainText = html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Scrape additional linked pages
+  for (const link of extraLinks) {
+    try {
+      console.log('  → Also fetching linked page:', link);
+      const extraRes = await axios.get(link, { timeout: 10000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SORCEBot/1.0)' } });
+      const extraText = extraRes.data
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      mainText += '\n\n--- ADDITIONAL PAGE ---\n\n' + extraText;
+    } catch (e) {
+      console.warn('  ⚠️ Could not fetch linked page:', link, e.message);
+    }
+  }
+
+  return mainText;
+}
+
+// POST /scrape - Scrape services from a website URL using headless browser + AI
+router.post('/scrape', authenticateToken, async (req, res) => {
+  try {
+    const { url } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: 'Website URL is required' });
+    }
+
+    console.log('🌐 Scraping services from:', url);
+
+    // Try Puppeteer first (renders JS), fall back to axios if chromium unavailable
+    let mainText;
+    try {
+      mainText = await scrapeWithPuppeteer(url);
+      console.log('📄 Used Puppeteer (JS-rendered) scrape');
+    } catch (puppeteerErr) {
+      console.warn('⚠️ Puppeteer unavailable, falling back to axios:', puppeteerErr.message);
+      try {
+        mainText = await scrapeWithAxios(url);
+        console.log('📄 Used axios (static HTML) scrape');
+      } catch (axiosErr) {
+        return res.status(400).json({ error: `Could not fetch website: ${axiosErr.message}` });
+      }
+    }
+
     const textContent = mainText.replace(/\s+/g, ' ').trim().slice(0, 20000);
 
     if (textContent.length < 50) {
@@ -219,10 +275,6 @@ ${textContent}`
   } catch (error) {
     console.error('Error scraping services:', error);
     res.status(500).json({ error: 'Failed to scrape services from website' });
-  } finally {
-    if (browser) {
-      try { await browser.close(); } catch (e) {}
-    }
   }
 });
 
