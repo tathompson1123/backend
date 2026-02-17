@@ -119,7 +119,8 @@
     // Chat FAB
     var fab = document.createElement('button');
     fab.className = 'sorce-fab sorce-fab-chat';
-    fab.innerHTML = '<svg width="26" height="26" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg><span class="sorce-fab-label">Chat with us</span>';
+    var chatInitial = (config.chat.agentName || 'A').charAt(0).toUpperCase();
+    fab.innerHTML = '<span style="font-weight:700;font-size:18px">' + chatInitial + '</span><span class="sorce-fab-label">' + escapeHtml(config.chat.agentName) + ' is online</span>';
     fab.onclick = toggleChat;
     container.appendChild(fab);
 

@@ -444,6 +444,10 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Backfill columns for tables created before these were added
+    await pool.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL');
+    await pool.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL');
+    await pool.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL');
     await pool.query('CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id)');
     await pool.query('CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments(invoice_id)');
     await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_processor_payment_id ON payments(processor_payment_id) WHERE processor_payment_id IS NOT NULL');

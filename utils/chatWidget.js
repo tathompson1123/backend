@@ -27,24 +27,60 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
   z-index: 9999;
 }
 .chat-bubble {
-  width: 60px;
-  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   background: linear-gradient(135deg, ${primaryColor} 0%, ${accentColor} 100%);
+  border-radius: 30px;
+  padding: 8px 16px 8px 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  transition: transform 0.2s, box-shadow 0.2s;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.chat-bubble:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+}
+.chat-bubble-avatar {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
+  background: rgba(255,255,255,0.25);
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  transition: transform 0.2s;
+  font-weight: 700;
+  font-size: 16px;
+  flex-shrink: 0;
 }
-.chat-bubble:hover {
-  transform: scale(1.1);
+.chat-bubble-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
 }
-.chat-bubble svg {
-  width: 28px;
-  height: 28px;
-  color: white;
+.chat-bubble-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.chat-bubble-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+.chat-bubble-dot {
+  width: 7px;
+  height: 7px;
+  background: #34d399;
+  border-radius: 50%;
+  animation: sorce-pulse 2s infinite;
+}
+@keyframes sorce-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 .chat-window {
   position: fixed;
@@ -68,15 +104,46 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
 .chat-header {
   background: linear-gradient(135deg, ${primaryColor} 0%, ${accentColor} 100%);
   color: white;
-  padding: 20px;
+  padding: 16px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
+.chat-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.chat-header-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+}
 .chat-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
+}
+.chat-header-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+.chat-header-status-dot {
+  width: 6px;
+  height: 6px;
+  background: #34d399;
+  border-radius: 50%;
 }
 .chat-close {
   background: none;
@@ -197,7 +264,8 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
     const widget = document.getElementById('sorce-chat-widget');
     if (!widget) return;
 
-    widget.innerHTML = '<div class="chat-bubble" onclick="toggleChat()"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg></div><div class="chat-window" id="chat-window"><div class="chat-header"><h3>Chat with ' + agentName + '</h3><button class="chat-close" onclick="toggleChat()">\\u00d7</button></div><div class="chat-messages" id="chat-messages"></div><div class="chat-input-area"><textarea class="chat-input" id="chat-input" placeholder="Type your message..." rows="2" onkeypress="handleKeyPress(event)"></textarea><button class="chat-send-btn" onclick="sendMessage()">Send Message</button></div></div>';
+    const initial = agentName.charAt(0).toUpperCase();
+    widget.innerHTML = '<div class="chat-bubble" onclick="toggleChat()"><div class="chat-bubble-avatar">' + initial + '</div><div class="chat-bubble-info"><span class="chat-bubble-name">' + agentName + '</span><span class="chat-bubble-status"><span class="chat-bubble-dot"></span> Online now</span></div></div><div class="chat-window" id="chat-window"><div class="chat-header"><div class="chat-header-info"><div class="chat-header-avatar">' + initial + '</div><div><h3>' + agentName + '</h3><div class="chat-header-status"><span class="chat-header-status-dot"></span> Online</div></div></div><button class="chat-close" onclick="toggleChat()">\\u00d7</button></div><div class="chat-messages" id="chat-messages"></div><div class="chat-input-area"><textarea class="chat-input" id="chat-input" placeholder="Type your message..." rows="2" onkeypress="handleKeyPress(event)"></textarea><button class="chat-send-btn" onclick="sendMessage()">Send Message</button></div></div>';
 
     setTimeout(function() {
       const hasOpened = sessionStorage.getItem('chat-opened');
