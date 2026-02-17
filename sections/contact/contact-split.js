@@ -66,7 +66,7 @@ module.exports = {
         </div>
         <div class="${s}-field">
           <label for="${s}-service">Service Interested In</label>
-          <input type="text" id="${s}-service" name="service" placeholder="e.g. Full Detail, Lawn Care...">
+          <input type="text" id="${s}-service" name="service" placeholder="Which service are you interested in?">
         </div>
         <div class="${s}-field">
           <label for="${s}-message">Tell Us About Your Project</label>

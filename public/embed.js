@@ -60,7 +60,7 @@
       '.sorce-fab:hover .sorce-fab-label { opacity: 1; }\n' +
 
       /* Chat window */
-      '.sorce-chat-window { position: fixed; bottom: 90px; ' + posOpp + ' width: 380px; height: 550px; background: white; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); display: flex; flex-direction: column; overflow: hidden; transform: scale(0); transform-origin: ' + origin + '; transition: transform 0.3s ease; z-index: 100000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }\n' +
+      '.sorce-chat-window { position: fixed; bottom: 90px; ' + posOpp + ' width: 380px; height: 550px; background: white; color: #1f2937; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); display: flex; flex-direction: column; overflow: hidden; transform: scale(0); transform-origin: ' + origin + '; transition: transform 0.3s ease; z-index: 100000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }\n' +
       '.sorce-chat-window.open { transform: scale(1); }\n' +
       '.sorce-chat-header { background: ' + tc + '; color: white; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }\n' +
       '.sorce-chat-header h3 { margin: 0; font-size: 16px; font-weight: 600; }\n' +
@@ -70,8 +70,8 @@
       '.sorce-chat-msg.agent .sorce-msg-bubble { background: white; color: #1f2937; border: 1px solid #e5e7eb; }\n' +
       '.sorce-chat-msg.user .sorce-msg-bubble { background: ' + tc + '; color: white; margin-left: auto; }\n' +
       '.sorce-msg-bubble { max-width: 75%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; }\n' +
-      '.sorce-chat-input-area { padding: 12px; border-top: 1px solid #e5e7eb; background: white; }\n' +
-      '.sorce-chat-input { width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; resize: none; box-sizing: border-box; font-family: inherit; }\n' +
+      '.sorce-chat-input-area { padding: 12px; border-top: 1px solid #e5e7eb; background: white; color: #1f2937; }\n' +
+      '.sorce-chat-input { width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; resize: none; box-sizing: border-box; font-family: inherit; color: #1f2937; background: white; }\n' +
       '.sorce-chat-input:focus { outline: none; border-color: ' + tc + '; }\n' +
       '.sorce-chat-send { margin-top: 8px; width: 100%; padding: 10px; background: ' + tc + '; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; }\n' +
       '.sorce-chat-send:disabled { opacity: 0.5; cursor: not-allowed; }\n' +
@@ -83,12 +83,12 @@
 
       /* Booking modal */
       '.sorce-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 100001; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }\n' +
-      '.sorce-modal { background: white; border-radius: 16px; max-width: 480px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 32px; box-shadow: 0 16px 48px rgba(0,0,0,0.2); }\n' +
+      '.sorce-modal { background: white; color: #1f2937; border-radius: 16px; max-width: 480px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 32px; box-shadow: 0 16px 48px rgba(0,0,0,0.2); }\n' +
       '.sorce-modal h2 { margin: 0 0 8px; font-size: 22px; color: #1f2937; }\n' +
       '.sorce-modal p { margin: 0 0 24px; color: #6b7280; font-size: 14px; }\n' +
       '.sorce-form-group { margin-bottom: 16px; }\n' +
       '.sorce-form-group label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; color: #374151; }\n' +
-      '.sorce-form-group input, .sorce-form-group select, .sorce-form-group textarea { width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; box-sizing: border-box; font-family: inherit; }\n' +
+      '.sorce-form-group input, .sorce-form-group select, .sorce-form-group textarea { width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; box-sizing: border-box; font-family: inherit; color: #1f2937; background: white; }\n' +
       '.sorce-form-group input:focus, .sorce-form-group select:focus, .sorce-form-group textarea:focus { outline: none; border-color: ' + tc + '; }\n' +
       '.sorce-btn-primary { width: 100%; padding: 12px; background: ' + tc + '; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 15px; transition: opacity 0.2s; }\n' +
       '.sorce-btn-primary:hover { opacity: 0.9; }\n' +
