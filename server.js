@@ -120,6 +120,20 @@ app.use('/api/pay', paymentPublicRoutes);
 
 const statusTemplateRoutes = require('./routes/status-templates');
 app.use('/api/status-templates', statusTemplateRoutes);
+
+// Embed system — public JS bundle + API routes (open CORS for any origin)
+const path = require('path');
+app.use('/embed.js', express.static(path.join(__dirname, 'public', 'embed.js'), {
+  setHeaders: (res) => { res.set('Access-Control-Allow-Origin', '*'); res.set('Cache-Control', 'public, max-age=300'); }
+}));
+const embedRoutes = require('./routes/embed');
+app.use('/api/embed', (req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+}, embedRoutes);
 app.get('/api/groups', (req, res) => {
   res.json({ success: true, groups: [] });
 });
@@ -592,6 +606,35 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     console.log('✅ Market Research tables verified');
   } catch (e) {
     console.warn('⚠️ Could not verify Market Research tables:', e.message);
+  }
+})();
+
+// ── Embed system tables ──────────────────────────────
+(async () => {
+  try {
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS site_key UUID DEFAULT gen_random_uuid()");
+    await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_site_key ON users(site_key)");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS embed_configs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        chat_enabled BOOLEAN DEFAULT false,
+        booking_enabled BOOLEAN DEFAULT false,
+        booking_style VARCHAR(20) DEFAULT 'chat',
+        lead_form_enabled BOOLEAN DEFAULT false,
+        lead_form_title VARCHAR(255) DEFAULT 'Get a Free Quote',
+        lead_form_fields JSONB DEFAULT '["name","email","phone","message"]',
+        booking_button_text VARCHAR(100) DEFAULT 'Book Online',
+        theme_color VARCHAR(20) DEFAULT '#d97706',
+        position VARCHAR(20) DEFAULT 'bottom-right',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Embed system tables verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify embed tables:', e.message);
   }
 })();
 
