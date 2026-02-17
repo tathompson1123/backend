@@ -462,6 +462,27 @@
     };
   }
 
+  // Determine if a form looks like a contact/lead form (has visible text inputs)
+  function isContactForm(form) {
+    // Skip forms inside nav, header, footer (search bars, login, newsletter)
+    var ancestor = form;
+    while (ancestor) {
+      var tag = ancestor.tagName;
+      if (tag === 'NAV' || tag === 'HEADER' || tag === 'FOOTER') return false;
+      // Wix-specific: skip forms inside site header/footer containers
+      var role = ancestor.getAttribute('role');
+      if (role === 'navigation' || role === 'banner' || role === 'contentinfo') return false;
+      ancestor = ancestor.parentElement;
+    }
+    // Must have at least 2 visible input/textarea fields to look like a contact form
+    var inputs = form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type]), textarea');
+    var visibleCount = 0;
+    for (var j = 0; j < inputs.length; j++) {
+      if (inputs[j].offsetParent !== null) visibleCount++;
+    }
+    return visibleCount >= 2;
+  }
+
   function injectLeadForm() {
     var formConfig = resolveFormConfig();
     var tc = config.themeColor || '#d97706';
@@ -472,9 +493,8 @@
 
     for (var i = 0; i < allForms.length; i++) {
       var form = allForms[i];
-      // Skip forms inside nav/header (likely search bars, login forms)
-      var parentTag = form.parentElement ? form.parentElement.tagName : '';
-      if (parentTag === 'NAV' || parentTag === 'HEADER') continue;
+      // Only mask forms that look like actual contact/lead forms
+      if (!isContactForm(form)) continue;
 
       maskAndOverlay(form, formConfig.fields, tc, formConfig.submitText, formConfig.title);
       maskedCount++;
