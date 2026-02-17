@@ -441,10 +441,30 @@
   // are preserved (just hidden) — if the embed is removed, they reappear.
   // If no forms are found, fall back to the FAB + modal approach.
 
+  // Resolve which form config to use based on page URL and page rules
+  function resolveFormConfig() {
+    var path = window.location.pathname;
+    var rules = config.formRules || [];
+    for (var i = 0; i < rules.length; i++) {
+      if (rules[i].urlPattern && path.indexOf(rules[i].urlPattern) === 0) {
+        return {
+          title: rules[i].formTitle || config.leadFormTitle || 'Get a Free Quote',
+          fields: rules[i].formFields || config.leadFormFields || ['name', 'email', 'phone', 'message'],
+          submitText: rules[i].submitButtonText || config.submitButtonText || 'Submit'
+        };
+      }
+    }
+    // Default fallback
+    return {
+      title: config.leadFormTitle || 'Get a Free Quote',
+      fields: config.leadFormFields || ['name', 'email', 'phone', 'message'],
+      submitText: config.submitButtonText || 'Submit'
+    };
+  }
+
   function injectLeadForm() {
-    var fields = config.leadFormFields || ['name', 'email', 'phone', 'message'];
+    var formConfig = resolveFormConfig();
     var tc = config.themeColor || '#d97706';
-    var submitText = config.submitButtonText || 'Submit';
 
     // Find existing forms on the page (exclude any SORCE-injected elements)
     var allForms = document.querySelectorAll('form:not([data-sorce-masked]):not([data-sorce-form])');
@@ -456,7 +476,7 @@
       var parentTag = form.parentElement ? form.parentElement.tagName : '';
       if (parentTag === 'NAV' || parentTag === 'HEADER') continue;
 
-      maskAndOverlay(form, fields, tc, submitText);
+      maskAndOverlay(form, formConfig.fields, tc, formConfig.submitText, formConfig.title);
       maskedCount++;
     }
 
@@ -465,15 +485,16 @@
       var container = getOrCreateContainer();
       var fab = document.createElement('button');
       fab.className = 'sorce-fab sorce-fab-lead';
-      fab.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg><span class="sorce-fab-label">' + escapeHtml(config.leadFormTitle || 'Get a Free Quote') + '</span>';
+      fab.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg><span class="sorce-fab-label">' + escapeHtml(formConfig.title) + '</span>';
       fab.onclick = openLeadForm;
       container.appendChild(fab);
     }
   }
 
-  function buildLeadFormHTML(fields, tc, submitText) {
+  function buildLeadFormHTML(fields, tc, submitText, title) {
+    var formTitle = title || config.leadFormTitle || 'Get a Free Quote';
     var html = '<h3 style="margin:0 0 4px;font-size:20px;font-weight:700;color:#1f2937;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">' +
-      escapeHtml(config.leadFormTitle || 'Get a Free Quote') + '</h3>' +
+      escapeHtml(formTitle) + '</h3>' +
       '<p style="margin:0 0 16px;color:#6b7280;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">Fill out the form and we\'ll get back to you shortly.</p>';
 
     var inputStyle = 'width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;color:#1f2937;background:white;';
@@ -492,7 +513,7 @@
     return html;
   }
 
-  function maskAndOverlay(originalForm, fields, tc, submitText) {
+  function maskAndOverlay(originalForm, fields, tc, submitText, title) {
     // Hide the original form (preserve it in DOM so removing our script restores it)
     originalForm.setAttribute('data-sorce-masked', 'true');
     originalForm.style.display = 'none';
@@ -500,7 +521,7 @@
     // Create our SORCE form right after the hidden original
     var sorceForm = document.createElement('div');
     sorceForm.setAttribute('data-sorce-form', 'true');
-    sorceForm.innerHTML = buildLeadFormHTML(fields, tc, submitText);
+    sorceForm.innerHTML = buildLeadFormHTML(fields, tc, submitText, title);
     originalForm.parentNode.insertBefore(sorceForm, originalForm.nextSibling);
 
     // Handle submit
@@ -560,11 +581,10 @@
     if (leadFormOpen) return;
     leadFormOpen = true;
 
-    var fields = config.leadFormFields || ['name', 'email', 'phone', 'message'];
+    var formConfig = resolveFormConfig();
     var tc = config.themeColor || '#d97706';
-    var submitText = config.submitButtonText || 'Submit';
 
-    var html = buildLeadFormHTML(fields, tc, submitText, 'sorce-lead');
+    var html = buildLeadFormHTML(formConfig.fields, tc, formConfig.submitText, formConfig.title);
     html += '<button class="sorce-btn-secondary" id="sorce-lead-cancel" style="width:100%;padding:10px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:500;cursor:pointer;font-size:14px;margin-top:8px;">Cancel</button>';
 
     var overlay = document.createElement('div');

@@ -81,6 +81,7 @@ const reviewConfigRoutes = require('./routes/review-config');
 app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/customers', customerRoutes);
+app.use('/api/leads/public', embedCors); // CORS for embed form submissions
 app.use('/api/leads', leadRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/employees', employeeRoutes);
@@ -90,7 +91,7 @@ app.use('/api/google-business', reviewRoutes);
 app.use('/api/sms', smsRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/market-research', marketResearchRoutes);
-app.use('/api/chat', chatRoutes);
+app.use('/api/chat', embedCors, chatRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/review-config', reviewConfigRoutes);
@@ -123,17 +124,24 @@ app.use('/api/status-templates', statusTemplateRoutes);
 
 // Embed system — public JS bundle + API routes (open CORS for any origin)
 const path = require('path');
-app.use('/embed.js', express.static(path.join(__dirname, 'public', 'embed.js'), {
-  setHeaders: (res) => { res.set('Access-Control-Allow-Origin', '*'); res.set('Cache-Control', 'public, max-age=300'); }
-}));
-const embedRoutes = require('./routes/embed');
-app.use('/api/embed', (req, res, next) => {
+// Shared CORS middleware for embed-facing routes (called from external sites)
+function embedCors(req, res, next) {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
   res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
-}, embedRoutes);
+}
+app.use('/embed.js', express.static(path.join(__dirname, 'public', 'embed.js'), {
+  setHeaders: (res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.set('Cache-Control', 'public, max-age=300');
+  }
+}));
+const embedRoutes = require('./routes/embed');
+app.use('/api/embed', embedCors, embedRoutes);
 app.get('/api/groups', (req, res) => {
   res.json({ success: true, groups: [] });
 });
@@ -638,6 +646,7 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     `);
     // Backfill new columns
     await pool.query("ALTER TABLE embed_configs ADD COLUMN IF NOT EXISTS submit_button_text VARCHAR(100) DEFAULT 'Submit'");
+    await pool.query("ALTER TABLE embed_configs ADD COLUMN IF NOT EXISTS form_rules JSONB DEFAULT '[]'");
 
     console.log('✅ Embed system tables verified');
   } catch (e) {

@@ -37,6 +37,7 @@ router.get('/config/:siteKey', async (req, res) => {
       leadFormFields: config.lead_form_fields,
       bookingButtonText: config.booking_button_text,
       submitButtonText: config.submit_button_text || 'Submit',
+      formRules: config.form_rules || [],
       themeColor: config.theme_color,
       position: config.position,
       userId: user.id
@@ -295,17 +296,18 @@ router.put('/settings', authenticateToken, async (req, res) => {
   try {
     const {
       chatEnabled, bookingEnabled, bookingStyle, leadFormEnabled,
-      leadFormTitle, leadFormFields, bookingButtonText, submitButtonText, themeColor, position
+      leadFormTitle, leadFormFields, bookingButtonText, submitButtonText,
+      formRules, themeColor, position
     } = req.body;
 
     const result = await pool.query(
       `INSERT INTO embed_configs (user_id, chat_enabled, booking_enabled, booking_style, lead_form_enabled,
-        lead_form_title, lead_form_fields, booking_button_text, submit_button_text, theme_color, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        lead_form_title, lead_form_fields, booking_button_text, submit_button_text, form_rules, theme_color, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (user_id) DO UPDATE SET
         chat_enabled = $2, booking_enabled = $3, booking_style = $4, lead_form_enabled = $5,
         lead_form_title = $6, lead_form_fields = $7, booking_button_text = $8,
-        submit_button_text = $9, theme_color = $10, position = $11, updated_at = NOW()
+        submit_button_text = $9, form_rules = $10, theme_color = $11, position = $12, updated_at = NOW()
        RETURNING *`,
       [
         req.user.userId,
@@ -317,6 +319,7 @@ router.put('/settings', authenticateToken, async (req, res) => {
         JSON.stringify(leadFormFields || ['name', 'email', 'phone', 'message']),
         bookingButtonText || 'Book Online',
         submitButtonText || 'Submit',
+        JSON.stringify(formRules || []),
         themeColor || '#d97706',
         position || 'bottom-right'
       ]
