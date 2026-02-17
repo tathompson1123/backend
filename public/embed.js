@@ -51,19 +51,33 @@
 
     var css = '\n' +
       '#sorce-embed-container { position: fixed; bottom: 20px; ' + pos + ' z-index: 99999; display: flex; flex-direction: column; align-items: ' + (config.position === 'bottom-left' ? 'flex-start' : 'flex-end') + '; gap: 12px; }\n' +
-      '.sorce-fab { width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: transform 0.2s; color: white; font-size: 24px; }\n' +
+      /* Non-chat FABs */
+      '.sorce-fab { width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: transform 0.2s; color: white; font-size: 24px; position: relative; }\n' +
       '.sorce-fab:hover { transform: scale(1.1); }\n' +
-      '.sorce-fab-chat { background: ' + tc + '; }\n' +
       '.sorce-fab-book { background: #059669; }\n' +
       '.sorce-fab-lead { background: #2563eb; }\n' +
       '.sorce-fab-label { position: absolute; ' + (config.position === 'bottom-left' ? 'left: 66px;' : 'right: 66px;') + ' background: #1f2937; color: white; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.2s; }\n' +
       '.sorce-fab:hover .sorce-fab-label { opacity: 1; }\n' +
 
+      /* Chat bubble (pill shape with avatar + name + status) */
+      '.sorce-chat-bubble { display: flex; align-items: center; gap: 10px; background: ' + tc + '; border-radius: 30px; padding: 8px 16px 8px 8px; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.18); transition: transform 0.2s, box-shadow 0.2s; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; border: none; }\n' +
+      '.sorce-chat-bubble:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }\n' +
+      '.sorce-chat-avatar { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0; }\n' +
+      '.sorce-chat-bubble-info { display: flex; flex-direction: column; line-height: 1.2; }\n' +
+      '.sorce-chat-bubble-name { font-weight: 600; font-size: 14px; }\n' +
+      '.sorce-chat-bubble-status { display: flex; align-items: center; gap: 5px; font-size: 12px; opacity: 0.9; }\n' +
+      '.sorce-online-dot { width: 7px; height: 7px; background: #34d399; border-radius: 50%; animation: sorceOnlinePulse 2s infinite; }\n' +
+      '@keyframes sorceOnlinePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }\n' +
+
       /* Chat window */
       '.sorce-chat-window { position: fixed; bottom: 90px; ' + posOpp + ' width: 380px; height: 550px; background: white; color: #1f2937; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); display: flex; flex-direction: column; overflow: hidden; transform: scale(0); transform-origin: ' + origin + '; transition: transform 0.3s ease; z-index: 100000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }\n' +
       '.sorce-chat-window.open { transform: scale(1); }\n' +
       '.sorce-chat-header { background: ' + tc + '; color: white; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }\n' +
+      '.sorce-chat-header-info { display: flex; align-items: center; gap: 12px; }\n' +
+      '.sorce-chat-header-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; }\n' +
       '.sorce-chat-header h3 { margin: 0; font-size: 16px; font-weight: 600; }\n' +
+      '.sorce-chat-header-status { display: flex; align-items: center; gap: 5px; font-size: 12px; opacity: 0.85; margin-top: 2px; }\n' +
+      '.sorce-chat-header-status-dot { width: 6px; height: 6px; background: #34d399; border-radius: 50%; }\n' +
       '.sorce-chat-close { background: none; border: none; color: white; cursor: pointer; font-size: 22px; padding: 0; }\n' +
       '.sorce-chat-messages { flex: 1; overflow-y: auto; padding: 16px; background: #f9fafb; }\n' +
       '.sorce-chat-msg { margin-bottom: 12px; display: flex; }\n' +
@@ -116,11 +130,12 @@
   function injectChatWidget() {
     var container = getOrCreateContainer();
 
-    // Chat FAB
-    var fab = document.createElement('button');
-    fab.className = 'sorce-fab sorce-fab-chat';
+    // Chat bubble (pill with avatar + name + online status)
+    var chatName = escapeHtml(config.chat.agentName || 'Assistant');
     var chatInitial = (config.chat.agentName || 'A').charAt(0).toUpperCase();
-    fab.innerHTML = '<span style="font-weight:700;font-size:18px">' + chatInitial + '</span><span class="sorce-fab-label">' + escapeHtml(config.chat.agentName) + ' is online</span>';
+    var fab = document.createElement('button');
+    fab.className = 'sorce-chat-bubble';
+    fab.innerHTML = '<div class="sorce-chat-avatar">' + chatInitial + '</div><div class="sorce-chat-bubble-info"><span class="sorce-chat-bubble-name">' + chatName + '</span><span class="sorce-chat-bubble-status"><span class="sorce-online-dot"></span> Online now</span></div>';
     fab.onclick = toggleChat;
     container.appendChild(fab);
 
@@ -129,7 +144,7 @@
     chatWindow.className = 'sorce-chat-window';
     chatWindow.id = 'sorce-chat-window';
     chatWindow.innerHTML =
-      '<div class="sorce-chat-header"><h3>Chat with ' + escapeHtml(config.chat.agentName) + '</h3><button class="sorce-chat-close" onclick="document.getElementById(\'sorce-chat-window\').classList.remove(\'open\')">\u00d7</button></div>' +
+      '<div class="sorce-chat-header"><div class="sorce-chat-header-info"><div class="sorce-chat-header-avatar">' + chatInitial + '</div><div><h3>' + chatName + '</h3><div class="sorce-chat-header-status"><span class="sorce-chat-header-status-dot"></span> Online</div></div></div><button class="sorce-chat-close">\u00d7</button></div>' +
       '<div class="sorce-chat-messages" id="sorce-chat-messages"></div>' +
       '<div class="sorce-chat-input-area"><textarea class="sorce-chat-input" id="sorce-chat-input" placeholder="Type your message..." rows="2"></textarea><button class="sorce-chat-send" id="sorce-chat-send">Send Message</button></div>';
     document.body.appendChild(chatWindow);
