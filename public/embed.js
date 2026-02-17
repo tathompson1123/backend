@@ -201,28 +201,33 @@
     addChatMessage(msg, 'user');
     input.value = '';
 
+    // Fetch response in background while we do the initial "reading" delay
     var fetchP = fetch(API_BASE + '/api/chat/message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: config.userId, conversationId: chatConversationId, message: msg })
     });
 
-    // Show typing after brief delay
-    setTimeout(function() { showChatTyping(); }, 3000);
+    // 5 second "reading" delay before typing indicator appears (matches website widget)
+    setTimeout(function() {
+      showChatTyping();
 
-    fetchP.then(function(r) { return r.json(); })
-    .then(function(data) {
-      var len = (data.reply || '').length;
-      var typingMs = Math.min(Math.max(len * 150, 2000), 12000);
-      setTimeout(function() {
+      fetchP.then(function(r) { return r.json(); })
+      .then(function(data) {
+        // Human typing delay: 60-80 WPM (150-200ms per char)
+        var len = (data.reply || '').length;
+        var msPerChar = 150 + Math.random() * 50;
+        var typingMs = Math.min(Math.max(len * msPerChar, 2000), 15000);
+        setTimeout(function() {
+          hideChatTyping();
+          addChatMessage(data.reply, 'agent');
+        }, typingMs);
+      })
+      .catch(function() {
         hideChatTyping();
-        addChatMessage(data.reply, 'agent');
-      }, typingMs);
-    })
-    .catch(function() {
-      hideChatTyping();
-      addChatMessage('Sorry, I had trouble connecting. Please try again.', 'agent');
-    });
+        addChatMessage('Sorry, I had trouble connecting. Please try again.', 'agent');
+      });
+    }, 5000);
   }
 
   function addChatMessage(text, type) {
@@ -431,14 +436,124 @@
   }
 
   // ── Lead Form ──────────────────────────────────────────
-  function injectLeadForm() {
-    var container = getOrCreateContainer();
+  // Strategy: Find existing <form> elements on the page, hide them,
+  // and place our SORCE form right next to them. The original forms
+  // are preserved (just hidden) — if the embed is removed, they reappear.
+  // If no forms are found, fall back to the FAB + modal approach.
 
-    var fab = document.createElement('button');
-    fab.className = 'sorce-fab sorce-fab-lead';
-    fab.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg><span class="sorce-fab-label">' + escapeHtml(config.leadFormTitle || 'Get a Free Quote') + '</span>';
-    fab.onclick = openLeadForm;
-    container.appendChild(fab);
+  function injectLeadForm() {
+    var fields = config.leadFormFields || ['name', 'email', 'phone', 'message'];
+    var tc = config.themeColor || '#d97706';
+    var submitText = config.submitButtonText || 'Submit';
+
+    // Find existing forms on the page (exclude any SORCE-injected elements)
+    var allForms = document.querySelectorAll('form:not([data-sorce-masked]):not([data-sorce-form])');
+    var maskedCount = 0;
+
+    for (var i = 0; i < allForms.length; i++) {
+      var form = allForms[i];
+      // Skip forms inside nav/header (likely search bars, login forms)
+      var parentTag = form.parentElement ? form.parentElement.tagName : '';
+      if (parentTag === 'NAV' || parentTag === 'HEADER') continue;
+
+      maskAndOverlay(form, fields, tc, submitText);
+      maskedCount++;
+    }
+
+    // Fallback: no forms found on page — show FAB + modal
+    if (maskedCount === 0) {
+      var container = getOrCreateContainer();
+      var fab = document.createElement('button');
+      fab.className = 'sorce-fab sorce-fab-lead';
+      fab.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg><span class="sorce-fab-label">' + escapeHtml(config.leadFormTitle || 'Get a Free Quote') + '</span>';
+      fab.onclick = openLeadForm;
+      container.appendChild(fab);
+    }
+  }
+
+  function buildLeadFormHTML(fields, tc, submitText) {
+    var html = '<h3 style="margin:0 0 4px;font-size:20px;font-weight:700;color:#1f2937;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">' +
+      escapeHtml(config.leadFormTitle || 'Get a Free Quote') + '</h3>' +
+      '<p style="margin:0 0 16px;color:#6b7280;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">Fill out the form and we\'ll get back to you shortly.</p>';
+
+    var inputStyle = 'width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;color:#1f2937;background:white;';
+    var labelStyle = 'display:block;margin-bottom:6px;font-size:14px;font-weight:500;color:#374151;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;';
+    var groupStyle = 'margin-bottom:14px;';
+
+    if (fields.indexOf('name') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Name</label><input type="text" data-sorce-field="name" placeholder="Your name" required style="' + inputStyle + '"></div>';
+    if (fields.indexOf('email') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Email</label><input type="email" data-sorce-field="email" placeholder="your@email.com" required style="' + inputStyle + '"></div>';
+    if (fields.indexOf('phone') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Phone</label><input type="tel" data-sorce-field="phone" placeholder="(555) 123-4567" style="' + inputStyle + '"></div>';
+    if (fields.indexOf('service') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Service Interested In</label><input type="text" data-sorce-field="service" placeholder="What service are you looking for?" style="' + inputStyle + '"></div>';
+    if (fields.indexOf('message') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Message</label><textarea data-sorce-field="message" rows="3" placeholder="Tell us about what you need..." style="' + inputStyle + 'resize:vertical;"></textarea></div>';
+
+    html += '<div style="' + groupStyle + 'display:flex;align-items:flex-start;gap:8px"><input type="checkbox" data-sorce-field="sms" style="margin-top:3px;width:auto;"><label style="font-size:12px;color:#6b7280;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">I consent to receiving SMS messages about my inquiry</label></div>';
+    html += '<button type="submit" data-sorce-submit style="width:100%;padding:12px;background:' + tc + ';color:white;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:15px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;transition:opacity 0.2s;">' + escapeHtml(submitText) + '</button>';
+
+    return html;
+  }
+
+  function maskAndOverlay(originalForm, fields, tc, submitText) {
+    // Hide the original form (preserve it in DOM so removing our script restores it)
+    originalForm.setAttribute('data-sorce-masked', 'true');
+    originalForm.style.display = 'none';
+
+    // Create our SORCE form right after the hidden original
+    var sorceForm = document.createElement('div');
+    sorceForm.setAttribute('data-sorce-form', 'true');
+    sorceForm.innerHTML = buildLeadFormHTML(fields, tc, submitText);
+    originalForm.parentNode.insertBefore(sorceForm, originalForm.nextSibling);
+
+    // Handle submit
+    sorceForm.querySelector('[data-sorce-submit]').addEventListener('click', function(e) {
+      e.preventDefault();
+      submitLeadForm(sorceForm);
+    });
+  }
+
+  function submitLeadForm(container) {
+    var btn = container.querySelector('[data-sorce-submit]');
+    var name = (container.querySelector('[data-sorce-field="name"]') || {}).value || '';
+    var email = (container.querySelector('[data-sorce-field="email"]') || {}).value || '';
+    var phone = (container.querySelector('[data-sorce-field="phone"]') || {}).value || '';
+    var service = (container.querySelector('[data-sorce-field="service"]') || {}).value || '';
+    var message = (container.querySelector('[data-sorce-field="message"]') || {}).value || '';
+    var smsConsent = (container.querySelector('[data-sorce-field="sms"]') || {}).checked || false;
+
+    if (!name.trim() || !email.trim()) {
+      alert('Please provide your name and email.');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+
+    fetch(API_BASE + '/api/leads/public/' + config.userId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        service: service.trim(),
+        message: message.trim(),
+        sms_consent: smsConsent,
+        source: 'embed'
+      })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function() {
+      container.innerHTML =
+        '<div style="text-align:center;padding:20px;">' +
+        '<div style="font-size:48px;color:#059669;">&#10003;</div>' +
+        '<h3 style="color:#059669;font-size:20px;margin:12px 0 8px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">Thank You!</h3>' +
+        '<p style="color:#6b7280;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">We\'ve received your message and will get back to you shortly.</p>' +
+        '</div>';
+    })
+    .catch(function() {
+      btn.textContent = config.submitButtonText || 'Submit';
+      btn.disabled = false;
+      alert('Something went wrong. Please try again.');
+    });
   }
 
   function openLeadForm() {
@@ -446,19 +561,11 @@
     leadFormOpen = true;
 
     var fields = config.leadFormFields || ['name', 'email', 'phone', 'message'];
+    var tc = config.themeColor || '#d97706';
+    var submitText = config.submitButtonText || 'Submit';
 
-    var html = '<h2>' + escapeHtml(config.leadFormTitle || 'Get a Free Quote') + '</h2>' +
-      '<p>Fill out the form below and we\'ll get back to you shortly.</p>';
-
-    if (fields.indexOf('name') !== -1) html += '<div class="sorce-form-group"><label>Name</label><input type="text" id="sorce-lead-name" placeholder="Your name" required></div>';
-    if (fields.indexOf('email') !== -1) html += '<div class="sorce-form-group"><label>Email</label><input type="email" id="sorce-lead-email" placeholder="your@email.com" required></div>';
-    if (fields.indexOf('phone') !== -1) html += '<div class="sorce-form-group"><label>Phone</label><input type="tel" id="sorce-lead-phone" placeholder="(555) 123-4567"></div>';
-    if (fields.indexOf('service') !== -1) html += '<div class="sorce-form-group"><label>Service Interested In</label><input type="text" id="sorce-lead-service" placeholder="What service are you looking for?"></div>';
-    if (fields.indexOf('message') !== -1) html += '<div class="sorce-form-group"><label>Message</label><textarea id="sorce-lead-message" rows="3" placeholder="Tell us about what you need..."></textarea></div>';
-
-    html += '<div class="sorce-form-group" style="display:flex;align-items:flex-start;gap:8px"><input type="checkbox" id="sorce-lead-sms" style="margin-top:3px;width:auto"><label for="sorce-lead-sms" style="font-size:12px;color:#6b7280">I consent to receiving SMS messages about my inquiry</label></div>';
-    html += '<button class="sorce-btn-primary" id="sorce-lead-submit">Submit</button>';
-    html += '<button class="sorce-btn-secondary" id="sorce-lead-cancel">Cancel</button>';
+    var html = buildLeadFormHTML(fields, tc, submitText, 'sorce-lead');
+    html += '<button class="sorce-btn-secondary" id="sorce-lead-cancel" style="width:100%;padding:10px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:500;cursor:pointer;font-size:14px;margin-top:8px;">Cancel</button>';
 
     var overlay = document.createElement('div');
     overlay.className = 'sorce-modal-overlay';
@@ -466,51 +573,11 @@
     overlay.innerHTML = '<div class="sorce-modal" id="sorce-lead-modal">' + html + '</div>';
     document.body.appendChild(overlay);
 
-    document.getElementById('sorce-lead-submit').addEventListener('click', function() {
-      var btn = this;
-      var name = (document.getElementById('sorce-lead-name') || {}).value || '';
-      var email = (document.getElementById('sorce-lead-email') || {}).value || '';
-      var phone = (document.getElementById('sorce-lead-phone') || {}).value || '';
-      var service = (document.getElementById('sorce-lead-service') || {}).value || '';
-      var message = (document.getElementById('sorce-lead-message') || {}).value || '';
-      var smsConsent = (document.getElementById('sorce-lead-sms') || {}).checked || false;
-
-      if (!name.trim() || !email.trim()) {
-        alert('Please provide your name and email.');
-        return;
-      }
-
-      btn.disabled = true;
-      btn.textContent = 'Submitting...';
-
-      fetch(API_BASE + '/api/leads/public/' + config.userId, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-          service: service.trim(),
-          message: message.trim(),
-          sms_consent: smsConsent,
-          source: 'embed'
-        })
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        document.getElementById('sorce-lead-modal').innerHTML =
-          '<div class="sorce-success">' +
-          '<div style="font-size:48px">&#9993;</div>' +
-          '<h3>Thank You!</h3>' +
-          '<p style="color:#6b7280">We\'ve received your message and will get back to you shortly.</p>' +
-          '<button class="sorce-btn-secondary" style="margin-top:20px" onclick="document.getElementById(\'sorce-lead-overlay\').remove()">Close</button>' +
-          '</div>';
-      })
-      .catch(function() {
-        btn.textContent = 'Submit';
-        btn.disabled = false;
-        alert('Something went wrong. Please try again.');
-      });
+    // Wire submit
+    var modal = document.getElementById('sorce-lead-modal');
+    modal.querySelector('[data-sorce-submit]').addEventListener('click', function(e) {
+      e.preventDefault();
+      submitLeadForm(modal);
     });
 
     document.getElementById('sorce-lead-cancel').addEventListener('click', closeLeadForm);

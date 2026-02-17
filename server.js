@@ -636,6 +636,9 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Backfill new columns
+    await pool.query("ALTER TABLE embed_configs ADD COLUMN IF NOT EXISTS submit_button_text VARCHAR(100) DEFAULT 'Submit'");
+
     console.log('✅ Embed system tables verified');
   } catch (e) {
     console.warn('⚠️ Could not verify embed tables:', e.message);
