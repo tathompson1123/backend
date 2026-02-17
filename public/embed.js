@@ -464,51 +464,88 @@
 
   // Determine if a form looks like a contact/lead form (has visible text inputs)
   function isContactForm(form) {
-    // Skip forms inside nav, header, footer (search bars, login, newsletter)
+    // Skip forms inside nav, header (search bars, login forms)
     var ancestor = form;
     while (ancestor) {
       var tag = ancestor.tagName;
-      if (tag === 'NAV' || tag === 'HEADER' || tag === 'FOOTER') return false;
-      // Wix-specific: skip forms inside site header/footer containers
+      if (tag === 'NAV' || tag === 'HEADER') return false;
       var role = ancestor.getAttribute('role');
-      if (role === 'navigation' || role === 'banner' || role === 'contentinfo') return false;
+      if (role === 'navigation' || role === 'banner') return false;
       ancestor = ancestor.parentElement;
     }
-    // Must have at least 2 visible input/textarea fields to look like a contact form
+    // Check for visible input/textarea fields — standard HTML inputs
     var inputs = form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type]), textarea');
     var visibleCount = 0;
     for (var j = 0; j < inputs.length; j++) {
-      if (inputs[j].offsetParent !== null) visibleCount++;
+      // offsetParent is null for hidden elements; also check offsetHeight for Wix
+      var inp = inputs[j];
+      if (inp.offsetParent !== null || inp.offsetHeight > 0) visibleCount++;
     }
-    return visibleCount >= 2;
+    if (visibleCount >= 2) return true;
+    // Wix forms: look for Wix-specific form container attributes
+    if (form.querySelector('[data-mesh-id]') || form.querySelector('[id*="comp-"]')) {
+      // Wix form with custom components — check for any labelled input-like elements
+      var wixInputs = form.querySelectorAll('input, textarea, [role="textbox"]');
+      if (wixInputs.length >= 2) return true;
+    }
+    return false;
   }
 
-  function injectLeadForm() {
+  var leadFormFabCreated = false;
+
+  function scanAndMaskForms() {
     var formConfig = resolveFormConfig();
     var tc = config.themeColor || '#d97706';
 
-    // Find existing forms on the page (exclude any SORCE-injected elements)
     var allForms = document.querySelectorAll('form:not([data-sorce-masked]):not([data-sorce-form])');
     var maskedCount = 0;
 
     for (var i = 0; i < allForms.length; i++) {
       var form = allForms[i];
-      // Only mask forms that look like actual contact/lead forms
       if (!isContactForm(form)) continue;
-
       maskAndOverlay(form, formConfig.fields, tc, formConfig.submitText, formConfig.title);
       maskedCount++;
     }
+    return maskedCount;
+  }
 
-    // Fallback: no forms found on page — show FAB + modal
-    if (maskedCount === 0) {
-      var container = getOrCreateContainer();
-      var fab = document.createElement('button');
-      fab.className = 'sorce-fab sorce-fab-lead';
-      fab.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg><span class="sorce-fab-label">' + escapeHtml(formConfig.title) + '</span>';
-      fab.onclick = openLeadForm;
-      container.appendChild(fab);
+  function injectLeadForm() {
+    var formConfig = resolveFormConfig();
+    var maskedCount = scanAndMaskForms();
+
+    if (maskedCount > 0) {
+      leadFormFabCreated = true; // forms found, no FAB needed
+      return;
     }
+
+    // Retry after delays — Wix and other SPA frameworks hydrate forms late
+    var retries = [1000, 3000, 6000];
+    var retryIdx = 0;
+    function retryMask() {
+      if (retryIdx >= retries.length) {
+        // All retries exhausted — show FAB fallback if not already
+        if (!leadFormFabCreated) {
+          leadFormFabCreated = true;
+          var container = getOrCreateContainer();
+          var fab = document.createElement('button');
+          fab.className = 'sorce-fab sorce-fab-lead';
+          fab.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg><span class="sorce-fab-label">' + escapeHtml(formConfig.title) + '</span>';
+          fab.onclick = openLeadForm;
+          container.appendChild(fab);
+        }
+        return;
+      }
+      setTimeout(function() {
+        var found = scanAndMaskForms();
+        if (found > 0) {
+          leadFormFabCreated = true;
+        } else {
+          retryIdx++;
+          retryMask();
+        }
+      }, retries[retryIdx]);
+    }
+    retryMask();
   }
 
   function buildLeadFormHTML(fields, tc, submitText, title) {
