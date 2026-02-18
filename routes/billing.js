@@ -21,9 +21,11 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
 
     // Define prices
     const prices = {
-      basic: { amount: 2995, name: 'Basic Plan' },      // $29.95
-      pro: { amount: 6995, name: 'Pro Plan' },          // $69.95
-      expert: { amount: 9995, name: 'Expert Plan' }     // $99.95
+      pro: { amount: 9550, name: 'Pro Plan' },          // $95.50
+      scale: { amount: 17550, name: 'Scale Plan' },     // $175.50
+      // Legacy plans kept for existing subscribers
+      basic: { amount: 2995, name: 'Basic Plan' },
+      expert: { amount: 9995, name: 'Expert Plan' }
     };
 
     const selectedPrice = prices[plan];
@@ -112,8 +114,9 @@ router.post('/create-embedded-checkout', authenticateToken, async (req, res) => 
     const userEmail = userResult.rows[0]?.email;
 
     const prices = {
+      pro: { amount: 9550, name: 'Pro Plan' },
+      scale: { amount: 17550, name: 'Scale Plan' },
       basic: { amount: 2995, name: 'Basic Plan' },
-      pro: { amount: 6995, name: 'Pro Plan' },
       expert: { amount: 9995, name: 'Expert Plan' }
     };
 

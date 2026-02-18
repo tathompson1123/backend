@@ -82,7 +82,8 @@ function requirePlan(requiredPlan) {
         });
       }
       
-      const planLevels = { 'basic': 0, 'pro': 1, 'expert': 2 };
+      // basic/expert are legacy plan values; scale is new top tier
+      const planLevels = { 'basic': 1, 'pro': 2, 'expert': 2, 'scale': 3 };
       const userLevel = planLevels[userPlan] || 0;
       const requiredLevel = planLevels[requiredPlan] || 0;
       

@@ -142,6 +142,15 @@ app.use('/embed.js', express.static(path.join(__dirname, 'public', 'embed.js'), 
 }));
 const embedRoutes = require('./routes/embed');
 app.use('/api/embed', embedCors, embedRoutes);
+
+// External form webhook — open CORS (called from Wix, Squarespace, Zapier etc.)
+const webhookRoutes = require('./routes/webhooks');
+app.use('/api/webhooks', embedCors, webhookRoutes);
+
+// Email marketing campaigns
+const emailCampaignRoutes = require('./routes/email-campaigns');
+app.use('/api/email-campaigns', emailCampaignRoutes);
+
 app.get('/api/groups', (req, res) => {
   res.json({ success: true, groups: [] });
 });
@@ -654,6 +663,46 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
   }
 })();
 
+// ── Email campaign tables ────────────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS email_campaign_configs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        enabled BOOLEAN DEFAULT false,
+        send_day VARCHAR(10) DEFAULT 'monday',
+        send_hour INTEGER DEFAULT 9,
+        from_name VARCHAR(100),
+        from_email VARCHAR(255),
+        tone VARCHAR(50) DEFAULT 'friendly',
+        focus VARCHAR(50) DEFAULT 'seasonal',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS email_campaigns (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        subject VARCHAR(300),
+        preview_text VARCHAR(200),
+        body_html TEXT,
+        body_text TEXT,
+        recipient_count INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'pending',
+        scheduled_for TIMESTAMP,
+        sent_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_email_campaigns_user ON email_campaigns(user_id, created_at DESC)');
+    console.log('✅ Email campaign tables verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify email campaign tables:', e.message);
+  }
+})();
+
 // ── SMS processing cron job ──────────────────────────────
 // Runs every 30 seconds. Picks up leads in 'sms_pending' status
 // whose sms_scheduled_at has passed, sends the SMS via Twilio,
@@ -675,6 +724,29 @@ cron.schedule('*/30 * * * * *', async () => {
 
     for (const lead of pending.rows) {
       try {
+        // Check monthly SMS limit for this user's plan
+        const planRow = await pool.query('SELECT plan FROM users WHERE id = $1', [lead.user_id]);
+        const userPlan = planRow.rows[0]?.plan;
+        const SMS_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
+        const smsLimit = SMS_LIMITS[userPlan] || 0;
+        if (smsLimit === 0) {
+          // Free plan — no SMS
+          await pool.query("UPDATE leads SET status = 'new' WHERE id = $1", [lead.id]);
+          continue;
+        }
+        const usageRow = await pool.query(
+          `SELECT COUNT(*) FROM sms_messages
+           WHERE user_id = $1 AND direction = 'outgoing'
+           AND created_at >= date_trunc('month', NOW())`,
+          [lead.user_id]
+        );
+        const smsUsed = parseInt(usageRow.rows[0].count, 10);
+        if (smsUsed >= smsLimit) {
+          console.log(`⚠️ SMS limit reached for user ${lead.user_id} (${smsUsed}/${smsLimit} this month)`);
+          await pool.query("UPDATE leads SET status = 'sms_limit_reached' WHERE id = $1", [lead.id]);
+          continue;
+        }
+
         const agentResult = await pool.query(
           'SELECT config, sms_template FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
           [lead.user_id, 'lead_form']
@@ -714,6 +786,47 @@ cron.schedule('*/30 * * * * *', async () => {
     }
   } catch (err) {
     console.error('❌ SMS cron error:', err.message || err);
+  }
+});
+
+// ── Email campaign cron job ──────────────────────────────
+// Runs every hour. Checks if any user has a campaign scheduled for this day+hour.
+const { generateCampaign, sendCampaign } = require('./routes/email-campaigns');
+
+cron.schedule('0 * * * *', async () => {
+  try {
+    const now = new Date();
+    const dayName = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const hour = now.getHours();
+
+    const configs = await pool.query(
+      `SELECT ec.*, u.plan FROM email_campaign_configs ec
+       JOIN users u ON u.id = ec.user_id
+       WHERE ec.enabled = true AND ec.send_day = $1 AND ec.send_hour = $2
+         AND u.plan IN ('pro', 'scale', 'expert')`,
+      [dayName, hour]
+    );
+
+    for (const config of configs.rows) {
+      try {
+        console.log(`📧 Email campaign cron: generating for user ${config.user_id}`);
+        const generated = await generateCampaign(config.user_id, config);
+
+        const saved = await pool.query(
+          `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, status, scheduled_for, created_at)
+           VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), NOW()) RETURNING id`,
+          [config.user_id, generated.subject, generated.previewText, generated.bodyHtml, generated.bodyText]
+        );
+        const campaignId = saved.rows[0].id;
+
+        const result = await sendCampaign(config.user_id, config, campaignId);
+        console.log(`✅ Email campaign sent: ${result.sent} emails for user ${config.user_id} — "${generated.subject}"`);
+      } catch (err) {
+        console.error(`❌ Email campaign failed for user ${config.user_id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('❌ Email campaign cron error:', err.message);
   }
 });
 
