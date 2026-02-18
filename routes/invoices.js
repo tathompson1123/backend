@@ -55,6 +55,75 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /api/invoices/sync-square - Sync invoices from Square into local DB
+router.post('/sync-square', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const connResult = await pool.query(
+      "SELECT * FROM payment_connections WHERE user_id = $1 AND processor = 'square' AND is_active = true",
+      [userId]
+    );
+    if (connResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Square not connected' });
+    }
+
+    const conn = connResult.rows[0];
+    const { Client, Environment } = require('square/legacy');
+    const client = new Client({
+      bearerAuthCredentials: { accessToken: conn.square_access_token },
+      environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
+    });
+
+    const { result } = await client.invoicesApi.listInvoices(conn.square_location_id);
+    const squareInvoices = result.invoices || [];
+
+    const statusMap = {
+      DRAFT: 'draft', UNPAID: 'sent', SCHEDULED: 'sent',
+      PARTIALLY_PAID: 'partial', PAID: 'paid',
+      REFUNDED: 'refunded', CANCELLED: 'cancelled',
+      FAILED: 'overdue', PAYMENT_PENDING: 'sent',
+    };
+
+    let synced = 0;
+    for (const inv of squareInvoices) {
+      const status = statusMap[inv.status] || 'sent';
+      const totalAmount = inv.paymentRequests?.[0]?.requestedMoney?.amount
+        ? Number(inv.paymentRequests[0].requestedMoney.amount) / 100 : 0;
+      const amountPaid = inv.paymentRequests?.[0]?.totalCompletedAmountMoney?.amount
+        ? Number(inv.paymentRequests[0].totalCompletedAmountMoney.amount) / 100 : 0;
+      const amountDue = Math.max(0, totalAmount - amountPaid);
+      const dueDate = inv.paymentRequests?.[0]?.dueDate || null;
+      const customerName = inv.primaryRecipient?.givenName
+        ? `${inv.primaryRecipient.givenName} ${inv.primaryRecipient.familyName || ''}`.trim()
+        : inv.primaryRecipient?.companyName || null;
+      const customerEmail = inv.primaryRecipient?.emailAddress || null;
+      const invoiceNumber = `SQ-${inv.invoiceNumber || inv.id}`;
+      const paidAt = status === 'paid' ? inv.updatedAt : null;
+
+      await pool.query(
+        `INSERT INTO invoices (user_id, invoice_number, customer_name, customer_email,
+           subtotal, total_amount, amount_paid, amount_due, status, issue_date, due_date,
+           paid_at, payment_processor, notes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'square', $13, $14, NOW())
+         ON CONFLICT (invoice_number) DO UPDATE SET
+           status = EXCLUDED.status, amount_paid = EXCLUDED.amount_paid,
+           amount_due = EXCLUDED.amount_due, paid_at = EXCLUDED.paid_at, updated_at = NOW()`,
+        [userId, invoiceNumber, customerName, customerEmail,
+         totalAmount, totalAmount, amountPaid, amountDue,
+         status, inv.createdAt?.split('T')[0], dueDate,
+         paidAt, inv.description || null, inv.createdAt]
+      );
+      synced++;
+    }
+
+    res.json({ success: true, synced });
+  } catch (error) {
+    console.error('Square invoices sync error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/invoices/:id - Invoice detail
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
