@@ -414,7 +414,7 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const { v4: uuidv4 } = require('uuid');
+    const { randomUUID } = require('crypto');
     const { Client, Environment } = require('square/legacy');
 
     const invoiceResult = await pool.query(
@@ -471,7 +471,7 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
           description: invoice.notes || `Invoice for ${invoice.customer_name}`,
           deliveryMethod: 'EMAIL',
         },
-        idempotencyKey: uuidv4(),
+        idempotencyKey: randomUUID(),
       });
       squareInvoiceId = createResult.invoice.id;
       version = createResult.invoice.version;
@@ -484,7 +484,7 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
     // Publish — Square emails the customer with a payment link
     await client.invoicesApi.publishInvoice(squareInvoiceId, {
       version,
-      idempotencyKey: uuidv4(),
+      idempotencyKey: randomUUID(),
     });
 
     await pool.query(

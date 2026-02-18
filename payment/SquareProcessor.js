@@ -16,10 +16,10 @@ class SquareProcessor extends PaymentProcessor {
   }
 
   async createPaymentIntent(amount, currency = 'USD', metadata = {}) {
-    const { v4: uuidv4 } = require('uuid');
+    const { randomUUID } = require('crypto');
     const { result } = await this.client.paymentsApi.createPayment({
       sourceId: metadata.sourceId || 'EXTERNAL', // nonce from Web Payments SDK
-      idempotencyKey: uuidv4(),
+      idempotencyKey: randomUUID(),
       amountMoney: {
         amount: BigInt(Math.round(amount * 100)),
         currency: currency.toUpperCase()
@@ -37,9 +37,9 @@ class SquareProcessor extends PaymentProcessor {
   }
 
   async createCheckoutSession({ amount, currency = 'USD', description, customerEmail, successUrl, cancelUrl, metadata = {} }) {
-    const { v4: uuidv4 } = require('uuid');
+    const { randomUUID } = require('crypto');
     const { result } = await this.client.checkoutApi.createPaymentLink({
-      idempotencyKey: uuidv4(),
+      idempotencyKey: randomUUID(),
       order: {
         locationId: this.locationId,
         lineItems: [{
@@ -75,9 +75,9 @@ class SquareProcessor extends PaymentProcessor {
   }
 
   async refundPayment(processorPaymentId, amount = null) {
-    const { v4: uuidv4 } = require('uuid');
+    const { randomUUID } = require('crypto');
     const refundData = {
-      idempotencyKey: uuidv4(),
+      idempotencyKey: randomUUID(),
       paymentId: processorPaymentId,
     };
 
