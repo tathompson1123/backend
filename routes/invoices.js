@@ -450,7 +450,7 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
     const sqHdrs = {
       'Authorization': `Bearer ${conn.square_access_token}`,
       'Content-Type': 'application/json',
-      'Square-Version': '2024-01-17',
+      'Square-Version': '2025-01-23',
     };
 
     let squareInvoiceId = invoice.square_invoice_id;
