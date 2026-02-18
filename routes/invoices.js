@@ -499,6 +499,186 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /api/invoices/:id/send-stripe - Create in Stripe + finalize + send so Stripe emails the customer
+router.post('/:id/send-stripe', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const Stripe = require('stripe');
+
+    const invoiceResult = await pool.query(
+      'SELECT * FROM invoices WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (invoiceResult.rows.length === 0) return res.status(404).json({ error: 'Invoice not found' });
+    const invoice = invoiceResult.rows[0];
+
+    if (!invoice.customer_email) {
+      return res.status(400).json({ error: 'Customer email is required to send via Stripe' });
+    }
+
+    const connResult = await pool.query(
+      "SELECT * FROM payment_connections WHERE user_id = $1 AND processor = 'stripe' AND is_active = true",
+      [userId]
+    );
+    if (connResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Stripe not connected. Connect Stripe in Payment Settings first.' });
+    }
+    const conn = connResult.rows[0];
+    const stripe = new Stripe(conn.stripe_access_token);
+
+    // Find or create Stripe customer
+    let customerId;
+    const existing = await stripe.customers.list({ email: invoice.customer_email, limit: 1 });
+    if (existing.data.length > 0) {
+      customerId = existing.data[0].id;
+    } else {
+      const customer = await stripe.customers.create({
+        email: invoice.customer_email,
+        name: invoice.customer_name || undefined,
+      });
+      customerId = customer.id;
+    }
+
+    // Create invoice item
+    await stripe.invoiceItems.create({
+      customer: customerId,
+      amount: Math.round(parseFloat(invoice.total_amount) * 100),
+      currency: 'usd',
+      description: `${invoice.invoice_number}${invoice.notes ? ' — ' + invoice.notes : ''}`,
+    });
+
+    // Create invoice
+    const daysUntilDue = invoice.due_date
+      ? Math.max(1, Math.ceil((new Date(invoice.due_date) - new Date()) / (1000 * 60 * 60 * 24)))
+      : 30;
+
+    const stripeInvoice = await stripe.invoices.create({
+      customer: customerId,
+      collection_method: 'send_invoice',
+      days_until_due: daysUntilDue,
+      metadata: { local_invoice_id: id, invoice_number: invoice.invoice_number },
+    });
+
+    // Finalize then send — Stripe emails the customer with a hosted payment page
+    await stripe.invoices.finalizeInvoice(stripeInvoice.id);
+    await stripe.invoices.sendInvoice(stripeInvoice.id);
+
+    await pool.query(
+      "UPDATE invoices SET status = 'sent', sent_at = NOW(), payment_processor = 'stripe', stripe_invoice_id = $1, updated_at = NOW() WHERE id = $2",
+      [stripeInvoice.id, id]
+    );
+
+    res.json({ success: true, message: `Invoice sent via Stripe to ${invoice.customer_email}` });
+  } catch (error) {
+    console.error('Error sending invoice via Stripe:', error.message);
+    res.status(500).json({ error: error.message || 'Failed to send via Stripe' });
+  }
+});
+
+// POST /api/invoices/:id/send-paypal - Create in PayPal + send so PayPal emails the customer
+router.post('/:id/send-paypal', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    const invoiceResult = await pool.query(
+      'SELECT * FROM invoices WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (invoiceResult.rows.length === 0) return res.status(404).json({ error: 'Invoice not found' });
+    const invoice = invoiceResult.rows[0];
+
+    if (!invoice.customer_email) {
+      return res.status(400).json({ error: 'Customer email is required to send via PayPal' });
+    }
+
+    const connResult = await pool.query(
+      "SELECT * FROM payment_connections WHERE user_id = $1 AND processor = 'paypal' AND is_active = true",
+      [userId]
+    );
+    if (connResult.rows.length === 0) {
+      return res.status(400).json({ error: 'PayPal not connected. Connect PayPal in Payment Settings first.' });
+    }
+    const conn = connResult.rows[0];
+
+    const paypalBase = process.env.PAYPAL_ENVIRONMENT === 'sandbox'
+      ? 'https://api-m.sandbox.paypal.com'
+      : 'https://api-m.paypal.com';
+
+    // Get PayPal access token
+    const tokenRes = await fetch(`${paypalBase}/v1/oauth2/token`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${Buffer.from(`${conn.paypal_client_id}:${conn.paypal_client_secret}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials',
+    });
+    if (!tokenRes.ok) throw new Error('Failed to get PayPal access token');
+    const { access_token } = await tokenRes.json();
+
+    const dueDate = invoice.due_date
+      ? new Date(invoice.due_date).toISOString().split('T')[0]
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const nameParts = (invoice.customer_name || '').split(' ');
+
+    // Create PayPal invoice
+    const createRes = await fetch(`${paypalBase}/v2/invoicing/invoices`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        detail: {
+          invoice_number: invoice.invoice_number,
+          invoice_date: new Date().toISOString().split('T')[0],
+          currency_code: 'USD',
+          note: invoice.notes || '',
+          payment_term: { term_type: 'DUE_ON_DATE', due_date: dueDate },
+        },
+        primary_recipients: [{
+          billing_info: {
+            email_address: invoice.customer_email,
+            name: { given_name: nameParts[0] || '', surname: nameParts.slice(1).join(' ') || '' },
+          },
+        }],
+        items: [{
+          name: `Invoice ${invoice.invoice_number}`,
+          description: invoice.notes || `Payment for ${invoice.customer_name}`,
+          quantity: '1',
+          unit_amount: { currency_code: 'USD', value: parseFloat(invoice.total_amount).toFixed(2) },
+        }],
+      }),
+    });
+    if (!createRes.ok) {
+      const body = await createRes.text();
+      throw new Error(`PayPal invoice creation failed: ${body}`);
+    }
+    const paypalInvoice = await createRes.json();
+
+    // Send — PayPal emails the customer with a payment link
+    const sendRes = await fetch(`${paypalBase}/v2/invoicing/invoices/${paypalInvoice.id}/send`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ send_to_invoicer: true }),
+    });
+    if (!sendRes.ok) {
+      const body = await sendRes.text();
+      throw new Error(`PayPal invoice send failed: ${body}`);
+    }
+
+    await pool.query(
+      "UPDATE invoices SET status = 'sent', sent_at = NOW(), payment_processor = 'paypal', paypal_invoice_id = $1, updated_at = NOW() WHERE id = $2",
+      [paypalInvoice.id, id]
+    );
+
+    res.json({ success: true, message: `Invoice sent via PayPal to ${invoice.customer_email}` });
+  } catch (error) {
+    console.error('Error sending invoice via PayPal:', error.message);
+    res.status(500).json({ error: error.message || 'Failed to send via PayPal' });
+  }
+});
+
 // POST /api/invoices/:id/void - Void an invoice
 router.post('/:id/void', authenticateToken, async (req, res) => {
   try {
