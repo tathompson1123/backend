@@ -15,7 +15,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function getBusinessContext(userId) {
   const userRow = await pool.query(
-    'SELECT business_name, industry, city, state FROM users WHERE id = $1',
+    'SELECT business_name, business_type FROM users WHERE id = $1',
     [userId]
   );
   const user = userRow.rows[0] || {};
@@ -28,9 +28,9 @@ async function getBusinessContext(userId) {
 
   return {
     businessName: user.business_name || 'Our Business',
-    industry: user.industry || 'service business',
-    city: user.city || '',
-    state: user.state || '',
+    industry: user.business_type || 'service business',
+    city: '',
+    state: '',
     services,
   };
 }
