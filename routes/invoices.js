@@ -504,7 +504,7 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
           }],
           deliveryMethod: 'EMAIL',
           title: `Invoice for ${invoice.customer_name || invoice.customer_email}`,
-          description: (invoice.notes || '').slice(0, 500),
+          ...(invoice.notes?.trim() ? { description: invoice.notes.trim().slice(0, 500) } : {}),
         },
         idempotencyKey: randomUUID(),
       });
