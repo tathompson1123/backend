@@ -442,6 +442,17 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
       environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
     });
 
+    // Use raw fetch for all Square invoice API calls — the legacy SDK schema
+    // strips accepted_payment_methods so we bypass it entirely for invoices.
+    const sqBase = process.env.SQUARE_ENVIRONMENT === 'sandbox'
+      ? 'https://connect.squareupsandbox.com'
+      : 'https://connect.squareup.com';
+    const sqHdrs = {
+      'Authorization': `Bearer ${conn.square_access_token}`,
+      'Content-Type': 'application/json',
+      'Square-Version': '2024-01-17',
+    };
+
     let squareInvoiceId = invoice.square_invoice_id;
     let version = 0;
 
@@ -490,37 +501,53 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
       });
       const orderId = orderResult.order.id;
 
-      // Step 3: Create the invoice referencing the order + customer
-      const { result: createResult } = await client.invoicesApi.createInvoice({
+      // Step 3: Create the invoice via raw fetch (SDK strips accepted_payment_methods)
+      const invoiceBody = {
+        idempotency_key: randomUUID(),
         invoice: {
-          locationId: conn.square_location_id,
-          orderId,
-          primaryRecipient: { customerId },
-          paymentRequests: [{
-            requestType: 'BALANCE',
-            dueDate,
-            automaticPaymentSource: 'NONE',
-            acceptedPaymentMethods: { card: true, squareGiftCard: false, bankAccount: false, buyNowPayLater: false },
+          location_id: conn.square_location_id,
+          order_id: orderId,
+          primary_recipient: { customer_id: customerId },
+          payment_requests: [{
+            request_type: 'BALANCE',
+            due_date: dueDate,
+            automatic_payment_source: 'NONE',
+            accepted_payment_methods: { card: true, square_gift_card: false, bank_account: false, buy_now_pay_later: false },
           }],
-          deliveryMethod: 'EMAIL',
+          delivery_method: 'EMAIL',
           title: `Invoice for ${invoice.customer_name || invoice.customer_email}`,
           ...(invoice.notes?.trim() ? { description: invoice.notes.trim().slice(0, 500) } : {}),
         },
-        idempotencyKey: randomUUID(),
+      };
+
+      const createResp = await fetch(`${sqBase}/v2/invoices`, {
+        method: 'POST', headers: sqHdrs, body: JSON.stringify(invoiceBody),
       });
-      squareInvoiceId = createResult.invoice.id;
-      version = createResult.invoice.version;
+      const createData = await createResp.json();
+      if (!createResp.ok) {
+        const errs = createData.errors?.map(e => `${e.code}: ${e.detail}`).join('; ') || JSON.stringify(createData);
+        throw new Error(errs);
+      }
+      squareInvoiceId = createData.invoice.id;
+      version = createData.invoice.version;
       await pool.query('UPDATE invoices SET square_invoice_id = $1 WHERE id = $2', [squareInvoiceId, id]);
     } else {
-      const { result: getResult } = await client.invoicesApi.getInvoice(squareInvoiceId);
-      version = getResult.invoice.version;
+      const getResp = await fetch(`${sqBase}/v2/invoices/${squareInvoiceId}`, { headers: sqHdrs });
+      const getData = await getResp.json();
+      version = getData.invoice.version;
     }
 
     // Publish — Square emails the customer with a payment link
-    await client.invoicesApi.publishInvoice(squareInvoiceId, {
-      version,
-      idempotencyKey: randomUUID(),
+    const publishResp = await fetch(`${sqBase}/v2/invoices/${squareInvoiceId}/publish`, {
+      method: 'POST',
+      headers: sqHdrs,
+      body: JSON.stringify({ version, idempotency_key: randomUUID() }),
     });
+    if (!publishResp.ok) {
+      const publishData = await publishResp.json();
+      const errs = publishData.errors?.map(e => `${e.code}: ${e.detail}`).join('; ') || JSON.stringify(publishData);
+      throw new Error(errs);
+    }
 
     await pool.query(
       "UPDATE invoices SET status = 'sent', sent_at = NOW(), payment_processor = 'square', updated_at = NOW() WHERE id = $1",
