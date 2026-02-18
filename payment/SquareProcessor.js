@@ -149,11 +149,13 @@ class SquareProcessor extends PaymentProcessor {
       environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
     });
 
+    const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/payment-connections/square/callback`;
     const { result } = await client.oAuthApi.obtainToken({
       clientId: process.env.SQUARE_APPLICATION_ID,
       clientSecret: process.env.SQUARE_APPLICATION_SECRET,
       code,
-      grantType: 'authorization_code'
+      grantType: 'authorization_code',
+      redirectUri,
     });
 
     return {

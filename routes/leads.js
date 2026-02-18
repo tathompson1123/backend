@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
-const { authenticateToken } = require('../config/middleware');
+const { authenticateToken, requirePlan } = require('../config/middleware');
 const { sendSMS } = require('../utils/twilio');
 const sgMail = require('@sendgrid/mail');
 
@@ -235,7 +235,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 // POST - Send manual SMS to lead (SendBlue)
 // ============================================
 // Around line 250 - Update send-sms endpoint
-router.post('/:leadId/send-sms', authenticateToken, async (req, res) => {
+router.post('/:leadId/send-sms', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {
     const { leadId } = req.params;
     const { message } = req.body;

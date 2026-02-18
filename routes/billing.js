@@ -99,6 +99,30 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     } catch (error) {
       console.error('Error updating user plan:', error.message);
     }
+
+    // Auto-provision Twilio phone number for pro/scale plans
+    if (plan === 'pro' || plan === 'scale') {
+      try {
+        const userRow = await pool.query(
+          'SELECT twilio_phone_number, city, state FROM users WHERE id = $1',
+          [userId]
+        );
+        const userData = userRow.rows[0];
+        if (!userData?.twilio_phone_number) {
+          const { purchasePhoneNumber } = require('../utils/twilio');
+          // Use area code based on city/state if possible, default to 800
+          const result = await purchasePhoneNumber('800', userId);
+          await pool.query(
+            'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2 WHERE id = $3',
+            [result.phoneNumber, result.phoneSid, userId]
+          );
+          console.log(`✅ Auto-provisioned Twilio number ${result.phoneNumber} for user ${userId} (${plan} plan)`);
+        }
+      } catch (twilioError) {
+        // Non-fatal — user can provision manually
+        console.error(`⚠️ Could not auto-provision Twilio for user ${userId}:`, twilioError.message);
+      }
+    }
   }
 
   res.json({ received: true });

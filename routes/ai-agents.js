@@ -190,6 +190,59 @@ router.get('/website/stats', authenticateToken, requirePlan('pro'), async (req, 
   }
 });
 
+// Website Chat Agent - Get conversation history
+router.get('/website/conversations', authenticateToken, requirePlan('pro'), async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const limit = parseInt(req.query.limit) || 20;
+
+    // Get recent conversations with their first/last messages
+    const convResult = await pool.query(
+      `SELECT cc.id, cc.created_at, cc.updated_at,
+              (SELECT content FROM chat_messages WHERE conversation_id = cc.id AND role = 'user' ORDER BY created_at ASC LIMIT 1) as first_message,
+              (SELECT COUNT(*) FROM chat_messages WHERE conversation_id = cc.id) as message_count,
+              l.name as lead_name, l.email as lead_email, l.phone as lead_phone, l.status as lead_status
+       FROM chat_conversations cc
+       LEFT JOIN leads l ON l.user_id = cc.user_id AND l.source = 'ai_chat_agent'
+         AND l.created_at BETWEEN cc.created_at - INTERVAL '1 hour' AND cc.created_at + INTERVAL '1 hour'
+       WHERE cc.user_id = $1
+       ORDER BY cc.created_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+
+    res.json({ conversations: convResult.rows });
+  } catch (error) {
+    console.error('Error fetching chat conversations:', error.message);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+// Website Chat Agent - Get messages for a specific conversation
+router.get('/website/conversations/:id/messages', authenticateToken, requirePlan('pro'), async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    // Verify conversation belongs to user
+    const conv = await pool.query(
+      'SELECT id FROM chat_conversations WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (conv.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+
+    const messages = await pool.query(
+      'SELECT role, content, created_at FROM chat_messages WHERE conversation_id = $1 ORDER BY created_at ASC',
+      [id]
+    );
+
+    res.json({ messages: messages.rows });
+  } catch (error) {
+    console.error('Error fetching chat messages:', error.message);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
 // Website Chat Agent - Toggle
 router.patch('/website', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {

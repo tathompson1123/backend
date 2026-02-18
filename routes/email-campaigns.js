@@ -91,9 +91,12 @@ For bodyText: plain text version of the same content.`;
   });
 
   const text = response.content[0].text.trim();
-  // Strip markdown code fences if present
-  const json = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '');
-  return JSON.parse(json);
+  // Strip markdown code fences if present, extract first JSON object
+  let json = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+  // If there's extra text before/after JSON, extract just the JSON object
+  const jsonMatch = json.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON found in AI response');
+  return JSON.parse(jsonMatch[0]);
 }
 
 async function sendCampaign(userId, config, campaignId) {
@@ -202,7 +205,7 @@ router.post('/preview', authenticateToken, async (req, res) => {
     res.json({ success: true, campaign });
   } catch (e) {
     console.error('Campaign preview error:', e.message);
-    res.status(500).json({ error: 'Failed to generate campaign preview' });
+    res.status(500).json({ error: e.message || 'Failed to generate campaign preview' });
   }
 });
 
@@ -219,8 +222,11 @@ router.post('/send-now', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Please set your From Email in campaign settings first' });
     }
 
-    // Generate
-    const generated = await generateCampaign(req.user.userId, config);
+    // Use pre-generated campaign if provided (from frontend preview+edit), otherwise generate fresh
+    const { usePreview } = req.body;
+    const generated = usePreview && usePreview.subject
+      ? usePreview
+      : await generateCampaign(req.user.userId, config);
 
     // Save to DB
     const saved = await pool.query(

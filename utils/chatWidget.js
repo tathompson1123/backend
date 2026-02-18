@@ -240,12 +240,32 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
   0%, 60%, 100% { transform: translateY(0); }
   30% { transform: translateY(-10px); }
 }
-@media (max-width: 480px) {
+@media (max-width: 600px) {
+  #sorce-chat-widget {
+    bottom: 12px;
+    right: 12px;
+  }
+  .chat-bubble {
+    padding: 6px 12px 6px 6px;
+    border-radius: 24px;
+  }
+  .chat-bubble-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+  .chat-bubble-name {
+    font-size: 13px;
+  }
+  .chat-bubble-status {
+    font-size: 11px;
+  }
   .chat-window {
-    width: calc(100vw - 40px);
-    height: calc(100vh - 120px);
-    right: 20px;
-    bottom: 90px;
+    width: calc(100vw - 24px);
+    height: calc(100dvh - 80px);
+    right: 12px;
+    bottom: 68px;
+    border-radius: 12px;
   }
 }
 </style>

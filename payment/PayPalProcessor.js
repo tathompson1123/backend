@@ -177,8 +177,56 @@ class PayPalProcessor extends PaymentProcessor {
   }
 
   static getOAuthUrl(userId) {
-    // PayPal uses direct client ID/secret — no OAuth redirect flow
-    return null;
+    const clientId = process.env.PAYPAL_CLIENT_ID;
+    if (!clientId) throw new Error('PAYPAL_CLIENT_ID not configured');
+    const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/payment-connections/paypal/callback`;
+    const baseUrl = process.env.NODE_ENV === 'production'
+      ? 'https://www.paypal.com'
+      : 'https://www.sandbox.paypal.com';
+    const scope = encodeURIComponent('openid profile email');
+    return `${baseUrl}/signin/authorize?client_id=${clientId}&response_type=code&scope=${scope}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${userId}`;
+  }
+
+  static async handleOAuthCallback(code) {
+    const clientId = process.env.PAYPAL_CLIENT_ID;
+    const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+    if (!clientId || !clientSecret) throw new Error('PayPal credentials not configured');
+
+    const baseUrl = process.env.NODE_ENV === 'production'
+      ? 'https://api-m.paypal.com'
+      : 'https://api-m.sandbox.paypal.com';
+    const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/payment-connections/paypal/callback`;
+
+    // Exchange authorization code for tokens
+    const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const tokenRes = await fetch(`${baseUrl}/v1/identity/openidconnect/tokenservice`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri,
+      }).toString(),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) throw new Error(tokenData.error_description || 'PayPal token exchange failed');
+
+    const accessToken = tokenData.access_token;
+
+    // Get merchant profile info
+    const profileRes = await fetch(`${baseUrl}/v1/identity/openidconnect/userinfo?schema=openid`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    const profile = await profileRes.json();
+
+    return {
+      paypalEmail: profile.email || profile.emails?.[0]?.value || '',
+      paypalPayerId: profile.payer_id || profile.sub || '',
+      name: profile.name || '',
+    };
   }
 }
 

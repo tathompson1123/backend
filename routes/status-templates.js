@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
-const { authenticateToken } = require('../config/middleware');
+const { authenticateToken, requirePlan } = require('../config/middleware');
 
 router.use(authenticateToken);
+router.use(requirePlan('pro'));
 
 // GET /api/status-templates - List all templates for this business
 router.get('/', async (req, res) => {

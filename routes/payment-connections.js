@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { getConnectionsForUser, getProcessor, StripeConnectProcessor, SquareProcessor } = require('../payment/ProcessorFactory');
+const PayPalProcessor = require('../payment/PayPalProcessor');
 
 // GET /api/payment-connections - List all connections
 router.get('/', authenticateToken, async (req, res) => {
@@ -30,7 +31,8 @@ router.get('/:processor/oauth-url', authenticateToken, async (req, res) => {
         url = SquareProcessor.getOAuthUrl(userId);
         break;
       case 'paypal':
-        return res.json({ oauthUrl: null, message: 'PayPal uses direct API credentials. Use POST /connect instead.' });
+        url = PayPalProcessor.getOAuthUrl(userId);
+        break;
       default:
         return res.status(400).json({ error: 'Unknown processor' });
     }
@@ -100,6 +102,32 @@ router.get('/square/callback', async (req, res) => {
   } catch (error) {
     console.error('Square OAuth callback error:', error.message);
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=square_failed`);
+  }
+});
+
+// GET /api/payment-connections/paypal/callback - PayPal OAuth callback
+router.get('/paypal/callback', async (req, res) => {
+  try {
+    const { code, state: userId, error: oauthError } = req.query;
+
+    if (oauthError) {
+      return res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=${oauthError}`);
+    }
+
+    const result = await PayPalProcessor.handleOAuthCallback(code);
+
+    await pool.query(
+      `INSERT INTO payment_connections (user_id, processor, paypal_client_id, paypal_client_secret, is_active, is_primary)
+       VALUES ($1, 'paypal', $2, $3, true, false)
+       ON CONFLICT (user_id, processor)
+       DO UPDATE SET paypal_client_id = $2, paypal_client_secret = $3, is_active = true, updated_at = NOW()`,
+      [userId, result.paypalEmail || result.paypalPayerId, result.paypalPayerId || result.paypalEmail]
+    );
+
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&connected=paypal`);
+  } catch (error) {
+    console.error('PayPal OAuth callback error:', error.message);
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=paypal_failed`);
   }
 });
 
