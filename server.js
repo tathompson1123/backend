@@ -163,6 +163,14 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
   try {
     await pool.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS sms_scheduled_at TIMESTAMP');
     await pool.query("CREATE INDEX IF NOT EXISTS idx_leads_sms_pending ON leads(sms_scheduled_at) WHERE status = 'sms_pending'");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS processor VARCHAR(20)");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS processor_payment_id VARCHAR(255)");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS refund_amount NUMERIC(10,2) DEFAULT 0");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS card_brand VARCHAR(50)");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS card_last_four VARCHAR(4)");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50)");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS metadata JSONB");
     console.log('✅ SMS scheduling columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify sms_scheduled_at column:', e.message);
