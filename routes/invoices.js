@@ -450,25 +450,34 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
         ? new Date(invoice.due_date).toISOString().split('T')[0]
         : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const nameParts = (invoice.customer_name || '').split(' ');
+      const nameParts = (invoice.customer_name || '').trim().split(/\s+/);
+      const givenName = nameParts[0] || null;
+      const familyName = nameParts.slice(1).join(' ') || null;
+
+      // Build recipient — only include name fields if non-empty (Square rejects empty strings)
+      const primaryRecipient = { emailAddress: invoice.customer_email };
+      if (givenName) primaryRecipient.givenName = givenName;
+      if (familyName) primaryRecipient.familyName = familyName;
+
+      const amountCents = Math.round(parseFloat(invoice.total_amount || 0) * 100);
+      if (amountCents <= 0) {
+        return res.status(400).json({ error: 'Invoice total must be greater than $0 to send via Square' });
+      }
+
       const { result: createResult } = await client.invoicesApi.createInvoice({
         invoice: {
           locationId: conn.square_location_id,
-          primaryRecipient: {
-            emailAddress: invoice.customer_email,
-            givenName: nameParts[0] || '',
-            familyName: nameParts.slice(1).join(' ') || '',
-          },
+          primaryRecipient,
           paymentRequests: [{
             requestType: 'BALANCE',
             dueDate,
             requestedMoney: {
-              amount: BigInt(Math.round(parseFloat(invoice.total_amount) * 100)),
+              amount: BigInt(amountCents),
               currency: 'USD',
             },
           }],
-          invoiceNumber: invoice.invoice_number,
-          description: invoice.notes || `Invoice for ${invoice.customer_name}`,
+          // Omit invoiceNumber — let Square auto-generate to avoid conflicts
+          description: (invoice.notes || `Invoice for ${invoice.customer_name || 'Customer'}`).slice(0, 500),
           deliveryMethod: 'EMAIL',
         },
         idempotencyKey: randomUUID(),
@@ -494,8 +503,11 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
 
     res.json({ success: true, message: `Invoice sent via Square to ${invoice.customer_email}` });
   } catch (error) {
-    console.error('Error sending invoice via Square:', error.message);
-    res.status(500).json({ error: error.message || 'Failed to send via Square' });
+    // Surface the actual Square API error details
+    const squareErrors = error.errors?.map(e => `${e.code}: ${e.detail}`).join('; ');
+    const msg = squareErrors || error.message || 'Failed to send via Square';
+    console.error('Error sending invoice via Square:', msg);
+    res.status(500).json({ error: msg });
   }
 });
 
