@@ -140,7 +140,7 @@ class SquareProcessor extends PaymentProcessor {
     const baseUrl = process.env.SQUARE_ENVIRONMENT === 'sandbox'
       ? 'https://connect.squareupsandbox.com'
       : 'https://connect.squareup.com';
-    return `${baseUrl}/oauth2/authorize?client_id=${clientId}&scope=PAYMENTS_WRITE+PAYMENTS_READ+ORDERS_WRITE+ORDERS_READ&session=false&state=${userId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    return `${baseUrl}/oauth2/authorize?client_id=${clientId}&scope=PAYMENTS_WRITE+PAYMENTS_READ+ORDERS_WRITE+ORDERS_READ+MERCHANT_PROFILE_READ&session=false&state=${userId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
   }
 
   static async handleOAuthCallback(code) {
