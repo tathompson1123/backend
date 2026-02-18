@@ -67,15 +67,16 @@ async function syncSquareInvoices(userId, accessToken, locationId, pool) {
     await pool.query(
       `INSERT INTO invoices (user_id, invoice_number, customer_name, customer_email,
          subtotal, total_amount, amount_paid, amount_due, status, issue_date, due_date,
-         paid_at, payment_processor, notes, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'square', $13, $14, NOW())
+         paid_at, payment_processor, notes, square_invoice_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'square', $13, $14, $15, NOW())
        ON CONFLICT (invoice_number) DO UPDATE SET
          status = EXCLUDED.status, amount_paid = EXCLUDED.amount_paid,
-         amount_due = EXCLUDED.amount_due, paid_at = EXCLUDED.paid_at, updated_at = NOW()`,
+         amount_due = EXCLUDED.amount_due, paid_at = EXCLUDED.paid_at,
+         square_invoice_id = EXCLUDED.square_invoice_id, updated_at = NOW()`,
       [userId, invoiceNumber, customerName, customerEmail,
        totalAmount, totalAmount, amountPaid, amountDue,
        status, inv.createdAt?.split('T')[0], dueDate,
-       paidAt, inv.description || null, inv.createdAt]
+       paidAt, inv.description || null, inv.id, inv.createdAt]
     );
     synced++;
   }

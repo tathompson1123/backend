@@ -409,6 +409,96 @@ router.post('/:id/remind', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /api/invoices/:id/send-square - Create in Square (if needed) + publish so Square emails the customer
+router.post('/:id/send-square', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { v4: uuidv4 } = require('uuid');
+    const { Client, Environment } = require('square/legacy');
+
+    const invoiceResult = await pool.query(
+      'SELECT * FROM invoices WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (invoiceResult.rows.length === 0) return res.status(404).json({ error: 'Invoice not found' });
+    const invoice = invoiceResult.rows[0];
+
+    if (!invoice.customer_email) {
+      return res.status(400).json({ error: 'Customer email is required to send via Square' });
+    }
+
+    const connResult = await pool.query(
+      "SELECT * FROM payment_connections WHERE user_id = $1 AND processor = 'square' AND is_active = true",
+      [userId]
+    );
+    if (connResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Square not connected. Connect Square in Payment Settings first.' });
+    }
+    const conn = connResult.rows[0];
+
+    const client = new Client({
+      bearerAuthCredentials: { accessToken: conn.square_access_token },
+      environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
+    });
+
+    let squareInvoiceId = invoice.square_invoice_id;
+    let version = 0;
+
+    if (!squareInvoiceId) {
+      const dueDate = invoice.due_date
+        ? new Date(invoice.due_date).toISOString().split('T')[0]
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const nameParts = (invoice.customer_name || '').split(' ');
+      const { result: createResult } = await client.invoicesApi.createInvoice({
+        invoice: {
+          locationId: conn.square_location_id,
+          primaryRecipient: {
+            emailAddress: invoice.customer_email,
+            givenName: nameParts[0] || '',
+            familyName: nameParts.slice(1).join(' ') || '',
+          },
+          paymentRequests: [{
+            requestType: 'BALANCE',
+            dueDate,
+            requestedMoney: {
+              amount: BigInt(Math.round(parseFloat(invoice.total_amount) * 100)),
+              currency: 'USD',
+            },
+          }],
+          invoiceNumber: invoice.invoice_number,
+          description: invoice.notes || `Invoice for ${invoice.customer_name}`,
+          deliveryMethod: 'EMAIL',
+        },
+        idempotencyKey: uuidv4(),
+      });
+      squareInvoiceId = createResult.invoice.id;
+      version = createResult.invoice.version;
+      await pool.query('UPDATE invoices SET square_invoice_id = $1 WHERE id = $2', [squareInvoiceId, id]);
+    } else {
+      const { result: getResult } = await client.invoicesApi.getInvoice(squareInvoiceId);
+      version = getResult.invoice.version;
+    }
+
+    // Publish — Square emails the customer with a payment link
+    await client.invoicesApi.publishInvoice(squareInvoiceId, {
+      version,
+      idempotencyKey: uuidv4(),
+    });
+
+    await pool.query(
+      "UPDATE invoices SET status = 'sent', sent_at = NOW(), payment_processor = 'square', updated_at = NOW() WHERE id = $1",
+      [id]
+    );
+
+    res.json({ success: true, message: `Invoice sent via Square to ${invoice.customer_email}` });
+  } catch (error) {
+    console.error('Error sending invoice via Square:', error.message);
+    res.status(500).json({ error: error.message || 'Failed to send via Square' });
+  }
+});
+
 // POST /api/invoices/:id/void - Void an invoice
 router.post('/:id/void', authenticateToken, async (req, res) => {
   try {
