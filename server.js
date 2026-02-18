@@ -177,6 +177,11 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS processor_fee NUMERIC(10,2)");
+    // payment_type was an old NOT NULL column — give it a default so Square sync doesn't break
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_type VARCHAR(50) DEFAULT 'card'");
+    await pool.query("ALTER TABLE payments ALTER COLUMN payment_type SET DEFAULT 'card'");
+    // Also drop NOT NULL in case the column already exists without a default
+    await pool.query("ALTER TABLE payments ALTER COLUMN payment_type DROP NOT NULL");
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS square_invoice_id VARCHAR(255)");
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_invoice_id VARCHAR(255)");
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paypal_invoice_id VARCHAR(255)");
