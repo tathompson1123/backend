@@ -450,35 +450,61 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
         ? new Date(invoice.due_date).toISOString().split('T')[0]
         : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const nameParts = (invoice.customer_name || '').trim().split(/\s+/);
-      const givenName = nameParts[0] || null;
-      const familyName = nameParts.slice(1).join(' ') || null;
-
-      // Build recipient — only include name fields if non-empty (Square rejects empty strings)
-      const primaryRecipient = { emailAddress: invoice.customer_email };
-      if (givenName) primaryRecipient.givenName = givenName;
-      if (familyName) primaryRecipient.familyName = familyName;
-
       const amountCents = Math.round(parseFloat(invoice.total_amount || 0) * 100);
       if (amountCents <= 0) {
         return res.status(400).json({ error: 'Invoice total must be greater than $0 to send via Square' });
       }
 
+      const nameParts = (invoice.customer_name || '').trim().split(/\s+/);
+      const givenName = nameParts[0] || null;
+      const familyName = nameParts.slice(1).join(' ') || null;
+
+      // Step 1: Find or create a Square Customer (invoice recipient requires customer_id)
+      let customerId;
+      const { result: searchResult } = await client.customersApi.searchCustomers({
+        query: { filter: { emailAddress: { exact: invoice.customer_email } } }
+      });
+      if (searchResult.customers?.length > 0) {
+        customerId = searchResult.customers[0].id;
+      } else {
+        const newCustBody = { emailAddress: invoice.customer_email, idempotencyKey: randomUUID() };
+        if (givenName) newCustBody.givenName = givenName;
+        if (familyName) newCustBody.familyName = familyName;
+        const { result: newCust } = await client.customersApi.createCustomer(newCustBody);
+        customerId = newCust.customer.id;
+      }
+
+      // Step 2: Create a Square Order to set the invoice amount (required by Square Invoice API)
+      const itemsResult = await pool.query('SELECT * FROM invoice_items WHERE invoice_id = $1', [id]);
+      const lineItems = itemsResult.rows.length > 0
+        ? itemsResult.rows.map(item => ({
+            name: (item.description || 'Service').slice(0, 255),
+            quantity: String(parseFloat(item.quantity) || 1),
+            basePriceMoney: { amount: BigInt(Math.round(parseFloat(item.unit_price) * 100)), currency: 'USD' },
+          }))
+        : [{ name: invoice.notes || 'Service', quantity: '1', basePriceMoney: { amount: BigInt(amountCents), currency: 'USD' } }];
+
+      const { result: orderResult } = await client.ordersApi.createOrder({
+        order: { locationId: conn.square_location_id, customerId, lineItems },
+        idempotencyKey: randomUUID(),
+      });
+      const orderId = orderResult.order.id;
+
+      // Step 3: Create the invoice referencing the order + customer
       const { result: createResult } = await client.invoicesApi.createInvoice({
         invoice: {
           locationId: conn.square_location_id,
-          primaryRecipient,
+          orderId,
+          primaryRecipient: { customerId },
           paymentRequests: [{
             requestType: 'BALANCE',
             dueDate,
-            requestedMoney: {
-              amount: BigInt(amountCents),
-              currency: 'USD',
-            },
+            automaticPaymentSource: 'NONE',
+            acceptedPaymentMethods: { card: true, squareGiftCard: false, bankAccount: false, buyNowPayLater: false },
           }],
-          // Omit invoiceNumber — let Square auto-generate to avoid conflicts
-          description: (invoice.notes || `Invoice for ${invoice.customer_name || 'Customer'}`).slice(0, 500),
           deliveryMethod: 'EMAIL',
+          title: `Invoice for ${invoice.customer_name || invoice.customer_email}`,
+          description: (invoice.notes || '').slice(0, 500),
         },
         idempotencyKey: randomUUID(),
       });
