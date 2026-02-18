@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { getConnectionsForUser, getProcessor, StripeConnectProcessor, SquareProcessor } = require('../payment/ProcessorFactory');
 const PayPalProcessor = require('../payment/PayPalProcessor');
+const { syncSquarePayments, syncSquareInvoices } = require('../utils/squareSync');
 
 // GET /api/payment-connections - List all connections
 router.get('/', authenticateToken, async (req, res) => {
@@ -97,6 +98,17 @@ router.get('/square/callback', async (req, res) => {
        DO UPDATE SET square_merchant_id = $2, square_access_token = $3, square_refresh_token = $4, square_location_id = $5, is_active = true, updated_at = NOW()`,
       [userId, result.merchantId, result.accessToken, result.refreshToken, locationId]
     );
+
+    // Auto-sync payments and invoices in background after connecting
+    setImmediate(async () => {
+      try {
+        const pCount = await syncSquarePayments(userId, result.accessToken, pool);
+        const iCount = await syncSquareInvoices(userId, result.accessToken, locationId, pool);
+        console.log(`✅ Auto-synced ${pCount} Square payments and ${iCount} invoices for user ${userId}`);
+      } catch (err) {
+        console.error('Square auto-sync error:', err.message);
+      }
+    });
 
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&connected=square`);
   } catch (error) {

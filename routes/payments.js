@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { getProcessorForUser } = require('../payment/ProcessorFactory');
+const { syncSquarePayments } = require('../utils/squareSync');
 
 // GET /api/payments - List payments
 router.get('/', authenticateToken, async (req, res) => {
@@ -117,7 +118,6 @@ router.post('/:id/refund', authenticateToken, async (req, res) => {
 router.post('/sync-square', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-
     const connResult = await pool.query(
       "SELECT * FROM payment_connections WHERE user_id = $1 AND processor = 'square' AND is_active = true",
       [userId]
@@ -125,39 +125,7 @@ router.post('/sync-square', authenticateToken, async (req, res) => {
     if (connResult.rows.length === 0) {
       return res.status(400).json({ error: 'Square not connected' });
     }
-
-    const conn = connResult.rows[0];
-    const { Client, Environment } = require('square/legacy');
-    const client = new Client({
-      bearerAuthCredentials: { accessToken: conn.square_access_token },
-      environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
-    });
-
-    const beginTime = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-    const { result } = await client.paymentsApi.listPayments(beginTime);
-    const squarePayments = result.payments || [];
-
-    let synced = 0;
-    for (const p of squarePayments) {
-      const amount = p.amountMoney ? Number(p.amountMoney.amount) / 100 : 0;
-      const refundAmount = p.refundedMoney ? Number(p.refundedMoney.amount) / 100 : 0;
-      const status = p.status === 'COMPLETED' ? 'completed' : p.status.toLowerCase();
-      const cardBrand = p.cardDetails?.card?.cardBrand?.toLowerCase() || null;
-      const cardLast4 = p.cardDetails?.card?.last4 || null;
-
-      await pool.query(
-        `INSERT INTO payments (user_id, processor, processor_payment_id, amount, refund_amount,
-           status, card_brand, card_last_four, payment_method, metadata, created_at, updated_at)
-         VALUES ($1, 'square', $2, $3, $4, $5, $6, $7, 'card', $8, $9, NOW())
-         ON CONFLICT (processor_payment_id) WHERE processor_payment_id IS NOT NULL
-         DO UPDATE SET status = EXCLUDED.status, refund_amount = EXCLUDED.refund_amount, updated_at = NOW()`,
-        [userId, p.id, amount, refundAmount, status, cardBrand, cardLast4,
-         JSON.stringify({ sourceType: p.sourceType, locationId: p.locationId, orderId: p.orderId }),
-         p.createdAt]
-      );
-      synced++;
-    }
-
+    const synced = await syncSquarePayments(userId, connResult.rows[0].square_access_token, pool);
     res.json({ success: true, synced });
   } catch (error) {
     console.error('Square payments sync error:', error.message);
