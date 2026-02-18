@@ -144,25 +144,39 @@ class SquareProcessor extends PaymentProcessor {
   }
 
   static async handleOAuthCallback(code) {
-    const { Client, Environment } = require('square/legacy');
-    const client = new Client({
-      environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
-    });
-
+    const clientId = process.env.SQUARE_APPLICATION_ID;
+    const clientSecret = process.env.SQUARE_APPLICATION_SECRET;
     const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/payment-connections/square/callback`;
-    const { result } = await client.oAuthApi.obtainToken({
-      clientId: process.env.SQUARE_APPLICATION_ID,
-      clientSecret: process.env.SQUARE_APPLICATION_SECRET,
-      code,
-      grantType: 'authorization_code',
-      redirectUri,
+    const baseUrl = process.env.SQUARE_ENVIRONMENT === 'sandbox'
+      ? 'https://connect.squareupsandbox.com'
+      : 'https://connect.squareup.com';
+
+    console.log('Square token exchange:', { clientId: clientId?.slice(0, 8) + '...', redirectUri, env: process.env.SQUARE_ENVIRONMENT });
+
+    const response = await fetch(`${baseUrl}/oauth2/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Square-Version': '2024-01-17' },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+      }),
     });
 
+    if (!response.ok) {
+      const body = await response.text();
+      console.error(`Square token exchange failed (${response.status}):`, body);
+      throw new Error(`Square OAuth failed (${response.status}): ${body}`);
+    }
+
+    const data = await response.json();
     return {
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-      merchantId: result.merchantId,
-      expiresAt: result.expiresAt
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      merchantId: data.merchant_id,
+      expiresAt: data.expires_at,
     };
   }
 }
