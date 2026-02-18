@@ -462,7 +462,11 @@
     };
   }
 
-  // Determine if a form looks like a contact/lead form (has visible text inputs)
+  // ── Form Intercept ─────────────────────────────────────
+  // Instead of replacing forms, we listen for submit events on their existing
+  // forms and forward the captured data to our leads API (triggers SMS agent).
+  // The original form still works normally — we just piggyback on the data.
+
   function isContactForm(form) {
     // Skip forms inside nav, header (search bars, login forms)
     var ancestor = form;
@@ -473,57 +477,124 @@
       if (role === 'navigation' || role === 'banner') return false;
       ancestor = ancestor.parentElement;
     }
-    // Check for visible input/textarea fields — standard HTML inputs
-    var inputs = form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type]), textarea');
-    var visibleCount = 0;
-    for (var j = 0; j < inputs.length; j++) {
-      // offsetParent is null for hidden elements; also check offsetHeight for Wix
-      var inp = inputs[j];
-      if (inp.offsetParent !== null || inp.offsetHeight > 0) visibleCount++;
+    // Must have at least 2 input/textarea fields
+    var inputs = form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type]), textarea, [role="textbox"]');
+    return inputs.length >= 2;
+  }
+
+  // Extract field values from a native form by inspecting input types, names, placeholders, labels
+  function extractFormData(form) {
+    var data = { name: '', email: '', phone: '', message: '', service: '' };
+    var inputs = form.querySelectorAll('input, textarea, [role="textbox"]');
+
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      var val = (inp.value || inp.textContent || '').trim();
+      if (!val) continue;
+
+      var type = (inp.type || '').toLowerCase();
+      var name = (inp.name || '').toLowerCase();
+      var placeholder = (inp.placeholder || '').toLowerCase();
+      var ariaLabel = (inp.getAttribute('aria-label') || '').toLowerCase();
+      var hint = name + ' ' + placeholder + ' ' + ariaLabel;
+
+      // Match by input type first
+      if (type === 'email') { data.email = val; continue; }
+      if (type === 'tel') { data.phone = val; continue; }
+
+      // Match by name/placeholder/label keywords
+      if (inp.tagName === 'TEXTAREA' || hint.indexOf('message') !== -1 || hint.indexOf('comment') !== -1 || hint.indexOf('detail') !== -1) {
+        data.message = val; continue;
+      }
+      if (hint.indexOf('email') !== -1) { data.email = val; continue; }
+      if (hint.indexOf('phone') !== -1 || hint.indexOf('tel') !== -1 || hint.indexOf('mobile') !== -1 || hint.indexOf('cell') !== -1) {
+        data.phone = val; continue;
+      }
+      if (hint.indexOf('name') !== -1 || hint.indexOf('full name') !== -1 || hint.indexOf('your name') !== -1) {
+        data.name = val; continue;
+      }
+      if (hint.indexOf('service') !== -1 || hint.indexOf('subject') !== -1) {
+        data.service = val; continue;
+      }
+      // If nothing matched and name is still empty, assume first text input is name
+      if (!data.name && type !== 'hidden' && type !== 'submit' && type !== 'checkbox' && type !== 'radio') {
+        data.name = val;
+      }
     }
-    if (visibleCount >= 2) return true;
-    // Wix forms: look for Wix-specific form container attributes
-    if (form.querySelector('[data-mesh-id]') || form.querySelector('[id*="comp-"]')) {
-      // Wix form with custom components — check for any labelled input-like elements
-      var wixInputs = form.querySelectorAll('input, textarea, [role="textbox"]');
-      if (wixInputs.length >= 2) return true;
+    return data;
+  }
+
+  function interceptForm(form) {
+    if (form.getAttribute('data-sorce-intercepted')) return;
+    form.setAttribute('data-sorce-intercepted', 'true');
+
+    // Listen for native submit event
+    form.addEventListener('submit', function() {
+      var data = extractFormData(form);
+      if (data.name || data.email || data.phone) {
+        sendLeadToAPI(data);
+      }
+    });
+
+    // Also listen for click on submit buttons (Wix forms may not fire submit event)
+    var submitBtns = form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])');
+    for (var k = 0; k < submitBtns.length; k++) {
+      submitBtns[k].addEventListener('click', function() {
+        // Small delay to let form values populate
+        setTimeout(function() {
+          var data = extractFormData(form);
+          if (data.name || data.email || data.phone) {
+            sendLeadToAPI(data);
+          }
+        }, 100);
+      });
     }
-    return false;
+  }
+
+  function sendLeadToAPI(data) {
+    fetch(API_BASE + '/api/leads/public/' + config.userId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        service: data.service,
+        message: data.message,
+        sms_consent: true,
+        source: 'embed_intercept'
+      })
+    }).catch(function(e) { console.warn('SORCE: lead forward failed', e.message); });
   }
 
   var leadFormFabCreated = false;
 
-  function scanAndMaskForms() {
-    var formConfig = resolveFormConfig();
-    var tc = config.themeColor || '#d97706';
-
-    var allForms = document.querySelectorAll('form:not([data-sorce-masked]):not([data-sorce-form])');
-    var maskedCount = 0;
-
+  function scanAndInterceptForms() {
+    var allForms = document.querySelectorAll('form:not([data-sorce-intercepted])');
+    var intercepted = 0;
     for (var i = 0; i < allForms.length; i++) {
-      var form = allForms[i];
-      if (!isContactForm(form)) continue;
-      maskAndOverlay(form, formConfig.fields, tc, formConfig.submitText, formConfig.title);
-      maskedCount++;
+      if (!isContactForm(allForms[i])) continue;
+      interceptForm(allForms[i]);
+      intercepted++;
     }
-    return maskedCount;
+    return intercepted;
   }
 
   function injectLeadForm() {
     var formConfig = resolveFormConfig();
-    var maskedCount = scanAndMaskForms();
+    var intercepted = scanAndInterceptForms();
 
-    if (maskedCount > 0) {
-      leadFormFabCreated = true; // forms found, no FAB needed
+    if (intercepted > 0) {
+      leadFormFabCreated = true;
       return;
     }
 
-    // Retry after delays — Wix and other SPA frameworks hydrate forms late
+    // Retry — Wix/SPA frameworks hydrate forms after initial load
     var retries = [1000, 3000, 6000];
     var retryIdx = 0;
-    function retryMask() {
+    function retryIntercept() {
       if (retryIdx >= retries.length) {
-        // All retries exhausted — show FAB fallback if not already
+        // All retries exhausted — show FAB fallback
         if (!leadFormFabCreated) {
           leadFormFabCreated = true;
           var container = getOrCreateContainer();
@@ -536,16 +607,16 @@
         return;
       }
       setTimeout(function() {
-        var found = scanAndMaskForms();
+        var found = scanAndInterceptForms();
         if (found > 0) {
           leadFormFabCreated = true;
         } else {
           retryIdx++;
-          retryMask();
+          retryIntercept();
         }
       }, retries[retryIdx]);
     }
-    retryMask();
+    retryIntercept();
   }
 
   function buildLeadFormHTML(fields, tc, submitText, title) {
@@ -568,24 +639,6 @@
     html += '<button type="submit" data-sorce-submit style="width:100%;padding:12px;background:' + tc + ';color:white;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:15px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;transition:opacity 0.2s;">' + escapeHtml(submitText) + '</button>';
 
     return html;
-  }
-
-  function maskAndOverlay(originalForm, fields, tc, submitText, title) {
-    // Hide the original form (preserve it in DOM so removing our script restores it)
-    originalForm.setAttribute('data-sorce-masked', 'true');
-    originalForm.style.display = 'none';
-
-    // Create our SORCE form right after the hidden original
-    var sorceForm = document.createElement('div');
-    sorceForm.setAttribute('data-sorce-form', 'true');
-    sorceForm.innerHTML = buildLeadFormHTML(fields, tc, submitText, title);
-    originalForm.parentNode.insertBefore(sorceForm, originalForm.nextSibling);
-
-    // Handle submit
-    sorceForm.querySelector('[data-sorce-submit]').addEventListener('click', function(e) {
-      e.preventDefault();
-      submitLeadForm(sorceForm);
-    });
   }
 
   function submitLeadForm(container) {
