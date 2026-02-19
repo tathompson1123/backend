@@ -502,8 +502,8 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
       const orderId = orderResult.order.id;
 
       // Step 3: Create the invoice via raw fetch.
-      // Note: accepted_payment_methods is NOT valid when order_id is set —
-      // Square derives payment methods from the order/location in that flow.
+      // accepted_payment_methods is a TOP-LEVEL invoice field, NOT inside payment_requests.
+      // payment_requests only needs request_type + due_date.
       const invoiceBody = {
         idempotency_key: randomUUID(),
         invoice: {
@@ -513,8 +513,14 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
           payment_requests: [{
             request_type: 'BALANCE',
             due_date: dueDate,
-            automatic_payment_source: 'NONE',
           }],
+          accepted_payment_methods: {
+            card: true,
+            square_gift_card: false,
+            bank_account: false,
+            buy_now_pay_later: false,
+            cash_app_pay: false,
+          },
           delivery_method: 'EMAIL',
           title: `Invoice for ${invoice.customer_name || invoice.customer_email}`,
           ...(invoice.notes?.trim() ? { description: invoice.notes.trim().slice(0, 500) } : {}),
