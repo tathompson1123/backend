@@ -476,7 +476,16 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
         query: { filter: { emailAddress: { exact: invoice.customer_email } } }
       });
       if (searchResult.customers?.length > 0) {
-        customerId = searchResult.customers[0].id;
+        const existing = searchResult.customers[0];
+        customerId = existing.id;
+        // Update name if our invoice has a name and it differs from what's in Square
+        if (givenName && existing.givenName !== givenName) {
+          const updateBody = {};
+          if (givenName) updateBody.givenName = givenName;
+          if (familyName) updateBody.familyName = familyName;
+          else updateBody.familyName = '';
+          await client.customersApi.updateCustomer(customerId, updateBody);
+        }
       } else {
         const newCustBody = { emailAddress: invoice.customer_email, idempotencyKey: randomUUID() };
         if (givenName) newCustBody.givenName = givenName;
