@@ -76,6 +76,30 @@ router.post('/sync-square', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/invoices/settings - Default tax rate
+router.get('/settings', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [req.user.userId]);
+    const rate = parseFloat(result.rows[0]?.default_tax_rate || 0);
+    res.json({ defaultTaxRate: parseFloat((rate * 100).toFixed(4)) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/invoices/catalog - Saved fees/supplies catalog
+router.get('/catalog', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM invoice_items_catalog WHERE user_id = $1 AND active = true ORDER BY category, name',
+      [req.user.userId]
+    );
+    res.json({ items: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/invoices/:id - Invoice detail
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
@@ -804,6 +828,46 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error deleting invoice:', error.message);
     res.status(500).json({ error: 'Failed to delete invoice' });
+  }
+});
+
+// ── Invoice Settings (tax rate) ──────────────────────────────────────────────
+
+router.put('/settings', authenticateToken, async (req, res) => {
+  try {
+    const { defaultTaxRate } = req.body; // e.g. 9.8 → stored as 0.098
+    await pool.query('UPDATE users SET default_tax_rate = $1 WHERE id = $2', [defaultTaxRate / 100, req.user.userId]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ── Invoice Items Catalog (fees, supplies, etc.) ─────────────────────────────
+
+router.post('/catalog', authenticateToken, async (req, res) => {
+  try {
+    const { name, category, amountType, amount } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+    const result = await pool.query(
+      'INSERT INTO invoice_items_catalog (user_id, name, category, amount_type, amount) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [req.user.userId, name.trim(), category || 'fee', amountType || 'fixed', parseFloat(amount) || 0]
+    );
+    res.json({ item: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/catalog/:itemId', authenticateToken, async (req, res) => {
+  try {
+    await pool.query(
+      'DELETE FROM invoice_items_catalog WHERE id = $1 AND user_id = $2',
+      [req.params.itemId, req.user.userId]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

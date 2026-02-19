@@ -185,6 +185,17 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS square_invoice_id VARCHAR(255)");
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_invoice_id VARCHAR(255)");
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paypal_invoice_id VARCHAR(255)");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS default_tax_rate DECIMAL(5,4) DEFAULT 0");
+    await pool.query(`CREATE TABLE IF NOT EXISTS invoice_items_catalog (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      category VARCHAR(20) DEFAULT 'fee',
+      amount_type VARCHAR(10) DEFAULT 'fixed',
+      amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`);
     console.log('✅ SMS scheduling columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify sms_scheduled_at column:', e.message);
