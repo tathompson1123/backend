@@ -59,7 +59,7 @@ router.post('/', authenticateToken, async (req, res) => {
         state || '',
         zipCode || '',
         serviceAreaType || 'zipcodes',
-        JSON.stringify(serviceZipCodes || []),
+        serviceZipCodes || [],
         serviceRadius || 25,
         centerZipCode || ''
       ]
