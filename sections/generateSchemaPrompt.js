@@ -209,8 +209,8 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "ctaLink": "contact.html",
             "ctaText2": "See Our Work",
             "ctaLink2": "gallery.html",
-            "portraitImage": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=800",
-            "bgImage": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=1600",
+            "portraitImage": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800",
+            "bgImage": "https://images.unsplash.com/photo-1558904541-efa843a96f01?w=1600",
             "floatBadge": "10+",
             "floatBadgeLabel": "Years Experience"
           }
@@ -243,7 +243,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
               { "icon": "🌞", "text": "Highlight about year-round beauty and care" },
               { "icon": "🏡", "text": "Highlight about property value or lifestyle improvement" }
             ],
-            "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=800",
+            "image": "https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?w=800",
             "imageAlt": "Beautiful landscaped outdoor space"
           }
         },
@@ -422,7 +422,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 
 == RULES ==
 1. Return ONLY the JSON object. No other text.
-2. Use REAL Unsplash URLs: https://images.unsplash.com/photo-XXXXX?w=1600 (hero/bg) or ?w=800 (gallery) or ?w=600 (service cards). Pick specific photo IDs related to landscaping, gardens, and outdoor spaces.
+2. CRITICAL — every image URL MUST be a real Unsplash photo ID. Format: https://images.unsplash.com/photo-XXXXXXXXXXXXXXXXXX?w=1600 (hero/bg) or ?w=800 (gallery/portrait) or ?w=600 (service cards). You MUST replace every placeholder with a real ID. Real landscaping photo IDs to use: photo-1416879595882-3373a0480b5b, photo-1558904541-efa843a96f01, photo-1585320806297-9794b3e4eeae, photo-1523348837708-15d4a09cfac2, photo-1600585154340-be6161a56a0c, photo-1558618666-fcd25c85cd64, photo-1500937386664-56d1dfef3854, photo-1506905925346-21bda4d32df4.
 3. Write compelling, specific copy — not generic placeholder text. Tailor everything to this business.
 4. Reviews should sound realistic and specific to the services offered.
 5. Include 3-5 services based on what was provided.
@@ -489,7 +489,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "ctaLink": "contact.html",
             "ctaText2": "View Our Work",
             "ctaLink2": "gallery.html",
-            "backgroundImage": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=1920"
+            "backgroundImage": "https://images.unsplash.com/photo-1552519507-da3b142a6f3e?w=1920"
           }
         },
         {
@@ -663,7 +663,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 
 == RULES ==
 1. Return ONLY the JSON object. No other text.
-2. Use REAL Unsplash URLs: https://images.unsplash.com/photo-XXXXX?w=1920 (hero) or ?w=800 (cards/gallery). Pick specific photo IDs related to auto detailing.
+2. CRITICAL — every image URL MUST be a real Unsplash photo ID. Format: https://images.unsplash.com/photo-XXXXXXXXXXXXXXXXXX?w=1920 (hero/bg) or ?w=800 (cards) or ?w=600 (service images). You MUST replace every placeholder with a real ID. Real auto-detailing photo IDs to use: photo-1552519507-da3b142a6f3e, photo-1601362840469-51e4d8d58785, photo-1558618666-fcd25c85cd64, photo-1502877338535-766e1452684a, photo-1616455579100-2ceaa4eb2d37, photo-1503376780353-7e6692767b70, photo-1549317661-bd32c8ce0db2, photo-1580273916550-e323be2ae537.
 3. Write compelling, specific copy — not generic placeholder text. Tailor everything to this business.
 4. Reviews and testimonials should sound realistic and specific to the services offered.
 5. Include 3-4 services based on what was provided.
