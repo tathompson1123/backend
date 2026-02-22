@@ -1,638 +1,770 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Green Valley Landscaping</title>
-    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        :root {
-            --forest: #1a3a1a;
-            --lime: #7cb342;
-            --green: #2d5016;
-            --cream: #faf8f3;
-        }
-
-        body { font-family: 'Archivo', sans-serif; color: var(--forest); line-height: 1.6; }
-
-        /* Trust Banner */
-        .trust-banner { background: var(--lime); color: white; padding: 1rem 0; overflow: hidden; }
-        .reviews-track { display: flex; animation: scroll 40s linear infinite; width: max-content; }
-        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-        .review-item { display: flex; align-items: center; gap: 0.5rem; padding: 0 1.5rem; font-size: 0.9rem; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
-        .stars { color: #fbbf24; font-size: 0.85rem; letter-spacing: 1px; }
-        .review-text { }
-
-        /* Nav */
-        nav { background: rgba(250, 248, 243, 0.98); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; }
-        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
-        .logo { font-family: 'Lora', serif; font-size: 1.8rem; font-weight: 700; color: var(--forest); }
-        .nav-links { display: flex; gap: 3rem; align-items: center; }
-        .nav-links a { color: var(--forest); text-decoration: none; font-weight: 500; }
-        .nav-cta { background: var(--lime); color: white; padding: 0.875rem 2rem; border-radius: 50px; font-weight: 600; }
-
-        /* Hero */
-        .hero {
-            min-height: 100vh;
-            display: flex;
-            align-items: flex-start;
-            background: linear-gradient(135deg, rgba(26, 58, 26, 0.5), rgba(45, 80, 22, 0.4)),
-                        url('https://picsum.photos/1920/1080?random=1') center/cover;
-            color: white;
-            position: relative;
-        }
-        .hero-content { max-width: 1400px; margin: 0 auto; padding: 8rem 3rem 6rem; position: relative; z-index: 1; text-align: center; opacity: 0; animation: fadeInUp 1s ease-out 0.3s forwards; }
-        .hero h1 { font-family: 'Lora', serif; font-size: 5rem; font-weight: 700; line-height: 1.1; margin-bottom: 2rem; }
-        .highlight { color: var(--lime); display: block; }
-        .btn-primary { background: var(--lime); color: white; padding: 1.25rem 3rem; border-radius: 50px; text-decoration: none; font-weight: 600; display: inline-block; margin-right: 1.5rem; transition: transform 0.3s ease, box-shadow 0.3s ease; }
-        .btn-primary:hover { transform: scale(1.05); box-shadow: 0 10px 30px rgba(124, 179, 66, 0.4); }
-        
-        .btn-primary.pulse {
-            animation: pulse 2s ease-in-out infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% {
-                transform: scale(1);
-                box-shadow: 0 0 0 0 rgba(124, 179, 66, 0.7);
-            }
-            50% {
-                transform: scale(1.05);
-                box-shadow: 0 0 0 15px rgba(124, 179, 66, 0);
-            }
-        }
-
-        /* Wave at bottom of hero */
-        .hero::after {
-            content: '';
-            position: absolute;
-            bottom: -1px;
-            left: 0;
-            right: 0;
-            width: 100%;
-            height: 100px;
-            background: var(--forest);
-            clip-path: ellipse(150% 100% at 50% 100%);
-        }
-
-        /* Features */
-        .features { 
-            background: var(--forest); 
-            padding: 0 3rem; 
-            color: white; 
-            position: relative; 
-            padding-top: 0;
-            padding-bottom: 7rem;
-        }
-        .features-grid { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 3rem; }
-        .feature-item { text-align: center; opacity: 0; animation: slideInLeft 0.6s ease-out forwards; }
-        .feature-item:nth-child(4) { animation-delay: 0.1s; }
-        .feature-item:nth-child(3) { animation-delay: 0.2s; }
-        .feature-item:nth-child(2) { animation-delay: 0.3s; }
-        .feature-item:nth-child(1) { animation-delay: 0.4s; }
-        
-        @keyframes slideInLeft {
-            from {
-                opacity: 0;
-                transform: translateX(-80px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-        
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
-        .feature-icon { width: 80px; height: 80px; background: rgba(124, 179, 66, 0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2rem; color: var(--lime); }
-        .feature-item h3 { font-family: 'Lora', serif; font-size: 1.4rem; margin-bottom: 0.75rem; color: var(--lime); }
-        .feature-item p { font-size: 1rem; }
-
-        /* Wave at bottom of features */
-        .features::after {
-            content: '';
-            position: absolute;
-            bottom: -1px;
-            left: 0;
-            right: 0;
-            width: 100%;
-            height: 80px;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 1200 80' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'%3E%3Cpath d='M 0,30 Q 200,0 400,30 T 800,30 Q 1000,0 1200,30 L 1200,80 L 0,80 Z' fill='%23faf8f3'/%3E%3C/svg%3E");
-            background-size: 100% 100%;
-            background-repeat: no-repeat;
-        }
-
-        /* Services */
-        .services { 
-            padding: 6rem 3rem; 
-            background: var(--cream); 
-            position: relative;
-            padding-top: 1rem;
-            padding-bottom: 6rem;
-        }
-        
-        .section-header { text-align: center; margin-bottom: 3.5rem; opacity: 0; transform: translateY(30px); }
-        .section-header.animate { opacity: 1; transform: translateY(0); transition: opacity 0.8s ease-out, transform 0.8s ease-out; }
-        .section-title { font-family: 'Lora', serif; font-size: 3.5rem; font-weight: 700; color: var(--forest); }
-        .services-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.5rem; max-width: 1400px; margin: 0 auto; }
-        .service-card { background: white; border-radius: 25px; overflow: hidden; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1); transition: transform 0.3s ease, box-shadow 0.3s ease; opacity: 0; transform: translateY(50px); }
-        .service-card.animate { opacity: 1; transform: translateY(0); transition: opacity 0.8s ease-out, transform 0.8s ease-out; }
-        .service-card:nth-child(1).animate { transition-delay: 0.1s; }
-        .service-card:nth-child(2).animate { transition-delay: 0.3s; }
-        .service-card:nth-child(3).animate { transition-delay: 0.5s; }
-        .service-card:hover { transform: translateY(-10px); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15); }
-        .service-image { height: 250px; }
-        .service-image img { width: 100%; height: 100%; object-fit: cover; }
-        .service-content { padding: 2.5rem; }
-        .service-card h3 { font-family: 'Lora', serif; font-size: 1.8rem; color: var(--forest); margin-bottom: 1rem; }
-        .price-tag { font-family: 'Lora', serif; font-size: 1.8rem; font-weight: 700; color: var(--lime); }
-        .price-tag a {
-            color: var(--lime);
-            text-decoration: none;
-            transition: color 0.3s ease, transform 0.3s ease;
-            display: inline-block;
-            cursor: pointer;
-        }
-        .price-tag a:hover {
-            color: var(--green);
-            transform: scale(1.05);
-        }
-
-        /* Wave at bottom of services */
-        .services::after {
-            content: '';
-            position: absolute;
-            bottom: -1px;
-            left: 0;
-            right: 0;
-            width: 100%;
-            height: 80px;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 1200 80' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'%3E%3Cpath d='M 0,40 Q 300,10 600,40 T 1200,40 L 1200,80 L 0,80 Z' fill='%23ffffff'/%3E%3C/svg%3E");
-            background-size: 100% 100%;
-            background-repeat: no-repeat;
-        }
-
-        /* Recent Work */
-        .recent-work { 
-            padding: 6rem 3rem; 
-            background: white; 
-            position: relative;
-            padding-top: 2rem;
-            padding-bottom: 8rem;
-            margin-bottom: -80px;
-        }
-        .work-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-top: 4rem; max-width: 1400px; margin-left: auto; margin-right: auto; }
-        .work-item { position: relative; border-radius: 15px; overflow: hidden; aspect-ratio: 1; transition: transform 0.3s ease, box-shadow 0.3s ease; cursor: pointer; opacity: 0; transform: scale(0.8); }
-        .work-item.animate { opacity: 1; transform: scale(1); transition: opacity 0.6s ease-out, transform 0.6s ease-out; }
-        .work-item:nth-child(1).animate { transition-delay: 0.1s; }
-        .work-item:nth-child(2).animate { transition-delay: 0.2s; }
-        .work-item:nth-child(3).animate { transition-delay: 0.3s; }
-        .work-item:nth-child(4).animate { transition-delay: 0.4s; }
-        .work-item:nth-child(5).animate { transition-delay: 0.5s; }
-        .work-item:nth-child(6).animate { transition-delay: 0.6s; }
-        .work-item:hover { transform: scale(1.05); box-shadow: 0 15px 50px rgba(0, 0, 0, 0.2); }
-        .work-item.large { grid-column: span 2; aspect-ratio: 4/3; }
-        .work-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
-        .work-item:hover img { transform: scale(1.1); }
-        .work-overlay { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); padding: 2rem 1.5rem 1.5rem; color: white; }
-        .work-overlay h4 { font-family: 'Lora', serif; font-size: 1.2rem; }
-
-        /* Wave at bottom of recent work */
-        .recent-work::after {
-            content: '';
-            position: absolute;
-            bottom: -1px;
-            left: 0;
-            right: 0;
-            width: 100%;
-            height: 80px;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 1200 80' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='grad1' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%237cb342;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%232d5016;stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M 0,35 Q 250,5 600,35 T 1200,35 L 1200,80 L 0,80 Z' fill='url(%23grad1)'/%3E%3C/svg%3E");
-            background-size: 100% 100%;
-            background-repeat: no-repeat;
-        }
-
-        /* CTA */
-        .cta-section { 
-            padding: 6rem 3rem; 
-            background: linear-gradient(135deg, #7cb342 0%, #2d5016 100%); 
-            text-align: center; 
-            color: white; 
-            position: relative;
-            padding-top: 2rem;
-            padding-bottom: 6rem;
-        }
-        .cta-section h2 { font-family: 'Lora', serif; font-size: 4rem; margin-bottom: 1.5rem; opacity: 0; transform: translateY(30px); }
-        .cta-section h2.animate { opacity: 1; transform: translateY(0); transition: opacity 0.8s ease-out, transform 0.8s ease-out 0.2s; }
-        .cta-badge {
-            display: inline-block;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 0.5rem 1.5rem;
-            border-radius: 50px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 1.5rem;
-        }
-        .cta-subtitle {
-            font-size: 1.5rem;
-            margin-bottom: 2rem;
-            opacity: 0.95;
-            max-width: 700px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        .cta-buttons {
-            display: flex;
-            gap: 1.5rem;
-            justify-content: center;
-            align-items: center;
-            flex-wrap: wrap;
-            margin-top: 2rem;
-        }
-        .cta-button-primary {
-            background: white;
-            color: var(--forest);
-            padding: 1.5rem 3.5rem;
-            border-radius: 50px;
-            text-decoration: none;
-            font-weight: 700;
-            font-size: 1.1rem;
-            display: inline-block;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-        }
-        .cta-button-primary:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
-        }
-        .cta-button-secondary {
-            color: white;
-            padding: 1.5rem 3rem;
-            border: 2px solid white;
-            border-radius: 50px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 1.1rem;
-            display: inline-block;
-            transition: background 0.3s ease, transform 0.3s ease;
-        }
-        .cta-button-secondary:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateY(-3px);
-        }
-        .cta-features {
-            display: flex;
-            gap: 3rem;
-            justify-content: center;
-            margin-top: 3rem;
-            font-size: 1rem;
-            opacity: 0.9;
-        }
-        .cta-feature {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .cta-feature::before {
-            content: "✓";
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-
-        /* Wave at bottom of CTA */
-        .cta-section::after {
-            content: '';
-            position: absolute;
-            bottom: -1px;
-            left: 0;
-            right: 0;
-            width: 100%;
-            height: 80px;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 1200 80' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'%3E%3Cpath d='M 0,45 Q 300,15 600,45 T 1200,45 L 1200,80 L 0,80 Z' fill='%231a3a1a'/%3E%3C/svg%3E");
-            background-size: 100% 100%;
-            background-repeat: no-repeat;
-        }
-
-        /* Footer */
-        footer { background: var(--forest); color: white; padding: 0 3rem 2rem; }
-        .footer-content { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4rem; }
-        .footer-brand { font-family: 'Lora', serif; font-size: 2rem; font-weight: 700; color: var(--lime); }
-
-        @media (max-width: 768px) {
-            .hero h1 { font-size: 3rem; }
-            .services-grid, .work-grid, .footer-content { grid-template-columns: 1fr; }
-            .work-item.large { grid-column: span 1; }
-            .features-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eden Landscapes — Crafting Sanctuaries</title>
+  <meta name="description" content="Premium landscaping and garden design in Portland, Oregon. Lawn care, hardscaping, irrigation, and custom landscape design.">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --moss-900:#1b2216; --moss-800:#2c3828; --moss-700:#3d4f39;
+      --moss-600:#506a4b; --moss-500:#6b8f5e; --moss-400:#85a378;
+      --moss-200:#c8dcc0; --moss-100:#dce9d6;
+      --cream-50:#faf8f5; --cream-100:#f0ece5; --cream-200:#e5ddd2;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,sans-serif;line-height:1.6;color:#374151;background:var(--cream-50);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+    a{color:inherit;text-decoration:none}
+    img{max-width:100%;height:auto}
+    .reveal{opacity:0;transform:translateY(40px);transition:opacity .7s cubic-bezier(.22,1,.36,1),transform .7s cubic-bezier(.22,1,.36,1)}
+    .reveal.visible{opacity:1;transform:translateY(0)}
+  </style>
 </head>
 <body>
-    <!-- Reviews -->
-    <div class="trust-banner">
-        <div class="reviews-track">
-            <div class="review-item"><span class="review-text">"Amazing transformation!" - Jennifer M.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Professional work" - Robert T.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Best in area" - Maria S.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Exceeded expectations!" - David K.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Beautiful results" - Lisa P.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Amazing transformation!" - Jennifer M.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Professional work" - Robert T.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Best in area" - Maria S.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Exceeded expectations!" - David K.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Beautiful results" - Lisa P.</span><span class="stars">★★★★★</span></div>
-        </div>
+<nav class="eden-nav">
+  <div class="eden-nav-inner">
+<a href="index.html" class="eden-nav-logo">Eden</a>
+    <div class="eden-nav-links">
+      <a href="index.html">Home</a>
+      <a href="services.html">Services</a>
+      <a href="gallery.html">Gallery</a>
+      <a href="contact.html">Contact</a>
+      <a href="contact.html" class="eden-nav-cta">Get a Quote</a>
     </div>
+    <button class="eden-nav-burger" onclick="document.querySelector('.eden-nav-links').classList.toggle('eden-nav-open')"><span></span><span></span><span></span></button>
+  </div>
+</nav>
+<style>
+  .eden-nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:1.5rem 0;background:transparent;transition:background .4s,backdrop-filter .4s;border-bottom:1px solid transparent}
+  .eden-nav.scrolled{background:rgba(44,56,40,.95);backdrop-filter:blur(12px);border-bottom-color:rgba(255,255,255,.08)}
+  .eden-nav-inner{max-width:1200px;margin:0 auto;padding:0 2rem;display:flex;justify-content:space-between;align-items:center}
+  .eden-nav-logo{font-family:'Cormorant Garamond',serif;font-size:2rem;font-weight:700;color:#fff;letter-spacing:4px;text-transform:uppercase}
+  .eden-nav-links{display:flex;gap:2.5rem;align-items:center}
+  .eden-nav-links a{color:rgba(255,255,255,.85);font-size:.82rem;font-weight:500;text-transform:uppercase;letter-spacing:1.5px;transition:color .3s}
+  .eden-nav-links a:hover{color:var(--moss-400)}
+  .eden-nav-cta{background:var(--moss-500)!important;color:#fff!important;padding:.65rem 1.75rem!important;border-radius:50px;font-weight:600!important;box-shadow:0 4px 16px rgba(107,143,94,.35);transition:transform .3s,box-shadow .3s!important}
+  .eden-nav-cta:hover{transform:translateY(-2px);box-shadow:0 6px 22px rgba(107,143,94,.5)}
+  .eden-nav-burger{display:none;background:none;border:none;cursor:pointer;flex-direction:column;gap:5px;padding:.5rem}
+  .eden-nav-burger span{display:block;width:24px;height:2px;background:#fff}
+  @media(max-width:768px){
+    .eden-nav-burger{display:flex}
+    .eden-nav-links{display:none;position:absolute;top:100%;left:0;right:0;background:rgba(44,56,40,.97);flex-direction:column;padding:2rem;gap:1.5rem}
+    .eden-nav-links.eden-nav-open{display:flex}
+  }
+</style>
+<script>
+(function(){
+  var nav=document.querySelector('.eden-nav');
+  function s(){nav.classList.toggle('scrolled',window.scrollY>60)}
+  window.addEventListener('scroll',s,{passive:true});s();
+})();
+</script>
 
-    <!-- Nav -->
-    <nav>
-        <div class="nav-container">
-            <div class="logo">Green Valley Landscaping</div>
-            <div class="nav-links">
-                <a href="services.html">Services</a>
-                <a href="recent-work.html">Recent Work</a>
-                <a href="contact.html">Contact</a>
-                <a href="contact.html" class="nav-cta">Book Here</a>
-            </div>
-        </div>
-    </nav>
+<!-- ─── HERO ─── -->
+<section class="eden-hero">
+  <div class="eden-hero-bg"><img src="https://images.unsplash.com/photo-1584463695286-9dc4766b446a?w=1600" alt="" class="eden-hero-bg-img"></div>
+  <div class="eden-hero-blob eden-hero-blob-tr"></div>
+  <div class="eden-hero-blob eden-hero-blob-bl"></div>
+  <div class="eden-hero-grid">
+    <div class="eden-hero-content">
+      <div class="eden-hero-label"><span class="eden-hero-label-line"></span>No. 1 Landscaping Service</div>
+      <h1 class="eden-hero-title">Because Your Lawn <em>Deserves</em> Better.</h1>
+      <p class="eden-hero-sub">Locally owned team of professionals committed to making your yards look their absolute best. Let the pros handle the dirt.</p>
+      <div class="eden-hero-btns">
+        <a href="contact.html" class="eden-hero-btn-primary">Schedule Service</a>
+        <button class="eden-hero-btn-play">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="var(--moss-400)" stroke="none"/></svg>
+          <span>Watch Video</span>
+        </button>
+      </div>
+    </div>
+    <div class="eden-hero-img-wrap">
+      <div class="eden-hero-img-bg"></div>
+      <img src="https://images.unsplash.com/photo-1615811361523-6bd03c770b44?w=800" alt="Professional landscaper" class="eden-hero-img">
+      <div class="eden-hero-badge">
+        <div class="eden-hero-badge-num">25+</div>
+        <div class="eden-hero-badge-lbl">Years Exp.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<style>
+  .eden-hero{position:relative;min-height:88vh;background:var(--moss-800);padding:8rem 2rem 7rem;overflow:hidden}
+  .eden-hero-bg{position:absolute;inset:0;opacity:.25;z-index:0;overflow:hidden}
+  .eden-hero-bg-img{width:100%;height:100%!important;object-fit:cover}
+  .eden-hero-blob{position:absolute;border-radius:50%;filter:blur(100px);pointer-events:none}
+  .eden-hero-blob-tr{top:-80px;right:-80px;width:480px;height:480px;background:rgba(107,143,94,.13)}
+  .eden-hero-blob-bl{bottom:-60px;left:-60px;width:340px;height:340px;background:rgba(234,179,8,.09)}
+  .eden-hero-grid{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center;position:relative;z-index:2}
+  .eden-hero-label{display:flex;align-items:center;gap:.75rem;font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:3px;color:var(--moss-100);margin-bottom:1.5rem}
+  .eden-hero-label-line{width:32px;height:2px;background:var(--moss-500);flex-shrink:0}
+  .eden-hero-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2.8rem,5.5vw,4.8rem);font-weight:700;line-height:1.05;color:var(--cream-50);margin-bottom:1.5rem}
+  .eden-hero-title em{font-style:italic;color:var(--moss-500)}
+  .eden-hero-sub{color:rgba(200,220,192,.78);font-size:1.05rem;line-height:1.75;max-width:460px;margin-bottom:2.5rem;font-weight:300}
+  .eden-hero-btns{display:flex;flex-wrap:wrap;gap:1rem;align-items:center}
+  .eden-hero-btn-primary{display:inline-block;padding:1rem 2.25rem;background:var(--moss-500);color:#fff;border-radius:50px;font-weight:600;font-size:1rem;box-shadow:0 8px 24px rgba(107,143,94,.35);transition:background .3s,transform .3s,box-shadow .3s}
+  .eden-hero-btn-primary:hover{background:var(--moss-400);transform:translateY(-2px);box-shadow:0 12px 32px rgba(107,143,94,.45)}
+  .eden-hero-btn-play{display:flex;align-items:center;gap:.6rem;background:none;border:none;cursor:pointer;color:#fff;font-size:1rem;font-weight:600;font-family:inherit;padding:1rem;transition:color .3s}
+  .eden-hero-btn-play:hover{color:var(--moss-400)}
+  .eden-hero-btn-play span{text-decoration:underline;text-decoration-color:var(--moss-500);text-underline-offset:5px}
+  .eden-hero-img-wrap{position:relative;display:flex;align-items:center;justify-content:center}
+  .eden-hero-img{position:relative;z-index:2;width:82%;max-width:400px;aspect-ratio:4/5;object-fit:cover;border-radius:100px 40px 100px 40px;border:8px solid rgba(255,255,255,.1);transform:rotate(2deg);box-shadow:0 25px 55px rgba(0,0,0,.35)}
+  .eden-hero-img-bg{position:absolute;z-index:1;width:82%;max-width:400px;aspect-ratio:4/5;background:var(--moss-500);border-radius:100px 40px 100px 40px;transform:rotate(2deg) translate(14px,16px);opacity:.45}
+  .eden-hero-badge{position:absolute;bottom:2%;left:5%;z-index:10;width:130px;height:130px;background:var(--cream-50);border-radius:50%;box-shadow:0 10px 28px rgba(0,0,0,.18);display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .eden-hero-badge-num{font-family:'Cormorant Garamond',serif;font-size:2.2rem;font-weight:700;color:var(--moss-800);line-height:1}
+  .eden-hero-badge-lbl{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--moss-600);margin-top:.2rem}
+  @media(max-width:900px){
+    .eden-hero-grid{grid-template-columns:1fr;gap:3rem}
+    .eden-hero-img-wrap{order:-1}
+    .eden-hero-sub{max-width:100%}
+    .eden-hero-btns,.eden-hero-label{justify-content:center}
+    .eden-hero-title{text-align:center}
+    .eden-hero-img,.eden-hero-img-bg{width:70%}
+  }
+  @media(max-width:600px){.eden-hero{padding:7rem 1.5rem 5rem;min-height:auto}}
+</style>
 
-    <!-- Hero -->
-    <section class="hero">
-        <div class="hero-content">
-            <h1>Transform Your<span class="highlight">Outdoor Paradise</span></h1>
-            <p style="font-size: 1.4rem; margin-bottom: 3rem; max-width: 700px; margin-left: auto; margin-right: auto;">We create beautiful, sustainable outdoor spaces that enhance your property.</p>
-            <a href="#" class="btn-primary">Request Free Consultation</a>
-        </div>
-    </section>
+<div class="eden-marquee">
+  <div class="eden-marquee-wrap">
+    <div class="eden-marquee-track">
+      <div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-500)">E</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Eleanor Rigby</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">Eden Landscapes completely transformed our backyard. The hardscaping work is flawless, and the plant selection is perfect for our soil.</p>
+    <div class="eden-rev-date">3 days ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-700)">M</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Marcus Johnson</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">Reliable, professional, and artistic. They turned a muddy mess into a beautiful garden sanctuary. The crew was respectful and fast.</p>
+    <div class="eden-rev-date">2 weeks ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-600)">S</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Sarah Connor</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">We hired them for regular maintenance and our lawn has never looked greener. Highly recommend their fertilization package.</p>
+    <div class="eden-rev-date">1 month ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-800)">D</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Dr. Alan Grant</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">The landscape design team is top notch. They listened to our needs for a drought-resistant garden and delivered beyond expectations.</p>
+    <div class="eden-rev-date">1 month ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:#7c3aed">J</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Jessica Day</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">Fair pricing for high-end work. The new patio and fire pit area is the envy of the neighborhood. Thank you Eden!</p>
+    <div class="eden-rev-date">2 months ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:#0891b2">T</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Tom Haverford</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">I treat myself to the best, and this is it. Best landscaping company in the city hands down. My hedges are geometric perfection.</p>
+    <div class="eden-rev-date">3 months ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-500)">E</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Eleanor Rigby</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">Eden Landscapes completely transformed our backyard. The hardscaping work is flawless, and the plant selection is perfect for our soil.</p>
+    <div class="eden-rev-date">3 days ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-700)">M</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Marcus Johnson</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">Reliable, professional, and artistic. They turned a muddy mess into a beautiful garden sanctuary. The crew was respectful and fast.</p>
+    <div class="eden-rev-date">2 weeks ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-600)">S</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Sarah Connor</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">We hired them for regular maintenance and our lawn has never looked greener. Highly recommend their fertilization package.</p>
+    <div class="eden-rev-date">1 month ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-800)">D</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Dr. Alan Grant</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">The landscape design team is top notch. They listened to our needs for a drought-resistant garden and delivered beyond expectations.</p>
+    <div class="eden-rev-date">1 month ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:#7c3aed">J</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Jessica Day</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">Fair pricing for high-end work. The new patio and fire pit area is the envy of the neighborhood. Thank you Eden!</p>
+    <div class="eden-rev-date">2 months ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:#0891b2">T</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Tom Haverford</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">I treat myself to the best, and this is it. Best landscaping company in the city hands down. My hedges are geometric perfection.</p>
+    <div class="eden-rev-date">3 months ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-500)">E</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Eleanor Rigby</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">Eden Landscapes completely transformed our backyard. The hardscaping work is flawless, and the plant selection is perfect for our soil.</p>
+    <div class="eden-rev-date">3 days ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-700)">M</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Marcus Johnson</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">Reliable, professional, and artistic. They turned a muddy mess into a beautiful garden sanctuary. The crew was respectful and fast.</p>
+    <div class="eden-rev-date">2 weeks ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-600)">S</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Sarah Connor</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">We hired them for regular maintenance and our lawn has never looked greener. Highly recommend their fertilization package.</p>
+    <div class="eden-rev-date">1 month ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:var(--moss-800)">D</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Dr. Alan Grant</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">The landscape design team is top notch. They listened to our needs for a drought-resistant garden and delivered beyond expectations.</p>
+    <div class="eden-rev-date">1 month ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:#7c3aed">J</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Jessica Day</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">Fair pricing for high-end work. The new patio and fire pit area is the envy of the neighborhood. Thank you Eden!</p>
+    <div class="eden-rev-date">2 months ago</div>
+  </div><div class="eden-rev-card">
+    <div class="eden-rev-head">
+      <div class="eden-rev-avatar" style="background:#0891b2">T</div>
+      <div class="eden-rev-info"><div class="eden-rev-name">Tom Haverford</div><div class="eden-rev-stars">★★★★★</div></div>
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    </div>
+    <p class="eden-rev-text">I treat myself to the best, and this is it. Best landscaping company in the city hands down. My hedges are geometric perfection.</p>
+    <div class="eden-rev-date">3 months ago</div>
+  </div>
+    </div>
+  </div>
+</div>
+<style>
+  .eden-marquee{background:var(--cream-100);border-top:1px solid var(--cream-200);border-bottom:1px solid var(--cream-200);padding:2.5rem 0;overflow:hidden}
+  .eden-marquee-wrap{overflow:hidden}
+  .eden-marquee-track{display:flex;gap:1.25rem;animation:eden-mq 24s linear infinite}
+  .eden-marquee-track:hover{animation-play-state:paused}
+  @keyframes eden-mq{0%{transform:translateX(0)}100%{transform:translateX(-33.333%)}}
+  .eden-rev-card{flex-shrink:0;width:300px;background:#fff;border-radius:16px;padding:1.25rem;box-shadow:0 2px 10px rgba(0,0,0,.06);display:flex;flex-direction:column;gap:.6rem;border:1px solid rgba(0,0,0,.04)}
+  .eden-rev-head{display:flex;align-items:flex-start;gap:.75rem}
+  .eden-rev-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1rem;flex-shrink:0}
+  .eden-rev-info{flex:1}
+  .eden-rev-name{font-weight:700;font-size:.9rem;color:#111827}
+  .eden-rev-stars{color:#f59e0b;font-size:.82rem;letter-spacing:1px}
+  .eden-rev-head svg{flex-shrink:0;margin-left:auto}
+  .eden-rev-text{font-size:.85rem;color:#6b7280;line-height:1.55;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;margin:0}
+  .eden-rev-date{font-size:.75rem;color:#9ca3af}
+</style>
 
-    <!-- Features -->
-    <section class="features">
-        <div class="features-grid">
-            <div class="feature-item">
-                <div class="feature-icon">✓</div>
-                <h3>Expert Design</h3>
-                <p style="color: rgba(255,255,255,0.8);">Custom designs tailored to your vision</p>
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">♻</div>
-                <h3>Eco-Friendly</h3>
-                <p style="color: rgba(255,255,255,0.8);">Sustainable native practices</p>
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">⚡</div>
-                <h3>Fast Service</h3>
-                <p style="color: rgba(255,255,255,0.8);">Efficient without compromise</p>
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">★</div>
-                <h3>Guaranteed</h3>
-                <p style="color: rgba(255,255,255,0.8);">100% satisfaction</p>
-            </div>
+<!-- ─── TRANSFORMATION ─── -->
+<section class="eden-transform" style="background:var(--cream-50)">
+  <div class="eden-transform-container">
+    <div class="eden-transform-header reveal">
+      <span class="eden-transform-label">Real Results</span>
+      <h2 class="eden-transform-title">From Planning to Perfection.</h2>
+      <p class="eden-transform-sub">Don't just take our word for it. See how we've transformed overgrown lots into manicured estates and barren backyards into functional paradises.</p>
+    </div>
+    <div class="eden-transform-grid">
+      <!-- Card 1 -->
+      <div class="eden-transform-card reveal" style="transition-delay:0s">
+        <div class="eden-transform-img-area" onclick="this.parentElement.querySelector('.eden-transform-after').classList.toggle('visible');this.parentElement.querySelector('.eden-transform-before').classList.toggle('visible');this.querySelector('.eden-transform-badge').textContent=this.parentElement.querySelector('.eden-transform-after').classList.contains('visible')?'After':'Before'">
+          <img class="eden-transform-before visible" src="https://images.unsplash.com/photo-1599147594582-77724738596f?w=600" alt="Before">
+          <img class="eden-transform-after" src="https://images.unsplash.com/photo-1621258661608-8e6c702334f6?w=600" alt="After">
+          <span class="eden-transform-badge">Before</span>
+          <div class="eden-transform-toggle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </div>
         </div>
-    </section>
+        <div class="eden-transform-info">
+          <h3 class="eden-transform-name">Suburban Oasis</h3>
+          <p class="eden-transform-desc">Complete backyard overhaul featuring a stone patio, fire pit, and drought-resistant planting.</p>
+        </div>
+      </div>
+      <!-- Card 2 -->
+      <div class="eden-transform-card reveal" style="transition-delay:0.15s">
+        <div class="eden-transform-img-area" onclick="this.parentElement.querySelector('.eden-transform-after').classList.toggle('visible');this.parentElement.querySelector('.eden-transform-before').classList.toggle('visible');this.querySelector('.eden-transform-badge').textContent=this.parentElement.querySelector('.eden-transform-after').classList.contains('visible')?'After':'Before'">
+          <img class="eden-transform-before visible" src="https://images.unsplash.com/photo-1575881875475-31023242e3f9?w=600" alt="Before">
+          <img class="eden-transform-after" src="https://images.unsplash.com/photo-1558904541-efa843a96f01?w=600" alt="After">
+          <span class="eden-transform-badge">Before</span>
+          <div class="eden-transform-toggle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </div>
+        </div>
+        <div class="eden-transform-info">
+          <h3 class="eden-transform-name">Front Yard Curb Appeal</h3>
+          <p class="eden-transform-desc">Removed overgrown shrubs and installed a modern walkway with accent lighting.</p>
+        </div>
+      </div>
+      <!-- Card 3 -->
+      <div class="eden-transform-card reveal" style="transition-delay:0.3s">
+        <div class="eden-transform-img-area" onclick="this.parentElement.querySelector('.eden-transform-after').classList.toggle('visible');this.parentElement.querySelector('.eden-transform-before').classList.toggle('visible');this.querySelector('.eden-transform-badge').textContent=this.parentElement.querySelector('.eden-transform-after').classList.contains('visible')?'After':'Before'">
+          <img class="eden-transform-before visible" src="https://images.unsplash.com/photo-1599147594582-77724738596f?w=600&flip=h" alt="Before">
+          <img class="eden-transform-after" src="https://images.unsplash.com/photo-1592419044706-39796d40f98c?w=600" alt="After">
+          <span class="eden-transform-badge">Before</span>
+          <div class="eden-transform-toggle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </div>
+        </div>
+        <div class="eden-transform-info">
+          <h3 class="eden-transform-name">Estate Maintenance</h3>
+          <p class="eden-transform-desc">Restoration of a neglected lawn to a pristine, striped fairway-quality finish.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<style>
+  .eden-transform{padding:6rem 2rem}
+  .eden-transform-container{max-width:1100px;margin:0 auto}
+  .eden-transform-header{text-align:center;margin-bottom:3.5rem}
+  .eden-transform-label{display:block;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:var(--moss-500);margin-bottom:.75rem}
+  .eden-transform-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,3rem);font-weight:800;color:var(--moss-900);margin-bottom:.75rem}
+  .eden-transform-sub{color:var(--moss-600);font-size:1.05rem;line-height:1.7;max-width:600px;margin:0 auto}
+  .eden-transform-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.75rem}
+  .eden-transform-card{background:var(--cream-100);border-radius:2rem;overflow:hidden;transition:background .3s,box-shadow .3s;border:1px solid transparent}
+  .eden-transform-card:hover{background:#fff;box-shadow:0 12px 36px rgba(0,0,0,.08)}
+  .eden-transform-img-area{position:relative;height:280px;margin:.5rem;border-radius:1.5rem;overflow:hidden;cursor:pointer}
+  .eden-transform-before,.eden-transform-after{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .5s}
+  .eden-transform-before{opacity:0}.eden-transform-before.visible{opacity:1}
+  .eden-transform-after{opacity:0}.eden-transform-after.visible{opacity:1}
+  .eden-transform-badge{position:absolute;top:.75rem;left:.75rem;z-index:2;background:rgba(27,34,22,.8);backdrop-filter:blur(8px);color:#fff;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;padding:.35rem .75rem;border-radius:.5rem}
+  .eden-transform-toggle{position:absolute;bottom:.75rem;right:.75rem;z-index:2;width:38px;height:38px;background:var(--moss-500);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;transition:transform .3s}
+  .eden-transform-card:hover .eden-transform-toggle{transform:scale(1.1)}
+  .eden-transform-info{padding:1.25rem 1.5rem 1.5rem}
+  .eden-transform-name{font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:700;color:var(--moss-900);margin-bottom:.35rem}
+  .eden-transform-desc{font-size:.88rem;color:rgba(80,106,75,.7);line-height:1.6}
+  @media(max-width:900px){.eden-transform-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:580px){.eden-transform-grid{grid-template-columns:1fr}}
+</style>
 
-    <!-- Services -->
-    <section class="services" id="services">
-        <div class="section-header">
-            <h2 class="section-title">Our Services</h2>
-        </div>
-        <div class="services-grid">
-            <div class="service-card">
-                <div class="service-image"><img src="https://picsum.photos/600/400?random=2" alt="Service"></div>
-                <div class="service-content">
-                    <h3>Landscape Design</h3>
-                    <p style="margin-bottom: 1.5rem;">Complete design and installation services.</p>
-                    <div class="price-tag"><a href="#">From $2,500</a></div>
-                </div>
-            </div>
-            <div class="service-card">
-                <div class="service-image"><img src="https://picsum.photos/600/400?random=3" alt="Service"></div>
-                <div class="service-content">
-                    <h3>Lawn Maintenance</h3>
-                    <p style="margin-bottom: 1.5rem;">Regular care to keep pristine.</p>
-                    <div class="price-tag"><a href="#">From $150/mo</a></div>
-                </div>
-            </div>
-            <div class="service-card">
-                <div class="service-image"><img src="https://picsum.photos/600/400?random=4" alt="Service"></div>
-                <div class="service-content">
-                    <h3>Garden Design</h3>
-                    <p style="margin-bottom: 1.5rem;">Custom gardens with native plants.</p>
-                    <div class="price-tag"><a href="#">From $1,800</a></div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Book Now CTA -->
-        <div class="book-now-cta" style="text-align: center; margin-top: 4rem; opacity: 0; transform: translateY(30px);">
-            <a href="#" class="btn-primary pulse">Book Now</a>
-        </div>
-        <style>
-            .book-now-cta.animate { opacity: 1; transform: translateY(0); transition: opacity 0.8s ease-out 0.7s, transform 0.8s ease-out 0.7s; }
-        
-        /* Benefits Section */
-        .benefits { 
-            background: white; 
-            padding: 4rem 3rem 8rem; 
-            position: relative;
-        }
-        .benefits-grid { 
-            max-width: 1400px; 
-            margin: 0 auto; 
-            display: grid; 
-            grid-template-columns: repeat(3, 1fr); 
-            gap: 4rem; 
-        }
-        .benefit-item { 
-            text-align: left; 
-            opacity: 0; 
-            transform: translateY(50px); 
-        }
-        .benefit-item.animate { 
-            opacity: 1; 
-            transform: translateY(0); 
-            transition: opacity 0.8s ease-out, transform 0.8s ease-out; 
-        }
-        .benefit-item:nth-child(1).animate { transition-delay: 0.1s; }
-        .benefit-item:nth-child(2).animate { transition-delay: 0.3s; }
-        .benefit-item:nth-child(3).animate { transition-delay: 0.5s; }
-        .benefit-number { 
-            font-family: 'Lora', serif; 
-            font-size: 4rem; 
-            font-weight: 700; 
-            color: var(--lime); 
-            line-height: 1;
-            margin-bottom: 1rem;
-        }
-        .benefit-item h3 { 
-            font-family: 'Lora', serif; 
-            font-size: 1.8rem; 
-            color: var(--forest); 
-            margin-bottom: 1rem; 
-        }
-        .benefit-item p { 
-            color: #666; 
-            line-height: 1.8; 
-            font-size: 1.05rem;
-        }
-        </style>
-    </section>
+<!-- ─── IMPORTANCE ─── -->
+<section class="eden-importance" style="background:var(--moss-100)">
+  <div class="eden-importance-container">
+    <div class="eden-importance-left reveal">
+      <span class="eden-importance-label">Invest in Your Property</span>
+      <h2 class="eden-importance-title">Locally Owned.<br>Professionally Trained.</h2>
+      <p class="eden-importance-body">A professionally designed landscape does more than just look good. It extends your living space, improves air quality, and can increase property value by up to 15%.</p>
+      <div class="eden-importance-chips">
+        <div class="eden-importance-chip"><span class="eden-importance-chip-icon">☀️</span><span>Outdoor Living</span></div>
+        <div class="eden-importance-chip"><span class="eden-importance-chip-icon">🌸</span><span>Native Planting</span></div>
+        <div class="eden-importance-chip"><span class="eden-importance-chip-icon">💧</span><span>Smart Irrigation</span></div>
+        <div class="eden-importance-chip"><span class="eden-importance-chip-icon">🌳</span><span>Sustainable Design</span></div>
+      </div>
+    </div>
+    <div class="eden-importance-right reveal" style="transition-delay:0.15s">
+      <div class="eden-importance-img-offset"></div>
+      <img src="https://images.unsplash.com/photo-1584463695286-9dc4766b446a?w=800" alt="Beautiful garden path" class="eden-importance-img">
+    </div>
+  </div>
+</section>
+<style>
+  .eden-importance{padding:6rem 2rem}
+  .eden-importance-container{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:center}
+  .eden-importance-label{display:block;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:var(--moss-600);margin-bottom:1rem}
+  .eden-importance-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,2.8rem);font-weight:800;color:var(--moss-900);line-height:1.15;margin-bottom:1.25rem}
+  .eden-importance-body{color:rgba(80,106,75,.7);font-size:1rem;line-height:1.75;margin-bottom:2rem}
+  .eden-importance-chips{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  .eden-importance-chip{display:flex;align-items:center;gap:.75rem;padding:.9rem 1rem;background:#fff;border:1px solid var(--moss-200);border-radius:.75rem;box-shadow:0 2px 6px rgba(0,0,0,.04);transition:border-color .3s}
+  .eden-importance-chip:hover{border-color:var(--moss-500)}
+  .eden-importance-chip-icon{font-size:1.1rem}
+  .eden-importance-chip span:last-child{font-size:.88rem;font-weight:600;color:var(--moss-900)}
+  .eden-importance-right{position:relative;display:flex;align-items:center;justify-content:center}
+  .eden-importance-img{position:relative;z-index:2;width:100%;border-radius:100px 40px 100px 40px;border:4px solid #fff;box-shadow:0 20px 48px rgba(0,0,0,.12)}
+  .eden-importance-img-offset{position:absolute;inset:0;background:var(--moss-500);border-radius:100px 40px 100px 40px;transform:translate(16px,16px);z-index:1}
+  @media(max-width:900px){
+    .eden-importance-container{grid-template-columns:1fr;gap:3rem}
+    .eden-importance-right{order:-1}
+  }
+  @media(max-width:600px){.eden-importance{padding:4rem 1.5rem}.eden-importance-chips{grid-template-columns:1fr}}
+</style>
 
-    <!-- Benefits Section -->
-    <section class="benefits">
-        <div class="section-header">
-            <h2 class="section-title">The Benefits of Professional Landscaping</h2>
+<section class="eden-carousel" style="background:var(--cream-50)">
+  <div class="eden-carousel-header reveal">
+    <span class="eden-carousel-label">Comprehensive Care</span>
+    <h2 class="eden-carousel-title">Our Expertise</h2>
+  </div>
+  <div class="eden-carousel-viewport">
+    <div class="eden-carousel-track">
+      <div class="eden-car-card" data-index="0">
+      
+      <div class="eden-car-img">
+        <img src="https://images.unsplash.com/photo-1592419044706-39796d40f98c?w=600" alt="Lawn Care" loading="lazy">
+        <div class="eden-car-img-overlay">
+          <span class="eden-car-cat">Maintenance</span>
+          <h3 class="eden-car-title">Lawn Care</h3>
         </div>
-        <div class="benefits-grid">
-            <div class="benefit-item">
-                <div class="benefit-number">01</div>
-                <h3>Increase Property Value</h3>
-                <p>Professional landscaping can boost your home's value by up to 20%. A well-maintained outdoor space creates lasting curb appeal and makes your property stand out in the market.</p>
-            </div>
-            <div class="benefit-item">
-                <div class="benefit-number">02</div>
-                <h3>Create Your Perfect Outdoor Oasis</h3>
-                <p>Transform your yard into a personal retreat where you can relax, entertain, and make memories. Beautiful landscaping extends your living space and enhances your quality of life.</p>
-            </div>
-            <div class="benefit-item">
-                <div class="benefit-number">03</div>
-                <h3>Save Time & Energy</h3>
-                <p>Let professionals handle the hard work while you enjoy the results. Smart landscaping design reduces maintenance needs, conserves water, and keeps your outdoor space looking pristine year-round.</p>
-            </div>
+      </div>
+      <div class="eden-car-body">
+        <div class="eden-car-price">$150</div>
+        <ul class="eden-car-feats"><li class="eden-car-feat"><span class="eden-car-check">✓</span>Precision Mowing</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Edging & Trimming</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Debris Removal</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Fertilization</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Weed Control</li></ul>
+        <a href="contact.html" class="eden-car-cta">Book Now</a>
+      </div>
+    </div><div class="eden-car-card" data-index="1">
+      <div class="eden-car-badge">Most Popular</div>
+      <div class="eden-car-img">
+        <img src="https://images.unsplash.com/photo-1558904541-efa843a96f01?w=600" alt="Garden Design" loading="lazy">
+        <div class="eden-car-img-overlay">
+          <span class="eden-car-cat">Design</span>
+          <h3 class="eden-car-title">Garden Design</h3>
         </div>
-    </section>
+      </div>
+      <div class="eden-car-body">
+        <div class="eden-car-price">$999</div>
+        <ul class="eden-car-feats"><li class="eden-car-feat"><span class="eden-car-check">✓</span>3D Rendering</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Plant Selection</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Hardscape Planning</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Soil Analysis</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Installation Roadmap</li></ul>
+        <a href="contact.html" class="eden-car-cta">Book Now</a>
+      </div>
+    </div><div class="eden-car-card" data-index="2">
+      
+      <div class="eden-car-img">
+        <img src="https://images.unsplash.com/photo-1621258661608-8e6c702334f6?w=800" alt="Hardscaping" loading="lazy">
+        <div class="eden-car-img-overlay">
+          <span class="eden-car-cat">Construction</span>
+          <h3 class="eden-car-title">Hardscaping</h3>
+        </div>
+      </div>
+      <div class="eden-car-body">
+        <div class="eden-car-price">$2,500</div>
+        <ul class="eden-car-feats"><li class="eden-car-feat"><span class="eden-car-check">✓</span>Paver Patios</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Retaining Walls</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Walkways</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Fire Pits</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Concrete Work</li></ul>
+        <a href="contact.html" class="eden-car-cta">Book Now</a>
+      </div>
+    </div><div class="eden-car-card" data-index="3">
+      
+      <div class="eden-car-img">
+        <img src="https://images.unsplash.com/photo-1563514227147-6d2ff665a6a0?w=800" alt="Irrigation" loading="lazy">
+        <div class="eden-car-img-overlay">
+          <span class="eden-car-cat">Systems</span>
+          <h3 class="eden-car-title">Irrigation</h3>
+        </div>
+      </div>
+      <div class="eden-car-body">
+        <div class="eden-car-price">$450</div>
+        <ul class="eden-car-feats"><li class="eden-car-feat"><span class="eden-car-check">✓</span>Sprinkler Install</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Drip Systems</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Winterization</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Repair & Tuning</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Smart Timers</li></ul>
+        <a href="contact.html" class="eden-car-cta">Book Now</a>
+      </div>
+    </div><div class="eden-car-card" data-index="4">
+      
+      <div class="eden-car-img">
+        <img src="https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=800" alt="Tree Surgery" loading="lazy">
+        <div class="eden-car-img-overlay">
+          <span class="eden-car-cat">Arboriculture</span>
+          <h3 class="eden-car-title">Tree Surgery</h3>
+        </div>
+      </div>
+      <div class="eden-car-body">
+        <div class="eden-car-price">$300</div>
+        <ul class="eden-car-feats"><li class="eden-car-feat"><span class="eden-car-check">✓</span>Pruning & Shaping</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Safe Removal</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Stump Grinding</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Health Assessment</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Emergency Service</li></ul>
+        <a href="contact.html" class="eden-car-cta">Book Now</a>
+      </div>
+    </div><div class="eden-car-card" data-index="5">
+      
+      <div class="eden-car-img">
+        <img src="https://images.unsplash.com/photo-1557063853-294711311319?w=600" alt="Lighting" loading="lazy">
+        <div class="eden-car-img-overlay">
+          <span class="eden-car-cat">Enhancement</span>
+          <h3 class="eden-car-title">Lighting</h3>
+        </div>
+      </div>
+      <div class="eden-car-body">
+        <div class="eden-car-price">$800</div>
+        <ul class="eden-car-feats"><li class="eden-car-feat"><span class="eden-car-check">✓</span>Path Lighting</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Up-lighting</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>LED Installation</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Timer Setup</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Security Lighting</li></ul>
+        <a href="contact.html" class="eden-car-cta">Book Now</a>
+      </div>
+    </div><div class="eden-car-card" data-index="6">
+      
+      <div class="eden-car-img">
+        <img src="https://images.unsplash.com/photo-1628045995775-68ae455cb314?w=600" alt="Sod Install" loading="lazy">
+        <div class="eden-car-img-overlay">
+          <span class="eden-car-cat">Renovation</span>
+          <h3 class="eden-car-title">Sod Install</h3>
+        </div>
+      </div>
+      <div class="eden-car-body">
+        <div class="eden-car-price">$1,200</div>
+        <ul class="eden-car-feats"><li class="eden-car-feat"><span class="eden-car-check">✓</span>Old Turf Removal</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Soil Grading</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Premium Sod</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>Roller Compaction</li><li class="eden-car-feat"><span class="eden-car-check">✓</span>First Water</li></ul>
+        <a href="contact.html" class="eden-car-cta">Book Now</a>
+      </div>
+    </div>
+    </div>
+    <button class="eden-car-arrow eden-car-arrow-l" onclick="window.edenCarousel(-1)">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <button class="eden-car-arrow eden-car-arrow-r" onclick="window.edenCarousel(1)">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+    </button>
+  </div>
+  <div class="eden-carousel-dots" id="eden-carousel-dots"></div>
+</section>
+<style>
+  .eden-carousel{padding:6rem 0;overflow:hidden}
+  .eden-carousel-header{text-align:center;margin-bottom:3rem;padding:0 2rem}
+  .eden-carousel-label{display:block;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:var(--moss-500);margin-bottom:.75rem}
+  .eden-carousel-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,3rem);font-weight:800;color:var(--moss-900)}
+  .eden-carousel-viewport{position:relative;width:100%;max-width:1100px;margin:0 auto;height:580px;display:flex;align-items:center;justify-content:center}
+  .eden-carousel-track{position:relative;width:100%;height:100%}
+  .eden-car-card{position:absolute;top:50%;left:50%;width:380px;max-width:90vw;background:var(--cream-50);border:2px solid var(--moss-200);border-radius:2rem;overflow:hidden;transition:transform .6s cubic-bezier(.32,.72,0,1),opacity .6s cubic-bezier(.32,.72,0,1);transform:translate(-50%,-50%) scale(.7);opacity:0;z-index:0;pointer-events:none}
+  .eden-car-card.car-center{transform:translate(-50%,-50%) scale(1);opacity:1;z-index:10;pointer-events:auto}
+  .eden-car-card.car-left{transform:translate(calc(-50% - 85%),-50%) scale(.95);opacity:.8;z-index:5}
+  .eden-car-card.car-right{transform:translate(calc(-50% + 85%),-50%) scale(.95);opacity:.8;z-index:5}
+  .eden-car-badge{position:absolute;top:12px;right:12px;z-index:2;background:var(--moss-500);color:#fff;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:.35rem .8rem;border-radius:50px;opacity:0;transition:opacity .3s}
+  .car-center .eden-car-badge{opacity:1}
+  .eden-car-img{position:relative;height:192px;overflow:hidden}
+  .eden-car-img img{width:100%;height:100%;object-fit:cover}
+  .eden-car-img-overlay{position:absolute;bottom:0;left:0;right:0;padding:1.5rem 1.25rem 1rem;background:linear-gradient(to top,rgba(0,0,0,.85) 0%,transparent 100%)}
+  .eden-car-cat{display:block;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--moss-400);margin-bottom:.2rem}
+  .eden-car-title{font-family:'Cormorant Garamond',serif;font-size:1.35rem;font-weight:700;color:#fff;margin:0}
+  .eden-car-body{padding:1.25rem}
+  .eden-car-price{font-family:'Cormorant Garamond',serif;font-size:1.7rem;font-weight:800;color:var(--moss-900);margin-bottom:.6rem}
+  .eden-car-feats{list-style:none;margin:0 0 1.25rem;padding:0;display:flex;flex-direction:column;gap:.4rem}
+  .eden-car-feat{font-size:.87rem;color:#6b7280;display:flex;align-items:center;gap:.5rem}
+  .eden-car-check{color:var(--moss-500);font-weight:700;font-size:.95rem}
+  .eden-car-cta{display:block;width:100%;text-align:center;padding:.8rem;border-radius:50px;font-weight:700;font-size:.88rem;text-decoration:none;text-transform:uppercase;letter-spacing:1px;background:rgba(107,143,94,.1);color:rgba(107,143,94,.6);border:1px solid var(--moss-200);pointer-events:none;transition:background .3s,color .3s,box-shadow .3s}
+  .car-center .eden-car-cta{background:var(--moss-500);color:#fff;border-color:var(--moss-500);pointer-events:auto;box-shadow:0 4px 18px rgba(107,143,94,.35)}
+  .car-center .eden-car-cta:hover{box-shadow:0 6px 26px rgba(107,143,94,.5)}
+  .eden-car-arrow{position:absolute;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;background:var(--moss-500);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:20;transition:background .3s}
+  .eden-car-arrow:hover{background:var(--moss-400)}
+  .eden-car-arrow-l{left:0}
+  .eden-car-arrow-r{right:0}
+  .eden-carousel-dots{display:flex;justify-content:center;gap:.6rem;margin-top:2rem}
+  .eden-car-dot{width:10px;height:10px;border-radius:50%;background:var(--moss-200);cursor:pointer;transition:background .3s}
+  .eden-car-dot.active{background:var(--moss-500)}
+  @media(max-width:768px){
+    .eden-carousel-viewport{height:520px}
+    .eden-car-card{width:85vw}
+    .eden-car-card.car-left,.eden-car-card.car-right{opacity:0}
+    .eden-car-arrow-l{left:4px}
+    .eden-car-arrow-r{right:4px}
+  }
+</style>
+<script>
+(function(){
+  var cards=document.querySelectorAll('.eden-car-card');
+  var total=cards.length;
+  var current=1;
+  var dotsC=document.getElementById('eden-carousel-dots');
+  for(var i=0;i<total;i++){
+    var d=document.createElement('div');
+    d.className='eden-car-dot'+(i===current?' active':'');
+    d.setAttribute('data-idx',i);
+    d.addEventListener('click',function(){update(parseInt(this.getAttribute('data-idx')))});
+    dotsC.appendChild(d);
+  }
+  function update(idx){
+    current=((idx%total)+total)%total;
+    var prev=((current-1)%total+total)%total;
+    var next=(current+1)%total;
+    cards.forEach(function(c,i){
+      c.classList.remove('car-center','car-left','car-right');
+      if(i===current)c.classList.add('car-center');
+      else if(i===prev)c.classList.add('car-left');
+      else if(i===next)c.classList.add('car-right');
+    });
+    dotsC.querySelectorAll('.eden-car-dot').forEach(function(d,i){d.classList.toggle('active',i===current)});
+  }
+  window.edenCarousel=function(dir){update(current+dir)};
+  update(current);
+})();
+</script>
 
-    <!-- Recent Work -->
-    <section class="recent-work" id="work">
-        <div class="section-header">
-            <h2 class="section-title">Our Recent Work</h2>
-        </div>
-        <div class="work-grid">
-            <div class="work-item large">
-                <img src="https://picsum.photos/800/600?random=10" alt="Project">
-                <div class="work-overlay">
-                    <h4>Sarah's Backyard Oasis</h4>
-                    <p>Bellevue, Washington</p>
-                </div>
-            </div>
-            <div class="work-item">
-                <img src="https://picsum.photos/600/600?random=11" alt="Project">
-                <div class="work-overlay">
-                    <h4>Modern Garden</h4>
-                    <p>Seattle, WA</p>
-                </div>
-            </div>
-            <div class="work-item">
-                <img src="https://picsum.photos/600/600?random=12" alt="Project">
-                <div class="work-overlay">
-                    <h4>Stone Patio</h4>
-                    <p>Redmond, WA</p>
-                </div>
-            </div>
-            <div class="work-item">
-                <img src="https://picsum.photos/600/600?random=13" alt="Project">
-                <div class="work-overlay">
-                    <h4>Lawn Restoration</h4>
-                    <p>Kirkland, WA</p>
-                </div>
-            </div>
-            <div class="work-item large">
-                <img src="https://picsum.photos/800/600?random=14" alt="Project">
-                <div class="work-overlay">
-                    <h4>Office Complex</h4>
-                    <p>Seattle, WA</p>
-                </div>
-            </div>
-            <div class="work-item">
-                <img src="https://picsum.photos/600/600?random=15" alt="Project">
-                <div class="work-overlay">
-                    <h4>Privacy Hedge</h4>
-                    <p>Sammamish, WA</p>
-                </div>
-            </div>
-        </div>
-    </section>
+<!-- ─── BENEFITS ─── -->
+<section class="eden-benefits" style="background:var(--moss-900)">
+  <div class="eden-benefits-container">
+    <div class="eden-benefits-header reveal">
+      <span class="eden-benefits-label">The Eden Standard</span>
+      <h2 class="eden-benefits-title">WHY CHOOSE US?</h2>
+      <p class="eden-benefits-sub">We combine artistic vision with horticultural science to create landscapes that thrive.</p>
+    </div>
+    <div class="eden-benefits-grid">
+      <div class="eden-benefits-card reveal" style="transition-delay:0s">
+        <span class="eden-benefits-wm">📐</span>
+        <div class="eden-benefits-icon-box"><span class="eden-benefits-icon">📐</span></div>
+        <h3 class="eden-benefits-card-title">Design Precision</h3>
+        <p class="eden-benefits-card-desc">Our detailed CAD designs and planning ensure every inch of your property is utilized effectively before a single shovel hits the dirt.</p>
+      </div>
+      <div class="eden-benefits-card reveal" style="transition-delay:0.15s">
+        <span class="eden-benefits-wm">🌱</span>
+        <div class="eden-benefits-icon-box"><span class="eden-benefits-icon">🌱</span></div>
+        <h3 class="eden-benefits-card-title">Sustainable Practice</h3>
+        <p class="eden-benefits-card-desc">We prioritize native species, smart irrigation, and organic fertilizers to create ecosystems that are friendly to pets and pollinators.</p>
+      </div>
+      <div class="eden-benefits-card reveal" style="transition-delay:0.3s">
+        <span class="eden-benefits-wm">🛡️</span>
+        <div class="eden-benefits-icon-box"><span class="eden-benefits-icon">🛡️</span></div>
+        <h3 class="eden-benefits-card-title">Satisfaction Guaranteed</h3>
+        <p class="eden-benefits-card-desc">We stand behind our work. Our plantings come with a 1-year warranty and our hardscaping with a 5-year structural guarantee.</p>
+      </div>
+    </div>
+  </div>
+</section>
+<style>
+  .eden-benefits{padding:6rem 2rem;position:relative;overflow:hidden}
+  .eden-benefits-container{max-width:1100px;margin:0 auto;position:relative;z-index:1}
+  .eden-benefits-header{text-align:center;margin-bottom:3.5rem}
+  .eden-benefits-label{display:block;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:var(--moss-500);margin-bottom:.75rem}
+  .eden-benefits-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,3rem);font-weight:800;color:#fff;margin-bottom:.75rem}
+  .eden-benefits-sub{color:rgba(255,255,255,.6);font-size:1.05rem;max-width:540px;margin:0 auto;line-height:1.7}
+  .eden-benefits-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}
+  .eden-benefits-card{position:relative;background:var(--moss-800);border:1px solid var(--moss-700);border-radius:2rem;padding:2.25rem 1.75rem 1.75rem;overflow:hidden;transition:border-color .3s}
+  .eden-benefits-card:hover{border-color:rgba(107,143,94,.5)}
+  .eden-benefits-wm{position:absolute;top:10px;right:14px;font-size:90px;opacity:.04;line-height:1;pointer-events:none;transition:opacity .3s}
+  .eden-benefits-card:hover .eden-benefits-wm{opacity:.08}
+  .eden-benefits-icon-box{width:56px;height:56px;background:rgba(107,143,94,.2);border-radius:14px;display:flex;align-items:center;justify-content:center;margin-bottom:1.25rem;transition:transform .3s}
+  .eden-benefits-card:hover .eden-benefits-icon-box{transform:scale(1.1)}
+  .eden-benefits-icon{font-size:1.75rem}
+  .eden-benefits-card-title{font-family:'Cormorant Garamond',serif;font-size:1.35rem;font-weight:700;color:#fff;margin-bottom:.5rem}
+  .eden-benefits-card-desc{font-size:.9rem;color:rgba(255,255,255,.55);line-height:1.65;margin:0}
+  @media(max-width:768px){.eden-benefits-grid{grid-template-columns:1fr;max-width:440px;margin:0 auto}}
+</style>
 
-    <!-- CTA -->
-    <section class="cta-section">
-        <div class="cta-badge">LIMITED TIME OFFER</div>
-        <h2>Get Your First Service 25% OFF</h2>
-        <p class="cta-subtitle">Transform your outdoor space this season. Book now and save on your first landscaping service!</p>
-        
-        <div class="cta-buttons">
-            <a href="#" class="cta-button-primary">Claim Your Discount</a>
-            <a href="#" class="cta-button-secondary">View Our Services</a>
-        </div>
-        
-        <div class="cta-features">
-            <div class="cta-feature">Free Consultation</div>
-            <div class="cta-feature">Same-Day Quotes</div>
-            <div class="cta-feature">100% Satisfaction Guarantee</div>
-        </div>
-    </section>
+<!-- ─── CTA ─── -->
+<section class="eden-cta" style="background:var(--cream-50)">
+  <div class="eden-cta-container">
+    <div class="eden-cta-card reveal">
+      <div class="eden-cta-glow-top"></div>
+      <h2 class="eden-cta-title">READY TO<br>BREAK GROUND?</h2>
+      <p class="eden-cta-sub">Our schedule fills up fast in the spring and summer. Secure your consultation today and let us transform your outdoor space.</p>
+      <a href="contact.html" class="eden-cta-btn">Get a Quote</a>
+    </div>
+  </div>
+</section>
+<style>
+  .eden-cta{padding:6rem 2rem}
+  .eden-cta-container{max-width:860px;margin:0 auto}
+  .eden-cta-card{position:relative;background:var(--moss-800);border:1px solid var(--moss-700);border-radius:1.75rem;padding:4rem 3rem;overflow:hidden;text-align:center}
+  .eden-cta-glow-top{position:absolute;top:-60px;left:50%;transform:translateX(-50%);width:320px;height:320px;background:rgba(107,143,94,.12);filter:blur(60px);border-radius:50%;pointer-events:none}
+  .eden-cta-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4.5vw,3.2rem);font-weight:800;color:#fff;line-height:1.1;margin-bottom:1rem;position:relative;z-index:1}
+  .eden-cta-sub{color:var(--moss-100);font-size:1.05rem;line-height:1.7;max-width:520px;margin:0 auto 2rem;position:relative;z-index:1}
+  .eden-cta-btn{display:inline-block;padding:.95rem 2.75rem;background:var(--moss-500);color:#fff;border-radius:50px;font-weight:700;font-size:.95rem;text-transform:uppercase;letter-spacing:1px;box-shadow:0 6px 20px rgba(107,143,94,.35);transition:transform .25s,box-shadow .25s;position:relative;z-index:1}
+  .eden-cta-btn:hover{transform:scale(1.05);box-shadow:0 8px 28px rgba(107,143,94,.5)}
+  @media(max-width:600px){.eden-cta-card{padding:3rem 1.75rem}}
+</style>
 
-    <!-- Footer -->
-    <footer id="contact">
-        <div class="footer-content">
-            <div>
-                <div class="footer-brand">Green Valley Landscaping</div>
-                <p style="color: rgba(255,255,255,0.7); margin-top: 1rem;">Creating beautiful outdoor spaces</p>
-            </div>
-            <div>
-                <h4 style="color: var(--lime); margin-bottom: 1rem;">Services</h4>
-                <p style="color: rgba(255,255,255,0.7);">Landscape Design<br>Lawn Maintenance<br>Tree Service</p>
-            </div>
-            <div>
-                <h4 style="color: var(--lime); margin-bottom: 1rem;">Contact</h4>
-                <p style="color: rgba(255,255,255,0.7);">(555) 847-2900<br><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="6801060e07280f1a0d0d061e0904040d11460b0705">[email&#160;protected]</a></p>
-            </div>
-            <div>
-                <h4 style="color: var(--lime); margin-bottom: 1rem;">Hours</h4>
-                <p style="color: rgba(255,255,255,0.7);">Mon-Fri: 7AM-6PM<br>Sat: 8AM-4PM<br>Sun: Closed</p>
-            </div>
+<footer class="eden-footer">
+  <div class="eden-footer-main">
+    <div class="eden-footer-container">
+      <div class="eden-footer-col eden-footer-brand">
+        <h3 class="eden-footer-logo">Eden</h3>
+        <p class="eden-footer-tagline">Crafting outdoor sanctuaries since 2001.</p>
+        <div class="eden-footer-social">
+          <a href="#" class="eden-footer-social-link" aria-label="Facebook"><svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+          <a href="#" class="eden-footer-social-link" aria-label="Instagram"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+          <a href="#" class="eden-footer-social-link" aria-label="Google"><svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg></a>
         </div>
-    </footer>
-    
-    <script>
-        // Intersection Observer for scroll animations
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: "0px 0px -50px 0px"
-        };
-        
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add("animate");
-                }
-            });
-        }, observerOptions);
-        
-        // Observe all elements that need scroll animations
-        document.addEventListener("DOMContentLoaded", () => {
-            const animateOnScroll = document.querySelectorAll(".service-card, .work-item, .section-header, .cta-section h2, .book-now-cta, .benefit-item");
-            animateOnScroll.forEach(el => observer.observe(el));
-        });
-    </script>
+      </div>
+      <div class="eden-footer-col">
+        <h4 class="eden-footer-heading">Services</h4>
+        <ul class="eden-footer-list"><li>Lawn Care</li><li>Garden Design</li><li>Hardscaping</li><li>Irrigation</li></ul>
+      </div>
+      <div class="eden-footer-col">
+        <h4 class="eden-footer-heading">Hours</h4>
+        <div class="eden-footer-hours">Mon–Fri: 7AM–5PM<br>Sat: 8AM–2PM<br>Sunday: Closed</div>
+      </div>
+      <div class="eden-footer-col">
+        <h4 class="eden-footer-heading">Contact</h4>
+        <div class="eden-footer-contact">
+          <a href="tel:+15035550199" class="eden-footer-contact-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            (503) 555-0199
+          </a>
+          <a href="mailto:hello@edenlandscapes.com" class="eden-footer-contact-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            hello@edenlandscapes.com
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="eden-footer-bottom">
+    <div class="eden-footer-container">
+      <p>© 2026 Eden Landscapes. All rights reserved.</p>
+      <div class="eden-footer-links"><a href="#">Privacy Policy</a><a href="#">Terms of Service</a></div>
+    </div>
+  </div>
+</footer>
+<style>
+  .eden-footer{background:var(--moss-900);color:rgba(255,255,255,.85)}
+  .eden-footer-main{padding:4rem 2rem;border-bottom:1px solid rgba(255,255,255,.1)}
+  .eden-footer-container{max-width:1200px;margin:0 auto}
+  .eden-footer-main .eden-footer-container{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:3rem}
+  .eden-footer-logo{font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:700;color:var(--moss-400);letter-spacing:3px;text-transform:uppercase;margin-bottom:.6rem}
+  .eden-footer-tagline{color:rgba(255,255,255,.5);font-size:.92rem;margin-bottom:1.25rem;line-height:1.6}
+  .eden-footer-social{display:flex;gap:.6rem}
+  .eden-footer-social-link{width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);border-radius:10px;color:rgba(255,255,255,.6);transition:all .3s}
+  .eden-footer-social-link:hover{background:var(--moss-500);color:#fff;transform:translateY(-2px)}
+  .eden-footer-heading{font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:700;color:#fff;margin-bottom:1rem;text-transform:uppercase;letter-spacing:1px}
+  .eden-footer-list{list-style:none;padding:0;margin:0}
+  .eden-footer-list li{padding:.45rem 0;color:rgba(255,255,255,.55);font-size:.92rem;transition:color .2s;cursor:default}
+  .eden-footer-list li:hover{color:var(--moss-400)}
+  .eden-footer-hours{color:rgba(255,255,255,.55);font-size:.92rem;line-height:1.9}
+  .eden-footer-contact{display:flex;flex-direction:column;gap:.85rem}
+  .eden-footer-contact-item{display:flex;align-items:center;gap:.6rem;color:rgba(255,255,255,.55);font-size:.92rem;transition:color .2s}
+  .eden-footer-contact-item:hover{color:var(--moss-400)}
+  .eden-footer-contact-item svg{flex-shrink:0;color:var(--moss-400)}
+  .eden-footer-bottom{padding:1.5rem 2rem}
+  .eden-footer-bottom .eden-footer-container{display:flex;justify-content:space-between;align-items:center}
+  .eden-footer-bottom p{color:rgba(255,255,255,.35);font-size:.85rem}
+  .eden-footer-links{display:flex;gap:2rem}
+  .eden-footer-links a{color:rgba(255,255,255,.35);font-size:.85rem;transition:color .2s}
+  .eden-footer-links a:hover{color:rgba(255,255,255,.6)}
+  @media(max-width:900px){.eden-footer-main .eden-footer-container{grid-template-columns:repeat(2,1fr);gap:2.5rem}}
+  @media(max-width:600px){
+    .eden-footer-main{padding:3rem 1.5rem}
+    .eden-footer-main .eden-footer-container{grid-template-columns:1fr;gap:2rem}
+    .eden-footer-bottom{padding:1.5rem}
+    .eden-footer-bottom .eden-footer-container{flex-direction:column;gap:.75rem;text-align:center}
+  }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){e.target.classList.add('visible');obs.unobserve(e.target)}
+    });
+  },{threshold:.12,rootMargin:'0px 0px -60px 0px'});
+  document.querySelectorAll('.reveal').forEach(function(el){obs.observe(el)});
+  document.querySelectorAll('a[href^="#"]').forEach(function(link){
+    link.addEventListener('click',function(e){
+      var t=document.querySelector(link.getAttribute('href'));
+      if(t){e.preventDefault();t.scrollIntoView({behavior:'smooth',block:'start'})}
+    });
+  });
+});
+</script>
 </body>
 </html>

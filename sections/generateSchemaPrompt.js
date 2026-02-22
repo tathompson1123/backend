@@ -60,19 +60,16 @@ function buildSchemaPrompt(businessData) {
   ].filter(Boolean).join('\n');
 
   // ── layout dispatch ───────────────────────────────
-  // Auto-detailing uses a separate multi-page prompt — return early
+  // Multi-page layouts return early with their own full prompt
   if (layout === 'autoDetailing') {
     return buildAutoDetailingMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
+  }
+  if (layout === 'organic') {
+    return buildOrganicMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
   }
 
   let mainSections, sectionOrder, contactId, footerId;
   switch (layout) {
-    case 'organic':
-      mainSections = organicSections({ businessName });
-      sectionOrder = 'nav → hero → reviews → importance → services → transformations → benefits → cta → contact → footer';
-      contactId    = 'contact';
-      footerId     = 'footer';
-      break;
     default:
       mainSections = defaultSections({ businessName, phone, phoneClean });
       sectionOrder = 'trust → nav → hero → features → services → benefits → gallery → testimonials → cta → contact → footer';
@@ -149,145 +146,274 @@ ${sharedTail}
 10. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
 }
 
-// ── Organic layout (landscaping, gardens, outdoor spaces) ───────────
-function organicSections({ businessName }) {
-  return `    {
-      "id": "nav",
-      "template": "nav-sticky-organic",
-      "content": {
-        "logo": "${businessName}",
-        "links": [
-          { "text": "Home",     "url": "#" },
-          { "text": "Services", "url": "#services" },
-          { "text": "Gallery",  "url": "#transformations" },
-          { "text": "Contact",  "url": "#contact" }
-        ],
-        "ctaText": "Get a Quote",
-        "ctaLink": "#contact"
-      }
-    },
+// ── Organic/Landscaping: multi-page prompt ───────────────────────────
+// 4 pages: index · services · gallery · contact
+// Section mapping mirrors the Eden Landscapes template design
+function buildOrganicMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList }) {
+  const servicesJson = JSON.stringify(servicesList.slice(0, 6).map(s => ({ text: s })));
+
+  return `You are a website content generator for landscaping and outdoor service businesses. Generate a JSON object for a MULTI-PAGE website with 4 separate pages.
+
+IMPORTANT: Return ONLY valid JSON. No markdown, no backticks, no explanation. Just the JSON object.
+
+== BUSINESS INFO ==
+${businessInfo}
+
+== YOUR TASK ==
+Generate a JSON object with this EXACT structure. Fill in compelling, professional content for this specific business.
+
+{
+  "meta": { "title": "${businessName} - Professional Landscaping", "description": "SEO meta description 150-160 chars" },
+  "multiPage": true,
+  "nav": {
+    "id": "nav",
+    "template": "nav-sticky-organic",
+    "content": {
+      "logo": "${businessName}",
+      "links": [
+        { "text": "Home",     "url": "index.html" },
+        { "text": "Services", "url": "services.html" },
+        { "text": "Gallery",  "url": "gallery.html" },
+        { "text": "Contact",  "url": "contact.html" }
+      ],
+      "ctaText": "Get a Quote",
+      "ctaLink": "contact.html"
+    }
+  },
+  "footer": {
+    "id": "footer",
+    "template": "footer-4col-dark",
+    "content": {
+      "logo": "${businessName}",
+      "tagline": "Short compelling tagline for this landscaping business",
+      "services": ${servicesJson},
+      "phone": "${phone}",
+      "email": "${email}",
+      "hours": "${hoursText}"
+    }
+  },
+  "pages": [
     {
-      "id": "hero",
-      "template": "hero-split-portrait",
-      "content": {
-        "badge": "Welcome to ${businessName}",
-        "headline": "Punchy headline WITHOUT the highlight word",
-        "highlightText": "One key highlight word (e.g. Landscapes, Gardens)",
-        "subtitle": "A compelling 2-3 sentence value proposition for the business",
-        "ctaText": "Get a Free Quote",
-        "ctaLink": "#contact",
-        "ctaText2": "See Our Work",
-        "ctaLink2": "#transformations",
-        "portraitImage": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=800",
-        "bgImage": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=1600",
-        "floatBadge": "25+",
-        "floatBadgeLabel": "Years Experience"
-      }
-    },
-    {
-      "id": "reviews",
-      "template": "review-marquee",
-      "content": {
-        "reviews": [
-          { "name": "Sarah M.",  "stars": 5, "text": "A realistic 5-star review about this business",      "date": "2 weeks ago",  "avatarColor": "#6b8f5e" },
-          { "name": "James R.",  "stars": 5, "text": "Another realistic review specific to the services",  "date": "1 month ago", "avatarColor": "#85a378" },
-          { "name": "Linda K.",  "stars": 5, "text": "A third review highlighting quality and care",       "date": "3 weeks ago", "avatarColor": "#506a4b" },
-          { "name": "Tom & Pat", "stars": 5, "text": "Review about the transformation result",             "date": "2 months ago","avatarColor": "#3d4f39" },
-          { "name": "Rachel W.", "stars": 5, "text": "Review about the experience from start to finish",   "date": "1 week ago",  "avatarColor": "#6b8f5e" },
-          { "name": "Mike D.",   "stars": 4, "text": "A slightly more measured but still positive review", "date": "5 days ago",  "avatarColor": "#85a378" }
-        ]
-      }
-    },
-    {
-      "id": "importance",
-      "template": "importance-split",
-      "content": {
-        "badge": "Why ${businessName}?",
-        "headline": "Why Your Outdoor Space Matters",
-        "body1": "First paragraph: why a well-maintained outdoor space matters to the customer (property value, curb appeal, lifestyle)",
-        "body2": "Second paragraph: what makes ${businessName} different — expertise, approach, and lasting results",
-        "highlights": [
-          { "icon": "🌿", "text": "Relevant highlight about native or quality plantings" },
-          { "icon": "💧", "text": "Relevant highlight about water-smart or sustainable design" },
-          { "icon": "🌞", "text": "Relevant highlight about year-round beauty" },
-          { "icon": "🏡", "text": "Relevant highlight about property value or lifestyle improvement" }
-        ],
-        "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=800",
-        "imageAlt": "Descriptive alt text for the image"
-      }
-    },
-    {
-      "id": "services",
-      "template": "services-carousel",
-      "content": {
-        "title": "Our Services",
-        "subtitle": "From concept to creation, we handle everything",
-        "services": [
-          {
-            "title": "First service name from the list above",
-            "category": "Appropriate category label",
-            "price": "From $XXX",
-            "image": "https://images.unsplash.com/RELEVANT-PHOTO?w=600",
-            "features": ["Key feature 1", "Key feature 2", "Key feature 3"],
-            "recommended": true
-          },
-          {
-            "title": "Second service name from the list above",
-            "category": "Appropriate category label",
-            "price": "From $XXX",
-            "image": "https://images.unsplash.com/RELEVANT-PHOTO?w=600",
-            "features": ["Key feature 1", "Key feature 2", "Key feature 3"],
-            "recommended": false
-          },
-          {
-            "title": "Third service name from the list above",
-            "category": "Appropriate category label",
-            "price": "From $XXX",
-            "image": "https://images.unsplash.com/RELEVANT-PHOTO?w=600",
-            "features": ["Key feature 1", "Key feature 2", "Key feature 3"],
-            "recommended": false
+      "filename": "index.html",
+      "meta": { "title": "${businessName} - Professional Landscaping", "description": "Homepage SEO description" },
+      "sections": [
+        {
+          "id": "hero",
+          "template": "hero-split-portrait",
+          "content": {
+            "badge": "Welcome to ${businessName}",
+            "headline": "Punchy headline WITHOUT the highlight word",
+            "highlightText": "One key highlight word (e.g. Landscapes, Gardens, Outdoor)",
+            "subtitle": "A compelling 2-3 sentence value proposition for this landscaping business",
+            "ctaText": "Get a Free Quote",
+            "ctaLink": "contact.html",
+            "ctaText2": "See Our Work",
+            "ctaLink2": "gallery.html",
+            "portraitImage": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=800",
+            "bgImage": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=1600",
+            "floatBadge": "10+",
+            "floatBadgeLabel": "Years Experience"
           }
-        ]
-      }
+        },
+        {
+          "id": "reviews",
+          "template": "review-marquee",
+          "content": {
+            "reviews": [
+              { "name": "Sarah M.",  "stars": 5, "text": "Realistic 5-star review about this landscaping business",     "date": "2 weeks ago",  "avatarColor": "#6b8f5e" },
+              { "name": "James R.",  "stars": 5, "text": "Review specific to the outdoor/garden services provided",     "date": "1 month ago",  "avatarColor": "#85a378" },
+              { "name": "Linda K.",  "stars": 5, "text": "Review highlighting quality, care, and attention to detail",  "date": "3 weeks ago",  "avatarColor": "#506a4b" },
+              { "name": "Tom & Pat", "stars": 5, "text": "Review about the transformation of their outdoor space",     "date": "2 months ago", "avatarColor": "#3d4f39" },
+              { "name": "Rachel W.", "stars": 5, "text": "Review about the experience from consultation to completion", "date": "1 week ago",   "avatarColor": "#6b8f5e" },
+              { "name": "Mike D.",   "stars": 4, "text": "Measured but positive review about the overall experience",   "date": "5 days ago",   "avatarColor": "#85a378" }
+            ]
+          }
+        },
+        {
+          "id": "importance",
+          "template": "importance-split",
+          "content": {
+            "badge": "Why It Matters",
+            "headline": "Why Your Outdoor Space Matters",
+            "body1": "First paragraph: why a well-maintained outdoor space matters to the customer (property value, curb appeal, lifestyle quality)",
+            "body2": "Second paragraph: what makes ${businessName} different — expertise, approach, and the lasting results clients love",
+            "highlights": [
+              { "icon": "🌿", "text": "Highlight about quality plantings or plant health" },
+              { "icon": "💧", "text": "Highlight about water-smart or sustainable practices" },
+              { "icon": "🌞", "text": "Highlight about year-round beauty and care" },
+              { "icon": "🏡", "text": "Highlight about property value or lifestyle improvement" }
+            ],
+            "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=800",
+            "imageAlt": "Beautiful landscaped outdoor space"
+          }
+        },
+        {
+          "id": "transformations",
+          "template": "before-after-cards",
+          "content": {
+            "title": "Our Transformations",
+            "subtitle": "Click each card to reveal the stunning before & after",
+            "cards": [
+              { "title": "Project type 1 (e.g. Backyard Oasis)",  "description": "Brief description of what was done", "beforeImage": "https://images.unsplash.com/BEFORE-PHOTO-1?w=600", "afterImage": "https://images.unsplash.com/AFTER-PHOTO-1?w=600" },
+              { "title": "Project type 2 (e.g. Front Garden)",    "description": "Brief description of what was done", "beforeImage": "https://images.unsplash.com/BEFORE-PHOTO-2?w=600", "afterImage": "https://images.unsplash.com/AFTER-PHOTO-2?w=600" },
+              { "title": "Project type 3 (e.g. Patio & Hardscape)","description": "Brief description of what was done", "beforeImage": "https://images.unsplash.com/BEFORE-PHOTO-3?w=600", "afterImage": "https://images.unsplash.com/AFTER-PHOTO-3?w=600" }
+            ]
+          }
+        },
+        {
+          "id": "cta",
+          "template": "cta-card",
+          "content": {
+            "headline": "Ready for a Stunning Transformation?",
+            "subtitle": "Let us turn your vision into reality. Contact us today for a free consultation.",
+            "ctaText": "Get a Free Quote",
+            "ctaLink": "contact.html",
+            "ctaText2": "View Our Work",
+            "ctaLink2": "gallery.html"
+          }
+        }
+      ]
     },
     {
-      "id": "transformations",
-      "template": "before-after-cards",
-      "content": {
-        "title": "Our Transformations",
-        "subtitle": "Click each card to reveal the stunning before & after",
-        "cards": [
-          { "title": "Project type 1 (e.g. Backyard Oasis)", "description": "Brief description of the transformation", "beforeImage": "https://images.unsplash.com/BEFORE-PHOTO-1?w=600", "afterImage": "https://images.unsplash.com/AFTER-PHOTO-1?w=600" },
-          { "title": "Project type 2 (e.g. Front Garden)",   "description": "Brief description of the transformation", "beforeImage": "https://images.unsplash.com/BEFORE-PHOTO-2?w=600", "afterImage": "https://images.unsplash.com/AFTER-PHOTO-2?w=600" },
-          { "title": "Project type 3 (e.g. Pool Surround)",  "description": "Brief description of the transformation", "beforeImage": "https://images.unsplash.com/BEFORE-PHOTO-3?w=600", "afterImage": "https://images.unsplash.com/AFTER-PHOTO-3?w=600" }
-        ]
-      }
+      "filename": "services.html",
+      "meta": { "title": "Services | ${businessName}", "description": "Services page SEO description" },
+      "sections": [
+        {
+          "id": "page-header",
+          "template": "hero-page-banner",
+          "content": {
+            "title": "Our Services",
+            "subtitle": "From concept to creation — we handle everything your outdoor space needs"
+          }
+        },
+        {
+          "id": "services",
+          "template": "services-carousel",
+          "content": {
+            "title": "Our Services",
+            "subtitle": "From concept to creation, we handle everything",
+            "services": [
+              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
+              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
+              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
+            ]
+          }
+        },
+        {
+          "id": "benefits",
+          "template": "benefits-cards",
+          "content": {
+            "title": "Why Choose ${businessName}",
+            "subtitle": "We bring more than just great service",
+            "benefits": [
+              { "icon": "🌿", "title": "Benefit 1 Title", "description": "Why this matters to the customer" },
+              { "icon": "💚", "title": "Benefit 2 Title", "description": "Why this matters to the customer" },
+              { "icon": "🏆", "title": "Benefit 3 Title", "description": "Why this matters to the customer" }
+            ]
+          }
+        },
+        {
+          "id": "cta",
+          "template": "cta-card",
+          "content": {
+            "headline": "Not Sure Which Service You Need?",
+            "subtitle": "Our team will help you figure out the right plan for your property. Reach out for a free consultation.",
+            "ctaText": "Get a Free Quote",
+            "ctaLink": "contact.html",
+            "ctaText2": "View Our Work",
+            "ctaLink2": "gallery.html"
+          }
+        }
+      ]
     },
     {
-      "id": "benefits",
-      "template": "benefits-cards",
-      "content": {
-        "title": "Why Choose ${businessName}",
-        "subtitle": "We bring more than just great service",
-        "benefits": [
-          { "icon": "🌿", "title": "Benefit Title 1", "description": "Why this matters to the customer" },
-          { "icon": "💚", "title": "Benefit Title 2", "description": "Why this matters to the customer" },
-          { "icon": "🏆", "title": "Benefit Title 3", "description": "Why this matters to the customer" }
-        ]
-      }
+      "filename": "gallery.html",
+      "meta": { "title": "Gallery | ${businessName}", "description": "Gallery page SEO description" },
+      "sections": [
+        {
+          "id": "page-header",
+          "template": "hero-page-banner",
+          "content": {
+            "title": "Our Portfolio",
+            "subtitle": "A showcase of outdoor spaces we've designed, built, and maintained"
+          }
+        },
+        {
+          "id": "gallery",
+          "template": "gallery-filtered",
+          "content": {
+            "title": "Recent Projects",
+            "subtitle": "Browse our finest work across all service categories",
+            "highlight": "Projects",
+            "categories": ["All", "Garden Design", "Hardscape", "Lawn Care", "Lighting", "Maintenance"],
+            "items": [
+              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-1?w=800", "title": "Project description 1", "category": "Garden Design" },
+              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-2?w=800", "title": "Project description 2", "category": "Hardscape" },
+              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-3?w=800", "title": "Project description 3", "category": "Lawn Care" },
+              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-4?w=800", "title": "Project description 4", "category": "Lighting" },
+              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-5?w=800", "title": "Project description 5", "category": "Garden Design" },
+              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-6?w=800", "title": "Project description 6", "category": "Maintenance" }
+            ]
+          }
+        },
+        {
+          "id": "cta",
+          "template": "cta-card",
+          "content": {
+            "headline": "Ready to Transform Your Space?",
+            "subtitle": "Book a free consultation and let's design your dream outdoor space.",
+            "ctaText": "Get a Free Quote",
+            "ctaLink": "contact.html",
+            "ctaText2": "View Services",
+            "ctaLink2": "services.html"
+          }
+        }
+      ]
     },
     {
-      "id": "ctasection",
-      "template": "cta-card",
-      "content": {
-        "headline": "Ready for a Stunning Transformation?",
-        "subtitle": "Let us turn your vision into reality. Contact us today for a free consultation.",
-        "ctaText": "Book a Consultation",
-        "ctaLink": "#contact",
-        "ctaText2": "View Our Work",
-        "ctaLink2": "#transformations"
-      }
-    }`;
+      "filename": "contact.html",
+      "meta": { "title": "Contact | ${businessName}", "description": "Contact page SEO description" },
+      "sections": [
+        {
+          "id": "page-header",
+          "template": "hero-page-banner",
+          "content": {
+            "title": "Get a Free Quote",
+            "subtitle": "Tell us about your project and we'll get back to you within 24 hours"
+          }
+        },
+        {
+          "id": "contact",
+          "template": "contact-split",
+          "content": {
+            "formTitle": "Tell Us About Your Project",
+            "formSubtitle": "Fill out the form and we'll get back to you within 24 hours",
+            "submitText": "Request Free Quote",
+            "phone": "${phone}",
+            "phoneClean": "${phoneClean}",
+            "email": "${email}",
+            "hours": "${hoursText}",
+            "serviceArea": "${areaText}",
+            "businessName": "${businessName}",
+            "highlights": [
+              { "text": "Why choose us point 1 — tailor to this landscaping business" },
+              { "text": "Why choose us point 2 — tailor to this landscaping business" },
+              { "text": "Why choose us point 3 — tailor to this landscaping business" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+== RULES ==
+1. Return ONLY the JSON object. No other text.
+2. Use REAL Unsplash URLs: https://images.unsplash.com/photo-XXXXX?w=1600 (hero/bg) or ?w=800 (gallery) or ?w=600 (service cards). Pick specific photo IDs related to landscaping, gardens, and outdoor spaces.
+3. Write compelling, specific copy — not generic placeholder text. Tailor everything to this business.
+4. Reviews should sound realistic and specific to the services offered.
+5. Include 3-5 services based on what was provided.
+6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
 }
 
 // ── Auto-detailing: multi-page prompt ────────────────────────────────

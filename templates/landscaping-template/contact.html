@@ -1,417 +1,423 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contact Us - Green Valley Landscaping</title>
-    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        :root {
-            --forest: #1a3a1a;
-            --lime: #7cb342;
-            --green: #2d5016;
-            --cream: #faf8f3;
-        }
-
-        body { font-family: 'Archivo', sans-serif; color: var(--forest); line-height: 1.6; }
-
-        /* Trust Banner */
-        .trust-banner { background: var(--lime); color: white; padding: 1rem 0; overflow: hidden; }
-        .reviews-track { display: flex; animation: scroll 40s linear infinite; width: max-content; }
-        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-        .review-item { display: flex; align-items: center; gap: 0.5rem; padding: 0 1.5rem; font-size: 0.9rem; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
-        .stars { color: #fbbf24; font-size: 0.85rem; letter-spacing: 1px; }
-
-        /* Nav */
-        nav { background: rgba(250, 248, 243, 0.98); padding: 1.5rem 0; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
-        .logo { font-family: 'Lora', serif; font-size: 1.8rem; font-weight: 700; color: var(--forest); text-decoration: none; }
-        .nav-links { display: flex; gap: 3rem; align-items: center; }
-        .nav-links a { color: var(--forest); text-decoration: none; font-weight: 500; transition: color 0.3s; }
-        .nav-links a:hover { color: var(--lime); }
-        .nav-cta { background: var(--lime); color: white; padding: 0.875rem 2rem; border-radius: 50px; font-weight: 600; }
-
-        /* Contact Hero */
-        .contact-hero {
-            background: linear-gradient(135deg, #7cb342 0%, #2d5016 100%);
-            color: white;
-            padding: 6rem 3rem 4rem;
-            text-align: center;
-        }
-        .offer-badge {
-            display: inline-block;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 0.5rem 1.5rem;
-            border-radius: 50px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 1.5rem;
-        }
-        .contact-hero h1 {
-            font-family: 'Lora', serif;
-            font-size: 4.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .contact-hero p {
-            font-size: 1.4rem;
-            max-width: 700px;
-            margin: 0 auto 2rem;
-            opacity: 0.95;
-        }
-        .hero-features {
-            display: flex;
-            gap: 3rem;
-            justify-content: center;
-            margin-top: 3rem;
-            font-size: 1.1rem;
-        }
-        .hero-feature {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .hero-feature::before {
-            content: "✓";
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-
-        /* Contact Section */
-        .contact-section {
-            padding: 8rem 3rem;
-            background: var(--cream);
-        }
-        .contact-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5rem;
-        }
-
-        /* Form */
-        .contact-form {
-            background: white;
-            padding: 3rem;
-            border-radius: 25px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-        }
-        .form-title {
-            font-family: 'Lora', serif;
-            font-size: 2.5rem;
-            color: var(--forest);
-            margin-bottom: 1.5rem;
-        }
-        .form-subtitle {
-            color: #666;
-            margin-bottom: 2rem;
-            font-size: 1.1rem;
-        }
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            color: var(--forest);
-        }
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 1rem 1.25rem;
-            border: 2px solid #e0e0e0;
-            border-radius: 12px;
-            font-family: 'Archivo', sans-serif;
-            font-size: 1rem;
-            transition: border-color 0.3s ease;
-        }
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: var(--lime);
-        }
-        .form-group textarea {
-            resize: vertical;
-            min-height: 120px;
-        }
-        .submit-button {
-            width: 100%;
-            background: var(--lime);
-            color: white;
-            padding: 1.25rem 2rem;
-            border: none;
-            border-radius: 50px;
-            font-size: 1.1rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-        .submit-button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(124, 179, 66, 0.4);
-        }
-        .form-note {
-            text-align: center;
-            margin-top: 1rem;
-            font-size: 0.9rem;
-            color: #666;
-        }
-
-        /* Contact Info */
-        .contact-info h3 {
-            font-family: 'Lora', serif;
-            font-size: 2rem;
-            color: var(--forest);
-            margin-bottom: 1.5rem;
-        }
-        .info-card {
-            background: white;
-            padding: 2rem;
-            border-radius: 20px;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
-        }
-        .info-card h4 {
-            color: var(--lime);
-            font-size: 1.2rem;
-            margin-bottom: 0.75rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-        .info-card p {
-            color: #555;
-            font-size: 1.05rem;
-            line-height: 1.8;
-        }
-        .info-card a {
-            color: var(--forest);
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .info-card a:hover {
-            color: var(--lime);
-        }
-
-        .why-choose {
-            background: var(--forest);
-            color: white;
-            padding: 2rem;
-            border-radius: 20px;
-            margin-top: 2rem;
-        }
-        .why-choose h4 {
-            color: var(--lime);
-            font-size: 1.3rem;
-            margin-bottom: 1rem;
-        }
-        .why-choose ul {
-            list-style: none;
-        }
-        .why-choose li {
-            padding: 0.5rem 0;
-            padding-left: 1.5rem;
-            position: relative;
-        }
-        .why-choose li::before {
-            content: "✓";
-            position: absolute;
-            left: 0;
-            color: var(--lime);
-            font-weight: bold;
-        }
-
-        /* Map Section */
-        .map-section {
-            padding: 0;
-            height: 400px;
-            background: #e0e0e0;
-        }
-        .map-placeholder {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #e0e0e0, #c0c0c0);
-            font-size: 1.5rem;
-            color: #666;
-        }
-
-        /* Footer */
-        footer { background: var(--forest); color: white; padding: 5rem 3rem 2rem; }
-        .footer-content { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4rem; }
-        .footer-brand { font-family: 'Lora', serif; font-size: 2rem; font-weight: 700; color: var(--lime); }
-
-        @media (max-width: 768px) {
-            .contact-hero h1 { font-size: 3rem; }
-            .contact-container { grid-template-columns: 1fr; gap: 3rem; }
-            .hero-features { flex-direction: column; gap: 1rem; }
-            .footer-content { grid-template-columns: 1fr; }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eden Landscapes — Get a Quote</title>
+  <meta name="description" content="Contact Eden Landscapes for a free landscaping quote. Portland, Oregon. Schedule a consultation today.">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --moss-900:#1b2216; --moss-800:#2c3828; --moss-700:#3d4f39;
+      --moss-600:#506a4b; --moss-500:#6b8f5e; --moss-400:#85a378;
+      --moss-200:#c8dcc0; --moss-100:#dce9d6;
+      --cream-50:#faf8f5; --cream-100:#f0ece5; --cream-200:#e5ddd2;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,sans-serif;line-height:1.6;color:#374151;background:var(--cream-50);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+    a{color:inherit;text-decoration:none}
+    img{max-width:100%;height:auto}
+    .reveal{opacity:0;transform:translateY(40px);transition:opacity .7s cubic-bezier(.22,1,.36,1),transform .7s cubic-bezier(.22,1,.36,1)}
+    .reveal.visible{opacity:1;transform:translateY(0)}
+  </style>
 </head>
 <body>
-    <!-- Reviews -->
-    <div class="trust-banner">
-        <div class="reviews-track">
-            <div class="review-item"><span class="review-text">"Amazing transformation!" - Jennifer M.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Professional work" - Robert T.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Best in area" - Maria S.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Exceeded expectations!" - David K.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Beautiful results" - Lisa P.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Amazing transformation!" - Jennifer M.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Professional work" - Robert T.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Best in area" - Maria S.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Exceeded expectations!" - David K.</span><span class="stars">★★★★★</span></div>
-            <div class="review-item"><span class="review-text">"Beautiful results" - Lisa P.</span><span class="stars">★★★★★</span></div>
-        </div>
+<nav class="eden-nav">
+  <div class="eden-nav-inner">
+    <a href="index.html" class="eden-nav-logo">Eden</a>
+    <div class="eden-nav-links">
+      <a href="index.html">Home</a>
+      <a href="services.html">Services</a>
+      <a href="gallery.html">Gallery</a>
+      <a href="contact.html">Contact</a>
+      <a href="contact.html" class="eden-nav-cta">Get a Quote</a>
     </div>
+    <button class="eden-nav-burger" onclick="document.querySelector('.eden-nav-links').classList.toggle('eden-nav-open')"><span></span><span></span><span></span></button>
+  </div>
+</nav>
+<style>
+  .eden-nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:1.5rem 0;background:transparent;transition:background .4s,backdrop-filter .4s;border-bottom:1px solid transparent}
+  .eden-nav.scrolled{background:rgba(44,56,40,.95);backdrop-filter:blur(12px);border-bottom-color:rgba(255,255,255,.08)}
+  .eden-nav-inner{max-width:1200px;margin:0 auto;padding:0 2rem;display:flex;justify-content:space-between;align-items:center}
+  .eden-nav-logo{font-family:'Cormorant Garamond',serif;font-size:2rem;font-weight:700;color:#fff;letter-spacing:4px;text-transform:uppercase}
+  .eden-nav-links{display:flex;gap:2.5rem;align-items:center}
+  .eden-nav-links a{color:rgba(255,255,255,.85);font-size:.82rem;font-weight:500;text-transform:uppercase;letter-spacing:1.5px;transition:color .3s}
+  .eden-nav-links a:hover{color:var(--moss-400)}
+  .eden-nav-cta{background:var(--moss-500)!important;color:#fff!important;padding:.65rem 1.75rem!important;border-radius:50px;font-weight:600!important;box-shadow:0 4px 16px rgba(107,143,94,.35);transition:transform .3s,box-shadow .3s!important}
+  .eden-nav-cta:hover{transform:translateY(-2px);box-shadow:0 6px 22px rgba(107,143,94,.5)}
+  .eden-nav-burger{display:none;background:none;border:none;cursor:pointer;flex-direction:column;gap:5px;padding:.5rem}
+  .eden-nav-burger span{display:block;width:24px;height:2px;background:#fff}
+  @media(max-width:768px){
+    .eden-nav-burger{display:flex}
+    .eden-nav-links{display:none;position:absolute;top:100%;left:0;right:0;background:rgba(44,56,40,.97);flex-direction:column;padding:2rem;gap:1.5rem}
+    .eden-nav-links.eden-nav-open{display:flex}
+  }
+</style>
+<script>
+(function(){
+  var nav=document.querySelector('.eden-nav');
+  nav.classList.add('scrolled');
+  function s(){nav.classList.toggle('scrolled',window.scrollY>60)}
+  window.addEventListener('scroll',s,{passive:true});
+})();
+</script>
+<section class="eden-page-header">
+  <div class="eden-page-header-blob"></div>
+  <div class="eden-page-header-content">
+    <span class="eden-page-header-label">Let's Connect</span>
+    <h1 class="eden-page-header-title">GET A FREE <span style="color:var(--moss-500)">QUOTE</span></h1>
+    <p class="eden-page-header-sub">Ready to enhance your outdoor living space? We'd love to hear about your project.</p>
+  </div>
+</section>
+<style>
+  .eden-page-header{position:relative;background:var(--moss-800);padding:7rem 2rem 5rem;overflow:hidden;text-align:center}
+  .eden-page-header-blob{position:absolute;top:-60px;right:-60px;width:320px;height:320px;background:rgba(107,143,94,.12);border-radius:50%;filter:blur(80px);pointer-events:none}
+  .eden-page-header-content{position:relative;z-index:2;max-width:720px;margin:0 auto}
+  .eden-page-header-label{display:block;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:var(--moss-500);margin-bottom:1rem}
+  .eden-page-header-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2.4rem,5vw,4rem);font-weight:700;color:#fff;line-height:1.1;margin-bottom:1rem}
+  .eden-page-header-sub{color:rgba(255,255,255,.7);font-size:1.05rem;line-height:1.7;font-weight:300}
+</style>
 
-    <!-- Nav -->
-    <nav>
-        <div class="nav-container">
-            <a href="index.html" class="logo">Green Valley Landscaping</a>
-            <div class="nav-links">
-                <a href="services.html">Services</a>
-                <a href="recent-work.html">Recent Work</a>
-                <a href="contact.html">Contact</a>
-                <a href="contact.html" class="nav-cta">Book Here</a>
-            </div>
+<!-- ─── CONTACT LAYOUT ─── -->
+<section class="eden-contact" style="background:var(--cream-50)">
+  <div class="eden-contact-container">
+    <!-- Left: info -->
+    <div class="eden-contact-info reveal">
+      <p class="eden-contact-intro">Provide some details below and we'll reach out to schedule a site visit and consultation.</p>
+      <div class="eden-contact-blocks">
+        <!-- Phone -->
+        <div class="eden-contact-block">
+          <div class="eden-contact-icon-wrap">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--moss-500)" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          </div>
+          <div>
+            <h4 class="eden-contact-block-title">Phone</h4>
+            <p class="eden-contact-block-val">(503) 555-0199</p>
+            <p class="eden-contact-block-hint">Mon–Fri 7AM–5PM</p>
+          </div>
         </div>
-    </nav>
-
-    <!-- Contact Hero -->
-    <section class="contact-hero">
-        <div class="offer-badge">🎉 SPECIAL OFFER</div>
-        <h1>Get 25% Off Your First Service</h1>
-        <p>Transform your outdoor space this season. Fill out the form below to claim your discount and receive a free consultation!</p>
-        <div class="hero-features">
-            <div class="hero-feature">Free On-Site Consultation</div>
-            <div class="hero-feature">Same-Day Quotes</div>
-            <div class="hero-feature">No Obligation</div>
+        <!-- Email -->
+        <div class="eden-contact-block">
+          <div class="eden-contact-icon-wrap">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--moss-500)" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <div>
+            <h4 class="eden-contact-block-title">Email</h4>
+            <p class="eden-contact-block-val">hello@edenlandscapes.com</p>
+          </div>
         </div>
-    </section>
-
-    <!-- Contact Form -->
-    <section class="contact-section">
-        <div class="contact-container">
-            <!-- Form -->
-            <div class="contact-form">
-                <h2 class="form-title">Request Your Free Quote</h2>
-                <p class="form-subtitle">Tell us about your project and we'll get back to you within 24 hours</p>
-                
-                <form action="#" method="POST">
-                    <div class="form-group">
-                        <label for="name">Full Name *</label>
-                        <input type="text" id="name" name="name" required placeholder="John Smith">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="email">Email Address *</label>
-                        <input type="email" id="email" name="email" required placeholder="john@example.com">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="phone">Phone Number *</label>
-                        <input type="tel" id="phone" name="phone" required placeholder="(555) 123-4567">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="address">Property Address</label>
-                        <input type="text" id="address" name="address" placeholder="123 Main St, Seattle, WA">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="service">Service Interested In *</label>
-                        <select id="service" name="service" required>
-                            <option value="">Select a service...</option>
-                            <option value="landscape-design">Landscape Design</option>
-                            <option value="lawn-maintenance">Lawn Maintenance</option>
-                            <option value="garden-design">Garden Design</option>
-                            <option value="hardscaping">Hardscaping</option>
-                            <option value="tree-services">Tree Services</option>
-                            <option value="irrigation">Irrigation Systems</option>
-                            <option value="other">Other / Not Sure</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="message">Tell Us About Your Project *</label>
-                        <textarea id="message" name="message" required placeholder="Describe your vision, timeline, budget, or any specific requirements..."></textarea>
-                    </div>
-
-                    <button type="submit" class="submit-button">Claim My 25% Discount</button>
-                    <p class="form-note">By submitting, you agree to receive communications from Green Valley Landscaping</p>
-                </form>
-            </div>
-
-            <!-- Contact Info -->
-            <div class="contact-info">
-                <h3>Get In Touch</h3>
-                
-                <div class="info-card">
-                    <h4>📞 Phone</h4>
-                    <p><a href="tel:5558472900">(555) 847-2900</a><br>
-                    Monday - Friday: 7AM - 6PM<br>
-                    Saturday: 8AM - 4PM<br>
-                    Emergency Service Available</p>
-                </div>
-
-                <div class="info-card">
-                    <h4>✉️ Email</h4>
-                    <p><a href="/cdn-cgi/l/email-protection#b7ded9d1d8f7d0c5d2d2d9c1d6dbdbd2ce99d4d8da"><span class="__cf_email__" data-cfemail="a9c0c7cfc6e9cedbccccc7dfc8c5c5ccd087cac6c4">[email&#160;protected]</span></a><br>
-                    We respond within 24 hours</p>
-                </div>
-
-                <div class="info-card">
-                    <h4>📍 Service Area</h4>
-                    <p>Serving Greater Seattle Area<br>
-                    Bellevue, Redmond, Kirkland,<br>
-                    Sammamish, Issaquah & More</p>
-                </div>
-
-                <div class="why-choose">
-                    <h4>Why Clients Choose Us</h4>
-                    <ul>
-                        <li>15+ Years of Experience</li>
-                        <li>Licensed & Fully Insured</li>
-                        <li>100% Satisfaction Guarantee</li>
-                        <li>Eco-Friendly Practices</li>
-                        <li>Competitive Pricing</li>
-                        <li>Award-Winning Results</li>
-                    </ul>
-                </div>
-            </div>
+        <!-- Location -->
+        <div class="eden-contact-block">
+          <div class="eden-contact-icon-wrap">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--moss-500)" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <div>
+            <h4 class="eden-contact-block-title">Location</h4>
+            <p class="eden-contact-block-val">882 Garden Grove Ln<br>Portland, OR 97204</p>
+          </div>
         </div>
-    </section>
+      </div>
+    </div>
+    <!-- Right: form -->
+    <div class="eden-contact-form-wrap reveal" style="transition-delay:0.15s">
+      <div class="eden-contact-form-card">
+        <h3 class="eden-contact-form-title">Project Details</h3>
+        <p class="eden-contact-form-req">Fields marked with <span style="color:var(--moss-500)">*</span> are required.</p>
+        <form id="eden-form" class="eden-contact-form" onsubmit="edenSubmit(event)">
+          <div class="eden-form-row">
+            <div class="eden-form-field">
+              <label>First Name <span style="color:var(--moss-500)">*</span></label>
+              <input required type="text" placeholder="Jane">
+            </div>
+            <div class="eden-form-field">
+              <label>Last Name <span style="color:var(--moss-500)">*</span></label>
+              <input required type="text" placeholder="Smith">
+            </div>
+          </div>
+          <div class="eden-form-field">
+            <label>Email Address <span style="color:var(--moss-500)">*</span></label>
+            <input required type="email" placeholder="jane@example.com">
+          </div>
+          <div class="eden-form-field">
+            <label>Property Address <span style="color:var(--moss-500)">*</span></label>
+            <input required type="text" placeholder="123 Maple St">
+          </div>
+          <div class="eden-form-field">
+            <label>Service Type <span style="color:var(--moss-500)">*</span></label>
+            <select required>
+              <option value="" disabled selected>Select a Service</option>
+              <option>Lawn Maintenance Plan</option>
+              <option>Landscape Design &amp; Install</option>
+              <option>Hardscaping / Patio</option>
+              <option>Irrigation System</option>
+              <option>Tree Service</option>
+              <option>Other / Custom Project</option>
+            </select>
+          </div>
+          <div class="eden-form-field">
+            <label>Project Description / Goals <span style="color:var(--moss-500)">*</span></label>
+            <textarea required rows="4" placeholder="Describe your vision, estimated square footage, or specific problems…"></textarea>
+          </div>
+          <div class="eden-form-consent">
+            <input required type="checkbox" id="eden-sms-consent" class="eden-form-checkbox">
+            <label for="eden-sms-consent">I agree to receive communications from Eden Landscapes regarding my estimate. Message &amp; data rates may apply. <span style="color:var(--moss-500)">*</span></label>
+          </div>
+          <button type="submit" class="eden-form-submit" id="eden-submit-btn">
+            <span id="eden-submit-text">Submit Request</span>
+            <svg id="eden-submit-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+<style>
+  .eden-contact{padding:5rem 2rem 6rem}
+  .eden-contact-container{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1.1fr;gap:4rem;align-items:start}
+  .eden-contact-intro{color:rgba(80,106,75,.7);font-size:1.05rem;line-height:1.75;margin-bottom:2.5rem}
+  .eden-contact-blocks{display:flex;flex-direction:column;gap:2rem}
+  .eden-contact-block{display:flex;align-items:flex-start;gap:1rem}
+  .eden-contact-icon-wrap{width:48px;height:48px;background:#fff;border:1px solid var(--moss-200);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 3px 10px rgba(107,143,94,.1)}
+  .eden-contact-block-title{font-weight:700;color:var(--moss-900);font-size:1rem;margin-bottom:.2rem}
+  .eden-contact-block-val{color:var(--moss-600);font-weight:600;font-size:.95rem;line-height:1.5}
+  .eden-contact-block-hint{color:#9ca3af;font-size:.78rem;margin-top:.15rem}
+  /* Form card */
+  .eden-contact-form-card{background:#fff;border:1px solid var(--moss-200);border-radius:2rem;padding:2.5rem;box-shadow:0 6px 24px rgba(0,0,0,.06)}
+  .eden-contact-form-title{font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:700;color:var(--moss-900);margin-bottom:.25rem}
+  .eden-contact-form-req{font-size:.82rem;color:#9ca3af;margin-bottom:1.75rem}
+  .eden-contact-form{display:flex;flex-direction:column;gap:1.25rem}
+  .eden-form-row{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+  .eden-form-field label{display:block;font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--moss-600);margin-bottom:.4rem}
+  .eden-form-field input,.eden-form-field select,.eden-form-field textarea{width:100%;background:var(--cream-100);border:1px solid var(--moss-200);border-radius:10px;padding:.85rem 1rem;font-family:inherit;font-size:.92rem;color:var(--moss-900);transition:border-color .25s,box-shadow .25s;outline:none}
+  .eden-form-field input::placeholder,.eden-form-field textarea::placeholder{color:rgba(80,106,75,.45)}
+  .eden-form-field input:focus,.eden-form-field select:focus,.eden-form-field textarea:focus{border-color:var(--moss-500);box-shadow:0 0 0 1px var(--moss-500)}
+  .eden-form-field select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23506a4b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 1rem center;padding-right:2.5rem;cursor:pointer}
+  .eden-form-consent{display:flex;align-items:flex-start;gap:.6rem;padding:.85rem 1rem;background:var(--cream-100);border:1px solid var(--moss-200);border-radius:.75rem}
+  .eden-form-checkbox{margin-top:.15rem;accent-color:var(--moss-500);width:16px;height:16px;flex-shrink:0;cursor:pointer}
+  .eden-form-consent label{font-size:.78rem;color:#6b7280;line-height:1.5;cursor:pointer}
+  .eden-form-submit{width:100%;display:flex;align-items:center;justify-content:center;gap:.6rem;padding:1rem;background:var(--moss-500);color:#fff;border:none;border-radius:14px;font-family:inherit;font-size:.92rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;cursor:pointer;box-shadow:0 4px 16px rgba(107,143,94,.3);transition:transform .2s,box-shadow .2s,background .3s}
+  .eden-form-submit:hover{transform:scale(1.02);box-shadow:0 6px 22px rgba(107,143,94,.45)}
+  .eden-form-submit:disabled{cursor:not-allowed;opacity:.7}
+  .eden-form-submit.success{background:#16a34a}
+  @media(max-width:900px){.eden-contact-container{grid-template-columns:1fr;gap:3rem}}
+  @media(max-width:600px){.eden-form-row{grid-template-columns:1fr}.eden-contact{padding:3rem 1.5rem 5rem}}
+</style>
 
-    <!-- Map -->
-    <section class="map-section">
-        <div class="map-placeholder">
-            <p>📍 Service Area Map</p>
+<footer class="eden-footer">
+  <div class="eden-footer-main">
+    <div class="eden-footer-container">
+      <div class="eden-footer-col eden-footer-brand">
+        <h3 class="eden-footer-logo">Eden</h3>
+        <p class="eden-footer-tagline">Crafting outdoor sanctuaries since 2001.</p>
+        <div class="eden-footer-social">
+          <a href="#" class="eden-footer-social-link" aria-label="Facebook"><svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+          <a href="#" class="eden-footer-social-link" aria-label="Instagram"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+          <a href="#" class="eden-footer-social-link" aria-label="Google"><svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg></a>
         </div>
-    </section>
+      </div>
+      <div class="eden-footer-col">
+        <h4 class="eden-footer-heading">Services</h4>
+        <ul class="eden-footer-list"><li>Lawn Care</li><li>Garden Design</li><li>Hardscaping</li><li>Irrigation</li></ul>
+      </div>
+      <div class="eden-footer-col">
+        <h4 class="eden-footer-heading">Hours</h4>
+        <div class="eden-footer-hours">Mon–Fri: 7AM–5PM<br>Sat: 8AM–2PM<br>Sunday: Closed</div>
+      </div>
+      <div class="eden-footer-col">
+        <h4 class="eden-footer-heading">Contact</h4>
+        <div class="eden-footer-contact">
+          <a href="tel:+15035550199" class="eden-footer-contact-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            (503) 555-0199
+          </a>
+          <a href="mailto:hello@edenlandscapes.com" class="eden-footer-contact-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            hello@edenlandscapes.com
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="eden-footer-bottom">
+    <div class="eden-footer-container">
+      <p>© 2026 Eden Landscapes. All rights reserved.</p>
+      <div class="eden-footer-links"><a href="#">Privacy Policy</a><a href="#">Terms of Service</a></div>
+    </div>
+  </div>
+</footer>
+<style>
+  .eden-footer{background:var(--moss-900);color:rgba(255,255,255,.85)}
+  .eden-footer-main{padding:4rem 2rem;border-bottom:1px solid rgba(255,255,255,.1)}
+  .eden-footer-container{max-width:1200px;margin:0 auto}
+  .eden-footer-main .eden-footer-container{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:3rem}
+  .eden-footer-logo{font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:700;color:var(--moss-400);letter-spacing:3px;text-transform:uppercase;margin-bottom:.6rem}
+  .eden-footer-tagline{color:rgba(255,255,255,.5);font-size:.92rem;margin-bottom:1.25rem;line-height:1.6}
+  .eden-footer-social{display:flex;gap:.6rem}
+  .eden-footer-social-link{width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);border-radius:10px;color:rgba(255,255,255,.6);transition:all .3s}
+  .eden-footer-social-link:hover{background:var(--moss-500);color:#fff;transform:translateY(-2px)}
+  .eden-footer-heading{font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:700;color:#fff;margin-bottom:1rem;text-transform:uppercase;letter-spacing:1px}
+  .eden-footer-list{list-style:none;padding:0;margin:0}
+  .eden-footer-list li{padding:.45rem 0;color:rgba(255,255,255,.55);font-size:.92rem;transition:color .2s;cursor:default}
+  .eden-footer-list li:hover{color:var(--moss-400)}
+  .eden-footer-hours{color:rgba(255,255,255,.55);font-size:.92rem;line-height:1.9}
+  .eden-footer-contact{display:flex;flex-direction:column;gap:.85rem}
+  .eden-footer-contact-item{display:flex;align-items:center;gap:.6rem;color:rgba(255,255,255,.55);font-size:.92rem;transition:color .2s}
+  .eden-footer-contact-item:hover{color:var(--moss-400)}
+  .eden-footer-contact-item svg{flex-shrink:0;color:var(--moss-400)}
+  .eden-footer-bottom{padding:1.5rem 2rem}
+  .eden-footer-bottom .eden-footer-container{display:flex;justify-content:space-between;align-items:center}
+  .eden-footer-bottom p{color:rgba(255,255,255,.35);font-size:.85rem}
+  .eden-footer-links{display:flex;gap:2rem}
+  .eden-footer-links a{color:rgba(255,255,255,.35);font-size:.85rem;transition:color .2s}
+  .eden-footer-links a:hover{color:rgba(255,255,255,.6)}
+  @media(max-width:900px){.eden-footer-main .eden-footer-container{grid-template-columns:repeat(2,1fr);gap:2.5rem}}
+  @media(max-width:600px){
+    .eden-footer-main{padding:3rem 1.5rem}
+    .eden-footer-main .eden-footer-container{grid-template-columns:1fr;gap:2rem}
+    .eden-footer-bottom{padding:1.5rem}
+    .eden-footer-bottom .eden-footer-container{flex-direction:column;gap:.75rem;text-align:center}
+  }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){e.target.classList.add('visible');obs.unobserve(e.target)}
+    });
+  },{threshold:.12,rootMargin:'0px 0px -60px 0px'});
+  document.querySelectorAll('.reveal').forEach(function(el){obs.observe(el)});
+  document.querySelectorAll('a[href^="#"]').forEach(function(link){
+    link.addEventListener('click',function(e){
+      var t=document.querySelector(link.getAttribute('href'));
+      if(t){e.preventDefault();t.scrollIntoView({behavior:'smooth',block:'start'})}
+    });
+  });
+});
+</script>
+<script>
+function edenSubmit(e){
+  e.preventDefault();
+  var btn=document.getElementById('eden-submit-btn');
+  var txt=document.getElementById('eden-submit-text');
+  var icon=document.getElementById('eden-submit-icon');
+  btn.disabled=true;
+  txt.textContent='Sending…';
+  icon.style.display='none';
+  setTimeout(function(){
+    txt.textContent='Request Sent!';
+    btn.classList.add('success');
+    setTimeout(function(){
+      btn.disabled=false;
+      btn.classList.remove('success');
+      txt.textContent='Submit Request';
+      icon.style.display='inline-block';
+      document.getElementById('eden-form').reset();
+    },3000);
+  },1500);
+}
+</script>
+</body>
+</html>
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer__inner">
+    <div class="footer__brand">
+      <div class="footer__brand-logo">Eden <span>Landscapes</span></div>
+      <p>Crafting beautiful, sustainable outdoor spaces across the Portland metro area since 2014. Your yard, reimagined.</p>
+    </div>
+    <div class="footer__col">
+      <h4>Quick Links</h4>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="services.html">Services</a></li>
+        <li><a href="gallery.html">Gallery</a></li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+    </div>
+    <div class="footer__col">
+      <h4>Services</h4>
+      <ul>
+        <li><a href="#">Lawn Maintenance</a></li>
+        <li><a href="#">Landscape Design</a></li>
+        <li><a href="#">Hardscaping</a></li>
+        <li><a href="#">Irrigation</a></li>
+        <li><a href="#">Tree Service</a></li>
+      </ul>
+    </div>
+    <div class="footer__col">
+      <h4>Contact</h4>
+      <ul>
+        <li><a href="#">(503) 555-0199</a></li>
+        <li><a href="#">hello@edenlandscapes.com</a></li>
+        <li><a href="#">882 Garden Grove Ln</a></li>
+        <li><a href="#">Portland, OR 97204</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer__bottom">
+    <span>&copy; 2025 Eden Landscapes. All rights reserved.</span>
+    <span>Crafted with care &amp; green thumb.</span>
+  </div>
+</footer>
 
-    <!-- Footer -->
-    <footer>
-        <div class="footer-content">
-            <div>
-                <div class="footer-brand">Green Valley Landscaping</div>
-                <p style="color: rgba(255,255,255,0.7); margin-top: 1rem;">Creating beautiful outdoor spaces</p>
-            </div>
-            <div>
-                <h4 style="color: var(--lime); margin-bottom: 1rem;">Services</h4>
-                <p style="color: rgba(255,255,255,0.7);">Landscape Design<br>Lawn Maintenance<br>Tree Service</p>
-            </div>
-            <div>
-                <h4 style="color: var(--lime); margin-bottom: 1rem;">Contact</h4>
-                <p style="color: rgba(255,255,255,0.7);">(555) 847-2900<br><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7d14131b123d1a0f1818130b1c11111804531e1210">[email&#160;protected]</a></p>
-            </div>
+<!-- SCRIPTS -->
+<script>
+  // Nav scroll handler
+  (function () {
+    var nav = document.getElementById('nav');
+    nav.classList.add('scrolled');
+    window.addEventListener('scroll', function () {
+      if (window.scrollY > 40) nav.classList.add('scrolled');
+      else nav.classList.remove('scrolled');
+    });
+  })();
+
+  // IntersectionObserver for .reveal
+  (function () {
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) entry.target.classList.add('visible');
+      });
+    }, { threshold: 0.15 });
+    document.querySelectorAll('.reveal').forEach(function (el) {
+      observer.observe(el);
+    });
+  })();
+
+  // Contact Form – simulated submission
+  (function () {
+    var form    = document.getElementById('contactForm');
+    var btn     = document.getElementById('submitBtn');
+    var btnText = document.getElementById('submitText');
+    var btnIcon = document.getElementById('submitIcon');
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!form.checkValidity()) { form.reportValidity(); return; }
+
+      // Sending state
+      btn.classList.add('sending');
+      btnText.textContent = 'Sending…';
+      btnIcon.style.display = 'none';
+
+      setTimeout(function () {
+        // Sent state
+        btn.classList.remove('sending');
+        btn.classList.add('sent');
+        btnText.textContent = 'Request Sent!';
+        btnIcon.style.display = 'none';
+
+        setTimeout(function () {
+          // Reset
+          btn.classList.remove('sent');
+          btnText.textContent = 'Submit Request';
+          btnIcon.style.display = '';
+          form.reset();
+        }, 3000);
+      }, 1500);
+    });
+  })();
+</script>
+
+</body>
+</html>
