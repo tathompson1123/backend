@@ -1,53 +1,31 @@
 // ============================================
 // PAGE RENDERER (V2 - Scoped CSS)
 // Combines section templates + content + theme → full HTML
+// Supports single-page (renderPage) and multi-page (renderMultiPage)
 // ============================================
 
 const { getSection } = require('./registry');
 
-function renderPage(pageSchema) {
-  console.log('🎨 RENDERER: renderPage called');
-  console.log('🎨 RENDERER: pageSchema exists:', !!pageSchema);
-  console.log('🎨 RENDERER: sections count:', pageSchema?.sections?.length || 0);
-  
-  if (pageSchema?.sections) {
-    console.log('🎨 RENDERER: Section templates requested:', pageSchema.sections.map(s => s.template));
+// ── Shared helpers ────────────────────────────────────────────────────
+
+function renderSectionHtml(section, theme) {
+  const template = getSection(section.template);
+  if (!template) {
+    console.warn(`⚠️ RENDERER: Template NOT FOUND: ${section.template}`);
+    return `<!-- Unknown section: ${section.template} -->`;
   }
-
-  if (!pageSchema || !pageSchema.sections) {
-    console.log('❌ RENDERER: No pageSchema or sections!');
-    return '<html><body><p>No content</p></body></html>';
+  try {
+    const sectionId = section.id || section.template;
+    const html = template.render(section.content || {}, theme, sectionId);
+    // Wrap in id-tagged div so anchor links (#services, etc.) resolve
+    return `<div id="${sectionId}">${html}</div>`;
+  } catch (err) {
+    console.error(`❌ RENDERER: Error rendering ${section.template}:`, err);
+    return `<!-- Error rendering: ${section.template} -->`;
   }
+}
 
-  const theme = pageSchema.theme || {};
-  const meta = pageSchema.meta || {};
-
-  const sectionsHtml = pageSchema.sections
-    .map(section => {
-      console.log(`🎨 RENDERER: Looking for template: ${section.template}`);
-      const template = getSection(section.template);
-      
-      if (!template) {
-        console.warn(`⚠️ RENDERER: Template NOT FOUND: ${section.template}`);
-        return `<!-- Unknown section: ${section.template} -->`;
-      }
-      
-      console.log(`✅ RENDERER: Found template: ${section.template}`);
-      
-      try {
-        const sectionId = section.id || section.template;
-        const html = template.render(section.content || {}, theme, sectionId);
-        console.log(`✅ RENDERER: Rendered ${section.template} - ${html.length} chars`);
-        // Wrap in an id-tagged div so anchor links (#services, #contact, etc.) resolve
-        return `<div id="${sectionId}">${html}</div>`;
-      } catch (err) {
-        console.error(`❌ RENDERER: Error rendering ${section.template}:`, err);
-        return `<!-- Error rendering: ${section.template} -->`;
-      }
-    })
-    .join('\n\n');
-
-  // Build full HTML document
+function buildPageHtml(sectionsHtml, theme, meta) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -97,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
   document.querySelectorAll('.reveal').forEach(function(el) { revealObserver.observe(el); });
 
-  // Smooth scroll for anchor links
+  // Smooth scroll for anchor links only (not page links)
   document.querySelectorAll('a[href^="#"]').forEach(function(link) {
     link.addEventListener('click', function(e) {
       var target = document.querySelector(link.getAttribute('href'));
@@ -113,10 +91,92 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>`;
 }
 
+// ── Single-page renderer ──────────────────────────────────────────────
+
+function renderPage(pageSchema) {
+  console.log('🎨 RENDERER: renderPage called');
+  console.log('🎨 RENDERER: pageSchema exists:', !!pageSchema);
+  console.log('🎨 RENDERER: sections count:', pageSchema?.sections?.length || 0);
+
+  if (pageSchema?.sections) {
+    console.log('🎨 RENDERER: Section templates requested:', pageSchema.sections.map(s => s.template));
+  }
+
+  if (!pageSchema || !pageSchema.sections) {
+    console.log('❌ RENDERER: No pageSchema or sections!');
+    return '<html><body><p>No content</p></body></html>';
+  }
+
+  const theme = pageSchema.theme || {};
+  const meta = pageSchema.meta || {};
+
+  const sectionsHtml = pageSchema.sections
+    .map(section => {
+      console.log(`🎨 RENDERER: Looking for template: ${section.template}`);
+      const result = renderSectionHtml(section, theme);
+      if (!result.startsWith('<!--')) {
+        console.log(`✅ RENDERER: Rendered ${section.template}`);
+      }
+      return result;
+    })
+    .join('\n\n');
+
+  return buildPageHtml(sectionsHtml, theme, meta);
+}
+
+// ── Multi-page renderer ───────────────────────────────────────────────
+// Schema shape:
+//   { multiPage: true, nav: {id,template,content}, footer: {id,template,content},
+//     pages: [{ filename, meta, sections: [...] }], theme, meta }
+// Returns: { 'index.html': html, 'services.html': html, ... }
+
+function renderMultiPage(pageSchema) {
+  console.log('🎨 RENDERER: renderMultiPage called');
+
+  if (!pageSchema.multiPage || !pageSchema.pages) {
+    console.error('❌ RENDERER: renderMultiPage called but schema is not multi-page');
+    return {};
+  }
+
+  const theme = pageSchema.theme || {};
+  const baseMeta = pageSchema.meta || {};
+  const result = {};
+
+  for (const page of pageSchema.pages) {
+    const filename = page.filename || 'index.html';
+    const pageMeta = Object.assign({}, baseMeta, page.meta || {});
+
+    console.log(`🎨 RENDERER: Rendering page: ${filename}`);
+
+    const htmlParts = [];
+
+    // Inject shared nav at the top of every page
+    if (pageSchema.nav) {
+      htmlParts.push(renderSectionHtml(pageSchema.nav, theme));
+    }
+
+    // Page-specific sections
+    for (const section of (page.sections || [])) {
+      console.log(`🎨 RENDERER: [${filename}] template: ${section.template}`);
+      htmlParts.push(renderSectionHtml(section, theme));
+    }
+
+    // Inject shared footer at the bottom of every page
+    if (pageSchema.footer) {
+      htmlParts.push(renderSectionHtml(pageSchema.footer, theme));
+    }
+
+    result[filename] = buildPageHtml(htmlParts.join('\n\n'), theme, pageMeta);
+    console.log(`✅ RENDERER: ${filename} rendered, ${result[filename].length} chars`);
+  }
+
+  return result;
+}
+
 function escapeHtml(text) {
   if (!text) return '';
   const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
   return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
-module.exports = { renderPage };
+module.exports = { renderPage, renderMultiPage };

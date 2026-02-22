@@ -60,17 +60,16 @@ function buildSchemaPrompt(businessData) {
   ].filter(Boolean).join('\n');
 
   // ── layout dispatch ───────────────────────────────
+  // Auto-detailing uses a separate multi-page prompt — return early
+  if (layout === 'autoDetailing') {
+    return buildAutoDetailingMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
+  }
+
   let mainSections, sectionOrder, contactId, footerId;
   switch (layout) {
     case 'organic':
       mainSections = organicSections({ businessName });
       sectionOrder = 'nav → hero → reviews → importance → services → transformations → benefits → cta → contact → footer';
-      contactId    = 'contact';
-      footerId     = 'footer';
-      break;
-    case 'autoDetailing':
-      mainSections = autoDetailingSections({ businessName, phone, phoneClean });
-      sectionOrder = 'nav → hero → reviews → features → services → benefits → gallery → testimonials → cta → contact → footer';
       contactId    = 'contact';
       footerId     = 'footer';
       break;
@@ -291,158 +290,219 @@ function organicSections({ businessName }) {
     }`;
 }
 
-// ── Auto-detailing layout (cars, ceramic coatings, etc.) ────────────
-function autoDetailingSections({ businessName, phone, phoneClean }) {
-  return `    {
-      "id": "nav",
-      "template": "nav-sticky-dark",
-      "content": {
-        "logo": "${businessName}",
-        "links": [
-          { "text": "Services", "url": "#services" },
-          { "text": "Gallery",  "url": "#gallery" },
-          { "text": "Reviews",  "url": "#reviews" },
-          { "text": "Contact",  "url": "#contact" }
-        ],
-        "ctaText": "Book Now",
-        "ctaLink": "#contact"
-      }
-    },
+// ── Auto-detailing: multi-page prompt ────────────────────────────────
+function buildAutoDetailingMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList }) {
+  const servicesJson = JSON.stringify(servicesList.slice(0, 6).map(s => ({ text: s })));
+
+  return `You are a website content generator for auto detailing businesses. Generate a JSON object for a MULTI-PAGE website with 4 separate pages.
+
+IMPORTANT: Return ONLY valid JSON. No markdown, no backticks, no explanation. Just the JSON object.
+
+== BUSINESS INFO ==
+${businessInfo}
+
+== YOUR TASK ==
+Generate a JSON object with this EXACT structure. Fill in compelling, professional content for this specific business.
+
+{
+  "meta": { "title": "${businessName} - Premium Auto Detailing", "description": "SEO meta description 150-160 chars" },
+  "multiPage": true,
+  "nav": {
+    "id": "nav",
+    "template": "nav-sticky-dark",
+    "content": {
+      "logo": "${businessName}",
+      "links": [
+        { "text": "Home",     "url": "index.html" },
+        { "text": "Services", "url": "services.html" },
+        { "text": "Gallery",  "url": "gallery.html" },
+        { "text": "Contact",  "url": "contact.html" }
+      ],
+      "ctaText": "Book Now",
+      "ctaLink": "contact.html"
+    }
+  },
+  "footer": {
+    "id": "footer",
+    "template": "footer-4col-dark",
+    "content": {
+      "logo": "${businessName}",
+      "tagline": "Short compelling tagline",
+      "services": ${servicesJson},
+      "phone": "${phone}",
+      "email": "${email}",
+      "hours": "${hoursText}"
+    }
+  },
+  "pages": [
     {
-      "id": "hero",
-      "template": "hero-fullscreen-dark",
-      "content": {
-        "headline": "Main headline WITHOUT the highlight word",
-        "highlightText": "One or two highlight words",
-        "subtitle": "A compelling subtitle (1-2 sentences) about the business value prop",
-        "ctaText": "Book Your Detail",
-        "ctaLink": "#contact",
-        "ctaText2": "View Our Work",
-        "ctaLink2": "#gallery",
-        "backgroundImage": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=1920"
-      }
-    },
-    {
-      "id": "reviews",
-      "template": "review-marquee",
-      "content": {
-        "reviews": [
-          { "name": "David K.",  "stars": 5, "text": "A realistic 5-star review about this auto detailing business", "date": "3 days ago",  "avatarColor": "#d97706" },
-          { "name": "Maria S.",  "stars": 5, "text": "Another realistic review about the quality and finish",       "date": "1 week ago",  "avatarColor": "#f59e0b" },
-          { "name": "Chris T.",  "stars": 5, "text": "Review highlighting ceramic coating or paint correction",      "date": "2 weeks ago", "avatarColor": "#b45309" },
-          { "name": "Lisa R.",   "stars": 5, "text": "Review about interior cleaning or full detail package",        "date": "4 days ago",  "avatarColor": "#d97706" },
-          { "name": "James W.",  "stars": 5, "text": "Review about how the car looks brand new after service",       "date": "1 month ago", "avatarColor": "#f59e0b" },
-          { "name": "Karen M.",  "stars": 4, "text": "A measured but still positive review about the experience",    "date": "10 days ago", "avatarColor": "#92400e" }
-        ]
-      }
-    },
-    {
-      "id": "features",
-      "template": "features-icon-row",
-      "content": {
-        "features": [
-          { "icon": "⭐", "title": "Feature 1 Title", "text": "Short description relevant to auto detailing" },
-          { "icon": "🛡️", "title": "Feature 2 Title", "text": "Short description relevant to auto detailing" },
-          { "icon": "⚡", "title": "Feature 3 Title", "text": "Short description relevant to auto detailing" },
-          { "icon": "🏆", "title": "Feature 4 Title", "text": "Short description relevant to auto detailing" }
-        ]
-      }
-    },
-    {
-      "id": "services",
-      "template": "services-carousel",
-      "content": {
-        "title": "Our Services",
-        "subtitle": "Premium detailing packages for every need",
-        "services": [
-          {
-            "title": "First service name from the list above",
-            "category": "Appropriate category label",
-            "price": "From $XXX",
-            "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600",
-            "features": ["Key feature 1", "Key feature 2", "Key feature 3"],
-            "recommended": true
-          },
-          {
-            "title": "Second service name from the list above",
-            "category": "Appropriate category label",
-            "price": "From $XXX",
-            "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600",
-            "features": ["Key feature 1", "Key feature 2", "Key feature 3"],
-            "recommended": false
-          },
-          {
-            "title": "Third service name from the list above",
-            "category": "Appropriate category label",
-            "price": "From $XXX",
-            "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600",
-            "features": ["Key feature 1", "Key feature 2", "Key feature 3"],
-            "recommended": false
+      "filename": "index.html",
+      "meta": { "title": "${businessName} - Premium Auto Detailing", "description": "Homepage SEO description" },
+      "sections": [
+        {
+          "id": "hero",
+          "template": "hero-fullscreen-dark",
+          "content": {
+            "headline": "Main headline WITHOUT the highlight word",
+            "highlightText": "One or two highlight words",
+            "subtitle": "Compelling subtitle 1-2 sentences about this business",
+            "ctaText": "Book Your Detail",
+            "ctaLink": "contact.html",
+            "ctaText2": "View Our Work",
+            "ctaLink2": "gallery.html",
+            "backgroundImage": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=1920"
           }
-        ]
-      }
+        },
+        {
+          "id": "reviews",
+          "template": "review-marquee",
+          "content": {
+            "reviews": [
+              { "name": "David K.",  "stars": 5, "text": "Realistic 5-star review about this auto detailing business", "date": "3 days ago",  "avatarColor": "#d97706" },
+              { "name": "Maria S.",  "stars": 5, "text": "Review about quality and finish",                            "date": "1 week ago",  "avatarColor": "#f59e0b" },
+              { "name": "Chris T.",  "stars": 5, "text": "Review highlighting ceramic coating or paint correction",    "date": "2 weeks ago", "avatarColor": "#b45309" },
+              { "name": "Lisa R.",   "stars": 5, "text": "Review about interior cleaning or full detail package",      "date": "4 days ago",  "avatarColor": "#d97706" },
+              { "name": "James W.",  "stars": 5, "text": "Review about car looking brand new after service",           "date": "1 month ago", "avatarColor": "#f59e0b" },
+              { "name": "Karen M.",  "stars": 4, "text": "Measured but positive review about the overall experience",  "date": "10 days ago", "avatarColor": "#92400e" }
+            ]
+          }
+        },
+        {
+          "id": "features",
+          "template": "features-icon-row",
+          "content": {
+            "features": [
+              { "icon": "⭐", "title": "Feature 1 Title", "text": "Short description relevant to auto detailing" },
+              { "icon": "🛡️", "title": "Feature 2 Title", "text": "Short description relevant to auto detailing" },
+              { "icon": "⚡", "title": "Feature 3 Title", "text": "Short description relevant to auto detailing" },
+              { "icon": "🏆", "title": "Feature 4 Title", "text": "Short description relevant to auto detailing" }
+            ]
+          }
+        },
+        {
+          "id": "cta",
+          "template": "cta-gradient-full",
+          "content": {
+            "badge": "Limited Time",
+            "headline": "Compelling CTA headline for auto detailing",
+            "subtitle": "Supporting text that drives action",
+            "ctaText": "Book Now",
+            "ctaLink": "contact.html",
+            "ctaText2": "Call Now: ${phone}",
+            "ctaLink2": "tel:${phoneClean}",
+            "features": [
+              { "text": "Feature pill 1 for auto detailing" },
+              { "text": "Feature pill 2 for auto detailing" },
+              { "text": "Feature pill 3 for auto detailing" }
+            ]
+          }
+        }
+      ]
     },
     {
-      "id": "benefits",
-      "template": "benefits-cards",
-      "content": {
-        "title": "Why Choose ${businessName}",
-        "subtitle": "Premium quality you can see and feel",
-        "benefits": [
-          { "icon": "✨", "title": "Benefit Title 1", "description": "Why this matters to the customer" },
-          { "icon": "🛡️", "title": "Benefit Title 2", "description": "Why this matters to the customer" },
-          { "icon": "🏆", "title": "Benefit Title 3", "description": "Why this matters to the customer" }
-        ]
-      }
+      "filename": "services.html",
+      "meta": { "title": "Services | ${businessName}", "description": "Services page SEO description" },
+      "sections": [
+        {
+          "id": "services",
+          "template": "services-carousel",
+          "content": {
+            "title": "Our Services",
+            "subtitle": "Premium detailing packages for every need",
+            "services": [
+              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
+              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
+              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
+            ]
+          }
+        },
+        {
+          "id": "benefits",
+          "template": "benefits-cards",
+          "content": {
+            "title": "Why Choose ${businessName}",
+            "subtitle": "Premium quality you can see and feel",
+            "benefits": [
+              { "icon": "✨", "title": "Benefit 1 Title", "description": "Why this matters to the customer" },
+              { "icon": "🛡️", "title": "Benefit 2 Title", "description": "Why this matters to the customer" },
+              { "icon": "🏆", "title": "Benefit 3 Title", "description": "Why this matters to the customer" }
+            ]
+          }
+        },
+        {
+          "id": "testimonials",
+          "template": "testimonials-3col",
+          "content": {
+            "title": "What Our Clients Say",
+            "testimonials": [
+              { "quote": "Detailed realistic testimonial about the detailing service", "author": "First Last", "role": "Car Owner / Context", "rating": 5 },
+              { "quote": "Detailed realistic testimonial about the detailing service", "author": "First Last", "role": "Car Owner / Context", "rating": 5 },
+              { "quote": "Detailed realistic testimonial about the detailing service", "author": "First Last", "role": "Car Owner / Context", "rating": 5 }
+            ]
+          }
+        }
+      ]
     },
     {
-      "id": "gallery",
-      "template": "gallery-filtered",
-      "content": {
-        "title": "Our Work",
-        "subtitle": "Check out some of our finest detailing projects",
-        "highlight": "Work",
-        "categories": ["All", "Full Detail", "Ceramic Coating", "Paint Correction", "Interior"],
-        "items": [
-          { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-1?w=800", "title": "Project description 1", "category": "Full Detail" },
-          { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-2?w=800", "title": "Project description 2", "category": "Ceramic Coating" },
-          { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-3?w=800", "title": "Project description 3", "category": "Paint Correction" },
-          { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-4?w=800", "title": "Project description 4", "category": "Interior" },
-          { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-5?w=800", "title": "Project description 5", "category": "Full Detail" },
-          { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-6?w=800", "title": "Project description 6", "category": "Ceramic Coating" }
-        ]
-      }
+      "filename": "gallery.html",
+      "meta": { "title": "Gallery | ${businessName}", "description": "Gallery page SEO description" },
+      "sections": [
+        {
+          "id": "gallery",
+          "template": "gallery-filtered",
+          "content": {
+            "title": "Our Work",
+            "subtitle": "Check out some of our finest detailing projects",
+            "highlight": "Work",
+            "categories": ["All", "Full Detail", "Ceramic Coating", "Paint Correction", "Interior"],
+            "items": [
+              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-1?w=800", "title": "Project description 1", "category": "Full Detail" },
+              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-2?w=800", "title": "Project description 2", "category": "Ceramic Coating" },
+              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-3?w=800", "title": "Project description 3", "category": "Paint Correction" },
+              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-4?w=800", "title": "Project description 4", "category": "Interior" },
+              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-5?w=800", "title": "Project description 5", "category": "Full Detail" },
+              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-6?w=800", "title": "Project description 6", "category": "Ceramic Coating" }
+            ]
+          }
+        }
+      ]
     },
     {
-      "id": "testimonials",
-      "template": "testimonials-3col",
-      "content": {
-        "title": "What Our Clients Say",
-        "testimonials": [
-          { "quote": "Detailed realistic testimonial about the detailing service", "author": "First Last", "role": "Car Owner / Context", "rating": 5 },
-          { "quote": "Detailed realistic testimonial about the detailing service", "author": "First Last", "role": "Car Owner / Context", "rating": 5 },
-          { "quote": "Detailed realistic testimonial about the detailing service", "author": "First Last", "role": "Car Owner / Context", "rating": 5 }
-        ]
-      }
-    },
-    {
-      "id": "cta",
-      "template": "cta-gradient-full",
-      "content": {
-        "badge": "Limited Time",
-        "headline": "Compelling CTA headline about the detailing service",
-        "subtitle": "Supporting text that drives action",
-        "ctaText": "Book Now",
-        "ctaLink": "#contact",
-        "ctaText2": "Call Now: ${phone}",
-        "ctaLink2": "tel:${phoneClean}",
-        "features": [
-          { "text": "Feature pill 1 relevant to auto detailing" },
-          { "text": "Feature pill 2 relevant to auto detailing" },
-          { "text": "Feature pill 3 relevant to auto detailing" }
-        ]
-      }
-    }`;
+      "filename": "contact.html",
+      "meta": { "title": "Contact | ${businessName}", "description": "Contact page SEO description" },
+      "sections": [
+        {
+          "id": "contact",
+          "template": "contact-split",
+          "content": {
+            "formTitle": "Get Your Free Quote",
+            "formSubtitle": "Fill out the form and we'll get back to you within 24 hours",
+            "submitText": "Request Quote",
+            "phone": "${phone}",
+            "phoneClean": "${phoneClean}",
+            "email": "${email}",
+            "hours": "${hoursText}",
+            "serviceArea": "${areaText}",
+            "businessName": "${businessName}",
+            "highlights": [
+              { "text": "Why choose us point 1 — tailor to auto detailing" },
+              { "text": "Why choose us point 2 — tailor to auto detailing" },
+              { "text": "Why choose us point 3 — tailor to auto detailing" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+== RULES ==
+1. Return ONLY the JSON object. No other text.
+2. Use REAL Unsplash URLs: https://images.unsplash.com/photo-XXXXX?w=1920 (hero) or ?w=800 (cards/gallery). Pick specific photo IDs related to auto detailing.
+3. Write compelling, specific copy — not generic placeholder text. Tailor everything to this business.
+4. Reviews and testimonials should sound realistic and specific to the services offered.
+5. Include 3-4 services based on what was provided.
+6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
 }
 
 // ── Default layout (dark theme, generic service businesses) ─────────

@@ -6,7 +6,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { buildSchemaPrompt } = require('../sections/generateSchemaPrompt');
-const { renderPage } = require('../sections/renderer');
+const { renderPage, renderMultiPage } = require('../sections/renderer');
 const { getThemeForBusinessType } = require('../sections/themes');
 
 const anthropic = new Anthropic({
@@ -150,24 +150,41 @@ async function generateWebsite(req, res)
       pageSchema.meta.userId = req.user.id;
     }
 
-    console.log('🎨 Rendering HTML from schema...');
-    let html = renderPage(pageSchema);
-    console.log('✅ HTML generated, length:', html.length);
-
-    // Auto-inject chat widget if the user has one deployed
     const { injectAgents } = require('../utils/injectAgents');
-    html = await injectAgents(html, userId, pool, pageSchema.theme);
+    let html;
+    let pages;
+
+    if (pageSchema.multiPage) {
+      // ── Multi-page site (e.g. auto detailing) ──────────────────────
+      console.log('📄 Multi-page schema detected, rendering pages...');
+      const renderedPages = renderMultiPage(pageSchema);
+      console.log('✅ Pages rendered:', Object.keys(renderedPages).join(', '));
+
+      // Inject chat widget into every page
+      pages = {};
+      for (const [filename, pageHtml] of Object.entries(renderedPages)) {
+        pages[filename] = await injectAgents(pageHtml, userId, pool, pageSchema.theme);
+      }
+
+      // index.html is the primary page returned to the frontend for preview
+      html = pages['index.html'] || Object.values(pages)[0];
+    } else {
+      // ── Single-page site ────────────────────────────────────────────
+      console.log('🎨 Rendering HTML from schema...');
+      html = renderPage(pageSchema);
+      console.log('✅ HTML generated, length:', html.length);
+      html = await injectAgents(html, userId, pool, pageSchema.theme);
+      pages = { 'index.html': html };
+    }
 
     // ==========================================
     // STEP 5: Save website to DB
     // ==========================================
 
     console.log('📝 Saving with:', { businessName, businessType, userId });
-    
+
     if (pool) {
       try {
-        const pages = { 'index.html': html };
-        
         const existing = await pool.query(
           'SELECT id, is_published FROM websites WHERE user_id = $1',
           [userId]
