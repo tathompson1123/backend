@@ -12,6 +12,7 @@ function detectLayout(businessType) {
   const bt = (businessType || '').toLowerCase();
   if (['landscaping', 'lawn', 'garden', 'tree', 'outdoor', 'yard'].some(kw => bt.includes(kw))) return 'organic';
   if (['detailing', 'car', 'auto', 'vehicle', 'ceramic', 'paint', 'wash'].some(kw => bt.includes(kw))) return 'autoDetailing';
+  if (['handyman', 'renovation', 'remodeling', 'remodel', 'contractor', 'construction', 'builder', 'repair'].some(kw => bt.includes(kw))) return 'renovation';
   return 'default';
 }
 
@@ -66,6 +67,9 @@ function buildSchemaPrompt(businessData) {
   }
   if (layout === 'organic') {
     return buildOrganicMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
+  }
+  if (layout === 'renovation') {
+    return buildHandymanMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
   }
 
   let mainSections, sectionOrder, contactId, footerId;
@@ -800,6 +804,290 @@ function defaultSections({ businessName, phone, phoneClean }) {
         ]
       }
     }`;
+}
+
+// ── Handyman / Contractor / Renovation: multi-page prompt ────────────────────
+function buildHandymanMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList }) {
+  return `You are a website content generator for handyman, contractor, and home renovation businesses. Generate a JSON object for a MULTI-PAGE website with 4 separate pages.
+
+IMPORTANT: Return ONLY valid JSON. No markdown, no backticks, no explanation. Just the JSON object.
+
+== BUSINESS INFO ==
+${businessInfo}
+
+== YOUR TASK ==
+Generate a JSON object with this EXACT structure. Fill in compelling, professional content for this specific business.
+
+{
+  "meta": { "title": "${businessName} — Expert Home Renovation & Repair", "description": "SEO meta description 150-160 chars" },
+  "multiPage": true,
+  "nav": {
+    "id": "nav",
+    "template": "nav-sticky-dark",
+    "content": {
+      "logo": "${businessName}",
+      "links": [
+        { "text": "Home",     "url": "index.html" },
+        { "text": "Services", "url": "services.html" },
+        { "text": "Projects", "url": "gallery.html" },
+        { "text": "Contact",  "url": "contact.html" }
+      ],
+      "ctaText": "Get an Estimate",
+      "ctaLink": "contact.html"
+    }
+  },
+  "footer": {
+    "id": "footer",
+    "template": "footer-4col-dark",
+    "content": {
+      "logo": "${businessName}",
+      "tagline": "Craftsmanship you can trust.",
+      "services": ["Service 1 from list", "Service 2 from list", "Service 3 from list", "Service 4 from list"],
+      "address": "123 Builder Ave\\n${areaText}",
+      "hours": "${hoursText}",
+      "phone": "${phone}",
+      "email": "${email}"
+    }
+  },
+  "pages": [
+    {
+      "filename": "index.html",
+      "meta": { "title": "${businessName} — Home Remodeling & Repair", "description": "Homepage SEO description" },
+      "sections": [
+        {
+          "id": "hero",
+          "template": "hero-fullscreen-dark",
+          "content": {
+            "headline": "Short punchy headline WITHOUT the highlight word",
+            "highlightText": "One bold highlight word (e.g. LAST. or RIGHT. or DONE.)",
+            "subtitle": "2-3 sentence value proposition specific to this business — quality, trust, experience",
+            "ctaText": "Request Estimate",
+            "ctaLink": "contact.html",
+            "ctaText2": "Our Work",
+            "ctaLink2": "gallery.html",
+            "backgroundImage": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1920"
+          }
+        },
+        {
+          "id": "importance",
+          "template": "importance-split",
+          "content": {
+            "badge": "Quality & Craftsmanship",
+            "headline": "YOUR HOME, DONE RIGHT.",
+            "body1": "First paragraph: why quality matters in home renovation — impact on value, safety, and comfort",
+            "body2": "Second paragraph: what makes ${businessName} different — experience, approach, and commitment to excellence",
+            "highlights": [
+              { "icon": "🔨", "text": "Expert craftsmanship highlight" },
+              { "icon": "📐", "text": "Precision and detail highlight" },
+              { "icon": "⏱", "text": "On-time and reliable highlight" },
+              { "icon": "🛡", "text": "Licensed and insured highlight" }
+            ],
+            "image": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800",
+            "imageAlt": "Professional craftsman at work"
+          }
+        },
+        {
+          "id": "carousel",
+          "template": "services-carousel",
+          "content": {
+            "title": "Our Services",
+            "subtitle": "From quick fixes to complete transformations",
+            "services": [
+              { "title": "First service from list", "category": "Renovation", "price": "Custom", "image": "https://images.unsplash.com/photo-1556910103-1c02745a872f?w=600", "features": ["Feature 1", "Feature 2", "Feature 3", "Feature 4"], "recommended": true },
+              { "title": "Second service from list", "category": "Repair", "price": "Custom", "image": "https://images.unsplash.com/photo-1620626011761-996317b8d101?w=600", "features": ["Feature 1", "Feature 2", "Feature 3", "Feature 4"], "recommended": false },
+              { "title": "Third service from list", "category": "Installation", "price": "Custom", "image": "https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?w=600", "features": ["Feature 1", "Feature 2", "Feature 3", "Feature 4"], "recommended": false }
+            ]
+          }
+        },
+        {
+          "id": "reviews",
+          "template": "review-marquee",
+          "content": {
+            "reviews": [
+              { "name": "Robert C.",   "stars": 5, "text": "Realistic 5-star review about renovation quality and craftsmanship",   "date": "1 week ago",   "avatarColor": "#b45309" },
+              { "name": "Amanda F.",   "stars": 5, "text": "Review about reliability, timeliness, and clean work environment",       "date": "3 weeks ago",  "avatarColor": "#1e293b" },
+              { "name": "David M.",    "stars": 5, "text": "Review about handyman or repair work — specific and realistic",          "date": "1 month ago",  "avatarColor": "#475569" },
+              { "name": "Sarah J.",    "stars": 5, "text": "Review about a major project like a deck, kitchen, or bathroom",         "date": "2 months ago", "avatarColor": "#0f172a" },
+              { "name": "Michael T.",  "stars": 5, "text": "Review praising communication, transparency, and final result",          "date": "2 months ago", "avatarColor": "#d97706" },
+              { "name": "Emily W.",    "stars": 5, "text": "Review about honest pricing and the quality of the finished work",       "date": "3 months ago", "avatarColor": "#334155" }
+            ]
+          }
+        },
+        {
+          "id": "benefits",
+          "template": "benefits-cards",
+          "content": {
+            "title": "The ${businessName} Difference",
+            "benefits": [
+              { "icon": "📋", "title": "Transparent Pricing", "description": "No hidden fees or surprise charges. Detailed, itemized estimates before any work begins." },
+              { "icon": "🤝", "title": "Reliable Communication", "description": "We answer our phones, show up when we say we will, and keep you updated throughout." },
+              { "icon": "⭐", "title": "Quality Guarantee", "description": "We stand behind our craftsmanship. If something isn't right, we'll make it right." }
+            ]
+          }
+        },
+        {
+          "id": "splitcta",
+          "template": "split-image-cta",
+          "content": {
+            "image": "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800",
+            "imageAlt": "Beautiful home renovation result",
+            "headline": "TURN YOUR HOUSE INTO YOUR DREAM HOME",
+            "body": "Compelling 2-3 sentence pitch about why now is the time to do those renovations — reference the business's specific services",
+            "checkpoints": [
+              "Licensed, bonded, and insured",
+              "Clean and respectful work environment",
+              "Premium materials and hardware",
+              "Dedicated project management"
+            ],
+            "ctaText": "Start Your Project",
+            "ctaLink": "contact.html"
+          }
+        },
+        {
+          "id": "ctacard",
+          "template": "cta-card",
+          "content": {
+            "headline": "READY TO GET STARTED?",
+            "subtitle": "Contact us today for a free, no-obligation estimate for your project.",
+            "ctaText": "Request Estimate",
+            "ctaLink": "contact.html",
+            "ctaText2": "View Portfolio",
+            "ctaLink2": "gallery.html"
+          }
+        }
+      ]
+    },
+    {
+      "filename": "services.html",
+      "meta": { "title": "Services | ${businessName}", "description": "Services page SEO description" },
+      "sections": [
+        {
+          "id": "page-header",
+          "template": "hero-page-banner",
+          "content": {
+            "title": "Our Services",
+            "subtitle": "Expert solutions for every area of your home"
+          }
+        },
+        {
+          "id": "carousel",
+          "template": "services-carousel",
+          "content": {
+            "title": "What We Do",
+            "subtitle": "Expert solutions for every area of your home",
+            "services": [
+              { "title": "First service from list", "category": "Renovation", "price": "Custom", "image": "https://images.unsplash.com/photo-1556910103-1c02745a872f?w=600", "features": ["Feature 1", "Feature 2", "Feature 3", "Feature 4", "Feature 5"], "recommended": true },
+              { "title": "Second service from list", "category": "Repair", "price": "Custom", "image": "https://images.unsplash.com/photo-1620626011761-996317b8d101?w=600", "features": ["Feature 1", "Feature 2", "Feature 3", "Feature 4", "Feature 5"], "recommended": false },
+              { "title": "Third service from list", "category": "Installation", "price": "Custom", "image": "https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?w=600", "features": ["Feature 1", "Feature 2", "Feature 3", "Feature 4", "Feature 5"], "recommended": false },
+              { "title": "Fourth service from list", "category": "Exterior", "price": "Custom", "image": "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600", "features": ["Feature 1", "Feature 2", "Feature 3", "Feature 4"], "recommended": false }
+            ]
+          }
+        },
+        {
+          "id": "ctacard",
+          "template": "cta-card",
+          "content": {
+            "headline": "Don't See What You Need?",
+            "subtitle": "We handle a wide variety of custom projects. Reach out to discuss your specific needs.",
+            "ctaText": "Call Us",
+            "ctaLink": "tel:${phoneClean}",
+            "ctaText2": "Contact Form",
+            "ctaLink2": "contact.html"
+          }
+        }
+      ]
+    },
+    {
+      "filename": "gallery.html",
+      "meta": { "title": "Projects | ${businessName}", "description": "Gallery page SEO description" },
+      "sections": [
+        {
+          "id": "page-header",
+          "template": "hero-page-banner",
+          "content": {
+            "title": "Our Projects",
+            "subtitle": "A showcase of renovations, repairs, and craftsmanship"
+          }
+        },
+        {
+          "id": "galfilter",
+          "template": "gallery-filtered",
+          "content": {
+            "title": "Recent Projects",
+            "subtitle": "Take a look at some of our recent renovations and repairs.",
+            "highlight": "Portfolio",
+            "categories": ["All", "Kitchens", "Bathrooms", "Exteriors", "Carpentry"],
+            "items": [
+              { "url": "https://images.unsplash.com/photo-1556910103-1c02745a872f?w=800", "title": "Project title 1", "category": "Kitchens" },
+              { "url": "https://images.unsplash.com/photo-1620626011761-996317b8d101?w=800", "title": "Project title 2", "category": "Bathrooms" },
+              { "url": "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800", "title": "Project title 3", "category": "Exteriors" },
+              { "url": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800", "title": "Project title 4", "category": "Carpentry" },
+              { "url": "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800", "title": "Project title 5", "category": "Kitchens" },
+              { "url": "https://images.unsplash.com/photo-1584622781564-1d987f7333c1?w=800", "title": "Project title 6", "category": "Bathrooms" },
+              { "url": "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=800", "title": "Project title 7", "category": "Exteriors" },
+              { "url": "https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?w=800", "title": "Project title 8", "category": "Carpentry" }
+            ]
+          }
+        },
+        {
+          "id": "ctacard",
+          "template": "cta-card",
+          "content": {
+            "headline": "Like What You See?",
+            "subtitle": "Let's add your home to our portfolio. Contact us to discuss your vision.",
+            "ctaText": "Request Estimate",
+            "ctaLink": "contact.html",
+            "ctaText2": "View Services",
+            "ctaLink2": "services.html"
+          }
+        }
+      ]
+    },
+    {
+      "filename": "contact.html",
+      "meta": { "title": "Contact | ${businessName}", "description": "Contact page SEO description" },
+      "sections": [
+        {
+          "id": "page-header",
+          "template": "hero-page-banner",
+          "content": {
+            "title": "Get a Free Estimate",
+            "subtitle": "Tell us about your project and we'll get back to you within 24 hours"
+          }
+        },
+        {
+          "id": "contact",
+          "template": "contact-split",
+          "content": {
+            "formTitle": "Request an Estimate",
+            "formSubtitle": "Tell us about your project and we'll get back to you within 24 hours to schedule a walkthrough.",
+            "submitText": "Send Request",
+            "phone": "${phone}",
+            "phoneClean": "${phoneClean}",
+            "email": "${email}",
+            "hours": "${hoursText}",
+            "serviceArea": "${areaText}",
+            "businessName": "${businessName}",
+            "highlights": [
+              { "text": "Licensed, bonded & insured" },
+              { "text": "Transparent pricing — no surprises" },
+              { "text": "Quality craftsmanship guaranteed" },
+              { "text": "Free initial estimates" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+== RULES ==
+1. Return ONLY the JSON object. No other text.
+2. CRITICAL — every image URL MUST use a real Unsplash photo ID. Format: https://images.unsplash.com/photo-XXXXXXXXXXXXXXXXXX?w=SIZE. Real renovation/handyman photo IDs to use: photo-1504307651254-35680f356dfd, photo-1556910103-1c02745a872f, photo-1620626011761-996317b8d101, photo-1581141849291-1125c7b692b5, photo-1513694203232-719a280e022f, photo-1581858726788-75bc0f6a952d, photo-1589939705384-5185137a7f0f, photo-1503387762-592deb58ef4e, photo-1584622650111-993a426fbf0a, photo-1584622781564-1d987f7333c1.
+3. Write compelling, specific copy — not generic placeholder text. Tailor everything to this business type and the services listed.
+4. Reviews should sound realistic and specific to the type of work done.
+5. List 3-6 services based on what was provided. Match services to relevant photo IDs.
+6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
 }
 
 module.exports = { buildSchemaPrompt };
