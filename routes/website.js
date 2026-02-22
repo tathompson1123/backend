@@ -625,7 +625,7 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'page_data is required' });
     }
 
-    const { renderPage } = require('../sections/renderer');
+    const { renderPage, renderMultiPage } = require('../sections/renderer');
     const { getThemeForBusinessType } = require('../sections/themes');
 
     const existing = await pool.query(
@@ -642,14 +642,22 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
     page_data.meta.userId = userId;
 
     console.log('🎨 Re-rendering HTML from updated schema...');
-    let html = renderPage(page_data);
-    console.log('✅ Rendered HTML:', html.length, 'chars');
-
-    // Auto-inject chat widget if deployed
     const { injectAgents } = require('../utils/injectAgents');
-    html = await injectAgents(html, userId, pool, page_data.theme);
+    let html, pages;
 
-    const pages = { 'index.html': html };
+    if (page_data.multiPage) {
+      const renderedPages = renderMultiPage(page_data);
+      pages = {};
+      for (const [filename, pageHtml] of Object.entries(renderedPages)) {
+        pages[filename] = await injectAgents(pageHtml, userId, pool, page_data.theme);
+      }
+      html = pages['index.html'] || Object.values(pages)[0];
+    } else {
+      html = renderPage(page_data);
+      html = await injectAgents(html, userId, pool, page_data.theme);
+      pages = { 'index.html': html };
+    }
+    console.log('✅ Rendered HTML:', html.length, 'chars');
 
     await pool.query(
       `UPDATE websites 
@@ -701,6 +709,7 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       html,
+      pages,
       deployed,
       url: deployUrl,
       message: deployed ? 'Schema saved and redeployed' : 'Schema saved and HTML regenerated'
