@@ -248,6 +248,19 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
           }
         },
         {
+          "id": "services",
+          "template": "services-carousel",
+          "content": {
+            "title": "What We Do",
+            "subtitle": "Comprehensive outdoor services for every property",
+            "services": [
+              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
+              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
+              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
+            ]
+          }
+        },
+        {
           "id": "transformations",
           "template": "before-after-cards",
           "content": {
@@ -502,6 +515,32 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
               { "icon": "🛡️", "title": "Feature 2 Title", "text": "Short description relevant to auto detailing" },
               { "icon": "⚡", "title": "Feature 3 Title", "text": "Short description relevant to auto detailing" },
               { "icon": "🏆", "title": "Feature 4 Title", "text": "Short description relevant to auto detailing" }
+            ]
+          }
+        },
+        {
+          "id": "services",
+          "template": "services-carousel",
+          "content": {
+            "title": "Our Detailing Packages",
+            "subtitle": "Premium services tailored to your vehicle",
+            "services": [
+              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
+              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
+              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
+            ]
+          }
+        },
+        {
+          "id": "benefits",
+          "template": "benefits-cards",
+          "content": {
+            "title": "Why Choose ${businessName}",
+            "subtitle": "Premium quality you can see and feel",
+            "benefits": [
+              { "icon": "✨", "title": "Benefit 1 Title", "description": "Why this matters to the customer" },
+              { "icon": "🛡️", "title": "Benefit 2 Title", "description": "Why this matters to the customer" },
+              { "icon": "🏆", "title": "Benefit 3 Title", "description": "Why this matters to the customer" }
             ]
           }
         },
