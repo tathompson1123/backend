@@ -253,6 +253,7 @@ async function generateWebsite(req, res)
     res.json({
       success: true,
       html,
+      pages,
       schema: pageSchema,
       theme: theme.id,
     });

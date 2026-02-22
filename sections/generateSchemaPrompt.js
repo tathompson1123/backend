@@ -216,20 +216,6 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
           }
         },
         {
-          "id": "reviews",
-          "template": "review-marquee",
-          "content": {
-            "reviews": [
-              { "name": "Sarah M.",  "stars": 5, "text": "Realistic 5-star review about this landscaping business",     "date": "2 weeks ago",  "avatarColor": "#6b8f5e" },
-              { "name": "James R.",  "stars": 5, "text": "Review specific to the outdoor/garden services provided",     "date": "1 month ago",  "avatarColor": "#85a378" },
-              { "name": "Linda K.",  "stars": 5, "text": "Review highlighting quality, care, and attention to detail",  "date": "3 weeks ago",  "avatarColor": "#506a4b" },
-              { "name": "Tom & Pat", "stars": 5, "text": "Review about the transformation of their outdoor space",     "date": "2 months ago", "avatarColor": "#3d4f39" },
-              { "name": "Rachel W.", "stars": 5, "text": "Review about the experience from consultation to completion", "date": "1 week ago",   "avatarColor": "#6b8f5e" },
-              { "name": "Mike D.",   "stars": 4, "text": "Measured but positive review about the overall experience",   "date": "5 days ago",   "avatarColor": "#85a378" }
-            ]
-          }
-        },
-        {
           "id": "importance",
           "template": "importance-split",
           "content": {
@@ -254,9 +240,23 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "title": "What We Do",
             "subtitle": "Comprehensive outdoor services for every property",
             "services": [
-              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
-              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
-              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
+              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
+              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
+              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
+            ]
+          }
+        },
+        {
+          "id": "reviews",
+          "template": "review-marquee",
+          "content": {
+            "reviews": [
+              { "name": "Sarah M.",  "stars": 5, "text": "Realistic 5-star review about this landscaping business",     "date": "2 weeks ago",  "avatarColor": "#6b8f5e" },
+              { "name": "James R.",  "stars": 5, "text": "Review specific to the outdoor/garden services provided",     "date": "1 month ago",  "avatarColor": "#85a378" },
+              { "name": "Linda K.",  "stars": 5, "text": "Review highlighting quality, care, and attention to detail",  "date": "3 weeks ago",  "avatarColor": "#506a4b" },
+              { "name": "Tom & Pat", "stars": 5, "text": "Review about the transformation of their outdoor space",     "date": "2 months ago", "avatarColor": "#3d4f39" },
+              { "name": "Rachel W.", "stars": 5, "text": "Review about the experience from consultation to completion", "date": "1 week ago",   "avatarColor": "#6b8f5e" },
+              { "name": "Mike D.",   "stars": 4, "text": "Measured but positive review about the overall experience",   "date": "5 days ago",   "avatarColor": "#85a378" }
             ]
           }
         },
@@ -267,9 +267,9 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "title": "Our Transformations",
             "subtitle": "Click each card to reveal the stunning before & after",
             "cards": [
-              { "title": "Project type 1 (e.g. Backyard Oasis)",  "description": "Brief description of what was done", "beforeImage": "https://images.unsplash.com/BEFORE-PHOTO-1?w=600", "afterImage": "https://images.unsplash.com/AFTER-PHOTO-1?w=600" },
-              { "title": "Project type 2 (e.g. Front Garden)",    "description": "Brief description of what was done", "beforeImage": "https://images.unsplash.com/BEFORE-PHOTO-2?w=600", "afterImage": "https://images.unsplash.com/AFTER-PHOTO-2?w=600" },
-              { "title": "Project type 3 (e.g. Patio & Hardscape)","description": "Brief description of what was done", "beforeImage": "https://images.unsplash.com/BEFORE-PHOTO-3?w=600", "afterImage": "https://images.unsplash.com/AFTER-PHOTO-3?w=600" }
+              { "title": "Project type 1 (e.g. Backyard Oasis)",  "description": "Brief description of what was done", "beforeImage": "https://images.unsplash.com/photo-1558904541-efa843a96f01?w=600", "afterImage": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=600" },
+              { "title": "Project type 2 (e.g. Front Garden)",    "description": "Brief description of what was done", "beforeImage": "https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?w=600", "afterImage": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600" },
+              { "title": "Project type 3 (e.g. Patio & Hardscape)","description": "Brief description of what was done", "beforeImage": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600", "afterImage": "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=600" }
             ]
           }
         },
@@ -306,9 +306,9 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "title": "Our Services",
             "subtitle": "From concept to creation, we handle everything",
             "services": [
-              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
-              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
-              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-LANDSCAPE-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
+              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
+              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
+              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
             ]
           }
         },
@@ -360,12 +360,12 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "highlight": "Projects",
             "categories": ["All", "Garden Design", "Hardscape", "Lawn Care", "Lighting", "Maintenance"],
             "items": [
-              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-1?w=800", "title": "Project description 1", "category": "Garden Design" },
-              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-2?w=800", "title": "Project description 2", "category": "Hardscape" },
-              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-3?w=800", "title": "Project description 3", "category": "Lawn Care" },
-              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-4?w=800", "title": "Project description 4", "category": "Lighting" },
-              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-5?w=800", "title": "Project description 5", "category": "Garden Design" },
-              { "url": "https://images.unsplash.com/LANDSCAPE-PHOTO-6?w=800", "title": "Project description 6", "category": "Maintenance" }
+              { "url": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800", "title": "Project description 1", "category": "Garden Design" },
+              { "url": "https://images.unsplash.com/photo-1558904541-efa843a96f01?w=800", "title": "Project description 2", "category": "Hardscape" },
+              { "url": "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=800", "title": "Project description 3", "category": "Lawn Care" },
+              { "url": "https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?w=800", "title": "Project description 4", "category": "Lighting" },
+              { "url": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800", "title": "Project description 5", "category": "Garden Design" },
+              { "url": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800", "title": "Project description 6", "category": "Maintenance" }
             ]
           }
         },
