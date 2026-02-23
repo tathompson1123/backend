@@ -10,7 +10,7 @@
 
 function detectLayout(businessType) {
   const bt = (businessType || '').toLowerCase();
-  if (['landscaping', 'lawn', 'garden', 'tree', 'outdoor', 'yard'].some(kw => bt.includes(kw))) return 'organic';
+  if (['landscape', 'landscaping', 'lawn', 'garden', 'tree', 'outdoor', 'yard'].some(kw => bt.includes(kw))) return 'organic';
   if (['detailing', 'car', 'auto', 'vehicle', 'ceramic', 'paint', 'wash'].some(kw => bt.includes(kw))) return 'autoDetailing';
   if (['handyman', 'renovation', 'remodeling', 'remodel', 'contractor', 'construction', 'builder', 'repair'].some(kw => bt.includes(kw))) return 'renovation';
   return 'default';
