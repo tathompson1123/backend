@@ -121,6 +121,7 @@ class StripeConnectProcessor extends PaymentProcessor {
    */
   static getOAuthUrl(userId) {
     const clientId = process.env.STRIPE_CLIENT_ID;
+    if (!clientId) throw new Error('STRIPE_CLIENT_ID is not configured on the server. Add it to your Railway environment variables.');
     const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/payment-connections/stripe/callback`;
     return `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=read_write&redirect_uri=${encodeURIComponent(redirectUri)}&state=${userId}`;
   }
