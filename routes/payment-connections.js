@@ -44,7 +44,7 @@ router.get('/:processor/oauth-url', authenticateToken, async (req, res) => {
     res.json({ oauthUrl: url });
   } catch (error) {
     console.error('Error generating OAuth URL:', error.message);
-    res.status(500).json({ error: 'Failed to generate OAuth URL' });
+    res.status(500).json({ error: error.message || 'Failed to generate OAuth URL' });
   }
 });
 

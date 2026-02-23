@@ -5,7 +5,7 @@
 // ============================================
 
 const Anthropic = require('@anthropic-ai/sdk');
-const { buildSchemaPrompt } = require('../sections/generateSchemaPrompt');
+const { buildSchemaPrompt, detectLayout, buildOrganicSchemaFromContent } = require('../sections/generateSchemaPrompt');
 const { renderPage, renderMultiPage } = require('../sections/renderer');
 const { getThemeForBusinessType } = require('../sections/themes');
 
@@ -130,9 +130,41 @@ async function generateWebsite(req, res)
     } catch (parseErr) {
       console.error('❌ Failed to parse AI response as JSON:', parseErr.message);
       console.error('Raw response:', rawText.substring(0, 500));
-      return res.status(500).json({ 
-        error: 'AI returned invalid JSON', 
-        details: parseErr.message 
+      return res.status(500).json({
+        error: 'AI returned invalid JSON',
+        details: parseErr.message
+      });
+    }
+
+    // ==========================================
+    // STEP 3b: For organic layout, build full schema from text content
+    // Claude returns only text content; we construct the full multi-page schema
+    // ==========================================
+    const layout = detectLayout(businessType);
+    if (layout === 'organic') {
+      const hoursRaw = req.body.hours || '';
+      const serviceArea = req.body.serviceArea || '';
+      const phoneClean = (phone || '').replace(/\D/g, '');
+      const hoursText = hoursRaw || 'Mon-Fri: 8AM-6PM\nSat: 9AM-4PM\nSun: Closed';
+      const areaText = serviceArea || ((city || state) ? [city, state].filter(Boolean).join(', ') + ' and surrounding areas' : 'Local and surrounding areas');
+
+      let parsedServices = services;
+      if (typeof services === 'string' && services.trim()) {
+        parsedServices = services.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      const servicesList = Array.isArray(parsedServices) && parsedServices.length > 0
+        ? parsedServices.map(s => typeof s === 'string' ? s : (s.name || s.title || '')).filter(Boolean)
+        : ['Lawn Care', 'Garden Design', 'Landscaping'];
+
+      console.log('🌿 Organic layout: building schema from content...');
+      pageSchema = buildOrganicSchemaFromContent(pageSchema, {
+        businessName,
+        phone: phone || '(555) 555-5555',
+        phoneClean,
+        email: email || 'info@business.com',
+        hoursText,
+        areaText,
+        servicesList,
       });
     }
 
