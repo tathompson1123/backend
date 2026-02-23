@@ -313,4 +313,66 @@ Return ONLY valid JSON:
   }
 });
 
+// ─── POST /upsells/booking — Contextual upsell ideas for a specific booking ───
+router.post('/upsells/booking', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { serviceName, servicePrice } = req.body;
+
+    if (!serviceName) return res.status(400).json({ error: 'Service name required' });
+
+    const userResult = await pool.query(
+      'SELECT business_name FROM users WHERE id = $1',
+      [userId]
+    );
+    const websiteResult = await pool.query(
+      'SELECT business_type FROM websites WHERE user_id = $1 LIMIT 1',
+      [userId]
+    );
+    const businessName = userResult.rows[0]?.business_name || '';
+    const businessType = websiteResult.rows[0]?.business_type || '';
+
+    const aiResponse = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      messages: [{
+        role: 'user',
+        content: `You are a sales coach for a "${businessType}" business called "${businessName}".
+
+A customer just booked: "${serviceName}"${servicePrice ? ` ($${servicePrice})` : ''}.
+
+Suggest 3 upsells this business can offer this specific customer — during or right after the service visit.
+
+Each upsell must be:
+- A natural add-on to "${serviceName}" (not a completely unrelated service)
+- Quick to offer verbally (30 seconds or less)
+- Priced to feel like a small decision
+
+For each upsell return:
+- name: Short upsell name
+- price: Suggested add-on price (number, e.g. 49)
+- timing: Exact moment to bring it up (e.g. "While inspecting the vehicle before starting")
+- script: A natural 1-2 sentence word-for-word pitch the employee says to the customer
+
+Return ONLY valid JSON:
+{"upsells":[{"name":"...","price":49,"timing":"...","script":"..."},{"name":"...","price":35,"timing":"...","script":"..."},{"name":"...","price":65,"timing":"...","script":"..."}]}`
+      }]
+    });
+
+    const text = aiResponse.content[0].text.trim();
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      const m = text.match(/\{[\s\S]*\}/);
+      result = m ? JSON.parse(m[0]) : { upsells: [] };
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Booking upsell error:', error.message);
+    res.status(500).json({ error: 'Failed to generate upsell suggestions' });
+  }
+});
+
 module.exports = router;

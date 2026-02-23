@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir /S \"C:\\\\SORCENEW\\\\frontend\" /B)",
+      "Bash(findstr:*)",
+      "Bash(dir /s /b \"C:\\\\SORCENEW\\\\backend\\\\templates\"\")",
+      "Read(//c/SORCENEW/frontend/**)",
+      "WebFetch(domain:developer.squareup.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:aistudio.google.com)"
+    ]
+  }
+}

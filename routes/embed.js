@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
+const { sendBookingEmails } = require('../utils/bookingEmail');
 
 // ─── Helper: Look up user by site key ───────────────────
 async function getUserBySiteKey(siteKey) {
@@ -236,6 +237,21 @@ router.post('/book/:siteKey', async (req, res) => {
     );
 
     console.log(`📅 Embed booking created: ${bookingNumber} for user ${user.id}`);
+
+    // Send booking confirmation emails (non-blocking)
+    sendBookingEmails({
+      userId: user.id,
+      bookingNumber,
+      customerName,
+      customerEmail,
+      customerPhone: customerPhone || '',
+      serviceName: service.name,
+      bookingDate: date,
+      startTime,
+      endTime,
+      price: service.price,
+      notes: notes || '',
+    }).catch(() => {});
 
     res.json({
       success: true,

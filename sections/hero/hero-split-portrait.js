@@ -213,8 +213,8 @@ module.exports = {
       text-align: center;
       padding: 7rem 2rem 5rem;
     }
-    .${s}-content { order: 2; }
-    .${s}-portrait-wrap { order: 1; max-width: 380px; margin: 0 auto; }
+    .${s}-content { order: 1; }
+    .${s}-portrait-wrap { order: 2; max-width: 380px; margin: 0 auto; }
     .${s}-subtitle { max-width: 100%; }
     .${s}-buttons { justify-content: center; }
   }

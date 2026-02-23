@@ -288,7 +288,6 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
         filename: 'services.html',
         meta: { title: `Services | ${businessName}`, description: 'Services page' },
         sections: [
-          { id: 'page-header', template: 'hero-page-banner', content: { title: 'Our Services', subtitle: 'From concept to creation — we handle everything your outdoor space needs' } },
           { id: 'services', template: 'services-carousel', content: { title: 'Our Services', subtitle: 'From concept to creation, we handle everything', services } },
           { id: 'benefits', template: 'benefits-cards', content: { title: `Why Choose ${businessName}`, subtitle: 'We bring more than just great service', benefits } },
           { id: 'cta', template: 'cta-card', content: { headline: 'Not Sure Which Service You Need?', subtitle: 'Our team will help you figure out the right plan. Reach out for a free consultation.', ctaText: 'Get a Free Quote', ctaLink: 'contact.html', ctaText2: 'View Our Work', ctaLink2: 'gallery.html' } },
@@ -298,7 +297,6 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
         filename: 'gallery.html',
         meta: { title: `Gallery | ${businessName}`, description: 'Gallery page' },
         sections: [
-          { id: 'page-header', template: 'hero-page-banner', content: { title: 'Our Portfolio', subtitle: "A showcase of outdoor spaces we've designed, built, and maintained" } },
           { id: 'gallery', template: 'gallery-filtered', content: {
             title: 'Recent Projects', subtitle: 'Browse our finest work across all service categories', highlight: 'Projects',
             categories: ['All', 'Garden Design', 'Hardscape', 'Lawn Care', 'Lighting', 'Maintenance'],
@@ -315,7 +313,6 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
         filename: 'contact.html',
         meta: { title: `Contact | ${businessName}`, description: 'Contact page' },
         sections: [
-          { id: 'page-header', template: 'hero-page-banner', content: { title: 'Get a Free Quote', subtitle: "Tell us about your project and we'll get back to you within 24 hours" } },
           { id: 'contact', template: 'contact-split', content: {
             formTitle: 'Tell Us About Your Project',
             formSubtitle: "Fill out the form and we'll get back to you within 24 hours",
@@ -932,14 +929,6 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
       "meta": { "title": "Services | ${businessName}", "description": "Services page SEO description" },
       "sections": [
         {
-          "id": "page-header",
-          "template": "hero-page-banner",
-          "content": {
-            "title": "Our Services",
-            "subtitle": "Expert solutions for every area of your home"
-          }
-        },
-        {
           "id": "carousel",
           "template": "services-carousel",
           "content": {
@@ -971,14 +960,6 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
       "filename": "gallery.html",
       "meta": { "title": "Projects | ${businessName}", "description": "Gallery page SEO description" },
       "sections": [
-        {
-          "id": "page-header",
-          "template": "hero-page-banner",
-          "content": {
-            "title": "Our Projects",
-            "subtitle": "A showcase of renovations, repairs, and craftsmanship"
-          }
-        },
         {
           "id": "galfilter",
           "template": "gallery-filtered",
@@ -1017,14 +998,6 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
       "filename": "contact.html",
       "meta": { "title": "Contact | ${businessName}", "description": "Contact page SEO description" },
       "sections": [
-        {
-          "id": "page-header",
-          "template": "hero-page-banner",
-          "content": {
-            "title": "Get a Free Estimate",
-            "subtitle": "Tell us about your project and we'll get back to you within 24 hours"
-          }
-        },
         {
           "id": "contact",
           "template": "contact-split",
