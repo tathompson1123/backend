@@ -122,6 +122,9 @@ app.use('/api/pay', paymentPublicRoutes);
 const statusTemplateRoutes = require('./routes/status-templates');
 app.use('/api/status-templates', statusTemplateRoutes);
 
+const uploadRoutes = require('./routes/upload');
+app.use('/api/upload', uploadRoutes);
+
 // Embed system — public JS bundle + API routes (open CORS for any origin)
 const path = require('path');
 // Shared CORS middleware for embed-facing routes (called from external sites)
