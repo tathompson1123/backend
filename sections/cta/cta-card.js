@@ -27,9 +27,16 @@ module.exports = {
 
   render(content, theme, sectionId = 'ctacard') {
     const s = `section-${sectionId}`;
+    // Detect light vs dark theme to pick appropriate card background
+    const bg = theme.bgColor || '#020617';
+    const isLight = bg.startsWith('#f') || bg.startsWith('#e') || bg === '#ffffff' || bg === '#FFFFFF';
+    const sectionBg = isLight ? (theme.surfaceColor || '#f0ece5') : `linear-gradient(180deg, ${bg} 0%, #000 100%)`;
+    const cardBg = isLight
+      ? `linear-gradient(135deg, ${theme.primaryColor || '#1a3a1a'}, ${theme.accentColor || theme.primaryColor || '#2d5a2d'})`
+      : 'linear-gradient(135deg, #111827, #000000)';
 
     return `
-<section class="${s}" style="background: linear-gradient(180deg, ${theme.bgColor || '#020617'} 0%, #000 100%); padding: 6rem 2rem;">
+<section class="${s}" style="background: ${sectionBg}; padding: 6rem 2rem;">
   <div class="${s}-container">
     <div class="${s}-card reveal">
       <div class="${s}-glow-tr"></div>
@@ -52,7 +59,7 @@ module.exports = {
   }
   .${s}-card {
     position: relative;
-    background: linear-gradient(135deg, #111827, #000000);
+    background: ${cardBg};
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 28px;
     overflow: hidden;
