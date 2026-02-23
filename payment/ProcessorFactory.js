@@ -1,6 +1,7 @@
 const StripeConnectProcessor = require('./StripeConnectProcessor');
 const SquareProcessor = require('./SquareProcessor');
 const PayPalProcessor = require('./PayPalProcessor');
+const CloverProcessor = require('./CloverProcessor');
 
 function getProcessor(connection) {
   switch (connection.processor) {
@@ -10,6 +11,8 @@ function getProcessor(connection) {
       return new SquareProcessor(connection);
     case 'paypal':
       return new PayPalProcessor(connection);
+    case 'clover':
+      return new CloverProcessor(connection);
     default:
       throw new Error(`Unknown payment processor: ${connection.processor}`);
   }
@@ -55,5 +58,6 @@ module.exports = {
   getConnectionsForUser,
   StripeConnectProcessor,
   SquareProcessor,
-  PayPalProcessor
+  PayPalProcessor,
+  CloverProcessor
 };

@@ -185,6 +185,8 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS square_invoice_id VARCHAR(255)");
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_invoice_id VARCHAR(255)");
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paypal_invoice_id VARCHAR(255)");
+    await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS clover_merchant_id TEXT");
+    await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS clover_access_token TEXT");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS default_tax_rate DECIMAL(5,4) DEFAULT 0");
     await pool.query(`CREATE TABLE IF NOT EXISTS invoice_items_catalog (
       id SERIAL PRIMARY KEY,

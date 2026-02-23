@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
-const { getConnectionsForUser, getProcessor, StripeConnectProcessor, SquareProcessor } = require('../payment/ProcessorFactory');
+const { getConnectionsForUser, getProcessor, StripeConnectProcessor, SquareProcessor, CloverProcessor } = require('../payment/ProcessorFactory');
 const PayPalProcessor = require('../payment/PayPalProcessor');
 const { syncSquarePayments, syncSquareInvoices } = require('../utils/squareSync');
 
@@ -33,6 +33,9 @@ router.get('/:processor/oauth-url', authenticateToken, async (req, res) => {
         break;
       case 'paypal':
         url = PayPalProcessor.getOAuthUrl(userId);
+        break;
+      case 'clover':
+        url = CloverProcessor.getOAuthUrl(userId);
         break;
       default:
         return res.status(400).json({ error: 'Unknown processor' });
@@ -153,6 +156,32 @@ router.get('/paypal/callback', async (req, res) => {
   } catch (error) {
     console.error('PayPal OAuth callback error:', error.message);
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=paypal_failed`);
+  }
+});
+
+// GET /api/payment-connections/clover/callback - Clover OAuth callback
+router.get('/clover/callback', async (req, res) => {
+  try {
+    const { code, merchant_id: merchantId, state: userId, error: oauthError } = req.query;
+
+    if (oauthError) {
+      return res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=${oauthError}`);
+    }
+
+    const result = await CloverProcessor.handleOAuthCallback(code);
+
+    await pool.query(
+      `INSERT INTO payment_connections (user_id, processor, clover_merchant_id, clover_access_token, is_active, is_primary)
+       VALUES ($1, 'clover', $2, $3, true, false)
+       ON CONFLICT (user_id, processor)
+       DO UPDATE SET clover_merchant_id = $2, clover_access_token = $3, is_active = true, updated_at = NOW()`,
+      [userId, merchantId, result.accessToken]
+    );
+
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&connected=clover`);
+  } catch (error) {
+    console.error('Clover OAuth callback error:', error.message);
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=clover_failed`);
   }
 });
 
