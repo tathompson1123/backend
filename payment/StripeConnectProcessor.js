@@ -117,30 +117,26 @@ class StripeConnectProcessor extends PaymentProcessor {
   }
 
   /**
-   * Generate the OAuth URL for Stripe Connect Standard
+   * Create a Stripe Express account and return an Account Link URL.
+   * Same user-facing flow as Square OAuth — redirect out, redirect back.
    */
-  static getOAuthUrl(userId) {
-    const clientId = process.env.STRIPE_CLIENT_ID;
-    if (!clientId) throw new Error('STRIPE_CLIENT_ID is not configured on the server. Add it to your Railway environment variables.');
-    const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/payment-connections/stripe/callback`;
-    return `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=read_write&redirect_uri=${encodeURIComponent(redirectUri)}&state=${userId}`;
-  }
-
-  /**
-   * Handle OAuth callback and get the connected account ID
-   */
-  static async handleOAuthCallback(code) {
+  static async getOAuthUrl(userId) {
     const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const response = await stripe.oauth.token({
-      grant_type: 'authorization_code',
-      code,
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+
+    const account = await stripe.accounts.create({ type: 'express' });
+
+    const returnUrl = `${backendUrl}/api/payment-connections/stripe/callback?userId=${userId}&accountId=${account.id}`;
+    const refreshUrl = `${backendUrl}/api/payment-connections/stripe/callback?userId=${userId}&accountId=${account.id}&refresh=true`;
+
+    const accountLink = await stripe.accountLinks.create({
+      account: account.id,
+      return_url: returnUrl,
+      refresh_url: refreshUrl,
+      type: 'account_onboarding',
     });
 
-    return {
-      stripeAccountId: response.stripe_user_id,
-      accessToken: response.access_token,
-      refreshToken: response.refresh_token
-    };
+    return accountLink.url;
   }
 }
 

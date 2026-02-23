@@ -26,7 +26,7 @@ router.get('/:processor/oauth-url', authenticateToken, async (req, res) => {
 
     switch (processor) {
       case 'stripe':
-        url = StripeConnectProcessor.getOAuthUrl(userId);
+        url = await StripeConnectProcessor.getOAuthUrl(userId);
         break;
       case 'square':
         url = SquareProcessor.getOAuthUrl(userId);
@@ -45,28 +45,41 @@ router.get('/:processor/oauth-url', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/payment-connections/stripe/callback - Stripe OAuth callback
+// GET /api/payment-connections/stripe/callback - Stripe Account Link callback
 router.get('/stripe/callback', async (req, res) => {
   try {
-    const { code, state: userId, error: oauthError } = req.query;
+    const { userId, accountId, refresh } = req.query;
 
-    if (oauthError) {
-      return res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=${oauthError}`);
+    if (!userId || !accountId) {
+      return res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=stripe_failed`);
     }
 
-    const result = await StripeConnectProcessor.handleOAuthCallback(code);
+    // Account link expired — generate a fresh one and redirect
+    if (refresh === 'true') {
+      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+      const returnUrl = `${backendUrl}/api/payment-connections/stripe/callback?userId=${userId}&accountId=${accountId}`;
+      const refreshUrl = `${backendUrl}/api/payment-connections/stripe/callback?userId=${userId}&accountId=${accountId}&refresh=true`;
+      const accountLink = await stripe.accountLinks.create({
+        account: accountId,
+        return_url: returnUrl,
+        refresh_url: refreshUrl,
+        type: 'account_onboarding',
+      });
+      return res.redirect(accountLink.url);
+    }
 
     await pool.query(
-      `INSERT INTO payment_connections (user_id, processor, stripe_account_id, stripe_access_token, is_active, is_primary)
-       VALUES ($1, 'stripe', $2, $3, true, true)
+      `INSERT INTO payment_connections (user_id, processor, stripe_account_id, is_active, is_primary)
+       VALUES ($1, 'stripe', $2, true, true)
        ON CONFLICT (user_id, processor)
-       DO UPDATE SET stripe_account_id = $2, stripe_access_token = $3, is_active = true, updated_at = NOW()`,
-      [userId, result.stripeAccountId, result.accessToken]
+       DO UPDATE SET stripe_account_id = $2, is_active = true, updated_at = NOW()`,
+      [userId, accountId]
     );
 
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&connected=stripe`);
   } catch (error) {
-    console.error('Stripe OAuth callback error:', error.message);
+    console.error('Stripe Account Link callback error:', error.message);
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=payment-settings&error=stripe_failed`);
   }
 });
