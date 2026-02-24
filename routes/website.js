@@ -3,7 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
 const { deployToVercel, addDomainToVercel, checkDomainVerification, removeDomainFromVercel } = require('../services/vercel');
-const { searchDomains, purchaseDomain } = require('../services/domain');
+const { searchDomains, purchaseDomain, updateNameservers } = require('../services/domain');
 const axios = require('axios');
 const { generateChatWidgetCode } = require('../utils/chatWidget');
 
@@ -1681,7 +1681,16 @@ router.post('/purchase-domain', authenticateToken, requirePlan('basic'), async (
       businessName: user.business_name
     });
 
-    // Add domain to Vercel
+    // Explicitly set nameservers to Vercel (belt-and-suspenders — registration
+    // params may not always apply reliably on all Dynadot plans)
+    try {
+      await updateNameservers(domain);
+    } catch (nsErr) {
+      console.warn(`⚠️ Nameserver update failed for ${domain}:`, nsErr.message);
+      // Non-fatal — ns0/ns1 params during registration may have already set them
+    }
+
+    // Add domain to Vercel project
     await addDomainToVercel(domain, userId);
 
     // Save to database
