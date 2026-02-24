@@ -244,7 +244,11 @@ async function generateWebsite(req, res)
                   },
                   body: JSON.stringify({
                     name: `website-${userId}`,
-                    files: [{ file: 'index.html', data: Buffer.from(html).toString('base64') }],
+                    files: Object.entries(pages).map(([filename, pageHtml]) => ({
+                      file: filename,
+                      data: Buffer.from(pageHtml).toString('base64'),
+                      encoding: 'base64'
+                    })),
                     projectSettings: { framework: null }
                   })
                 });
