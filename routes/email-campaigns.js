@@ -57,21 +57,83 @@ async function generateCampaign(userId, config) {
     winback: 'Create a "we miss you" win-back offer for customers who haven\'t booked in a while. Give them a compelling reason to come back now.',
   };
 
-  const prompt = `You are a marketing expert writing a weekly promotional email for ${businessName}, a ${industry} business${city ? ` in ${city}` : ''}.
+  // Pick a relevant Unsplash hero image based on industry
+  const industryImages = {
+    landscaping:    'photo-1558618666-fcd25c85cd64',
+    'auto detailing': 'photo-1507136566006-cfc505b114fc',
+    'auto wrap':    'photo-1552519507-da3b142c6e3d',
+    cleaning:       'photo-1581578731548-c64695cc6952',
+    hvac:           'photo-1621905251918-48416bd8575a',
+    plumbing:       'photo-1585771724684-38269d6639fd',
+    roofing:        'photo-1625766763788-95dcce9bf5ac',
+    dental:         'photo-1606811841689-23dfddce3e95',
+    fitness:        'photo-1534438327276-14e5300c3a48',
+    salon:          'photo-1521590832167-7bcbfaa6381f',
+    restaurant:     'photo-1414235077428-338989a2e8c0',
+    photography:    'photo-1542038784456-1ea8e935640e',
+    general:        'photo-1600880292203-757bb62b4baf',
+  };
+  const industryKey = Object.keys(industryImages).find(k => industry.toLowerCase().includes(k)) || 'general';
+  const heroImageId = industryImages[industryKey];
+  const heroImageUrl = `https://images.unsplash.com/${heroImageId}?w=600&q=80&auto=format&fit=crop`;
+
+  // Expiry date: end of this week (Sunday)
+  const expiryDate = new Date();
+  expiryDate.setDate(expiryDate.getDate() + (7 - expiryDate.getDay()));
+  const expiryStr = expiryDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const prompt = `You are a top-tier email marketer writing a weekly promotional email for ${businessName}, a ${industry} business${city ? ` in ${city}` : ''}.
 
 Month: ${month}
 Services offered: ${services.length ? services.join(', ') : 'various services'}
 Tone: ${tone}
 Campaign focus: ${focusInstructions[focus] || focusInstructions.seasonal}
+Offer expires: ${expiryStr}
 ${recentSubjects.length ? `Recent subjects used (DO NOT repeat these concepts): ${recentSubjects.join(' | ')}` : ''}
 
-Write ONE compelling weekly email that:
-- Has an irresistible, curiosity-driving subject line (under 60 chars)
-- Opens with a powerful hook that speaks to a real customer pain point
-- Presents a time-limited offer with clear value (discount, bonus service, priority scheduling, etc.)
-- Includes a clear call-to-action (call/text/book now)
-- Feels personal, not corporate
-- Is 150-250 words for the main body
+Write ONE high-converting weekly email using proven copywriting techniques:
+
+SUBJECT LINE: Use a curiosity gap or open loop (e.g., "The one thing most [customer type] don't know about…", "Why your [problem] keeps coming back…", "We almost didn't share this…"). Under 55 characters. No generic words like "newsletter" or "update".
+
+PREVIEW TEXT: Continue the curiosity hook, tease the offer without revealing it fully. 80-100 chars.
+
+BODY HTML: A rich, visually compelling email that:
+1. Opens with a punchy hook addressing a real customer pain point (1-2 lines)
+2. Builds desire with a "before/after" or problem/solution statement
+3. Reveals a SPECIFIC time-limited offer (e.g., "20% off this week only", "free add-on with any booking before ${expiryStr}", "2 spots left this week")
+4. Uses urgency language ("Expires ${expiryStr}", "Only X spots left", "This week only")
+5. Has ONE clear CTA button: bold, prominent, action-driven text
+6. Ends with a brief personal sign-off from the business owner/team
+7. Includes a footer with unsubscribe option
+
+Use this EXACT HTML structure with inline styles:
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.10)">
+  <!-- Header -->
+  <div style="background:#111827;padding:20px 24px;text-align:center">
+    <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px">[BUSINESS NAME]</h1>
+  </div>
+  <!-- Hero image -->
+  <img src="${heroImageUrl}" alt="[BUSINESS NAME] offer" style="width:100%;display:block;max-height:280px;object-fit:cover" />
+  <!-- Urgency bar -->
+  <div style="background:#fef3c7;border-bottom:2px solid #f59e0b;padding:12px 24px;text-align:center">
+    <p style="margin:0;font-size:14px;font-weight:700;color:#92400e">⏰ This offer expires ${expiryStr} — don't miss it</p>
+  </div>
+  <!-- Body -->
+  <div style="padding:32px 28px">
+    [HOOK LINE - 1-2 sentences, bold if possible]
+    [BODY PARAGRAPHS - 2-3 short paragraphs, problem → solution → offer]
+    [SPECIFIC OFFER BOX styled with background:#f0fdf4;border-left:4px solid #22c55e;padding:16px;border-radius:8px;margin:24px 0]
+    [CTA BUTTON centered, styled: background:#111827;color:#ffffff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block]
+    [PERSONAL SIGN-OFF]
+  </div>
+  <!-- Footer -->
+  <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 28px;text-align:center">
+    <p style="margin:0 0 8px;font-size:12px;color:#6b7280">You're receiving this because you've used [BUSINESS NAME] before.</p>
+    <a href="#" style="font-size:12px;color:#6b7280;text-decoration:underline">Unsubscribe</a>
+  </div>
+</div>
+
+BODY TEXT: A plain-text version of the same content.
 
 Return ONLY valid JSON (no markdown, no code blocks):
 {
@@ -79,14 +141,11 @@ Return ONLY valid JSON (no markdown, no code blocks):
   "previewText": "...",
   "bodyHtml": "...",
   "bodyText": "..."
-}
-
-For bodyHtml: use simple inline-styled HTML (no external CSS). Include the business name, the offer, and a prominent CTA button styled with background-color:#1d4ed8;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;
-For bodyText: plain text version of the same content.`;
+}`;
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1500,
+    max_tokens: 3000,
     messages: [{ role: 'user', content: prompt }],
   });
 
