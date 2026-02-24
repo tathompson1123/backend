@@ -34,6 +34,7 @@ function buildPageHtml(sectionsHtml, theme, meta) {
   <title>${escapeHtml(meta.title || 'Website')}</title>
   <meta name="description" content="${escapeHtml(meta.description || '')}">
   ${meta.userId ? `<meta name="user-id" content="${meta.userId}">` : ''}
+  ${meta.userId ? `<script>window.__SORCE_USER_ID__='${meta.userId}';</script>` : ''}
   <link href="${theme.fontImport || 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'}" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }

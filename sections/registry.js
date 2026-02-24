@@ -57,6 +57,9 @@ const sections = {
 
   // Footer
   'footer-4col-dark': require('./footer/footer-4col-dark'),
+
+  // Lead Magnets
+  'lead-magnet-landscaping': require('./lead-magnets/lead-magnet-landscaping'),
 };
 
 // ── Dynamic sections (Gemini-generated, registered at runtime) ──
