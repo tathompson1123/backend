@@ -244,11 +244,10 @@ async function generateWebsite(req, res)
                   },
                   body: JSON.stringify({
                     name: `website-${userId}`,
-                    files: Object.entries(pages).map(([filename, pageHtml]) => ({
-                      file: filename,
-                      data: Buffer.from(pageHtml).toString('base64'),
-                      encoding: 'base64'
-                    })),
+                    files: [
+                      ...Object.entries(pages).map(([filename, pageHtml]) => ({ file: filename, data: pageHtml })),
+                      { file: 'vercel.json', data: JSON.stringify({ cleanUrls: true, trailingSlash: false }) }
+                    ],
                     projectSettings: { framework: null }
                   })
                 });

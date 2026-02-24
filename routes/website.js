@@ -543,11 +543,7 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
     if (pages && Object.keys(pages).length > 0) {
       Object.keys(pages).forEach(pageKey => {
         if (!addedFiles.has(pageKey)) {
-          files.push({
-            file: pageKey,
-            data: Buffer.from(pages[pageKey]).toString('base64'),
-            encoding: 'base64'
-          });
+          files.push({ file: pageKey, data: pages[pageKey] });
           addedFiles.add(pageKey);
           console.log(`📄 Added ${pageKey} to deployment`);
         }
@@ -556,18 +552,17 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
 
     // Only add index.html from html_content if it wasn't already added from pages
     if (html_content && !addedFiles.has('index.html')) {
-      files.push({
-        file: 'index.html',
-        data: Buffer.from(html_content).toString('base64'),
-        encoding: 'base64'
-      });
+      files.push({ file: 'index.html', data: html_content });
       addedFiles.add('index.html');
       console.log(`📄 Added index.html to deployment`);
     }
 
-    console.log(`📦 Total files to deploy: ${files.length}`);
+    // Add vercel.json for proper static routing
+    files.push({ file: 'vercel.json', data: JSON.stringify({ cleanUrls: true, trailingSlash: false }) });
 
-    if (files.length === 0) {
+    console.log(`📦 Total files to deploy: ${files.length} (${Array.from(addedFiles).join(', ')})`);
+
+    if (addedFiles.size === 0) {
       throw new Error('No files to deploy');
     }
 
@@ -581,9 +576,7 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
       body: JSON.stringify({
         name: `website-${userId}`,
         files: files,
-        projectSettings: {
-          framework: null
-        }
+        projectSettings: { framework: null }
       })
     });
 
@@ -683,11 +676,10 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
             },
             body: JSON.stringify({
               name: `website-${userId}`,
-              files: Object.entries(pages).map(([filename, pageHtml]) => ({
-                file: filename,
-                data: Buffer.from(pageHtml).toString('base64'),
-                encoding: 'base64'
-              })),
+              files: [
+                ...Object.entries(pages).map(([filename, pageHtml]) => ({ file: filename, data: pageHtml })),
+                { file: 'vercel.json', data: JSON.stringify({ cleanUrls: true, trailingSlash: false }) }
+              ],
               projectSettings: { framework: null }
             })
           });

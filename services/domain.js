@@ -336,8 +336,16 @@ async function purchaseDomain(domain, userInfo) {
         message: 'Domain purchased successfully'
       };
     } else {
+      // Check for specific known error statuses first
+      if (xmlData.includes('<Status>insufficient_funds</Status>')) {
+        console.error(`❌ Dynadot registration failed: insufficient funds`);
+        console.error('  Full response:', xmlData);
+        throw new Error('Your Dynadot account has insufficient funds. Please top up your balance at dynadot.com and try again.');
+      }
+
       // Extract error message from XML (try multiple patterns)
       const errorPatterns = [
+        /<Status>(.+?)<\/Status>/i,
         /<Error>(.+?)<\/Error>/i,
         /<ErrorMessage>(.+?)<\/ErrorMessage>/i,
         /<Message>(.+?)<\/Message>/i,
@@ -347,7 +355,7 @@ async function purchaseDomain(domain, userInfo) {
       let errorMessage = 'Domain registration failed';
       for (const pattern of errorPatterns) {
         const match = xmlData.match(pattern);
-        if (match) {
+        if (match && match[1] !== 'success') {
           errorMessage = match[1];
           break;
         }

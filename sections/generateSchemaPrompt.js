@@ -222,12 +222,12 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
       content: {
         logo: businessName,
         links: [
-          { text: 'Home', url: 'index.html' },
-          { text: 'Services', url: 'services.html' },
-          { text: 'Gallery', url: 'gallery.html' },
-          { text: 'Contact', url: 'contact.html' },
+          { text: 'Home', url: '/' },
+          { text: 'Services', url: '/services' },
+          { text: 'Gallery', url: '/gallery' },
+          { text: 'Contact', url: '/contact' },
         ],
-        ctaText: 'Get a Quote', ctaLink: 'contact.html',
+        ctaText: 'Get a Quote', ctaLink: '/contact',
       },
     },
     footer: {
@@ -244,8 +244,8 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
             headline: hero.headline || 'Your Outdoor Space Deserves the Best',
             highlightText: hero.highlightText || 'Best',
             subtitle: hero.subtitle || `Professional landscaping services for your property.`,
-            ctaText: 'Get a Free Quote', ctaLink: 'contact.html',
-            ctaText2: 'See Our Work', ctaLink2: 'gallery.html',
+            ctaText: 'Get a Free Quote', ctaLink: '/contact',
+            ctaText2: 'See Our Work', ctaLink2: '/gallery',
             portraitImage: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800',
             bgImage: 'https://images.unsplash.com/photo-1558904541-efa843a96f01?w=1600',
             floatBadge: hero.floatBadge || '10+',
@@ -279,8 +279,8 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
           { id: 'cta', template: 'cta-card', content: {
             headline: 'Ready for a Stunning Transformation?',
             subtitle: `Let us turn your vision into reality. Contact us today for a free consultation.`,
-            ctaText: 'Get a Free Quote', ctaLink: 'contact.html',
-            ctaText2: 'View Our Work', ctaLink2: 'gallery.html',
+            ctaText: 'Get a Free Quote', ctaLink: '/contact',
+            ctaText2: 'View Our Work', ctaLink2: '/gallery',
           }},
         ],
       },
@@ -290,7 +290,7 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
         sections: [
           { id: 'services', template: 'services-carousel', content: { title: 'Our Services', subtitle: 'From concept to creation, we handle everything', services } },
           { id: 'benefits', template: 'benefits-cards', content: { title: `Why Choose ${businessName}`, subtitle: 'We bring more than just great service', benefits } },
-          { id: 'cta', template: 'cta-card', content: { headline: 'Not Sure Which Service You Need?', subtitle: 'Our team will help you figure out the right plan. Reach out for a free consultation.', ctaText: 'Get a Free Quote', ctaLink: 'contact.html', ctaText2: 'View Our Work', ctaLink2: 'gallery.html' } },
+          { id: 'cta', template: 'cta-card', content: { headline: 'Not Sure Which Service You Need?', subtitle: 'Our team will help you figure out the right plan. Reach out for a free consultation.', ctaText: 'Get a Free Quote', ctaLink: '/contact', ctaText2: 'View Our Work', ctaLink2: '/gallery' } },
         ],
       },
       {
@@ -306,7 +306,7 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
               category: ['Garden Design', 'Hardscape', 'Lawn Care', 'Lighting', 'Garden Design', 'Maintenance', 'Garden Design', 'Hardscape'][i % 8],
             })),
           }},
-          { id: 'cta', template: 'cta-card', content: { headline: 'Ready to Transform Your Space?', subtitle: "Book a free consultation and let's design your dream outdoor space.", ctaText: 'Get a Free Quote', ctaLink: 'contact.html', ctaText2: 'View Services', ctaLink2: 'services.html' } },
+          { id: 'cta', template: 'cta-card', content: { headline: 'Ready to Transform Your Space?', subtitle: "Book a free consultation and let's design your dream outdoor space.", ctaText: 'Get a Free Quote', ctaLink: '/contact', ctaText2: 'View Services', ctaLink2: '/services' } },
         ],
       },
       {
@@ -423,13 +423,13 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
     "content": {
       "logo": "${businessName}",
       "links": [
-        { "text": "Home",     "url": "index.html" },
-        { "text": "Services", "url": "services.html" },
-        { "text": "Gallery",  "url": "gallery.html" },
-        { "text": "Contact",  "url": "contact.html" }
+        { "text": "Home",     "url": "/" },
+        { "text": "Services", "url": "/services" },
+        { "text": "Gallery",  "url": "/gallery" },
+        { "text": "Contact",  "url": "/contact" }
       ],
       "ctaText": "Book Now",
-      "ctaLink": "contact.html"
+      "ctaLink": "/contact"
     }
   },
   "footer": {
@@ -457,9 +457,9 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "highlightText": "One or two highlight words",
             "subtitle": "Compelling subtitle 1-2 sentences about this business",
             "ctaText": "Book Your Detail",
-            "ctaLink": "contact.html",
+            "ctaLink": "/contact",
             "ctaText2": "View Our Work",
-            "ctaLink2": "gallery.html",
+            "ctaLink2": "/gallery",
             "backgroundImage": "https://images.unsplash.com/photo-1552519507-da3b142a6f3e?w=1920"
           }
         },
@@ -523,7 +523,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "headline": "Compelling CTA headline for auto detailing",
             "subtitle": "Supporting text that drives action",
             "ctaText": "Book Now",
-            "ctaLink": "contact.html",
+            "ctaLink": "/contact",
             "ctaText2": "Call Now: ${phone}",
             "ctaLink2": "tel:${phoneClean}",
             "features": [
@@ -794,13 +794,13 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
     "content": {
       "logo": "${businessName}",
       "links": [
-        { "text": "Home",     "url": "index.html" },
-        { "text": "Services", "url": "services.html" },
-        { "text": "Projects", "url": "gallery.html" },
-        { "text": "Contact",  "url": "contact.html" }
+        { "text": "Home",     "url": "/" },
+        { "text": "Services", "url": "/services" },
+        { "text": "Projects", "url": "/gallery" },
+        { "text": "Contact",  "url": "/contact" }
       ],
       "ctaText": "Get an Estimate",
-      "ctaLink": "contact.html"
+      "ctaLink": "/contact"
     }
   },
   "footer": {
@@ -829,9 +829,9 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "highlightText": "One bold highlight word (e.g. LAST. or RIGHT. or DONE.)",
             "subtitle": "2-3 sentence value proposition specific to this business — quality, trust, experience",
             "ctaText": "Request Estimate",
-            "ctaLink": "contact.html",
+            "ctaLink": "/contact",
             "ctaText2": "Our Work",
-            "ctaLink2": "gallery.html",
+            "ctaLink2": "/gallery",
             "backgroundImage": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1920"
           }
         },
@@ -907,7 +907,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
               "Dedicated project management"
             ],
             "ctaText": "Start Your Project",
-            "ctaLink": "contact.html"
+            "ctaLink": "/contact"
           }
         },
         {
@@ -917,9 +917,9 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "headline": "READY TO GET STARTED?",
             "subtitle": "Contact us today for a free, no-obligation estimate for your project.",
             "ctaText": "Request Estimate",
-            "ctaLink": "contact.html",
+            "ctaLink": "/contact",
             "ctaText2": "View Portfolio",
-            "ctaLink2": "gallery.html"
+            "ctaLink2": "/gallery"
           }
         }
       ]
@@ -951,7 +951,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "ctaText": "Call Us",
             "ctaLink": "tel:${phoneClean}",
             "ctaText2": "Contact Form",
-            "ctaLink2": "contact.html"
+            "ctaLink2": "/contact"
           }
         }
       ]
@@ -987,9 +987,9 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "headline": "Like What You See?",
             "subtitle": "Let's add your home to our portfolio. Contact us to discuss your vision.",
             "ctaText": "Request Estimate",
-            "ctaLink": "contact.html",
+            "ctaLink": "/contact",
             "ctaText2": "View Services",
-            "ctaLink2": "services.html"
+            "ctaLink2": "/services"
           }
         }
       ]
