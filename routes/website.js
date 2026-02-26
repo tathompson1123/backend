@@ -612,13 +612,12 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
 router.post('/save-schema', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { page_data } = req.body;
+    const { page_data, html_content: providedHtml, pages_html: providedPages } = req.body;
 
     if (!page_data) {
       return res.status(400).json({ error: 'page_data is required' });
     }
 
-    const { renderPage, renderMultiPage } = require('../sections/renderer');
     const { getThemeForBusinessType } = require('../sections/themes');
 
     const existing = await pool.query(
@@ -634,21 +633,38 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
     if (!page_data.meta) page_data.meta = {};
     page_data.meta.userId = userId;
 
-    console.log('🎨 Re-rendering HTML from updated schema...');
     const { injectAgents } = require('../utils/injectAgents');
     let html, pages;
 
-    if (page_data.multiPage) {
-      const renderedPages = renderMultiPage(page_data);
-      pages = {};
-      for (const [filename, pageHtml] of Object.entries(renderedPages)) {
-        pages[filename] = await injectAgents(pageHtml, userId, pool, page_data.theme);
+    if (providedHtml) {
+      // Widget format: HTML already rendered on frontend — just inject agents
+      console.log('🎨 Widget format: injecting agents into pre-rendered HTML...');
+      if (providedPages && typeof providedPages === 'object') {
+        pages = {};
+        for (const [filename, pageHtml] of Object.entries(providedPages)) {
+          pages[filename] = await injectAgents(pageHtml, userId, pool, page_data.theme);
+        }
+        html = pages['index.html'] || Object.values(pages)[0];
+      } else {
+        html = await injectAgents(providedHtml, userId, pool, page_data.theme);
+        pages = { 'index.html': html };
       }
-      html = pages['index.html'] || Object.values(pages)[0];
     } else {
-      html = renderPage(page_data);
-      html = await injectAgents(html, userId, pool, page_data.theme);
-      pages = { 'index.html': html };
+      // Template format: render from schema using backend template renderer
+      const { renderPage, renderMultiPage } = require('../sections/renderer');
+      console.log('🎨 Template format: re-rendering HTML from schema...');
+      if (page_data.multiPage) {
+        const renderedPages = renderMultiPage(page_data);
+        pages = {};
+        for (const [filename, pageHtml] of Object.entries(renderedPages)) {
+          pages[filename] = await injectAgents(pageHtml, userId, pool, page_data.theme);
+        }
+        html = pages['index.html'] || Object.values(pages)[0];
+      } else {
+        html = renderPage(page_data);
+        html = await injectAgents(html, userId, pool, page_data.theme);
+        pages = { 'index.html': html };
+      }
     }
     console.log('✅ Rendered HTML:', html.length, 'chars');
 
