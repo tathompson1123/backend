@@ -61,6 +61,9 @@ const sections = {
   // Lead Magnets
   'lead-magnet-landscaping': require('./lead-magnets/lead-magnet-landscaping'),
   'lead-magnet-auto-wrap':   require('./lead-magnets/lead-magnet-auto-wrap'),
+
+  // Custom / Freeform
+  'custom-row': require('./custom/custom-row'),
 };
 
 // ── Dynamic sections (Gemini-generated, registered at runtime) ──
