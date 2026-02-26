@@ -276,11 +276,6 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
             subtitle: 'Click each card to reveal the stunning before & after',
             cards: transformations,
           }},
-          { id: 'lead-magnet', template: 'lead-magnet-landscaping', content: {
-            headline: 'Get Your Free Landscape Estimate',
-            subheadline: 'Answer 4 quick questions and see your personalized price range instantly.',
-            ctaText: 'See My Estimate',
-          }},
           { id: 'cta', template: 'cta-card', content: {
             headline: 'Ready for a Stunning Transformation?',
             subtitle: `Let us turn your vision into reality. Contact us today for a free consultation.`,
@@ -518,15 +513,6 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
               { "icon": "🛡️", "title": "Benefit 2 Title", "description": "Why this matters to the customer" },
               { "icon": "🏆", "title": "Benefit 3 Title", "description": "Why this matters to the customer" }
             ]
-          }
-        },
-        {
-          "id": "lead-magnet",
-          "template": "lead-magnet-auto-wrap",
-          "content": {
-            "headline": "Design Your Vehicle Wrap",
-            "subheadline": "Get an instant price estimate in under 2 minutes.",
-            "ctaText": "Get My Estimate"
           }
         },
         {
