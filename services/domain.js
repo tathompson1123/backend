@@ -398,11 +398,15 @@ async function updateNameservers(domain) {
     const response = await axios.get(DYNADOT_API_URL, { params });
 
     const xmlData = response.data;
-    
-    if (xmlData.includes('<Status>success</Status>')) {
-      console.log(`✅ Updated nameservers for ${domain}`);
+    console.log(`🔍 Nameserver update response for ${domain}:`, xmlData);
+
+    // Dynadot API3 uses <SuccessCode>0</SuccessCode> for success (not <Status>success</Status>)
+    if (xmlData.includes('<SuccessCode>0</SuccessCode>') || xmlData.includes('<Status>success</Status>')) {
+      console.log(`✅ Updated nameservers for ${domain} → ns1.vercel-dns.com, ns2.vercel-dns.com`);
     } else {
-      throw new Error('Failed to update nameservers');
+      const errorMatch = xmlData.match(/<Error>(.+?)<\/Error>/i) || xmlData.match(/<Status>(.+?)<\/Status>/i);
+      const errorMsg = errorMatch ? errorMatch[1] : 'Unknown error';
+      throw new Error(`Failed to update nameservers: ${errorMsg}`);
     }
   } catch (error) {
     console.error('Nameserver update error:', error.message);
