@@ -734,6 +734,34 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
 });
 
 
+// POST - Render template schema to HTML preview without saving
+// Used by TemplateEditor to refresh the iframe preview after content edits
+router.post('/render-preview', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { page_data } = req.body;
+    if (!page_data) return res.status(400).json({ error: 'page_data required' });
+
+    const { renderPage, renderMultiPage } = require('../sections/renderer');
+    const { injectAgents } = require('../utils/injectAgents');
+
+    let html;
+    if (page_data.multiPage && Array.isArray(page_data.pages)) {
+      const pages = renderMultiPage(page_data);
+      html = pages['index.html'] || Object.values(pages)[0];
+    } else {
+      html = renderPage(page_data);
+    }
+    html = await injectAgents(html, userId, pool, page_data.theme);
+
+    res.json({ html });
+  } catch (err) {
+    console.error('Preview render error:', err.message);
+    res.status(500).json({ error: 'Failed to render preview' });
+  }
+});
+
+
 router.get('/check-contact-form', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
