@@ -20,6 +20,7 @@ const sections = {
 
   // Heroes
   'hero-fullscreen-dark':  require('./hero/hero-fullscreen-dark'),
+  'hero-fullscreen-light': require('./hero/hero-fullscreen-light'),
   'hero-gradient':         require('./hero/hero-gradient'),
   'hero-split-portrait':   require('./hero/hero-split-portrait'),
   'hero-page-banner':      require('./hero/hero-page-banner'),
@@ -39,8 +40,9 @@ const sections = {
   'benefits-cards':    require('./benefits/benefits-cards'),
 
   // Gallery
-  'gallery-mixed-grid': require('./gallery/gallery-mixed-grid'),
-  'gallery-filtered':   require('./gallery/gallery-filtered'),
+  'gallery-mixed-grid':        require('./gallery/gallery-mixed-grid'),
+  'gallery-filtered':          require('./gallery/gallery-filtered'),
+  'gallery-masonry-full-width': require('./gallery/gallery-masonry-full-width'),
 
   // Testimonials
   'testimonials-3col': require('./testimonials/testimonials-3col'),

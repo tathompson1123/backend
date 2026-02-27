@@ -160,19 +160,19 @@ const THEMES = {
   photography: {
     id: 'photography',
     name: 'Photography',
-    primaryColor: '#0A0A0A',
-    accentColor: '#D4AF37',
-    bgColor: '#FFFFFF',
-    surfaceColor: '#F5F5F5',
-    textColor: '#0A0A0A',
-    textMuted: 'rgba(10,10,10,0.6)',
-    headingFont: 'Crimson Text',
-    bodyFont: 'Raleway',
-    fontImport: "https://fonts.googleapis.com/css2?family=Crimson+Text:wght@400;600;700&family=Raleway:wght@400;500;600;700&display=swap",
-    borderRadius: '0px',
-    buttonRadius: '0px',
-    borderAccent: 'rgba(212, 175, 55, 0.3)',
-    borderAccentHover: 'rgba(212, 175, 55, 0.5)',
+    primaryColor: '#1c1917',        // stone-900 — buttons, strong accents
+    accentColor: '#78716c',         // stone-500 — secondary accents
+    bgColor: '#faf9f6',             // warm off-white (editorial style)
+    surfaceColor: '#f0ede6',        // slightly darker warm surface
+    textColor: '#1c1917',           // stone-900
+    textMuted: 'rgba(28,25,23,0.55)',
+    headingFont: 'Cormorant Garamond',
+    bodyFont: 'Inter',
+    fontImport: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap",
+    borderRadius: '16px',
+    buttonRadius: '50px',
+    borderAccent: 'rgba(28,25,23,0.2)',
+    borderAccentHover: 'rgba(28,25,23,0.5)',
   },
   legal: {
     id: 'legal',
