@@ -157,14 +157,18 @@ const THEMES = {
     borderAccent: 'rgba(30, 58, 138, 0.2)',
     borderAccentHover: 'rgba(30, 58, 138, 0.4)',
   },
+  // ── Photography: 3 style variants (warm / dark / clean) ──────────────
+  // The schema generator picks one randomly and embeds its themeId.
+  // generateV2.js reads themeId and selects the right sub-theme.
   photography: {
+    // Default alias → warm (used as fallback by getThemeForBusinessType)
     id: 'photography',
     name: 'Photography',
-    primaryColor: '#1c1917',        // stone-900 — buttons, strong accents
-    accentColor: '#78716c',         // stone-500 — secondary accents
-    bgColor: '#faf9f6',             // warm off-white (editorial style)
-    surfaceColor: '#f0ede6',        // slightly darker warm surface
-    textColor: '#1c1917',           // stone-900
+    primaryColor: '#1c1917',
+    accentColor: '#78716c',
+    bgColor: '#faf9f6',
+    surfaceColor: '#f0ede6',
+    textColor: '#1c1917',
     textMuted: 'rgba(28,25,23,0.55)',
     headingFont: 'Cormorant Garamond',
     bodyFont: 'Inter',
@@ -173,6 +177,60 @@ const THEMES = {
     buttonRadius: '50px',
     borderAccent: 'rgba(28,25,23,0.2)',
     borderAccentHover: 'rgba(28,25,23,0.5)',
+  },
+  'photography-warm': {
+    // Warm stone: cream background, natural tones, serif editorial
+    id: 'photography-warm',
+    name: 'Photography — Warm',
+    primaryColor: '#1c1917',
+    accentColor: '#78716c',
+    bgColor: '#faf9f6',
+    surfaceColor: '#f0ede6',
+    textColor: '#1c1917',
+    textMuted: 'rgba(28,25,23,0.55)',
+    headingFont: 'Cormorant Garamond',
+    bodyFont: 'Inter',
+    fontImport: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap",
+    borderRadius: '16px',
+    buttonRadius: '50px',
+    borderAccent: 'rgba(28,25,23,0.2)',
+    borderAccentHover: 'rgba(28,25,23,0.5)',
+  },
+  'photography-dark': {
+    // Moody dark: near-black background, warm gold accents, cinematic
+    id: 'photography-dark',
+    name: 'Photography — Dark',
+    primaryColor: '#f0ede6',        // light for buttons on dark bg
+    accentColor: '#c9ad87',         // warm gold
+    bgColor: '#0d0d0d',
+    surfaceColor: '#1a1a1a',
+    textColor: '#f0ede6',
+    textMuted: 'rgba(240,237,230,0.55)',
+    headingFont: 'Cormorant Garamond',
+    bodyFont: 'Raleway',
+    fontImport: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Raleway:wght@300;400;500;600;700&display=swap",
+    borderRadius: '8px',
+    buttonRadius: '2px',
+    borderAccent: 'rgba(240,237,230,0.15)',
+    borderAccentHover: 'rgba(240,237,230,0.4)',
+  },
+  'photography-clean': {
+    // Minimal white: pure white, sharp edges, high contrast, modern
+    id: 'photography-clean',
+    name: 'Photography — Clean',
+    primaryColor: '#111111',
+    accentColor: '#888888',
+    bgColor: '#ffffff',
+    surfaceColor: '#f5f5f5',
+    textColor: '#111111',
+    textMuted: 'rgba(17,17,17,0.5)',
+    headingFont: 'Playfair Display',
+    bodyFont: 'Lato',
+    fontImport: "https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,700;1,400;1,700&family=Lato:wght@300;400;700&display=swap",
+    borderRadius: '0px',
+    buttonRadius: '0px',
+    borderAccent: 'rgba(17,17,17,0.15)',
+    borderAccentHover: 'rgba(17,17,17,0.5)',
   },
   legal: {
     id: 'legal',

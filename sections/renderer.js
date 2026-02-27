@@ -17,8 +17,12 @@ function renderSectionHtml(section, theme) {
   try {
     const sectionId = section.id || section.template;
     const html = template.render(section.content || {}, theme, sectionId);
+    // Optional per-section background color override set in the editor
+    const bgOverride = section.content?.bgColor
+      ? `<style>.section-${sectionId}{background-color:${section.content.bgColor}!important}</style>`
+      : '';
     // Wrap in id-tagged div so anchor links (#services, etc.) resolve
-    return `<div id="${sectionId}">${html}</div>`;
+    return `<div id="${sectionId}">${html}${bgOverride}</div>`;
   } catch (err) {
     console.error(`❌ RENDERER: Error rendering ${section.template}:`, err);
     return `<!-- Error rendering: ${section.template} -->`;

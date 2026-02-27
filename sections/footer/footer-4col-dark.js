@@ -16,6 +16,15 @@ module.exports = {
   },
   mood: ['professional', 'complete', 'trustworthy'],
 
+  contentSchema: {
+    logo:     { type: 'text',     label: 'Business Name',    default: 'Business' },
+    tagline:  { type: 'textarea', label: 'Tagline',          default: '' },
+    services: { type: 'array',    label: 'Services List', itemSchema: { text: { type: 'text', label: 'Service', default: 'Service' } } },
+    hours:    { type: 'textarea', label: 'Business Hours',   default: 'Mon–Fri: 9AM–5PM' },
+    phone:    { type: 'text',     label: 'Phone Number',     default: '' },
+    email:    { type: 'text',     label: 'Email Address',    default: '' },
+  },
+
   render(content, theme, sectionId = 'footer') {
     const s = `section-${sectionId}`;
     const services = content.services || [];

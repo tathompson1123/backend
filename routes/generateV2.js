@@ -7,7 +7,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { buildSchemaPrompt, detectLayout, buildOrganicSchemaFromContent } = require('../sections/generateSchemaPrompt');
 const { renderPage, renderMultiPage } = require('../sections/renderer');
-const { getThemeForBusinessType } = require('../sections/themes');
+const { getThemeForBusinessType, THEMES } = require('../sections/themes');
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -171,8 +171,11 @@ async function generateWebsite(req, res)
     // ==========================================
     // STEP 4: Apply theme + render HTML
     // ==========================================
-    const theme = getThemeForBusinessType(businessType);
-    console.log(`🎨 Using theme: ${theme.name}`);
+    // Use themeId embedded in schema (e.g. photography variants), else fall back to business-type lookup
+    const theme = (pageSchema.themeId && THEMES[pageSchema.themeId])
+      ? THEMES[pageSchema.themeId]
+      : getThemeForBusinessType(businessType);
+    console.log(`🎨 Using theme: ${pageSchema.themeId || businessType} →`, theme.primaryColor);
 
     pageSchema.theme = theme;
     pageSchema.version = 2;

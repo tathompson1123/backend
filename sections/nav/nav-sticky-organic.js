@@ -145,6 +145,9 @@ module.exports = {
     transition: 0.3s;
   }
   @media (max-width: 768px) {
+    .${s} { padding: 0.875rem 0; }
+    .${s}-inner { padding: 0 1.25rem; min-height: 56px; }
+    .${s}-logo { font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100vw - 80px); }
     .${s}-burger { display: flex; }
     .${s}-links {
       display: none;

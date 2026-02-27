@@ -1037,10 +1037,13 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
 }
 
-// ── Photography: multi-page direct JSON prompt ────────────────────────
-// Returns a complete multi-page schema — Claude fills in all content.
-// Pages: Home · About · Portfolio · Services · Contact
-// Sections use the warm stone editorial theme (photography theme).
+// ── Photography: 3 style variants, chosen randomly at generation time ──
+// Variant is embedded as "themeId" in the schema so re-renders stay consistent.
+// generateV2.js reads themeId → picks the matching sub-theme from themes.js.
+//
+// Warm  — hero-fullscreen-light, masonry gallery, services-cards-3col
+// Dark  — hero-fullscreen-dark, gallery-filtered, services-carousel, features-icon-row
+// Clean — hero-split-portrait, masonry gallery, services-cards-3col
 
 const PHOTOGRAPHY_PHOTO_IDS = [
   'photo-1519741497674-611481863552', // golden hour wedding
@@ -1059,14 +1062,261 @@ const PHOTOGRAPHY_PHOTO_IDS = [
 
 function buildPhotographyMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList }) {
   const servicesJson = JSON.stringify(servicesList.slice(0, 5).map(s => ({ text: s })));
-  const galleryItemsJson = JSON.stringify(
+  const masonryItemsJson = JSON.stringify(
     PHOTOGRAPHY_PHOTO_IDS.slice(0, 9).map((id, i) => ({
       url: `https://images.unsplash.com/${id}?w=800`,
       caption: ['Golden Hour Romance', 'Natural Light Portrait', 'Studio Session', 'Commercial Shoot', 'Editorial Headshot', 'Live Event', 'Wedding Ceremony', 'Fashion Portrait', 'Reception Details'][i],
     }))
   );
 
-  return `You are a website content generator for photography businesses. Generate a JSON object for a MULTI-PAGE website with 5 separate pages. The design is an editorial, warm stone aesthetic (cream/off-white background, serif headings).
+  // Pick a random style variant — stored in schema so re-renders stay consistent
+  const variants = ['warm', 'dark', 'clean'];
+  const variant = variants[Math.floor(Math.random() * variants.length)];
+
+  const themeId = `photography-${variant}`;
+
+  // ── Variant-specific home page sections ──────────────────────────────
+
+  const warmHomeSections = `[
+        {
+          "id": "hero",
+          "template": "hero-fullscreen-light",
+          "content": {
+            "headline": "Short poetic photography tagline (4-6 words, uppercase-friendly, e.g. 'Photography is Poetry')",
+            "subtitle": "4-6 word descriptor e.g. 'Modern Portrait & Wedding Photography'",
+            "backgroundImage": "https://images.unsplash.com/photo-1519741497674-611481863552?w=1920",
+            "overlayOpacity": "0.12"
+          }
+        },
+        {
+          "id": "gallery-home",
+          "template": "gallery-masonry-full-width",
+          "content": {
+            "eyebrow": "Portfolio",
+            "title": "Recent Work",
+            "ctaText": "View Full Portfolio",
+            "ctaLink": "/portfolio",
+            "items": ${masonryItemsJson}
+          }
+        },
+        {
+          "id": "reviews",
+          "template": "review-marquee",
+          "content": {
+            "reviews": [
+              { "name": "Sarah & James", "stars": 5, "text": "Specific 5-star wedding/portrait review for this business", "date": "2 weeks ago", "avatarColor": "#c2410c" },
+              { "name": "Michael T.", "stars": 5, "text": "Review about professional headshots or corporate work", "date": "1 week ago", "avatarColor": "#1d4ed8" },
+              { "name": "The Johnson Family", "stars": 5, "text": "Family portrait review — mention comfort and natural shots", "date": "3 weeks ago", "avatarColor": "#7c3aed" },
+              { "name": "Emily R.", "stars": 5, "text": "Review about creative direction and final photos", "date": "4 days ago", "avatarColor": "#b45309" },
+              { "name": "David K.", "stars": 5, "text": "Review about event coverage being unobtrusive", "date": "1 month ago", "avatarColor": "#92400e" }
+            ]
+          }
+        },
+        {
+          "id": "packages",
+          "template": "services-cards-3col",
+          "content": {
+            "title": "Photography Packages",
+            "subtitle": "Tailored packages for every occasion",
+            "services": [
+              { "title": "Portrait Session",   "category": "Portraits",  "price": "From $350",   "image": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=800", "features": ["1 Hour Session", "30 Edited Photos", "Online Gallery"], "link": "/services", "recommended": false },
+              { "title": "Wedding Collection", "category": "Weddings",   "price": "From $2,500", "image": "https://images.unsplash.com/photo-1519741497674-611481863552?w=800", "features": ["8 Hours Coverage", "500+ Edited Photos", "Engagement Session"], "link": "/services", "recommended": true },
+              { "title": "Commercial Shoot",   "category": "Commercial", "price": "From $800",   "image": "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=800", "features": ["Half-Day Shoot", "Commercial Licensing", "Retouched Images"], "link": "/services", "recommended": false }
+            ]
+          }
+        },
+        {
+          "id": "cta-home",
+          "template": "cta-gradient-full",
+          "content": {
+            "badge": "Limited Availability",
+            "headline": "Compelling urgency headline about booking (7-10 words)",
+            "subtitle": "1-2 sentence value proposition",
+            "ctaText": "Book Now",
+            "ctaLink": "/contact",
+            "ctaText2": "See All Packages",
+            "ctaLink2": "/services",
+            "features": [
+              { "text": "Same-week booking available" },
+              { "text": "Online gallery delivery" },
+              { "text": "Print-ready files included" }
+            ]
+          }
+        }
+      ]`;
+
+  const darkHomeSections = `[
+        {
+          "id": "hero",
+          "template": "hero-fullscreen-dark",
+          "content": {
+            "headline": "Main dramatic headline WITHOUT the highlight word (e.g. 'Moments That Last')",
+            "highlightText": "One cinematic word to highlight in color (e.g. 'Last' or 'Forever')",
+            "subtitle": "1-2 sentences about the studio's cinematic, documentary style",
+            "ctaText": "Book Your Session",
+            "ctaLink": "/contact",
+            "ctaText2": "View Portfolio",
+            "ctaLink2": "/portfolio",
+            "backgroundImage": "https://images.unsplash.com/photo-1606800052052-a08af7148866?w=1920"
+          }
+        },
+        {
+          "id": "reviews",
+          "template": "review-marquee",
+          "content": {
+            "reviews": [
+              { "name": "Sarah & James", "stars": 5, "text": "Specific 5-star wedding/portrait review for this business", "date": "2 weeks ago", "avatarColor": "#c2410c" },
+              { "name": "Michael T.", "stars": 5, "text": "Review about professional headshots or corporate work", "date": "1 week ago", "avatarColor": "#1d4ed8" },
+              { "name": "The Johnson Family", "stars": 5, "text": "Family portrait review — mention comfort and natural shots", "date": "3 weeks ago", "avatarColor": "#7c3aed" },
+              { "name": "Emily R.", "stars": 5, "text": "Review about creative direction and final photos", "date": "4 days ago", "avatarColor": "#b45309" },
+              { "name": "David K.", "stars": 5, "text": "Review about event coverage being unobtrusive", "date": "1 month ago", "avatarColor": "#92400e" }
+            ]
+          }
+        },
+        {
+          "id": "features",
+          "template": "features-icon-row",
+          "content": {
+            "features": [
+              { "icon": "📷", "title": "Cinematic Style", "text": "Short description of the studio's signature editing and visual approach" },
+              { "icon": "🎨", "title": "Hand-Edited", "text": "Every image individually color-graded for our signature look" },
+              { "icon": "⚡", "title": "Fast Delivery", "text": "Online gallery delivered within 7 days of your session" },
+              { "icon": "🏆", "title": "Award-Winning", "text": "Recognized nationally for creative vision and technical excellence" }
+            ]
+          }
+        },
+        {
+          "id": "packages",
+          "template": "services-carousel",
+          "content": {
+            "title": "Photography Packages",
+            "subtitle": "Tailored packages for every occasion",
+            "services": [
+              { "title": "Portrait Session",   "category": "Portraits",  "price": "From $350",   "image": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=800", "features": ["1 Hour Session", "30 Edited Photos", "Online Gallery", "Print Release"], "recommended": false },
+              { "title": "Wedding Collection", "category": "Weddings",   "price": "From $2,500", "image": "https://images.unsplash.com/photo-1519741497674-611481863552?w=800", "features": ["8 Hours Coverage", "500+ Edited Photos", "Engagement Session", "Second Shooter"], "recommended": true },
+              { "title": "Commercial Shoot",   "category": "Commercial", "price": "From $800",   "image": "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=800", "features": ["Half-Day Shoot", "Commercial Licensing", "Retouched Images", "Brand Consultation"], "recommended": false },
+              { "title": "Event Coverage",     "category": "Events",     "price": "From $600",   "image": "https://images.unsplash.com/photo-1537633552985-df8429e8048b?w=800", "features": ["4 Hours Coverage", "200+ Edited Photos", "Fast Turnaround", "Online Gallery"], "recommended": false }
+            ]
+          }
+        },
+        {
+          "id": "gallery-home",
+          "template": "gallery-filtered",
+          "content": {
+            "title": "Our Work",
+            "highlight": "Work",
+            "subtitle": "A glimpse into our latest sessions",
+            "categories": ["All", "Weddings", "Portraits", "Events", "Commercial"],
+            "items": [
+              { "url": "https://images.unsplash.com/photo-1519741497674-611481863552?w=800", "title": "Golden Hour Romance",      "category": "Weddings"   },
+              { "url": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=800", "title": "Natural Light Portrait",   "category": "Portraits"  },
+              { "url": "https://images.unsplash.com/photo-1606800052052-a08af7148866?w=800", "title": "Portrait Moody Lighting",  "category": "Portraits"  },
+              { "url": "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?w=800", "title": "Wedding Ceremony",         "category": "Weddings"   },
+              { "url": "https://images.unsplash.com/photo-1537633552985-df8429e8048b?w=800", "title": "Live Events",              "category": "Events"     },
+              { "url": "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=800", "title": "Commercial Shoot",         "category": "Commercial" }
+            ]
+          }
+        },
+        {
+          "id": "cta-home",
+          "template": "cta-gradient-full",
+          "content": {
+            "badge": "Limited Availability",
+            "headline": "Compelling urgency headline about booking (7-10 words)",
+            "subtitle": "1-2 sentence value proposition",
+            "ctaText": "Book Now",
+            "ctaLink": "/contact",
+            "ctaText2": "See All Packages",
+            "ctaLink2": "/services",
+            "features": [
+              { "text": "Same-week booking available" },
+              { "text": "Online gallery delivery" },
+              { "text": "Print-ready files included" }
+            ]
+          }
+        }
+      ]`;
+
+  const cleanHomeSections = `[
+        {
+          "id": "hero",
+          "template": "hero-split-portrait",
+          "content": {
+            "badge": "3-4 word welcome line e.g. 'Portrait & Wedding Studio'",
+            "headline": "Main headline WITHOUT the highlight word (short, elegant, e.g. 'Stories Worth')",
+            "highlightText": "One word to italicize/highlight (e.g. 'Telling')",
+            "subtitle": "2-3 sentences about the studio's personal, relaxed approach to photography",
+            "ctaText": "Book a Session",
+            "ctaLink": "/contact",
+            "ctaText2": "View Portfolio",
+            "ctaLink2": "/portfolio",
+            "portraitImage": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=800",
+            "floatBadge": "500+",
+            "floatBadgeLabel": "Sessions Completed"
+          }
+        },
+        {
+          "id": "reviews",
+          "template": "review-marquee",
+          "content": {
+            "reviews": [
+              { "name": "Sarah & James", "stars": 5, "text": "Specific 5-star wedding/portrait review for this business", "date": "2 weeks ago", "avatarColor": "#c2410c" },
+              { "name": "Michael T.", "stars": 5, "text": "Review about professional headshots or corporate work", "date": "1 week ago", "avatarColor": "#1d4ed8" },
+              { "name": "The Johnson Family", "stars": 5, "text": "Family portrait review — mention comfort and natural shots", "date": "3 weeks ago", "avatarColor": "#7c3aed" },
+              { "name": "Emily R.", "stars": 5, "text": "Review about creative direction and final photos", "date": "4 days ago", "avatarColor": "#b45309" },
+              { "name": "David K.", "stars": 5, "text": "Review about event coverage being unobtrusive", "date": "1 month ago", "avatarColor": "#92400e" }
+            ]
+          }
+        },
+        {
+          "id": "packages",
+          "template": "services-cards-3col",
+          "content": {
+            "title": "Photography Packages",
+            "subtitle": "Tailored packages for every occasion",
+            "services": [
+              { "title": "Portrait Session",   "category": "Portraits",  "price": "From $350",   "image": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=800", "features": ["1 Hour Session", "30 Edited Photos", "Online Gallery"], "link": "/services", "recommended": false },
+              { "title": "Wedding Collection", "category": "Weddings",   "price": "From $2,500", "image": "https://images.unsplash.com/photo-1519741497674-611481863552?w=800", "features": ["8 Hours Coverage", "500+ Edited Photos", "Engagement Session"], "link": "/services", "recommended": true },
+              { "title": "Commercial Shoot",   "category": "Commercial", "price": "From $800",   "image": "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=800", "features": ["Half-Day Shoot", "Commercial Licensing", "Retouched Images"], "link": "/services", "recommended": false }
+            ]
+          }
+        },
+        {
+          "id": "gallery-home",
+          "template": "gallery-masonry-full-width",
+          "content": {
+            "eyebrow": "Portfolio",
+            "title": "Recent Work",
+            "ctaText": "View Full Portfolio",
+            "ctaLink": "/portfolio",
+            "items": ${masonryItemsJson}
+          }
+        },
+        {
+          "id": "cta-home",
+          "template": "cta-gradient-full",
+          "content": {
+            "badge": "Now Booking",
+            "headline": "Compelling headline inviting client to start their photography journey",
+            "subtitle": "1-2 sentence warm, personal invitation to book",
+            "ctaText": "Book Now",
+            "ctaLink": "/contact",
+            "ctaText2": "See All Packages",
+            "ctaLink2": "/services",
+            "features": [
+              { "text": "Personalized consultation included" },
+              { "text": "Online gallery delivery" },
+              { "text": "Print-ready files" }
+            ]
+          }
+        }
+      ]`;
+
+  const homeSections = variant === 'dark' ? darkHomeSections
+    : variant === 'clean' ? cleanHomeSections
+    : warmHomeSections;
+
+  return `You are a website content generator for photography businesses. Generate a JSON object for a MULTI-PAGE website with 5 separate pages.
 
 IMPORTANT: Return ONLY valid JSON. No markdown, no backticks, no explanation. Just the JSON object.
 
@@ -1079,6 +1329,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 {
   "meta": { "title": "${businessName} - Professional Photography", "description": "SEO meta description 150-160 chars" },
   "multiPage": true,
+  "themeId": "${themeId}",
   "nav": {
     "id": "nav",
     "template": "nav-sticky-dark",
@@ -1111,73 +1362,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
     {
       "filename": "index.html",
       "meta": { "title": "${businessName} — Photography", "description": "Homepage description" },
-      "sections": [
-        {
-          "id": "hero",
-          "template": "hero-fullscreen-light",
-          "content": {
-            "headline": "Short poetic photography tagline (4-6 words, uppercase-friendly)",
-            "subtitle": "Short 4-6 word descriptor e.g. 'Modern Portrait & Wedding Photography'",
-            "backgroundImage": "https://images.unsplash.com/photo-1519741497674-611481863552?w=1920",
-            "overlayOpacity": "0.12"
-          }
-        },
-        {
-          "id": "gallery-home",
-          "template": "gallery-masonry-full-width",
-          "content": {
-            "eyebrow": "Portfolio",
-            "title": "Recent Work",
-            "ctaText": "View Full Portfolio",
-            "ctaLink": "/portfolio",
-            "items": ${galleryItemsJson}
-          }
-        },
-        {
-          "id": "reviews",
-          "template": "review-marquee",
-          "content": {
-            "reviews": [
-              { "name": "Sarah & James", "stars": 5, "text": "Specific 5-star wedding/portrait review for this business", "date": "2 weeks ago", "avatarColor": "#c2410c" },
-              { "name": "Michael T.", "stars": 5, "text": "Review about professional headshots or corporate work", "date": "1 week ago", "avatarColor": "#1d4ed8" },
-              { "name": "The Johnson Family", "stars": 5, "text": "Family portrait review — mention comfort and natural shots", "date": "3 weeks ago", "avatarColor": "#7c3aed" },
-              { "name": "Emily R.", "stars": 5, "text": "Review about creative direction and final photos", "date": "4 days ago", "avatarColor": "#b45309" },
-              { "name": "David K.", "stars": 5, "text": "Review about event coverage being unobtrusive", "date": "1 month ago", "avatarColor": "#92400e" }
-            ]
-          }
-        },
-        {
-          "id": "packages",
-          "template": "services-cards-3col",
-          "content": {
-            "title": "Photography Packages",
-            "subtitle": "Tailored packages for every occasion",
-            "services": [
-              { "title": "Portrait Session",    "category": "Portraits",   "price": "From $350",   "image": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=800", "features": ["1 Hour Session", "30 Edited Photos", "Online Gallery"], "link": "/services", "recommended": false },
-              { "title": "Wedding Collection",  "category": "Weddings",    "price": "From $2,500", "image": "https://images.unsplash.com/photo-1519741497674-611481863552?w=800", "features": ["8 Hours Coverage", "500+ Edited Photos", "Engagement Session"], "link": "/services", "recommended": true },
-              { "title": "Commercial Shoot",    "category": "Commercial",  "price": "From $800",   "image": "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=800", "features": ["Half-Day Shoot", "Commercial Licensing", "Retouched Images"], "link": "/services", "recommended": false }
-            ]
-          }
-        },
-        {
-          "id": "cta-home",
-          "template": "cta-gradient-full",
-          "content": {
-            "badge": "Limited Availability",
-            "headline": "Compelling urgency headline about booking (7-10 words)",
-            "subtitle": "1-2 sentence value proposition",
-            "ctaText": "Book Now",
-            "ctaLink": "/contact",
-            "ctaText2": "See All Packages",
-            "ctaLink2": "/services",
-            "features": [
-              { "text": "Same-week booking available" },
-              { "text": "Online gallery delivery" },
-              { "text": "Print-ready files included" }
-            ]
-          }
-        }
-      ]
+      "sections": ${homeSections}
     },
     {
       "filename": "about.html",

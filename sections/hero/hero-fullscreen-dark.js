@@ -29,7 +29,7 @@ module.exports = {
 
   render(content, theme, sectionId = 'hero') {
     const s = `section-${sectionId}`;
-    const bgImage = content.backgroundImage || 'https://images.unsplash.com/photo-1619405399517-d7fce0f13302?w=1920';
+    const bgImage = content.backgroundImage || '';
     const btn2 = content.ctaText2 
       ? `<a href="${content.ctaLink2 || '#'}" class="${s}-btn-secondary">${content.ctaText2}</a>` 
       : '';
@@ -39,7 +39,7 @@ module.exports = {
   <div class="${s}-overlay"></div>
   <div class="${s}-particles"></div>
   <div class="${s}-content">
-    <div class="${s}-badge">Professional ${theme.name || 'Services'}</div>
+    <div class="${s}-badge">${content.badge || `Professional ${theme.name || 'Services'}`}</div>
     <h1 class="${s}-title">
       ${content.headline || 'Professional'}
       <span class="${s}-highlight">${content.highlightText || 'Services'}</span>
@@ -82,7 +82,7 @@ module.exports = {
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    background: url('${bgImage}') center/cover no-repeat fixed;
+    background: ${bgImage ? `url('${bgImage}') center/cover no-repeat fixed` : `linear-gradient(135deg, ${theme.bgColor || '#0a0a0a'} 0%, ${theme.primaryColor || '#1a1a2e'}22 100%)`};
     color: #ffffff;
     position: relative;
     overflow: hidden;

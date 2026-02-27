@@ -63,7 +63,9 @@ module.exports = {
   .${s}-mobile span { display: block; width: 25px; height: 2px; background: #ffffff; transition: 0.3s; }
 
   @media (max-width: 768px) {
-    .${s}-container { padding: 0 1.5rem; }
+    .${s} { padding: 0.875rem 0; }
+    .${s}-container { padding: 0 1.25rem; min-height: 56px; }
+    .${s}-logo { font-size: 1.2rem; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100vw - 80px); }
     .${s}-mobile { display: flex; }
     .${s}-links { display: none; position: absolute; top: 100%; left: 0; right: 0; background: rgba(10,10,10,0.98); flex-direction: column; padding: 2rem; gap: 1.5rem; border-bottom: 2px solid ${theme.primaryColor}; }
     .${s}-links.${s}-open { display: flex; }

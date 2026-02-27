@@ -739,7 +739,7 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
 router.post('/render-preview', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { page_data } = req.body;
+    const { page_data, pageFilename } = req.body;
     if (!page_data) return res.status(400).json({ error: 'page_data required' });
 
     const { renderPage, renderMultiPage } = require('../sections/renderer');
@@ -748,7 +748,11 @@ router.post('/render-preview', authenticateToken, async (req, res) => {
     let html;
     if (page_data.multiPage && Array.isArray(page_data.pages)) {
       const pages = renderMultiPage(page_data);
-      html = pages['index.html'] || Object.values(pages)[0];
+      if (pageFilename && pages[pageFilename]) {
+        html = pages[pageFilename];
+      } else {
+        html = pages['index.html'] || Object.values(pages)[0];
+      }
     } else {
       html = renderPage(page_data);
     }
