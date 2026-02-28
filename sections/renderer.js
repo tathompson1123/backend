@@ -16,13 +16,50 @@ function renderSectionHtml(section, theme) {
   }
   try {
     const sectionId = section.id || section.template;
-    const html = template.render(section.content || {}, theme, sectionId);
+    // Merge per-section color overrides (set in editor) on top of the global theme
+    const effectiveTheme = (section.colors && Object.keys(section.colors).length > 0)
+      ? { ...theme, ...section.colors }
+      : theme;
+    const html = template.render(section.content || {}, effectiveTheme, sectionId);
     // Optional per-section background color override set in the editor
     const bgOverride = section.content?.bgColor
       ? `<style>.section-${sectionId}{background-color:${section.content.bgColor}!important}</style>`
       : '';
+    // Belt-and-suspenders CSS overrides for section.colors (ensures visual changes even if
+    // template CSS doesn't pick up the effectiveTheme due to specificity or caching)
+    const colorsOverride = (() => {
+      const sc = section.colors;
+      if (!sc || !Object.keys(sc).length) return '';
+      const sp = `section-${sectionId}`;
+      const css = [];
+      if (sc.primaryColor) {
+        const c = sc.primaryColor;
+        css.push(
+          `.${sp}-cta{background:${c}!important;border-color:${c}!important}`,
+          `.${sp}-cta:hover{box-shadow:0 8px 25px ${c}40!important}`,
+          `.${sp}-btn-primary{background:${c}!important;box-shadow:0 4px 20px ${c}40!important}`,
+          `.${sp}-btn-primary:hover{box-shadow:0 8px 30px ${c}60!important}`,
+          `.${sp}-highlight{color:${c}!important;-webkit-text-fill-color:${c}!important;background-image:none!important}`,
+          `.${sp}-stat-number{color:${c}!important}`,
+          `.${sp}-badge{color:${c}!important;border-color:${c}40!important;background:${c}20!important}`,
+          `.${sp}-links a:hover,.${sp}-link:hover{color:${c}!important}`,
+          `.${sp}-scroll-line{background:linear-gradient(to bottom,${c},transparent)!important}`,
+          `.${sp}-logo{color:${c}!important}`
+        );
+      }
+      if (sc.textColor) {
+        const c = sc.textColor;
+        css.push(
+          `.${sp}-links a:not(.${sp}-cta){color:${c}!important}`,
+          `.${sp}-link{color:${c}!important}`,
+          `.${sp}-mobile span,.${sp}-burger span{background:${c}!important}`,
+          `.${sp}-subtitle,.${sp}-body,.${sp}-text{color:${c}!important}`
+        );
+      }
+      return css.length ? `<style>${css.join('')}</style>` : '';
+    })();
     // Wrap in id-tagged div so anchor links (#services, etc.) resolve
-    return `<div id="${sectionId}">${html}${bgOverride}</div>`;
+    return `<div id="${sectionId}">${html}${bgOverride}${colorsOverride}</div>`;
   } catch (err) {
     console.error(`❌ RENDERER: Error rendering ${section.template}:`, err);
     return `<!-- Error rendering: ${section.template} -->`;

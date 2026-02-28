@@ -16,6 +16,16 @@ function detectLayout(businessType) {
     'hedge', 'shrub', 'bush', 'fertiliz', 'aerat', 'seeding', 'prune',
     'pruning', 'weed', 'planting', 'hardscape', 'pavers', 'groundskeep',
   ].some(kw => bt.includes(kw))) return 'organic';
+  // ⚠️ Cleaning MUST be checked before autoDetailing —
+  // 'car' in autoDetailing would incorrectly match 'carpet', 'car wash', etc.
+  if ([
+    'carpet', 'carpet clean', 'house clean', 'home clean', 'maid', 'janitorial',
+    'deep clean', 'upholstery clean', 'tile clean', 'grout', 'rug clean',
+    'cleaning service', 'cleaning company', 'cleaning business', 'cleaning co',
+    'sanitiz', 'disinfect', 'pressure wash', 'power wash', 'steam clean',
+    'window clean', 'office clean', 'commercial clean',
+  ].some(kw => bt.includes(kw))) return 'cleaning';
+  // Cleaning is ruled out above, so 'car'/'wash' are now safe to match for auto businesses
   if (['detailing', 'car', 'auto', 'vehicle', 'ceramic', 'paint', 'wash'].some(kw => bt.includes(kw))) return 'autoDetailing';
   if (['handyman', 'renovation', 'remodeling', 'remodel', 'contractor', 'construction', 'builder', 'repair'].some(kw => bt.includes(kw))) return 'renovation';
   if (['photography', 'photographer', 'portrait', 'wedding photo', 'headshot', 'boudoir', 'photoshoot'].some(kw => bt.includes(kw))) return 'photography';
@@ -79,6 +89,9 @@ function buildSchemaPrompt(businessData) {
   }
   if (layout === 'photography') {
     return buildPhotographyMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
+  }
+  if (layout === 'cleaning') {
+    return buildCleaningMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
   }
 
   let mainSections, sectionOrder, contactId, footerId;
@@ -255,6 +268,11 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
             floatBadge: hero.floatBadge || '10+',
             floatBadgeLabel: hero.floatBadgeLabel || 'Years Experience',
           }},
+          { id: 'estimate', template: 'lead-magnet-landscaping', content: {
+            headline: hero.leadMagnetHeadline || 'How Much Will Your Project Cost?',
+            subheadline: hero.leadMagnetSubheadline || 'Answer 4 quick questions and get a free instant estimate.',
+            ctaText: hero.leadMagnetCtaText || 'Get My Free Estimate',
+          }},
           { id: 'importance', template: 'importance-split', content: {
             badge: importance.badge || 'Why It Matters',
             headline: importance.headline || 'Why Your Outdoor Space Matters',
@@ -349,7 +367,10 @@ Return this exact JSON with real, compelling content for this specific business:
     "highlightText": "One key word to highlight (e.g. Landscapes, Gardens, Outdoors)",
     "subtitle": "2-3 sentence value proposition specific to this business",
     "floatBadge": "10+",
-    "floatBadgeLabel": "Years Experience"
+    "floatBadgeLabel": "Years Experience",
+    "leadMagnetHeadline": "How Much Will Your Project Cost?",
+    "leadMagnetSubheadline": "Answer 4 quick questions and get a free instant estimate.",
+    "leadMagnetCtaText": "Get My Free Estimate"
   },
   "importance": {
     "badge": "Why It Matters",
@@ -406,7 +427,17 @@ RULES:
 
 // ── Auto-detailing: multi-page prompt ────────────────────────────────
 function buildAutoDetailingMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList }) {
-  const servicesJson = JSON.stringify(servicesList.slice(0, 6).map(s => ({ text: s })));
+  const DEFAULT_AUTO_SERVICES = [
+    'Full Detail', 'Ceramic Coating', 'Paint Correction', 'Interior Detail',
+    'Exterior Detail', 'Window Tint', 'Headlight Restoration', 'Engine Bay Clean',
+  ];
+  const paddedServicesList = [...servicesList];
+  for (const svc of DEFAULT_AUTO_SERVICES) {
+    if (paddedServicesList.length >= 6) break;
+    const alreadyHas = paddedServicesList.some(s => s.toLowerCase().includes(svc.toLowerCase().split(' ')[0]));
+    if (!alreadyHas) paddedServicesList.push(svc);
+  }
+  const servicesJson = JSON.stringify(paddedServicesList.slice(0, 6).map(s => ({ text: s })));
 
   return `You are a website content generator for auto detailing businesses. Generate a JSON object for a MULTI-PAGE website with 4 separate pages.
 
@@ -465,6 +496,15 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "ctaText2": "View Our Work",
             "ctaLink2": "/gallery",
             "backgroundImage": "https://images.unsplash.com/photo-1552519507-da3b142a6f3e?w=1920"
+          }
+        },
+        {
+          "id": "estimate",
+          "template": "lead-magnet-auto-wrap",
+          "content": {
+            "headline": "What Will Your Detail Cost?",
+            "subheadline": "Answer 4 quick questions and get an instant price estimate.",
+            "ctaText": "Get My Instant Quote"
           }
         },
         {
@@ -779,6 +819,18 @@ function defaultSections({ businessName, phone, phoneClean }) {
 
 // ── Handyman / Contractor / Renovation: multi-page prompt ────────────────────
 function buildHandymanMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList }) {
+  const DEFAULT_HANDYMAN_SERVICES = [
+    'Kitchen Remodel', 'Bathroom Remodel', 'Flooring', 'Painting',
+    'Deck Building', 'Drywall', 'Plumbing Repair', 'Electrical',
+  ];
+  const paddedServicesList = [...servicesList];
+  for (const svc of DEFAULT_HANDYMAN_SERVICES) {
+    if (paddedServicesList.length >= 6) break;
+    const alreadyHas = paddedServicesList.some(s => s.toLowerCase().includes(svc.toLowerCase().split(' ')[0]));
+    if (!alreadyHas) paddedServicesList.push(svc);
+  }
+  const servicesJson = JSON.stringify(paddedServicesList.slice(0, 6).map(s => ({ text: s })));
+
   return `You are a website content generator for handyman, contractor, and home renovation businesses. Generate a JSON object for a MULTI-PAGE website with 4 separate pages.
 
 IMPORTANT: Return ONLY valid JSON. No markdown, no backticks, no explanation. Just the JSON object.
@@ -813,7 +865,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
     "content": {
       "logo": "${businessName}",
       "tagline": "Craftsmanship you can trust.",
-      "services": ["Service 1 from list", "Service 2 from list", "Service 3 from list", "Service 4 from list"],
+      "services": ${servicesJson},
       "address": "123 Builder Ave\\n${areaText}",
       "hours": "${hoursText}",
       "phone": "${phone}",
@@ -837,6 +889,15 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "ctaText2": "Our Work",
             "ctaLink2": "/gallery",
             "backgroundImage": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1920"
+          }
+        },
+        {
+          "id": "estimate",
+          "template": "lead-magnet-renovation",
+          "content": {
+            "headline": "What Will Your Project Cost?",
+            "subheadline": "Answer 4 quick questions and get a free project estimate.",
+            "ctaText": "Get My Free Estimate"
           }
         },
         {
@@ -1070,8 +1131,7 @@ function buildPhotographyMultiPagePrompt({ businessInfo, businessName, phone, ph
   );
 
   // Pick a random style variant — stored in schema so re-renders stay consistent
-  const variants = ['warm', 'dark', 'clean'];
-  const variant = variants[Math.floor(Math.random() * variants.length)];
+  const variant = 'warm'; // locked to warm — consistent colors across all photography generations
 
   const themeId = `photography-${variant}`;
 
@@ -1086,6 +1146,15 @@ function buildPhotographyMultiPagePrompt({ businessInfo, businessName, phone, ph
             "subtitle": "4-6 word descriptor e.g. 'Modern Portrait & Wedding Photography'",
             "backgroundImage": "https://images.unsplash.com/photo-1519741497674-611481863552?w=1920",
             "overlayOpacity": "0.12"
+          }
+        },
+        {
+          "id": "estimate",
+          "template": "lead-magnet-photography",
+          "content": {
+            "headline": "Find Your Perfect Package",
+            "subheadline": "Answer 4 quick questions and discover which package fits your vision.",
+            "ctaText": "Find My Package"
           }
         },
         {
@@ -1569,6 +1638,355 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 3. Write compelling, specific copy — not generic placeholder text. Tailor everything to ${businessName} and their services: ${servicesList.slice(0, 5).join(', ')}.
 4. Reviews must sound realistic and mention specific photography services or outcomes.
 5. Adjust package pricing based on the services provided if different from defaults.
+6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
+}
+
+// ============================================
+// CLEANING MULTI-PAGE PROMPT
+// 4 pages: Home, About, Services, Contact
+// Sections modeled on Apex Carpet & Home Care template
+// ============================================
+
+function buildCleaningMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList }) {
+  // Always generate 6 services — pad with common cleaning services if user provided fewer
+  const DEFAULT_CLEANING_SERVICES = [
+    'House Cleaning', 'Carpet Cleaning', 'Deep Cleaning',
+    'Window Cleaning', 'Upholstery Cleaning', 'Tile & Grout Cleaning',
+    'Move-In/Out Cleaning', 'Commercial Cleaning',
+  ];
+  const paddedServicesList = [...servicesList];
+  for (const svc of DEFAULT_CLEANING_SERVICES) {
+    if (paddedServicesList.length >= 6) break;
+    const alreadyHas = paddedServicesList.some(s => s.toLowerCase().includes(svc.toLowerCase().split(' ')[0]));
+    if (!alreadyHas) paddedServicesList.push(svc);
+  }
+
+  const servicesJson = JSON.stringify(paddedServicesList.slice(0, 6).map(s => ({ text: s })));
+
+  // Verified cleaning Unsplash photo IDs (confirmed to load)
+  const serviceImages = [
+    'photo-1581578731548-c64695cc6952', // house cleaning
+    'photo-1527515637-60eab1b86d1a',    // cleaning detail / supplies
+    'photo-1584622650111-993a426fbf0a', // professional cleaner
+    'photo-1581578731548-c64695cc6952', // house cleaning (rotate)
+    'photo-1527515637-60eab1b86d1a',    // cleaning detail (rotate)
+    'photo-1584622650111-993a426fbf0a', // professional cleaner (rotate)
+  ];
+
+  const serviceCarouselJson = JSON.stringify(
+    paddedServicesList.slice(0, 6).map((svc, i) => ({
+      title: svc,
+      category: 'Cleaning',
+      price: 'Call for Quote',
+      image: `https://images.unsplash.com/${serviceImages[i % serviceImages.length]}?w=800`,
+      features: ['Certified Technicians', 'Eco-Friendly Products', 'Fast Dry Times', 'Satisfaction Guaranteed'],
+      recommended: i === 0,
+    }))
+  );
+
+  // Editorial hero items — simpler format (title + description + image)
+  const editorialItemsJson = JSON.stringify(
+    paddedServicesList.slice(0, 4).map((svc, i) => ({
+      title: svc,
+      description: 'Write a 1-2 sentence description of this specific cleaning service, highlighting technique and outcome',
+      image: `https://images.unsplash.com/${serviceImages[i % serviceImages.length]}?w=800&q=80`,
+    }))
+  );
+
+  return `You are a website content generator for professional cleaning businesses. Generate a JSON object for a MULTI-PAGE website with 4 separate pages.
+
+IMPORTANT: Return ONLY valid JSON. No markdown, no backticks, no explanation. Just the JSON object.
+IMPORTANT: Do NOT change any image URLs that are already provided in the template below — keep them exactly as-is. Only fill in text fields marked with instructions.
+
+== BUSINESS INFO ==
+${businessInfo}
+
+== YOUR TASK ==
+Generate a JSON object with this EXACT structure. Fill in compelling, professional content tailored to this specific cleaning business.
+
+{
+  "meta": { "title": "${businessName} - Professional Cleaning Services", "description": "SEO meta description 150-160 chars" },
+  "multiPage": true,
+  "nav": {
+    "id": "nav",
+    "template": "nav-sticky-dark",
+    "content": {
+      "logo": "${businessName}",
+      "links": [
+        { "text": "Home",     "url": "/" },
+        { "text": "About",    "url": "/about" },
+        { "text": "Services", "url": "/services" },
+        { "text": "Contact",  "url": "/contact" }
+      ],
+      "ctaText": "Get a Free Quote",
+      "ctaLink": "/contact"
+    }
+  },
+  "footer": {
+    "id": "footer",
+    "template": "footer-4col-dark",
+    "content": {
+      "logo": "${businessName}",
+      "tagline": "Short trustworthy tagline for this cleaning business (10-15 words)",
+      "services": ${servicesJson},
+      "phone": "${phone}",
+      "email": "${email}",
+      "hours": "${hoursText}"
+    }
+  },
+  "pages": [
+    {
+      "filename": "index.html",
+      "meta": { "title": "${businessName} - Professional Cleaning", "description": "Homepage SEO description" },
+      "sections": [
+        {
+          "id": "hero",
+          "template": "editorial-cleaning-services",
+          "content": {
+            "headline": "ALL-CAPS punchy headline (3-5 words, e.g. 'PURIFY YOUR SPACE')",
+            "subtitle": "Short tag line — business type + city (e.g. 'Professional Carpet & House Cleaning · Dallas')",
+            "description": "2-3 sentence description: what they do, area served, key differentiator (eco-friendly, certified, fast-dry, etc.)",
+            "ctaText": "Get a Free Quote",
+            "ctaUrl": "/contact",
+            "heroImage1": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80",
+            "heroImage2": "https://images.unsplash.com/photo-1527515637-60eab1b86d1a?w=800&q=80",
+            "servicesTitle": "OUR SERVICES",
+            "items": ${editorialItemsJson}
+          }
+        },
+        {
+          "id": "estimate",
+          "template": "lead-magnet-cleaning",
+          "content": {
+            "headline": "Get an Instant Cleaning Quote",
+            "subheadline": "Answer 4 quick questions and see your price range in seconds.",
+            "ctaText": "Get My Free Quote"
+          }
+        },
+        {
+          "id": "services",
+          "template": "services-carousel",
+          "content": {
+            "title": "Our Services",
+            "subtitle": "Professional cleaning solutions tailored to your needs",
+            "services": ${serviceCarouselJson}
+          }
+        },
+        {
+          "id": "trust",
+          "template": "features-icon-row",
+          "content": {
+            "features": [
+              { "icon": "🛡️", "title": "Fully Insured & Bonded", "text": "Complete peace of mind — your home and belongings are always protected" },
+              { "icon": "⏰", "title": "On-Time Guarantee", "text": "We respect your schedule and always arrive within the agreed window" },
+              { "icon": "✅", "title": "100% Satisfaction", "text": "Not happy? We'll return to re-clean the area at absolutely no charge" },
+              { "icon": "🌿", "title": "Eco-Friendly Products", "text": "Safe, non-toxic cleaning solutions — better for your family and the planet" }
+            ]
+          }
+        },
+        {
+          "id": "why-us",
+          "template": "importance-split",
+          "content": {
+            "badge": "The ${businessName} Difference",
+            "headline": "Why Hundreds of Local Families Choose Us",
+            "body1": "First paragraph: company story, years in business, core mission of quality and trust",
+            "body2": "Second paragraph: what sets this business apart — methods, certifications, customer care approach",
+            "highlights": [
+              { "icon": "🏆", "text": "IICRC Certified cleaning technicians" },
+              { "icon": "🌿", "text": "Eco-friendly, pet-safe cleaning solutions" },
+              { "icon": "⚡", "text": "State-of-the-art truck-mounted equipment" },
+              { "icon": "💰", "text": "Transparent pricing with no hidden fees" }
+            ],
+            "image": "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800",
+            "imageAlt": "Professional cleaning technician at work"
+          }
+        },
+        {
+          "id": "reviews",
+          "template": "review-marquee",
+          "content": {
+            "reviews": [
+              { "name": "Sarah J.", "stars": 5, "text": "Specific 5-star carpet or upholstery cleaning review mentioning before/after results", "date": "1 week ago", "avatarColor": "#1d4ed8" },
+              { "name": "Michael T.", "stars": 5, "text": "Review about tile & grout or house cleaning — mention punctuality and professionalism", "date": "3 days ago", "avatarColor": "#059669" },
+              { "name": "The Johnson Family", "stars": 5, "text": "Family review mentioning pet stain/odor removal or recurring cleaning service", "date": "2 weeks ago", "avatarColor": "#7c3aed" },
+              { "name": "Emily R.", "stars": 5, "text": "Review about how thorough the technicians were — mention a specific room or area", "date": "5 days ago", "avatarColor": "#b45309" },
+              { "name": "David K.", "stars": 5, "text": "Review praising communication, fair pricing, and outstanding final results", "date": "1 month ago", "avatarColor": "#0891b2" }
+            ]
+          }
+        },
+        {
+          "id": "cta-home",
+          "template": "cta-gradient-full",
+          "content": {
+            "badge": "Limited Availability",
+            "headline": "Urgency headline about booking a cleaning (7-10 words, e.g. 'Ready for the Cleanest Home You've Ever Had?')",
+            "subtitle": "1-2 sentences with a compelling reason to call today",
+            "ctaText": "Schedule Online",
+            "ctaLink": "/contact",
+            "ctaText2": "Call ${phone}",
+            "ctaLink2": "tel:${phoneClean}",
+            "features": [
+              { "text": "Free no-obligation estimates" },
+              { "text": "Flexible scheduling available" },
+              { "text": "100% satisfaction guarantee" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "filename": "about.html",
+      "meta": { "title": "About | ${businessName}", "description": "About page SEO description" },
+      "sections": [
+        {
+          "id": "about-banner",
+          "template": "hero-page-banner",
+          "content": {
+            "title": "About Us",
+            "subtitle": "Your trusted local cleaning experts",
+            "bgImage": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=1920"
+          }
+        },
+        {
+          "id": "about-story",
+          "template": "importance-split",
+          "content": {
+            "badge": "Our Story",
+            "headline": "A Tradition of Excellence — Serving ${areaText}",
+            "body1": "First paragraph: founding story, how many years in business, original mission of serving the community with honest, high-quality cleaning",
+            "body2": "Second paragraph: ongoing commitment to technology, eco-friendly products, rigorous technician training — why customers keep coming back year after year",
+            "highlights": [
+              { "icon": "✅", "text": "Fully licensed, bonded, and insured" },
+              { "icon": "🏅", "text": "IICRC Certified Master Textile Cleaners" },
+              { "icon": "🏘️", "text": "Family-owned and locally operated" },
+              { "icon": "🌿", "text": "Committed to eco-friendly practices" }
+            ],
+            "image": "https://images.unsplash.com/photo-1527515637-ed21c8286a0c?w=800",
+            "imageAlt": "Cleaning professional at work"
+          }
+        },
+        {
+          "id": "about-stats",
+          "template": "features-icon-row",
+          "content": {
+            "features": [
+              { "icon": "📅", "title": "Years in Business", "text": "Serving homeowners and businesses with trusted cleaning services" },
+              { "icon": "😊", "title": "Happy Customers", "text": "Thousands of satisfied clients across ${areaText}" },
+              { "icon": "⏱️", "title": "Fast Dry Times", "text": "Advanced extraction removes 95% of moisture for quick drying" },
+              { "icon": "🏆", "title": "100% Guarantee", "text": "If you're not satisfied, we'll re-clean at no charge" }
+            ]
+          }
+        },
+        {
+          "id": "about-cta",
+          "template": "cta-card",
+          "content": {
+            "headline": "Experience the ${businessName} Difference",
+            "subtitle": "Join thousands of satisfied customers who trust us with their homes.",
+            "ctaText": "Schedule Service",
+            "ctaLink": "/contact"
+          }
+        }
+      ]
+    },
+    {
+      "filename": "services.html",
+      "meta": { "title": "Services | ${businessName}", "description": "Services page SEO description" },
+      "sections": [
+        {
+          "id": "services-banner",
+          "template": "hero-page-banner",
+          "content": {
+            "title": "Our Cleaning Services",
+            "subtitle": "Professional care for every surface in your home",
+            "bgImage": "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=1920"
+          }
+        },
+        {
+          "id": "services-list",
+          "template": "services-carousel",
+          "content": {
+            "title": "Comprehensive Home Care",
+            "subtitle": "From deep carpet extraction to routine house cleaning",
+            "services": ${serviceCarouselJson}
+          }
+        },
+        {
+          "id": "services-benefits",
+          "template": "benefits-numbered",
+          "content": {
+            "title": "What's Included With Every Service",
+            "subtitle": "Our commitment to quality goes beyond just showing up",
+            "benefits": [
+              { "title": "Pre-Inspection & Spot Testing", "description": "We assess your surfaces and test products before starting to ensure the safest, most effective approach for your specific materials." },
+              { "title": "Professional-Grade Equipment", "description": "Our truck-mounted and portable equipment delivers deeper cleaning and faster drying than rental machines." },
+              { "title": "Eco-Friendly Solutions", "description": "All our cleaning products are non-toxic, pet-safe, and environmentally responsible — powerful on dirt, gentle on your home." },
+              { "title": "Post-Clean Walkthrough", "description": "We won't leave until you've inspected the work and are completely satisfied with the results." }
+            ]
+          }
+        },
+        {
+          "id": "services-testimonials",
+          "template": "testimonials-3col",
+          "content": {
+            "title": "What Our Clients Say",
+            "testimonials": [
+              { "quote": "Specific testimonial about carpet cleaning results — mention stains removed or freshness", "author": "Robert M.", "role": "Homeowner", "rating": 5 },
+              { "quote": "Testimonial about recurring house cleaning — mention consistency and trustworthiness of team", "author": "Jessica T.", "role": "Working Parent", "rating": 5 },
+              { "quote": "Commercial or tile/grout cleaning testimonial — mention before/after transformation", "author": "David L.", "role": "Business Owner", "rating": 5 }
+            ]
+          }
+        },
+        {
+          "id": "services-cta",
+          "template": "cta-card",
+          "content": {
+            "headline": "Ready to Book Your Cleaning?",
+            "subtitle": "Get a free, no-obligation estimate — we'll respond within 24 hours.",
+            "ctaText": "Get a Free Quote",
+            "ctaLink": "/contact",
+            "ctaText2": "Call ${phone}",
+            "ctaLink2": "tel:${phoneClean}"
+          }
+        }
+      ]
+    },
+    {
+      "filename": "contact.html",
+      "meta": { "title": "Contact | ${businessName}", "description": "Contact page SEO description" },
+      "sections": [
+        {
+          "id": "contact",
+          "template": "contact-split",
+          "content": {
+            "formTitle": "Get Your Free Quote",
+            "formSubtitle": "Tell us about your cleaning needs and we'll provide a transparent, competitive estimate.",
+            "submitText": "Request Estimate",
+            "phone": "${phone}",
+            "phoneClean": "${phoneClean}",
+            "email": "${email}",
+            "hours": "${hoursText}",
+            "serviceArea": "${areaText}",
+            "businessName": "${businessName}",
+            "highlights": [
+              { "text": "Free, no-obligation estimates" },
+              { "text": "Flexible scheduling to fit your life" },
+              { "text": "100% satisfaction guarantee" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+== RULES ==
+1. Return ONLY the JSON object. No other text.
+2. Use the EXACT Unsplash photo IDs provided — do not invent new ones.
+3. Write compelling, specific copy — not generic placeholder text. Tailor everything to ${businessName} and their services: ${servicesList.slice(0, 6).join(', ')}.
+4. Reviews and testimonials must sound realistic and mention specific cleaning services or outcomes.
+5. Adjust any pricing or service names to match what this business actually offers.
 6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
 }
 

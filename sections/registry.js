@@ -63,6 +63,9 @@ const sections = {
   // Lead Magnets
   'lead-magnet-landscaping': require('./lead-magnets/lead-magnet-landscaping'),
   'lead-magnet-auto-wrap':   require('./lead-magnets/lead-magnet-auto-wrap'),
+  'lead-magnet-cleaning':    require('./lead-magnets/lead-magnet-cleaning'),
+  'lead-magnet-renovation':  require('./lead-magnets/lead-magnet-renovation'),
+  'lead-magnet-photography': require('./lead-magnets/lead-magnet-photography'),
 
   // Custom / Freeform
   'custom-row': require('./custom/custom-row'),

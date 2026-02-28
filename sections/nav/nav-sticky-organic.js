@@ -36,11 +36,14 @@ module.exports = {
     const linksHtml = links.map(l =>
       `<a href="${l.url || '#'}" class="${s}-link">${l.text || 'Link'}</a>`
     ).join('\n      ');
+    const logoContent = content.logoImage
+      ? `<img src="${content.logoImage}" alt="${content.logo || 'Logo'}" class="${s}-logo-img" />`
+      : (content.logo || 'Business Name');
 
     return `
 <nav class="${s}">
   <div class="${s}-inner">
-    <a href="#" class="${s}-logo">${content.logo || 'Business Name'}</a>
+    <a href="#" class="${s}-logo">${logoContent}</a>
     <div class="${s}-links" id="${s}-links">
       ${linksHtml}
       <a href="${content.ctaLink || '#contact'}" class="${s}-cta">${content.ctaText || 'Get a Quote'}</a>
@@ -80,10 +83,11 @@ module.exports = {
     font-family: '${theme.headingFont || 'Cormorant Garamond'}', serif;
     font-size: 1.7rem;
     font-weight: 700;
-    color: ${theme.textColor || '#1b2216'};
+    color: ${content.logoColor || theme.textColor || '#1b2216'};
     text-decoration: none;
     letter-spacing: 0.5px;
   }
+  .${s}-logo-img { height: ${content.logoHeight || 40}px; max-width: 180px; object-fit: contain; display: block; }
   .${s}-links {
     display: flex;
     align-items: center;
@@ -146,9 +150,9 @@ module.exports = {
   }
   @media (max-width: 768px) {
     .${s} { padding: 0.875rem 0; }
-    .${s}-inner { padding: 0 1.25rem; min-height: 56px; }
-    .${s}-logo { font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100vw - 80px); }
-    .${s}-burger { display: flex; }
+    .${s}-inner { padding: 0 1.25rem; min-height: 56px; overflow: hidden; }
+    .${s}-logo { font-size: 1.15rem; flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 0.75rem; }
+    .${s}-burger { display: flex; flex-shrink: 0; }
     .${s}-links {
       display: none;
       position: absolute;

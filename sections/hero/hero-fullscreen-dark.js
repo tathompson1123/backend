@@ -36,6 +36,7 @@ module.exports = {
 
     return `
 <section class="${s}" id="hero">
+  ${bgImage ? `<img class="${s}-bgimg" src="${bgImage}" alt="" aria-hidden="true">` : ''}
   <div class="${s}-overlay"></div>
   <div class="${s}-particles"></div>
   <div class="${s}-content">
@@ -82,12 +83,26 @@ module.exports = {
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    background: ${bgImage ? `url('${bgImage}') center/cover no-repeat fixed` : `linear-gradient(135deg, ${theme.bgColor || '#0a0a0a'} 0%, ${theme.primaryColor || '#1a1a2e'}22 100%)`};
+    background: linear-gradient(135deg, ${theme.bgColor || '#0a0a0a'} 0%, ${theme.primaryColor || '#1a1a2e'}22 100%);
     color: #ffffff;
     position: relative;
     overflow: hidden;
   }
   
+  .${s}-bgimg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100% !important;
+    max-width: none !important;
+    object-fit: cover;
+    object-position: center;
+    z-index: 0;
+    display: block;
+    pointer-events: none;
+  }
+
   .${s}-overlay {
     position: absolute;
     inset: 0;
