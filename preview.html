@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Preview — Editorial Cleaning Services</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Karla', sans-serif;
+      background: #FFFFFF;
+      color: #1F2937;
+      -webkit-font-smoothing: antialiased;
+    }
+    img { max-width: 100%; height: auto; }
+    a { color: inherit; text-decoration: none; }
+    .reveal { opacity: 1; transform: none; }
+  </style>
+</head>
+<body>
+<div class="section-editorial-cleaning-services-wrapper">
+  <div class="section-editorial-cleaning-services-hero">
+    <div class="section-editorial-cleaning-services-hero-content reveal">
+      <p class="section-editorial-cleaning-services-subtitle">Bespoke House & Carpet Care</p>
+      <h1 class="section-editorial-cleaning-services-headline">PURIFY YOUR SPACE</h1>
+      <p class="section-editorial-cleaning-services-desc">We believe a clean home is the foundation of a peaceful mind. Experience meticulous, high-end cleaning tailored to your sanctuary.</p>
+      <a href="#contact" class="section-editorial-cleaning-services-cta">Inquire Now</a>
+    </div>
+    <div class="section-editorial-cleaning-services-hero-images">
+      <img src="https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80" alt="Cleaning" class="section-editorial-cleaning-services-img-main reveal" />
+      <img src="https://images.unsplash.com/photo-1527515637-60eab1b86d1a?w=800&q=80" alt="Details" class="section-editorial-cleaning-services-img-offset reveal" />
+    </div>
+  </div>
+
+  <div class="section-editorial-cleaning-services-services">
+    <div class="section-editorial-cleaning-services-services-header reveal">
+      <h2 class="section-editorial-cleaning-services-services-title">OUR SERVICES</h2>
+    </div>
+    <div class="section-editorial-cleaning-services-services-list">
+      
+      <div class="section-editorial-cleaning-services-service-item reveal">
+        <div class="section-editorial-cleaning-services-service-img-wrapper">
+          <img src="https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&q=80" alt="Signature House Cleaning" class="section-editorial-cleaning-services-service-img" />
+        </div>
+        <div class="section-editorial-cleaning-services-service-text">
+          <h3 class="section-editorial-cleaning-services-service-name">Signature House Cleaning</h3>
+          <p class="section-editorial-cleaning-services-service-detail">A comprehensive, top-to-bottom refresh of your living spaces, using eco-friendly, premium products.</p>
+          <a href="#contact" class="section-editorial-cleaning-services-service-link">Discover More</a>
+        </div>
+      </div>
+      
+
+      <div class="section-editorial-cleaning-services-service-item reveal">
+        <div class="section-editorial-cleaning-services-service-img-wrapper">
+          <img src="https://images.unsplash.com/photo-1558904541-efa843a96f0f?w=800&q=80" alt="Deep Carpet Restoration" class="section-editorial-cleaning-services-service-img" />
+        </div>
+        <div class="section-editorial-cleaning-services-service-text">
+          <h3 class="section-editorial-cleaning-services-service-name">Deep Carpet Restoration</h3>
+          <p class="section-editorial-cleaning-services-service-detail">Advanced steam extraction and stain treatment to breathe new life into your carpets and rugs.</p>
+          <a href="#contact" class="section-editorial-cleaning-services-service-link">Discover More</a>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+</div>
+<style>
+.section-editorial-cleaning-services-wrapper {
+  font-family: Karla, sans-serif;
+  color: #1F2937;
+  background-color: #FFFFFF;
+  overflow: hidden;
+  padding-bottom: 120px;
+}
+
+.section-editorial-cleaning-services-hero {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 60px;
+  padding: 120px 5% 80px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+@media (min-width: 992px) {
+  .section-editorial-cleaning-services-hero {
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    padding: 160px 5% 120px;
+  }
+}
+
+.section-editorial-cleaning-services-hero-content {
+  max-width: 500px;
+}
+
+.section-editorial-cleaning-services-subtitle {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  margin-bottom: 24px;
+  color: #1F2937;
+  opacity: 0.6;
+}
+
+.section-editorial-cleaning-services-headline {
+  font-family: Rubik, serif;
+  font-size: clamp(3rem, 6vw, 5.5rem);
+  font-weight: 300;
+  line-height: 1.05;
+  margin-bottom: 32px;
+  color: #1F2937;
+}
+
+.section-editorial-cleaning-services-desc {
+  font-size: 1.125rem;
+  line-height: 1.8;
+  margin-bottom: 48px;
+  color: #1F2937;
+  opacity: 0.8;
+  font-weight: 300;
+}
+
+.section-editorial-cleaning-services-cta {
+  display: inline-block;
+  border: 1px solid #1F2937;
+  color: #1F2937;
+  padding: 16px 40px;
+  text-decoration: none;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  transition: all 0.4s ease;
+  background: transparent;
+}
+
+.section-editorial-cleaning-services-cta:hover {
+  background: #1F2937;
+  color: #FFFFFF;
+}
+
+.section-editorial-cleaning-services-hero-images {
+  position: relative;
+  height: 600px;
+}
+
+.section-editorial-cleaning-services-img-main {
+  width: 80%;
+  height: 80%;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.section-editorial-cleaning-services-img-offset {
+  width: 50%;
+  height: 60%;
+  object-fit: cover;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  box-shadow: 20px 20px 60px rgba(0,0,0,0.05);
+}
+
+.section-editorial-cleaning-services-services {
+  padding: 80px 5% 0;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.section-editorial-cleaning-services-services-header {
+  text-align: center;
+  margin-bottom: 80px;
+}
+
+.section-editorial-cleaning-services-services-title {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  color: #1F2937;
+  opacity: 0.6;
+}
+
+.section-editorial-cleaning-services-services-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 60px;
+}
+
+@media (min-width: 768px) {
+  .section-editorial-cleaning-services-services-list {
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+  }
+}
+
+.section-editorial-cleaning-services-service-item {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.section-editorial-cleaning-services-service-img-wrapper {
+  width: 100%;
+  aspect-ratio: 3/4;
+  overflow: hidden;
+}
+
+.section-editorial-cleaning-services-service-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.8s ease;
+}
+
+.section-editorial-cleaning-services-service-item:hover .section-editorial-cleaning-services-service-img {
+  transform: scale(1.05);
+}
+
+.section-editorial-cleaning-services-service-text {
+  text-align: center;
+  padding: 0 20px;
+}
+
+.section-editorial-cleaning-services-service-name {
+  font-family: Rubik, serif;
+  font-size: 1.75rem;
+  font-weight: 300;
+  margin-bottom: 16px;
+  color: #1F2937;
+}
+
+.section-editorial-cleaning-services-service-detail {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: #1F2937;
+  opacity: 0.7;
+  margin-bottom: 24px;
+}
+
+.section-editorial-cleaning-services-service-link {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #1F2937;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0,0,0,0.2);
+  padding-bottom: 4px;
+  transition: opacity 0.3s ease;
+}
+
+.section-editorial-cleaning-services-service-link:hover {
+  opacity: 0.6;
+}
+</style>
+</body>
+</html>

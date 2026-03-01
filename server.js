@@ -111,10 +111,12 @@ app.use('/api/employee-auth', employeeAuthRoutes);
 app.use('/api/employee', employeeApiRoutes);
 
 const invoiceRoutes = require('./routes/invoices');
+const estimateRoutes = require('./routes/estimates');
 const paymentRoutes = require('./routes/payments');
 const paymentConnectionRoutes = require('./routes/payment-connections');
 const paymentPublicRoutes = require('./routes/payment-public');
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/estimates', estimateRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/payment-connections', paymentConnectionRoutes);
 app.use('/api/pay', paymentPublicRoutes);
@@ -191,6 +193,8 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS clover_merchant_id TEXT");
     await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS clover_access_token TEXT");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS default_tax_rate DECIMAL(5,4) DEFAULT 0");
+    await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS links JSONB DEFAULT '[]'::jsonb");
+    await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb");
     await pool.query(`CREATE TABLE IF NOT EXISTS invoice_items_catalog (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -471,6 +475,66 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     console.log('✅ Invoice items table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify invoice_items table:', e.message);
+  }
+
+  // Estimates table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS estimates (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+        estimate_number VARCHAR(50) UNIQUE NOT NULL,
+        customer_name VARCHAR(255),
+        customer_email VARCHAR(255),
+        customer_phone VARCHAR(50),
+        subtotal DECIMAL(10,2) DEFAULT 0,
+        tax_rate DECIMAL(5,4) DEFAULT 0,
+        tax_amount DECIMAL(10,2) DEFAULT 0,
+        discount_amount DECIMAL(10,2) DEFAULT 0,
+        total_amount DECIMAL(10,2) DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'draft',
+        issue_date DATE DEFAULT CURRENT_DATE,
+        valid_until DATE,
+        notes TEXT,
+        terms TEXT,
+        view_token VARCHAR(255) UNIQUE,
+        sent_at TIMESTAMP,
+        viewed_at TIMESTAMP,
+        reminder_sent_at TIMESTAMP,
+        accepted_at TIMESTAMP,
+        rejected_at TIMESTAMP,
+        converted_invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL,
+        converted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_estimates_user_id ON estimates(user_id)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_estimates_status ON estimates(status)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_estimates_view_token ON estimates(view_token)');
+    console.log('✅ Estimates table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify estimates table:', e.message);
+  }
+
+  // Estimate items table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS estimate_items (
+        id SERIAL PRIMARY KEY,
+        estimate_id INTEGER REFERENCES estimates(id) ON DELETE CASCADE,
+        description VARCHAR(500) NOT NULL,
+        quantity DECIMAL(10,2) DEFAULT 1,
+        unit_price DECIMAL(10,2) NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        service_id INTEGER REFERENCES services(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Estimate items table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify estimate_items table:', e.message);
   }
 
   // Payments table

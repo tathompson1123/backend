@@ -45,6 +45,7 @@ function buildSchemaPrompt(businessData) {
     description = '',
     hours = '',
     serviceArea = '',
+    images = null,   // pre-fetched Pexels images: { hero: [], cards: [] }
   } = businessData;
 
   // Handle services arriving as comma-separated string from form textarea
@@ -91,13 +92,13 @@ function buildSchemaPrompt(businessData) {
     return buildPhotographyMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
   }
   if (layout === 'cleaning') {
-    return buildCleaningMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
+    return buildCleaningMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList, images });
   }
 
   let mainSections, sectionOrder, contactId, footerId;
   switch (layout) {
     default:
-      mainSections = defaultSections({ businessName, phone, phoneClean });
+      mainSections = defaultSections({ businessName, phone, phoneClean, images });
       sectionOrder = 'trust → nav → hero → features → services → benefits → gallery → testimonials → cta → contact → footer';
       contactId    = 's10';
       footerId     = 's11';
@@ -161,7 +162,7 @@ ${sharedTail}
 
 == RULES ==
 1. Return ONLY the JSON object. No other text.
-2. Use REAL Unsplash URLs that match the business type. Format: https://images.unsplash.com/photo-XXXXX?w=1920 (hero) or ?w=800 (cards/gallery). Pick specific photo IDs that relate to ${businessType}.
+2. ${images?.hero?.length ? 'Image URLs are already filled in — do NOT change any image URL in the JSON. Keep every "backgroundImage", "image", and "url" value exactly as provided.' : 'Use REAL Unsplash URLs. Format: https://images.unsplash.com/photo-XXXXX?w=1920 (hero) or ?w=800 (cards/gallery). Pick specific photo IDs that match ' + businessType + '.'}
 3. Write compelling, specific copy — not generic placeholder text. Tailor everything to ${businessType}.
 4. Reviews and testimonials should sound realistic and specific to the services offered.
 5. Include 3-6 services in the services section based on what was provided.
@@ -686,7 +687,12 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 }
 
 // ── Default layout (dark theme, generic service businesses) ─────────
-function defaultSections({ businessName, phone, phoneClean }) {
+function defaultSections({ businessName, phone, phoneClean, images }) {
+  // Use pre-fetched Pexels URLs when available; fall back to placeholder for Claude to fill
+  const heroImg  = images?.hero?.[0]  || 'https://images.unsplash.com/RELEVANT-PHOTO?w=1920';
+  const cards    = images?.cards      || [];
+  const gc = (i) => cards[i] || 'https://images.unsplash.com/RELEVANT-PHOTO?w=800';
+
   return `    {
       "id": "s1",
       "template": "trust-banner-scroll",
@@ -726,7 +732,7 @@ function defaultSections({ businessName, phone, phoneClean }) {
         "ctaLink": "#contact",
         "ctaText2": "Secondary CTA text",
         "ctaLink2": "#services",
-        "backgroundImage": "https://images.unsplash.com/RELEVANT-PHOTO?w=1920"
+        "backgroundImage": "${heroImg}"
       }
     },
     {
@@ -753,7 +759,7 @@ function defaultSections({ businessName, phone, phoneClean }) {
             "name": "Service name from list",
             "description": "2-3 sentence description of this service",
             "price": "From $XX",
-            "image": "https://images.unsplash.com/RELEVANT-PHOTO?w=800",
+            "image": "${gc(0)}",
             "link": "#contact"
           }
         ]
@@ -777,11 +783,11 @@ function defaultSections({ businessName, phone, phoneClean }) {
       "content": {
         "title": "Our Work",
         "items": [
-          { "image": "https://images.unsplash.com/RELEVANT?w=800", "title": "Project type", "caption": "Brief caption", "large": true },
-          { "image": "https://images.unsplash.com/RELEVANT?w=800", "title": "Project type", "caption": "Brief caption", "large": false },
-          { "image": "https://images.unsplash.com/RELEVANT?w=800", "title": "Project type", "caption": "Brief caption", "large": false },
-          { "image": "https://images.unsplash.com/RELEVANT?w=800", "title": "Project type", "caption": "Brief caption", "large": false },
-          { "image": "https://images.unsplash.com/RELEVANT?w=800", "title": "Project type", "caption": "Brief caption", "large": true }
+          { "image": "${gc(1)}", "title": "Project type", "caption": "Brief caption", "large": true },
+          { "image": "${gc(2)}", "title": "Project type", "caption": "Brief caption", "large": false },
+          { "image": "${gc(3)}", "title": "Project type", "caption": "Brief caption", "large": false },
+          { "image": "${gc(4)}", "title": "Project type", "caption": "Brief caption", "large": false },
+          { "image": "${gc(5)}", "title": "Project type", "caption": "Brief caption", "large": true }
         ]
       }
     },
@@ -1647,7 +1653,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 // Sections modeled on Apex Carpet & Home Care template
 // ============================================
 
-function buildCleaningMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList }) {
+function buildCleaningMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList, images }) {
   // Always generate 6 services — pad with common cleaning services if user provided fewer
   const DEFAULT_CLEANING_SERVICES = [
     'House Cleaning', 'Carpet Cleaning', 'Deep Cleaning',
@@ -1673,30 +1679,30 @@ function buildCleaningMultiPagePrompt({ businessInfo, businessName, phone, phone
     'photo-1584622650111-993a426fbf0a', // professional cleaner (rotate)
   ];
 
+  // Use Pexels card images for service carousel if available, otherwise fall back to Unsplash
+  const pexelsCards = images?.cards || [];
   const serviceCarouselJson = JSON.stringify(
     paddedServicesList.slice(0, 6).map((svc, i) => ({
       title: svc,
       category: 'Cleaning',
       price: 'Call for Quote',
-      image: `https://images.unsplash.com/${serviceImages[i % serviceImages.length]}?w=800`,
+      image: pexelsCards[i + 2] || pexelsCards[i] || `https://images.unsplash.com/${serviceImages[i % serviceImages.length]}?w=800`,
       features: ['Certified Technicians', 'Eco-Friendly Products', 'Fast Dry Times', 'Satisfaction Guaranteed'],
       recommended: i === 0,
     }))
   );
 
-  // Editorial hero items — simpler format (title + description + image)
-  const editorialItemsJson = JSON.stringify(
-    paddedServicesList.slice(0, 4).map((svc, i) => ({
-      title: svc,
-      description: 'Write a 1-2 sentence description of this specific cleaning service, highlighting technique and outcome',
-      image: `https://images.unsplash.com/${serviceImages[i % serviceImages.length]}?w=800&q=80`,
-    }))
-  );
+  // Hero background + side images: Pexels if available, otherwise verified Unsplash cleaning photos
+  const heroBg   = images?.hero?.[0]   || 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=1920&q=80';
+  const heroImg1 = images?.cards?.[0]  || images?.hero?.[1] || 'https://images.unsplash.com/photo-1556909211-36987daf7b4d?w=600&q=80';
+  const heroImg2 = images?.cards?.[1]  || 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80';
+  const locationSnippet = [areaText].filter(Boolean)[0] || 'Your Area';
 
   return `You are a website content generator for professional cleaning businesses. Generate a JSON object for a MULTI-PAGE website with 4 separate pages.
 
 IMPORTANT: Return ONLY valid JSON. No markdown, no backticks, no explanation. Just the JSON object.
-IMPORTANT: Do NOT change any image URLs that are already provided in the template below — keep them exactly as-is. Only fill in text fields marked with instructions.
+IMPORTANT: Do NOT change any image URLs that are already provided in the template below — keep them exactly as-is.
+IMPORTANT: Only fill in text fields that contain placeholder instructions like "Write a headline here".
 
 == BUSINESS INFO ==
 ${businessInfo}
@@ -1741,26 +1747,21 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
       "sections": [
         {
           "id": "hero",
-          "template": "editorial-cleaning-services",
+          "template": "hero-cleaning-split",
           "content": {
-            "headline": "ALL-CAPS punchy headline (3-5 words, e.g. 'PURIFY YOUR SPACE')",
-            "subtitle": "Short tag line — business type + city (e.g. 'Professional Carpet & House Cleaning · Dallas')",
-            "description": "2-3 sentence description: what they do, area served, key differentiator (eco-friendly, certified, fast-dry, etc.)",
+            "badge": "Professional Cleaning Services",
+            "headline": "Punchy 4-6 word headline WITHOUT the highlight word",
+            "highlightText": "1-2 highlight/accent words",
+            "subtitle": "2-sentence description: what they clean, area served, key differentiator",
             "ctaText": "Get a Free Quote",
-            "ctaUrl": "/contact",
-            "heroImage1": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80",
-            "heroImage2": "https://images.unsplash.com/photo-1527515637-60eab1b86d1a?w=800&q=80",
-            "servicesTitle": "OUR SERVICES",
-            "items": ${editorialItemsJson}
-          }
-        },
-        {
-          "id": "estimate",
-          "template": "lead-magnet-cleaning",
-          "content": {
-            "headline": "Get an Instant Cleaning Quote",
-            "subheadline": "Answer 4 quick questions and see your price range in seconds.",
-            "ctaText": "Get My Free Quote"
+            "ctaLink": "/contact",
+            "ctaText2": "Call ${phone}",
+            "ctaLink2": "tel:${phoneClean}",
+            "backgroundImage": "${heroBg}",
+            "heroImage1": "${heroImg1}",
+            "heroImage2": "${heroImg2}",
+            "yearsText": "10+ Years",
+            "locationText": "Serving ${locationSnippet}"
           }
         },
         {
@@ -1773,14 +1774,15 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
           }
         },
         {
-          "id": "trust",
-          "template": "features-icon-row",
+          "id": "reviews",
+          "template": "review-marquee",
           "content": {
-            "features": [
-              { "icon": "🛡️", "title": "Fully Insured & Bonded", "text": "Complete peace of mind — your home and belongings are always protected" },
-              { "icon": "⏰", "title": "On-Time Guarantee", "text": "We respect your schedule and always arrive within the agreed window" },
-              { "icon": "✅", "title": "100% Satisfaction", "text": "Not happy? We'll return to re-clean the area at absolutely no charge" },
-              { "icon": "🌿", "title": "Eco-Friendly Products", "text": "Safe, non-toxic cleaning solutions — better for your family and the planet" }
+            "reviews": [
+              { "name": "Sarah J.", "stars": 5, "text": "Specific 5-star carpet or upholstery cleaning review mentioning before/after results", "date": "1 week ago", "avatarColor": "#1d4ed8" },
+              { "name": "Michael T.", "stars": 5, "text": "Review about tile & grout or house cleaning — mention punctuality and professionalism", "date": "3 days ago", "avatarColor": "#059669" },
+              { "name": "The Johnson Family", "stars": 5, "text": "Family review mentioning pet stain/odor removal or recurring cleaning service", "date": "2 weeks ago", "avatarColor": "#7c3aed" },
+              { "name": "Emily R.", "stars": 5, "text": "Review about how thorough the technicians were — mention a specific room or area", "date": "5 days ago", "avatarColor": "#b45309" },
+              { "name": "David K.", "stars": 5, "text": "Review praising communication, fair pricing, and outstanding final results", "date": "1 month ago", "avatarColor": "#0891b2" }
             ]
           }
         },
@@ -1803,24 +1805,11 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
           }
         },
         {
-          "id": "reviews",
-          "template": "review-marquee",
-          "content": {
-            "reviews": [
-              { "name": "Sarah J.", "stars": 5, "text": "Specific 5-star carpet or upholstery cleaning review mentioning before/after results", "date": "1 week ago", "avatarColor": "#1d4ed8" },
-              { "name": "Michael T.", "stars": 5, "text": "Review about tile & grout or house cleaning — mention punctuality and professionalism", "date": "3 days ago", "avatarColor": "#059669" },
-              { "name": "The Johnson Family", "stars": 5, "text": "Family review mentioning pet stain/odor removal or recurring cleaning service", "date": "2 weeks ago", "avatarColor": "#7c3aed" },
-              { "name": "Emily R.", "stars": 5, "text": "Review about how thorough the technicians were — mention a specific room or area", "date": "5 days ago", "avatarColor": "#b45309" },
-              { "name": "David K.", "stars": 5, "text": "Review praising communication, fair pricing, and outstanding final results", "date": "1 month ago", "avatarColor": "#0891b2" }
-            ]
-          }
-        },
-        {
           "id": "cta-home",
           "template": "cta-gradient-full",
           "content": {
             "badge": "Limited Availability",
-            "headline": "Urgency headline about booking a cleaning (7-10 words, e.g. 'Ready for the Cleanest Home You've Ever Had?')",
+            "headline": "Urgency headline about booking a cleaning (7-10 words)",
             "subtitle": "1-2 sentences with a compelling reason to call today",
             "ctaText": "Schedule Online",
             "ctaLink": "/contact",

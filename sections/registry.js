@@ -24,6 +24,7 @@ const sections = {
   'hero-gradient':         require('./hero/hero-gradient'),
   'hero-split-portrait':   require('./hero/hero-split-portrait'),
   'hero-page-banner':      require('./hero/hero-page-banner'),
+  'hero-cleaning-split':   require('./hero/hero-cleaning-split'),
 
   // Features
   'features-icon-row':   require('./features/features-icon-row'),

@@ -105,6 +105,42 @@ function buildPageHtml(sectionsHtml, theme, meta) {
 ${sectionsHtml}
 
 <script>
+// ── Image fallback — swap broken Unsplash photos with curated verified ones ──
+(function() {
+  var FALLBACKS = [
+    'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80',
+    'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80',
+    'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80',
+    'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&q=80',
+    'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=800&q=80',
+    'https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?w=800&q=80',
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80',
+  ];
+  var _fi = 0;
+  function attachFallback(img) {
+    if (img._fbAttached) return;
+    img._fbAttached = true;
+    img.onerror = function() {
+      if (!this._fbUsed) {
+        this._fbUsed = true;
+        this.src = FALLBACKS[_fi++ % FALLBACKS.length];
+      }
+    };
+  }
+  document.querySelectorAll('img').forEach(attachFallback);
+  // Also catch lazy-loaded or JS-injected images
+  if (window.MutationObserver) {
+    new MutationObserver(function(mutations) {
+      mutations.forEach(function(m) {
+        m.addedNodes.forEach(function(node) {
+          if (node.tagName === 'IMG') attachFallback(node);
+          else if (node.querySelectorAll) node.querySelectorAll('img').forEach(attachFallback);
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+})();
+
 document.addEventListener('DOMContentLoaded', () => {
   // Scroll-reveal animations
   var revealObserver = new IntersectionObserver(function(entries) {

@@ -8,6 +8,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { buildSchemaPrompt, detectLayout, buildOrganicSchemaFromContent } = require('../sections/generateSchemaPrompt');
 const { renderPage, renderMultiPage } = require('../sections/renderer');
 const { getThemeForBusinessType, THEMES } = require('../sections/themes');
+const { fetchPexelsImages } = require('../utils/fetchPexelsImages');
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -84,7 +85,13 @@ async function generateWebsite(req, res)
     }
 
     // ==========================================
-    // STEP 1: Build the AI prompt
+    // STEP 1: Pre-fetch verified images from Pexels
+    // ==========================================
+    const layout = detectLayout(businessType);
+    const pexelsImages = await fetchPexelsImages(businessType, layout);
+
+    // ==========================================
+    // STEP 2: Build the AI prompt
     // ==========================================
     const prompt = buildSchemaPrompt({
       businessName,
@@ -95,6 +102,7 @@ async function generateWebsite(req, res)
       state: state || '',
       services,
       description,
+      images: pexelsImages,
     });
 
     // ==========================================
@@ -140,7 +148,6 @@ async function generateWebsite(req, res)
     // STEP 3b: For organic layout, build full schema from text content
     // Claude returns only text content; we construct the full multi-page schema
     // ==========================================
-    const layout = detectLayout(businessType);
     if (layout === 'organic') {
       const hoursRaw = req.body.hours || '';
       const serviceArea = req.body.serviceArea || '';
