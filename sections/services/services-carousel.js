@@ -267,19 +267,21 @@ module.exports = {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.2);
-    color: #fff;
+    background: ${theme.surfaceColor || '#0f172a'};
+    border: 2px solid ${theme.primaryColor}50;
+    color: ${theme.textColor || '#fff'};
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 20;
-    transition: background 0.3s, border-color 0.3s;
+    transition: background 0.3s, border-color 0.3s, color 0.3s;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
   }
   .${s}-arrow:hover {
     background: ${theme.primaryColor};
     border-color: ${theme.primaryColor};
+    color: #fff;
   }
   .${s}-arrow-left  { left: 0; }
   .${s}-arrow-right { right: 0; }

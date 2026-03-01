@@ -1,14 +1,14 @@
 // ============================================
 // HERO - Cleaning Split
-// Dark background image left with text, two stacked images right
-// "X+ years serving [location]" float badge
+// Dark background image left with text, staggered images right:
+// one large main image + one smaller overlapping inset + years badge
 // ============================================
 
 module.exports = {
   id: 'hero-cleaning-split',
   name: 'Hero - Cleaning Split',
   category: 'hero',
-  description: 'Two-column hero with dark overlay text left and two stacked portrait images right, floating years badge',
+  description: 'Two-column hero with dark overlay text left and staggered portrait images right, floating years badge',
 
   suitability: {
     cleaning: 1.0, janitorial: 0.9, maid: 0.9, housekeeping: 0.8, carpetCleaning: 0.9,
@@ -25,8 +25,8 @@ module.exports = {
     ctaText2:       { type: 'text',     label: 'Secondary CTA',                     default: 'Call Us Now' },
     ctaLink2:       { type: 'url',      label: 'Secondary CTA Link',                default: 'tel:' },
     backgroundImage:{ type: 'image',    label: 'Background Image (full section)',    default: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=1920&q=80' },
-    heroImage1:     { type: 'image',    label: 'Side Image 1 (top)',                default: 'https://images.unsplash.com/photo-1556909211-36987daf7b4d?w=600&q=80' },
-    heroImage2:     { type: 'image',    label: 'Side Image 2 (bottom)',             default: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80' },
+    heroImage1:     { type: 'image',    label: 'Main Side Image (large)',           default: 'https://images.unsplash.com/photo-1556909211-36987daf7b4d?w=600&q=80' },
+    heroImage2:     { type: 'image',    label: 'Inset Side Image (smaller)',        default: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80' },
     yearsText:      { type: 'text',     label: 'Years Badge (e.g. "12+ Years")',    default: '10+ Years' },
     locationText:   { type: 'text',     label: 'Location for Badge',                default: 'Serving Your Area' },
   },
@@ -66,16 +66,20 @@ module.exports = {
       </div>
     </div>
 
+    <!-- Staggered image column -->
     <div class="${s}-images">
-      <div class="${s}-img-top">
+      <!-- Large main image -->
+      <div class="${s}-img-main">
         ${img1 ? `<img src="${img1}" alt="Professional cleaning" class="${s}-img" loading="eager">` : ''}
       </div>
-      <div class="${s}-img-bottom">
+      <!-- Smaller inset image overlapping bottom-left of main -->
+      <div class="${s}-img-inset">
         ${img2 ? `<img src="${img2}" alt="Clean home result" class="${s}-img" loading="lazy">` : ''}
-        <div class="${s}-float-badge">
-          <span class="${s}-float-years">${years}</span>
-          <span class="${s}-float-loc">${location}</span>
-        </div>
+      </div>
+      <!-- Years badge tucked at bottom-right of images column -->
+      <div class="${s}-float-badge">
+        <span class="${s}-float-years">${years}</span>
+        <span class="${s}-float-loc">${location}</span>
       </div>
     </div>
 
@@ -124,9 +128,7 @@ module.exports = {
     align-items: center;
     width: 100%;
   }
-  .${s}-content {
-    color: #fff;
-  }
+  .${s}-content { color: #fff; }
   .${s}-badge {
     display: inline-block;
     padding: 0.45rem 1.2rem;
@@ -201,10 +203,7 @@ module.exports = {
     border-radius: ${theme.buttonRadius || '8px'};
     transition: background 0.2s, border-color 0.2s;
   }
-  .${s}-btn-secondary:hover {
-    background: rgba(255,255,255,0.18);
-    border-color: rgba(255,255,255,0.5);
-  }
+  .${s}-btn-secondary:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.5); }
   .${s}-trust {
     display: flex;
     gap: 1.25rem;
@@ -218,25 +217,36 @@ module.exports = {
     color: rgba(255,255,255,0.75);
     font-weight: 500;
   }
-  /* Right column: two stacked images */
+
+  /* ── Staggered image column ─────────────────── */
   .${s}-images {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    height: 580px;
-  }
-  .${s}-img-top {
-    flex: 1.15;
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.45);
-  }
-  .${s}-img-bottom {
-    flex: 0.85;
-    border-radius: 16px;
-    overflow: hidden;
     position: relative;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.45);
+    height: 540px;
+  }
+  /* Main large image: fills upper ~80% of column */
+  .${s}-img-main {
+    position: absolute;
+    top: 0;
+    left: 5%;
+    right: 0;
+    bottom: 18%;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+  }
+  /* Smaller inset: bottom-left, overlaps main by ~40px */
+  .${s}-img-inset {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 58%;
+    height: 48%;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 4px solid rgba(255,255,255,0.18);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+    /* sits in front of main */
+    z-index: 2;
   }
   .${s}-img {
     width: 100%;
@@ -244,43 +254,44 @@ module.exports = {
     object-fit: cover;
     display: block;
   }
+  /* Years badge: bottom-right, distinct from both images */
   .${s}-float-badge {
     position: absolute;
-    bottom: 1.25rem;
-    left: 1.25rem;
-    background: rgba(255,255,255,0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 12px;
-    padding: 0.75rem 1.1rem;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    bottom: 0.5rem;
+    right: 0;
+    background: linear-gradient(135deg, ${theme.primaryColor || '#2563eb'}, ${theme.accentColor || theme.primaryColor || '#3b82f6'});
+    border-radius: 14px;
+    padding: 0.9rem 1.2rem;
+    box-shadow: 0 6px 24px ${theme.primaryColor || '#2563eb'}50;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    z-index: 3;
+    min-width: 130px;
   }
   .${s}-float-years {
     font-family: '${theme.headingFont || 'Inter'}', sans-serif;
-    font-size: 1.4rem;
+    font-size: 1.5rem;
     font-weight: 800;
-    color: ${theme.primaryColor || '#2563eb'};
+    color: #fff;
     line-height: 1;
   }
   .${s}-float-loc {
     font-size: 0.78rem;
-    color: #374151;
+    color: rgba(255,255,255,0.85);
     font-weight: 600;
-    margin-top: 0.2rem;
+    margin-top: 0.25rem;
+    line-height: 1.3;
   }
+
   @media (max-width: 900px) {
     .${s}-container {
       grid-template-columns: 1fr;
       padding: 8rem 1.5rem 5rem;
       gap: 3rem;
     }
-    .${s}-images {
-      height: 380px;
-      flex-direction: row;
-    }
-    .${s}-img-top, .${s}-img-bottom { flex: 1; }
+    .${s}-images { height: 360px; }
+    .${s}-img-inset { width: 52%; height: 50%; }
   }
   @media (max-width: 600px) {
     .${s}-images { height: 280px; }

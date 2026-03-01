@@ -126,8 +126,8 @@ const THEMES = {
   cleaning: {
     id: 'cleaning',
     name: 'Cleaning',
-    primaryColor: '#38BDF8',
-    accentColor: '#10B981',
+    primaryColor: '#1D6FA4',
+    accentColor: '#0EA5E9',
     bgColor: '#FFFFFF',
     surfaceColor: '#F0F9FF',
     textColor: '#1F2937',
@@ -137,8 +137,25 @@ const THEMES = {
     fontImport: "https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=Karla:wght@400;500;600;700&display=swap",
     borderRadius: '16px',
     buttonRadius: '50px',
-    borderAccent: 'rgba(56, 189, 248, 0.2)',
-    borderAccentHover: 'rgba(56, 189, 248, 0.4)',
+    borderAccent: 'rgba(29, 111, 164, 0.2)',
+    borderAccentHover: 'rgba(29, 111, 164, 0.4)',
+  },
+  'cleaning-green': {
+    id: 'cleaning-green',
+    name: 'Cleaning (Green)',
+    primaryColor: '#16A34A',
+    accentColor: '#22C55E',
+    bgColor: '#FFFFFF',
+    surfaceColor: '#F0FDF4',
+    textColor: '#1F2937',
+    textMuted: 'rgba(31,41,55,0.7)',
+    headingFont: 'Rubik',
+    bodyFont: 'Karla',
+    fontImport: "https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=Karla:wght@400;500;600;700&display=swap",
+    borderRadius: '16px',
+    buttonRadius: '50px',
+    borderAccent: 'rgba(22, 163, 74, 0.2)',
+    borderAccentHover: 'rgba(22, 163, 74, 0.4)',
   },
   realEstate: {
     id: 'realEstate',
@@ -323,6 +340,10 @@ function getThemeForBusinessType(businessType) {
 
   for (const [themeKey, keywords] of Object.entries(keywordMap)) {
     if (keywords.some(kw => bt.includes(kw))) {
+      // Cleaning alternates between blue and green variants for variety
+      if (themeKey === 'cleaning') {
+        return Math.random() < 0.5 ? THEMES['cleaning'] : THEMES['cleaning-green'];
+      }
       return THEMES[themeKey];
     }
   }

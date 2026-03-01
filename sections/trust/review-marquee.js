@@ -69,12 +69,15 @@ module.exports = {
 </div>
 <style>
   .${s} {
-    background: rgba(255,255,255,0.05);
-    border-top: 1px solid rgba(255,255,255,0.05);
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    padding: 2rem 0;
-    overflow: hidden;
-    width: 100%;
+    background: ${theme.surfaceColor || 'rgba(255,255,255,0.05)'};
+    padding: 4.5rem 0;
+    /* Pull up into the section above and down into the section below */
+    margin: -2.5rem 0;
+    position: relative;
+    z-index: 5;
+    /* Fade edges so cards softly disappear rather than hard-cut */
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
   }
   .${s}-track-wrap {
     overflow: hidden;
