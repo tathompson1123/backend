@@ -9,87 +9,221 @@
 const https = require('https');
 
 // Search queries per layout/business type — ordered by best relevance first
+// Specific subcategories appear before broad fallbacks so precise matches win.
 const QUERIES = {
+  // ── Auto ───────────────────────────────────────────
   autoDetailing: [
     'luxury car detailing professional',
-    'car wash detailing shiny',
-    'auto detailing ceramic coating',
+    'ceramic coating car shine',
+    'auto detailing polishing vehicle',
+  ],
+  autoRepair: [
+    'auto mechanic repair shop professional',
+    'car engine repair garage',
+    'automotive service technician',
+  ],
+  autoWrap: [
+    'car vinyl wrap professional',
+    'vehicle wrap color change',
+    'auto wrap installation studio',
+  ],
+  // ── Cleaning subcategories ─────────────────────────
+  carpetCleaning: [
+    'clean carpet fibers close up',
+    'carpet steam cleaning machine',
+    'freshly cleaned carpet living room',
+  ],
+  windowCleaning: [
+    'window cleaning professional squeegee',
+    'clean sparkling windows exterior',
+    'window washer high rise building',
+  ],
+  pressureWashing: [
+    'pressure washing driveway concrete',
+    'power washing house siding professional',
+    'pressure washer cleaning surface',
+  ],
+  upholsteryCleaning: [
+    'upholstery cleaning sofa professional',
+    'furniture steam cleaning couch',
+    'upholstery cleaner fabric restoration',
+  ],
+  commercialCleaning: [
+    'commercial office cleaning professional',
+    'janitorial service office building',
+    'commercial cleaner mopping floor',
+  ],
+  houseCleaning: [
+    'maid service cleaning bright home interior',
+    'professional house cleaner kitchen',
+    'clean modern home interior bright',
   ],
   cleaning: [
-    'professional house cleaning service',
-    'cleaning crew bright home',
-    'maid service sparkling clean',
+    'professional cleaning service bright home',
+    'cleaning technician sparkling interior',
+    'clean modern bright home interior',
   ],
-  renovation: [
-    'modern kitchen renovation remodel',
-    'home renovation contractor professional',
-    'bathroom remodel luxury',
-  ],
-  photography: [
-    'professional photography studio portrait',
-    'wedding photographer couple',
-    'photographer camera professional shoot',
-  ],
-  organic: [
-    'landscaping garden professional green',
-    'lawn care landscaping outdoor',
-    'garden design beautiful landscape',
-  ],
+  // ── Trades ────────────────────────────────────────
   plumbing: [
-    'plumber professional pipe repair',
-    'plumbing service work',
+    'plumber pipe fitting professional',
+    'plumbing repair under sink',
+    'plumber technician water heater',
   ],
   hvac: [
-    'hvac technician air conditioning system',
-    'heating cooling service professional',
+    'hvac technician air conditioning unit',
+    'heating cooling system installation',
+    'hvac service technician ductwork',
   ],
   electrical: [
-    'electrician professional wiring panel',
-    'electrical service work',
+    'electrician wiring electrical panel',
+    'electrical service installation professional',
+    'electrician working conduit',
   ],
   roofing: [
-    'roofing contractor professional installation',
-    'roof shingles repair',
+    'roofing shingles installation contractor',
+    'roof repair professional contractor',
+    'new roof installation aerial',
   ],
   painting: [
-    'painter professional interior house',
-    'house painting exterior brush',
+    'house painting interior professional roller',
+    'exterior house painting contractor brush',
+    'painter spray wall professional',
   ],
+  // ── Landscaping ────────────────────────────────────
+  organic: [
+    'landscaping garden design lush green',
+    'lawn care mowing professional',
+    'landscape garden beautiful outdoor',
+  ],
+  lawnCare: [
+    'lawn mowing professional neat grass',
+    'lawn care service green yard',
+    'grass cutting landscaping neat',
+  ],
+  // ── Home services ─────────────────────────────────
+  renovation: [
+    'kitchen remodel modern renovation',
+    'bathroom renovation luxury remodel',
+    'home renovation contractor professional',
+  ],
+  handyman: [
+    'handyman repair home professional',
+    'home repair maintenance service',
+    'contractor tools home improvement',
+  ],
+  // ── Beauty / Wellness ──────────────────────────────
   salon: [
-    'hair salon stylist professional',
-    'barber shop haircut styling',
+    'hair salon stylist cutting professional',
+    'barber haircut modern shop',
+    'hair styling salon interior',
   ],
   spa: [
-    'spa massage relaxing professional',
-    'wellness spa treatment',
+    'spa massage therapy relaxing',
+    'wellness spa treatment professional',
+    'massage table spa luxury',
   ],
   fitness: [
-    'personal trainer gym professional',
-    'fitness workout coach',
+    'personal trainer coaching gym',
+    'fitness training workout professional',
+    'gym workout weights training',
   ],
+  petGrooming: [
+    'dog grooming professional bath',
+    'pet groomer grooming salon',
+    'dog wash grooming cute',
+  ],
+  // ── Food ──────────────────────────────────────────
   catering: [
-    'catering food professional event',
-    'chef cooking restaurant professional',
+    'catering food elegant event spread',
+    'chef cooking professional kitchen',
+    'catering service plated food event',
   ],
+  // ── Photography ───────────────────────────────────
+  photography: [
+    'professional photographer camera studio',
+    'wedding photography couple outdoor',
+    'portrait photography studio lighting',
+  ],
+  // ── Default ───────────────────────────────────────
   default: [
     'professional service business team',
-    'business professional office',
+    'business professional working office',
   ],
 };
 
+// Ordered specificity map: check more specific substrings first
+const KEYWORD_MAP = [
+  // Cleaning subcategories — must come before generic 'cleaning'
+  ['carpet clean',        'carpetCleaning'],
+  ['window clean',        'windowCleaning'],
+  ['pressure wash',       'pressureWashing'],
+  ['power wash',          'pressureWashing'],
+  ['upholstery',          'upholsteryCleaning'],
+  ['commercial clean',    'commercialCleaning'],
+  ['janitorial',          'commercialCleaning'],
+  ['office clean',        'commercialCleaning'],
+  ['maid',                'houseCleaning'],
+  ['house clean',         'houseCleaning'],
+  ['home clean',          'houseCleaning'],
+  ['clean',               'cleaning'],
+  // Auto subcategories
+  ['wrap',                'autoWrap'],
+  ['ceramic coat',        'autoDetailing'],
+  ['detail',              'autoDetailing'],
+  ['auto repair',         'autoRepair'],
+  ['mechanic',            'autoRepair'],
+  ['car repair',          'autoRepair'],
+  // Trades
+  ['plumb',               'plumbing'],
+  ['hvac',                'hvac'],
+  ['heat',                'hvac'],
+  ['cool',                'hvac'],
+  ['air condition',       'hvac'],
+  ['electric',            'electrical'],
+  ['roof',                'roofing'],
+  ['paint',               'painting'],
+  // Landscaping
+  ['lawn',                'lawnCare'],
+  ['landscap',            'organic'],
+  ['garden',              'organic'],
+  ['tree',                'organic'],
+  // Home services
+  ['renovation',          'renovation'],
+  ['remodel',             'renovation'],
+  ['kitchen remodel',     'renovation'],
+  ['bathroom remodel',    'renovation'],
+  ['handyman',            'handyman'],
+  ['contractor',          'renovation'],
+  // Beauty / wellness
+  ['salon',               'salon'],
+  ['barber',              'salon'],
+  ['hair',                'salon'],
+  ['spa',                 'spa'],
+  ['massage',             'spa'],
+  ['gym',                 'fitness'],
+  ['fitness',             'fitness'],
+  ['train',               'fitness'],
+  ['pet',                 'petGrooming'],
+  ['groom',               'petGrooming'],
+  ['dog',                 'petGrooming'],
+  // Food
+  ['cater',               'catering'],
+  ['chef',                'catering'],
+  ['food',                'catering'],
+  // Photography
+  ['photo',               'photography'],
+  ['videograph',          'photography'],
+];
+
 // Map detectLayout() values + raw business types to query keys
 function getQueryKey(businessType, layout) {
+  // Layout-based shortcut (organic, autoDetailing, cleaning, renovation, photography)
   if (layout && QUERIES[layout]) return layout;
   const bt = (businessType || '').toLowerCase();
-  if (bt.includes('plumb')) return 'plumbing';
-  if (bt.includes('hvac') || bt.includes('heat') || bt.includes('cool') || bt.includes('air')) return 'hvac';
-  if (bt.includes('electric')) return 'electrical';
-  if (bt.includes('roof')) return 'roofing';
-  if (bt.includes('paint')) return 'painting';
-  if (bt.includes('salon') || bt.includes('barber') || bt.includes('hair')) return 'salon';
-  if (bt.includes('spa') || bt.includes('massage')) return 'spa';
-  if (bt.includes('fit') || bt.includes('gym') || bt.includes('train')) return 'fitness';
-  if (bt.includes('cater') || bt.includes('chef') || bt.includes('food')) return 'catering';
+  // Walk keyword map in order — first match wins
+  for (const [kw, key] of KEYWORD_MAP) {
+    if (bt.includes(kw)) return key;
+  }
   return 'default';
 }
 
