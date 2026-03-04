@@ -237,6 +237,17 @@ async function sendCampaign(userId, config, campaignId) {
   return { sent };
 }
 
+// ── Startup migration ────────────────────────────────────
+pool.query(`
+  CREATE TABLE IF NOT EXISTS email_campaign_presets (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    settings JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(e => console.error('email_campaign_presets migration error:', e.message));
+
 // ── Routes ──────────────────────────────────────────────
 
 // GET /api/email-campaigns/config
@@ -342,6 +353,50 @@ router.post('/send-now', authenticateToken, async (req, res) => {
   } catch (e) {
     console.error('Send now error:', e.message);
     res.status(500).json({ error: e.message || 'Failed to send campaign' });
+  }
+});
+
+// ── Campaign Presets ─────────────────────────────────────
+
+// GET /api/email-campaigns/presets
+router.get('/presets', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, settings, created_at FROM email_campaign_presets WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.user.userId]
+    );
+    res.json({ presets: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/email-campaigns/presets
+router.post('/presets', authenticateToken, async (req, res) => {
+  try {
+    const { name, settings } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Preset name is required' });
+    const result = await pool.query(
+      'INSERT INTO email_campaign_presets (user_id, name, settings) VALUES ($1, $2, $3) RETURNING *',
+      [req.user.userId, name.trim(), JSON.stringify(settings || {})]
+    );
+    res.json({ success: true, preset: result.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/email-campaigns/presets/:id
+router.delete('/presets/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM email_campaign_presets WHERE id = $1 AND user_id = $2 RETURNING id',
+      [req.params.id, req.user.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Preset not found' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
