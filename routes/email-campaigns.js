@@ -13,6 +13,43 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── Helpers ─────────────────────────────────────────────
 
+function esc(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function emailBlocksToHtml(blocks) {
+  if (!blocks || blocks.length === 0) return '';
+  const inner = blocks.map(b => {
+    const c = b.content || {};
+    switch (b.type) {
+      case 'header':
+        return `  <div style="background:${c.bgColor||'#111827'};padding:20px 24px;text-align:center"><h1 style="color:${c.textColor||'#ffffff'};margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px">${esc(c.title||'Your Business')}</h1></div>`;
+      case 'hero_image':
+        return c.src ? `  <img src="${esc(c.src)}" alt="${esc(c.alt||'')}" style="width:100%;display:block;max-height:280px;object-fit:cover" />` : '';
+      case 'urgency_bar':
+        return `  <div style="background:${c.bgColor||'#fef3c7'};border-bottom:2px solid #f59e0b;padding:12px 24px;text-align:center"><p style="margin:0;font-size:14px;font-weight:700;color:${c.textColor||'#92400e'}">${esc(c.text||'')}</p></div>`;
+      case 'body': {
+        const paras = (c.paragraphs||[]).map(p=>`<p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.65">${esc(p)}</p>`).join('');
+        return `  <div style="padding:32px 28px 8px"><h2 style="margin:0 0 20px;font-size:22px;font-weight:700;color:#111827;line-height:1.3">${esc(c.heading||'')}</h2>${paras}</div>`;
+      }
+      case 'offer_box':
+        return `  <div style="margin:0 28px 24px;background:${c.bgColor||'#f0fdf4'};border-left:4px solid ${c.borderColor||'#22c55e'};padding:16px 20px;border-radius:8px"><p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#111827">${esc(c.title||'Exclusive Offer')}</p><p style="margin:0;font-size:14px;color:#374151;line-height:1.55">${esc(c.description||'')}</p></div>`;
+      case 'cta_button':
+        return `  <div style="padding:8px 28px 32px;text-align:center"><a href="${esc(c.link||'#')}" style="display:inline-block;background:${c.bgColor||'#111827'};color:${c.textColor||'#ffffff'};padding:14px 36px;border-radius:${c.borderRadius||'8px'};text-decoration:none;font-weight:700;font-size:16px">${esc(c.text||'Book Now')}</a></div>`;
+      case 'divider':
+        return `  <div style="padding:0 28px"><hr style="border:none;border-top:${c.thickness||'1px'} solid ${c.color||'#e5e7eb'};margin:8px 0" /></div>`;
+      case 'spacer':
+        return `  <div style="height:${c.height||'24px'}"></div>`;
+      case 'signoff':
+        return `  <div style="padding:0 28px 24px"><p style="margin:0;font-size:14px;color:#6b7280">${esc(c.text||'')}</p></div>`;
+      case 'footer':
+        return `  <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 28px;text-align:center"><p style="margin:0 0 8px;font-size:12px;color:#6b7280">${esc(c.text||'')}</p><a href="#" style="font-size:12px;color:#6b7280;text-decoration:underline">${esc(c.unsubscribeText||'Unsubscribe')}</a></div>`;
+      default: return '';
+    }
+  }).join('\n');
+  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.10)">\n${inner}\n</div>`;
+}
+
 async function getBusinessContext(userId) {
   const userRow = await pool.query(
     'SELECT business_name, business_type FROM users WHERE id = $1',
@@ -43,7 +80,7 @@ async function getRecentSubjects(userId, limit = 5) {
   return result.rows.map(r => r.subject);
 }
 
-async function generateCampaign(userId, config) {
+async function generateCampaign(userId, config, offerDetails) {
   const { businessName, industry, city, services } = await getBusinessContext(userId);
   const recentSubjects = await getRecentSubjects(userId);
   const month = new Date().toLocaleString('default', { month: 'long' });
@@ -82,6 +119,13 @@ async function generateCampaign(userId, config) {
   expiryDate.setDate(expiryDate.getDate() + (7 - expiryDate.getDay()));
   const expiryStr = expiryDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
+  const offerSection = offerDetails ? [
+    offerDetails.offer    ? `Specific offer: ${offerDetails.offer}` : '',
+    offerDetails.message  ? `Message angle: ${offerDetails.message}` : '',
+    offerDetails.emotion  ? `Emotion to elicit: ${offerDetails.emotion}` : '',
+    offerDetails.ctaLink  ? `CTA link URL: ${offerDetails.ctaLink}` : '',
+  ].filter(Boolean).join('\n') : '';
+
   const prompt = `You are a top-tier email marketer writing a weekly promotional email for ${businessName}, a ${industry} business${city ? ` in ${city}` : ''}.
 
 Month: ${month}
@@ -89,73 +133,61 @@ Services offered: ${services.length ? services.join(', ') : 'various services'}
 Tone: ${tone}
 Campaign focus: ${focusInstructions[focus] || focusInstructions.seasonal}
 Offer expires: ${expiryStr}
-${recentSubjects.length ? `Recent subjects used (DO NOT repeat these concepts): ${recentSubjects.join(' | ')}` : ''}
+${offerSection ? offerSection + '\n' : ''}${recentSubjects.length ? `Recent subjects used (DO NOT repeat these concepts): ${recentSubjects.join(' | ')}` : ''}
 
-Write ONE high-converting weekly email using proven copywriting techniques:
+Write ONE high-converting weekly email using proven copywriting techniques.
 
-SUBJECT LINE: Use a curiosity gap or open loop (e.g., "The one thing most [customer type] don't know about…", "Why your [problem] keeps coming back…", "We almost didn't share this…"). Under 55 characters. No generic words like "newsletter" or "update".
+SUBJECT LINE: Under 55 chars. Use a curiosity gap or open loop. No generic words like "newsletter".
+PREVIEW TEXT: 80-100 chars. Continue the curiosity hook, tease without revealing the offer fully.
 
-PREVIEW TEXT: Continue the curiosity hook, tease the offer without revealing it fully. 80-100 chars.
-
-BODY HTML: A rich, visually compelling email that:
-1. Opens with a punchy hook addressing a real customer pain point (1-2 lines)
-2. Builds desire with a "before/after" or problem/solution statement
-3. Reveals a SPECIFIC time-limited offer (e.g., "20% off this week only", "free add-on with any booking before ${expiryStr}", "2 spots left this week")
-4. Uses urgency language ("Expires ${expiryStr}", "Only X spots left", "This week only")
-5. Has ONE clear CTA button: bold, prominent, action-driven text
-6. Ends with a brief personal sign-off from the business owner/team
-7. Includes a footer with unsubscribe option
-
-Use this EXACT HTML structure with inline styles:
-<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.10)">
-  <!-- Header -->
-  <div style="background:#111827;padding:20px 24px;text-align:center">
-    <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px">[BUSINESS NAME]</h1>
-  </div>
-  <!-- Hero image -->
-  <img src="${heroImageUrl}" alt="[BUSINESS NAME] offer" style="width:100%;display:block;max-height:280px;object-fit:cover" />
-  <!-- Urgency bar -->
-  <div style="background:#fef3c7;border-bottom:2px solid #f59e0b;padding:12px 24px;text-align:center">
-    <p style="margin:0;font-size:14px;font-weight:700;color:#92400e">⏰ This offer expires ${expiryStr} — don't miss it</p>
-  </div>
-  <!-- Body -->
-  <div style="padding:32px 28px">
-    [HOOK LINE - 1-2 sentences, bold if possible]
-    [BODY PARAGRAPHS - 2-3 short paragraphs, problem → solution → offer]
-    [SPECIFIC OFFER BOX styled with background:#f0fdf4;border-left:4px solid #22c55e;padding:16px;border-radius:8px;margin:24px 0]
-    [CTA BUTTON centered, styled: background:#111827;color:#ffffff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block]
-    [PERSONAL SIGN-OFF]
-  </div>
-  <!-- Footer -->
-  <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 28px;text-align:center">
-    <p style="margin:0 0 8px;font-size:12px;color:#6b7280">You're receiving this because you've used [BUSINESS NAME] before.</p>
-    <a href="#" style="font-size:12px;color:#6b7280;text-decoration:underline">Unsubscribe</a>
-  </div>
-</div>
-
-BODY TEXT: A plain-text version of the same content.
-
-Return ONLY valid JSON (no markdown, no code blocks):
+Return ONLY valid JSON (no markdown, no code blocks) with this structure:
 {
   "subject": "...",
   "previewText": "...",
-  "bodyHtml": "...",
-  "bodyText": "..."
-}`;
+  "bodyText": "plain text version of the full email",
+  "blocks": [
+    { "type": "header", "content": { "title": "${businessName}", "bgColor": "#111827", "textColor": "#ffffff" } },
+    { "type": "hero_image", "content": { "src": "${heroImageUrl}", "alt": "${businessName} offer" } },
+    { "type": "urgency_bar", "content": { "text": "⏰ This offer expires ${expiryStr} — don't miss it", "bgColor": "#fef3c7", "textColor": "#92400e" } },
+    { "type": "body", "content": { "heading": "[HOOK HEADING - punchy, 1 line]", "paragraphs": ["[paragraph 1: pain point / problem]", "[paragraph 2: solution / desire]"] } },
+    { "type": "offer_box", "content": { "title": "[SPECIFIC OFFER TITLE]", "description": "[offer details, expiry, what they get]", "bgColor": "#f0fdf4", "borderColor": "#22c55e" } },
+    { "type": "cta_button", "content": { "text": "[ACTION VERB + short phrase]", "link": "${offerDetails?.ctaLink || '#'}", "bgColor": "#111827", "textColor": "#ffffff", "borderRadius": "8px" } },
+    { "type": "signoff", "content": { "text": "The ${businessName} team" } },
+    { "type": "footer", "content": { "text": "You're receiving this because you've used ${businessName} before.", "unsubscribeText": "Unsubscribe" } }
+  ]
+}
+
+Rules:
+- Make the body content emotionally engaging and specific to the campaign focus
+- The offer_box should include a SPECIFIC discount, free add-on, or limited availability
+- CTA button text should be action-driven (e.g. "Claim Your Spot", "Book Before ${expiryStr}", "Get 20% Off Now")
+- Keep paragraphs short (2-3 sentences max)
+- Replace ALL placeholders in brackets with real, compelling copy`;
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 3000,
+    max_tokens: 4000,
     messages: [{ role: 'user', content: prompt }],
   });
 
   const text = response.content[0].text.trim();
-  // Strip markdown code fences if present, extract first JSON object
   let json = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
-  // If there's extra text before/after JSON, extract just the JSON object
   const jsonMatch = json.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON found in AI response');
-  return JSON.parse(jsonMatch[0]);
+  const parsed = JSON.parse(jsonMatch[0]);
+
+  // Assign unique IDs to blocks and compute bodyHtml
+  const { randomUUID } = require('crypto');
+  const blocks = (parsed.blocks || []).map(b => ({ ...b, id: randomUUID().slice(0, 8) }));
+  const bodyHtml = emailBlocksToHtml(blocks);
+
+  return {
+    subject: parsed.subject,
+    previewText: parsed.previewText,
+    bodyText: parsed.bodyText,
+    blocks,
+    bodyHtml,
+  };
 }
 
 async function sendCampaign(userId, config, campaignId) {
@@ -260,7 +292,8 @@ router.post('/preview', authenticateToken, async (req, res) => {
       [req.user.userId]
     );
     const config = configResult.rows[0] || {};
-    const campaign = await generateCampaign(req.user.userId, config);
+    const { offerDetails } = req.body;
+    const campaign = await generateCampaign(req.user.userId, config, offerDetails);
     res.json({ success: true, campaign });
   } catch (e) {
     console.error('Campaign preview error:', e.message);
@@ -282,10 +315,17 @@ router.post('/send-now', authenticateToken, async (req, res) => {
     }
 
     // Use pre-generated campaign if provided (from frontend preview+edit), otherwise generate fresh
-    const { usePreview } = req.body;
-    const generated = usePreview && usePreview.subject
-      ? usePreview
-      : await generateCampaign(req.user.userId, config);
+    const { usePreview, offerDetails } = req.body;
+    let generated;
+    if (usePreview && usePreview.subject) {
+      // If blocks provided but no bodyHtml, serialize now
+      if (usePreview.blocks && !usePreview.bodyHtml) {
+        usePreview.bodyHtml = emailBlocksToHtml(usePreview.blocks);
+      }
+      generated = usePreview;
+    } else {
+      generated = await generateCampaign(req.user.userId, config, offerDetails);
+    }
 
     // Save to DB
     const saved = await pool.query(
