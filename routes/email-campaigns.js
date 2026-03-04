@@ -237,7 +237,7 @@ async function sendCampaign(userId, config, campaignId) {
   return { sent };
 }
 
-// ── Startup migration ────────────────────────────────────
+// ── Startup migrations ───────────────────────────────────
 pool.query(`
   CREATE TABLE IF NOT EXISTS email_campaign_presets (
     id SERIAL PRIMARY KEY,
@@ -247,6 +247,9 @@ pool.query(`
     created_at TIMESTAMPTZ DEFAULT NOW()
   )
 `).catch(e => console.error('email_campaign_presets migration error:', e.message));
+
+pool.query(`ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS blocks JSONB`)
+  .catch(e => console.error('email_campaigns blocks column migration error:', e.message));
 
 // ── Routes ──────────────────────────────────────────────
 
@@ -295,7 +298,7 @@ router.get('/history', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/email-campaigns/preview — generate without sending
+// POST /api/email-campaigns/preview — generate and auto-save as draft
 router.post('/preview', authenticateToken, async (req, res) => {
   try {
     const configResult = await pool.query(
@@ -305,14 +308,22 @@ router.post('/preview', authenticateToken, async (req, res) => {
     const config = configResult.rows[0] || {};
     const { offerDetails } = req.body;
     const campaign = await generateCampaign(req.user.userId, config, offerDetails);
-    res.json({ success: true, campaign });
+
+    // Auto-save as draft
+    const saved = await pool.query(
+      `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, status, scheduled_for, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'draft', NOW(), NOW()) RETURNING id`,
+      [req.user.userId, campaign.subject, campaign.previewText, campaign.bodyHtml, campaign.bodyText, JSON.stringify(campaign.blocks)]
+    );
+
+    res.json({ success: true, campaign, draftId: saved.rows[0].id });
   } catch (e) {
     console.error('Campaign preview error:', e.message);
     res.status(500).json({ error: e.message || 'Failed to generate campaign preview' });
   }
 });
 
-// POST /api/email-campaigns/send-now — generate and send immediately
+// POST /api/email-campaigns/send-now — send immediately (optionally from a draft)
 router.post('/send-now', authenticateToken, async (req, res) => {
   try {
     const configResult = await pool.query(
@@ -325,34 +336,156 @@ router.post('/send-now', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Please set your From Email in campaign settings first' });
     }
 
-    // Use pre-generated campaign if provided (from frontend preview+edit), otherwise generate fresh
-    const { usePreview, offerDetails } = req.body;
+    const { usePreview, offerDetails, draftId } = req.body;
     let generated;
-    if (usePreview && usePreview.subject) {
-      // If blocks provided but no bodyHtml, serialize now
-      if (usePreview.blocks && !usePreview.bodyHtml) {
-        usePreview.bodyHtml = emailBlocksToHtml(usePreview.blocks);
+    let campaignId;
+
+    if (draftId) {
+      // Promote existing draft — update it in place
+      const draftResult = await pool.query(
+        'SELECT * FROM email_campaigns WHERE id = $1 AND user_id = $2 AND status = $3',
+        [draftId, req.user.userId, 'draft']
+      );
+      if (draftResult.rows.length === 0) return res.status(404).json({ error: 'Draft not found' });
+      const draft = draftResult.rows[0];
+
+      // If usePreview has updated content, use that; otherwise use saved draft content
+      if (usePreview && usePreview.subject) {
+        if (usePreview.blocks && !usePreview.bodyHtml) usePreview.bodyHtml = emailBlocksToHtml(usePreview.blocks);
+        generated = usePreview;
+        await pool.query(
+          `UPDATE email_campaigns SET subject=$1, preview_text=$2, body_html=$3, body_text=$4, blocks=$5, status='pending', scheduled_for=NOW() WHERE id=$6`,
+          [generated.subject, generated.previewText, generated.bodyHtml, generated.bodyText, JSON.stringify(generated.blocks), draftId]
+        );
+      } else {
+        generated = { subject: draft.subject, previewText: draft.preview_text, bodyHtml: draft.body_html, bodyText: draft.body_text };
+        await pool.query(`UPDATE email_campaigns SET status='pending', scheduled_for=NOW() WHERE id=$1`, [draftId]);
       }
+      campaignId = draftId;
+    } else if (usePreview && usePreview.subject) {
+      if (usePreview.blocks && !usePreview.bodyHtml) usePreview.bodyHtml = emailBlocksToHtml(usePreview.blocks);
       generated = usePreview;
+      const saved = await pool.query(
+        `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, status, scheduled_for, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW(), NOW()) RETURNING id`,
+        [req.user.userId, generated.subject, generated.previewText, generated.bodyHtml, generated.bodyText, JSON.stringify(generated.blocks || [])]
+      );
+      campaignId = saved.rows[0].id;
     } else {
       generated = await generateCampaign(req.user.userId, config, offerDetails);
+      const saved = await pool.query(
+        `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, status, scheduled_for, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW(), NOW()) RETURNING id`,
+        [req.user.userId, generated.subject, generated.previewText, generated.bodyHtml, generated.bodyText, JSON.stringify(generated.blocks || [])]
+      );
+      campaignId = saved.rows[0].id;
     }
 
-    // Save to DB
-    const saved = await pool.query(
-      `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, status, scheduled_for, created_at)
-       VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), NOW()) RETURNING id`,
-      [req.user.userId, generated.subject, generated.previewText, generated.bodyHtml, generated.bodyText]
-    );
-    const campaignId = saved.rows[0].id;
-
-    // Send
     const result = await sendCampaign(req.user.userId, config, campaignId);
-
     res.json({ success: true, ...result, subject: generated.subject });
   } catch (e) {
     console.error('Send now error:', e.message);
     res.status(500).json({ error: e.message || 'Failed to send campaign' });
+  }
+});
+
+// POST /api/email-campaigns/test-send — send to self (from_email) only
+router.post('/test-send', authenticateToken, async (req, res) => {
+  try {
+    const configResult = await pool.query(
+      'SELECT * FROM email_campaign_configs WHERE user_id = $1',
+      [req.user.userId]
+    );
+    const config = configResult.rows[0] || {};
+
+    if (!config.from_email) {
+      return res.status(400).json({ error: 'Please set your From Email in campaign settings first' });
+    }
+
+    const { draftId, subject, bodyHtml, bodyText, blocks } = req.body;
+    let emailSubject, emailHtml, emailText;
+
+    if (draftId) {
+      const draftResult = await pool.query(
+        'SELECT subject, body_html, body_text FROM email_campaigns WHERE id = $1 AND user_id = $2',
+        [draftId, req.user.userId]
+      );
+      if (draftResult.rows.length === 0) return res.status(404).json({ error: 'Draft not found' });
+      const d = draftResult.rows[0];
+      emailSubject = d.subject;
+      emailHtml = d.body_html;
+      emailText = d.body_text;
+    } else {
+      emailSubject = subject || 'Test Email';
+      emailHtml = blocks ? emailBlocksToHtml(blocks) : (bodyHtml || '');
+      emailText = bodyText || '';
+    }
+
+    await sgMail.send({
+      to: config.from_email,
+      from: { name: config.from_name || 'Campaign Test', email: config.from_email },
+      subject: `[TEST] ${emailSubject}`,
+      text: emailText,
+      html: emailHtml,
+    });
+
+    res.json({ success: true, sentTo: config.from_email });
+  } catch (e) {
+    console.error('Test send error:', e.message);
+    res.status(500).json({ error: e.message || 'Failed to send test email' });
+  }
+});
+
+// ── Drafts ──────────────────────────────────────────────
+
+// GET /api/email-campaigns/drafts
+router.get('/drafts', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, subject, preview_text, blocks, body_html, body_text, created_at
+       FROM email_campaigns WHERE user_id = $1 AND status = 'draft' ORDER BY created_at DESC`,
+      [req.user.userId]
+    );
+    res.json({ drafts: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/email-campaigns/drafts/:id
+router.put('/drafts/:id', authenticateToken, async (req, res) => {
+  try {
+    const { subject, previewText, bodyHtml, bodyText, blocks } = req.body;
+    const html = bodyHtml || (blocks ? emailBlocksToHtml(blocks) : '');
+    const result = await pool.query(
+      `UPDATE email_campaigns
+       SET subject = COALESCE($1, subject),
+           preview_text = COALESCE($2, preview_text),
+           body_html = COALESCE($3, body_html),
+           body_text = COALESCE($4, body_text),
+           blocks = COALESCE($5, blocks)
+       WHERE id = $6 AND user_id = $7 AND status = 'draft'
+       RETURNING id, subject, preview_text, created_at`,
+      [subject, previewText, html, bodyText, blocks ? JSON.stringify(blocks) : null, req.params.id, req.user.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Draft not found' });
+    res.json({ success: true, draft: result.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/email-campaigns/drafts/:id
+router.delete('/drafts/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM email_campaigns WHERE id = $1 AND user_id = $2 AND status = 'draft' RETURNING id`,
+      [req.params.id, req.user.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Draft not found' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
