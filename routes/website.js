@@ -1729,14 +1729,23 @@ router.post('/purchase-domain', authenticateToken, requirePlan('basic'), async (
       businessName: user.business_name
     });
 
-    // Explicitly set nameservers to Vercel (belt-and-suspenders — registration
-    // params may not always apply reliably on all Dynadot plans)
-    try {
-      await updateNameservers(domain);
-    } catch (nsErr) {
-      console.warn(`⚠️ Nameserver update failed for ${domain}:`, nsErr.message);
-      // Non-fatal — ns0/ns1 params during registration may have already set them
-    }
+    // Set nameservers to Vercel. Dynadot needs ~30s after registration before
+    // it will accept a set_ns command — so we try immediately, then retry twice.
+    const trySetNs = async () => {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await updateNameservers(domain);
+          console.log(`✅ Nameservers set for ${domain} (attempt ${attempt})`);
+          return;
+        } catch (nsErr) {
+          console.warn(`⚠️ NS update attempt ${attempt} failed for ${domain}:`, nsErr.message);
+          if (attempt < 3) await new Promise(r => setTimeout(r, 30000)); // wait 30s before retry
+        }
+      }
+      console.error(`❌ All nameserver update attempts failed for ${domain} — manual fix required`);
+    };
+    // Run first attempt immediately, schedule retries in background so response isn't delayed
+    trySetNs();
 
     // Add domain to Vercel project
     await addDomainToVercel(domain, userId);
