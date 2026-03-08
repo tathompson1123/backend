@@ -470,6 +470,27 @@ router.post('/save-v2', authenticateToken, async (req, res) => {
 });
 
 // ============================================
+// GET - Check DNS propagation for a domain
+// ============================================
+router.get('/domain-dns-status', authenticateToken, async (req, res) => {
+  const { domain } = req.query;
+  if (!domain) return res.status(400).json({ error: 'domain required' });
+
+  const dns = require('dns').promises;
+  try {
+    // Try to resolve NS records — if they point to Vercel, DNS has propagated
+    const nsRecords = await dns.resolveNs(domain);
+    const propagated = nsRecords.some(ns =>
+      ns.toLowerCase().includes('vercel-dns.com')
+    );
+    return res.json({ propagated, ns: nsRecords });
+  } catch {
+    // SERVFAIL / NXDOMAIN — not propagated yet
+    return res.json({ propagated: false, ns: [] });
+  }
+});
+
+// ============================================
 // GET - Get website with V2 page_data
 // ============================================
 router.get('/v2', authenticateToken, async (req, res) => {
@@ -477,7 +498,7 @@ router.get('/v2', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
 
     const result = await pool.query(
-      'SELECT id, page_data, html_content, vercel_url, is_published, custom_domain, domain_verified FROM websites WHERE user_id = $1',
+      'SELECT id, page_data, html_content, vercel_url, is_published, custom_domain, domain_verified, domain_managed_by_us, domain_purchase_date FROM websites WHERE user_id = $1',
       [userId]
     );
 

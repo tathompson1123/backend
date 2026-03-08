@@ -8,6 +8,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, email, business_name, plan, google_review_link,
+              twilio_phone_number, telnyx_phone_number,
               onboarding_completed, onboarding_current_step, onboarding_steps_completed
        FROM users WHERE id = $1`,
       [req.user.userId]
@@ -26,6 +27,8 @@ router.get('/profile', authenticateToken, async (req, res) => {
         businessName: user.business_name,
         plan: user.plan,
         google_review_link: user.google_review_link,
+        twilio_phone_number: user.twilio_phone_number,
+        telnyx_phone_number: user.telnyx_phone_number,
         onboarding_completed: user.onboarding_completed,
         onboarding_current_step: user.onboarding_current_step,
         onboarding_steps_completed: user.onboarding_steps_completed

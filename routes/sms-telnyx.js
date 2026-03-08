@@ -30,9 +30,9 @@ router.post('/webhook', express.json(), async (req, res) => {
 
     console.log(`📨 Telnyx SMS: ${fromNumber} → ${toNumber}: "${body}"`);
 
-    // Find user by their Telnyx phone number (stored same column as Twilio for now)
+    // Find user by their Telnyx phone number
     const userResult = await pool.query(
-      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1',
+      'SELECT id, business_name, telnyx_phone_number FROM users WHERE telnyx_phone_number = $1',
       [toNumber]
     );
 
@@ -97,7 +97,7 @@ router.post('/webhook', express.json(), async (req, res) => {
 
         setTimeout(async () => {
           try {
-            await sendSMSTelnyx(fromNumber, aiResponse);
+            await sendSMSTelnyx(fromNumber, aiResponse, toNumber);
 
             await pool.query(
               `INSERT INTO sms_messages

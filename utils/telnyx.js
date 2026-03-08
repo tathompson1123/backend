@@ -104,7 +104,7 @@ async function sendSMSTelnyx(to, message, fromNumber) {
   const response = await fetch(`${TELNYX_BASE}/messages`, {
     method: 'POST',
     headers: telnyxHeaders(),
-    body: JSON.stringify({ from, to, text: message }),
+    body: JSON.stringify({ from: fromNumber, to, text: message }),
   });
 
   const data = await response.json();
