@@ -80,7 +80,7 @@ function buildSchemaPrompt(businessData) {
   // ── layout dispatch ───────────────────────────────
   // Multi-page layouts return early with their own full prompt
   if (layout === 'autoDetailing') {
-    return buildAutoDetailingMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
+    return buildAutoDetailingMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList, images });
   }
   if (layout === 'organic') {
     return buildOrganicMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList });
@@ -427,11 +427,15 @@ RULES:
 }
 
 // ── Auto-detailing: multi-page prompt ────────────────────────────────
-function buildAutoDetailingMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList }) {
+function buildAutoDetailingMultiPagePrompt({ businessInfo, businessName, phone, phoneClean, email, hoursText, areaText, servicesList, images }) {
   const DEFAULT_AUTO_SERVICES = [
     'Full Detail', 'Ceramic Coating', 'Paint Correction', 'Interior Detail',
     'Exterior Detail', 'Window Tint', 'Headlight Restoration', 'Engine Bay Clean',
   ];
+  const heroBg = images?.hero?.[0] || 'https://images.unsplash.com/photo-1552519507-da3b142a6f3e?w=1920';
+  const cards  = images?.cards || [];
+  const gc = (i) => cards[i] || images?.hero?.[i + 1] || null;
+
   const paddedServicesList = [...servicesList];
   for (const svc of DEFAULT_AUTO_SERVICES) {
     if (paddedServicesList.length >= 6) break;
@@ -496,7 +500,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "ctaLink": "/contact",
             "ctaText2": "View Our Work",
             "ctaLink2": "/gallery",
-            "backgroundImage": "https://images.unsplash.com/photo-1552519507-da3b142a6f3e?w=1920"
+            "backgroundImage": "${heroBg}"
           }
         },
         {
@@ -541,9 +545,9 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "title": "Our Detailing Packages",
             "subtitle": "Premium services tailored to your vehicle",
             "services": [
-              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
-              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
-              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
+              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "${gc(0) || 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=600'}", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
+              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "${gc(1) || 'https://images.unsplash.com/photo-1502877338535-766e1452684a?w=600'}", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
+              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "${gc(2) || 'https://images.unsplash.com/photo-1616455579100-2ceaa4eb2d37?w=600'}", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
             ]
           }
         },
@@ -591,9 +595,9 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "title": "Our Services",
             "subtitle": "Premium detailing packages for every need",
             "services": [
-              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
-              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
-              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO?w=600", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
+              { "title": "First service from list", "category": "Category", "price": "From $XXX", "image": "${gc(3) || gc(0) || 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=600'}", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": true },
+              { "title": "Second service from list", "category": "Category", "price": "From $XXX", "image": "${gc(4) || gc(1) || 'https://images.unsplash.com/photo-1502877338535-766e1452684a?w=600'}", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false },
+              { "title": "Third service from list", "category": "Category", "price": "From $XXX", "image": "${gc(5) || gc(2) || 'https://images.unsplash.com/photo-1616455579100-2ceaa4eb2d37?w=600'}", "features": ["Feature 1", "Feature 2", "Feature 3"], "recommended": false }
             ]
           }
         },
@@ -679,7 +683,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 
 == RULES ==
 1. Return ONLY the JSON object. No other text.
-2. CRITICAL — every image URL MUST be a real Unsplash photo ID. Format: https://images.unsplash.com/photo-XXXXXXXXXXXXXXXXXX?w=1920 (hero/bg) or ?w=800 (cards) or ?w=600 (service images). You MUST replace every placeholder with a real ID. Real auto-detailing photo IDs to use: photo-1552519507-da3b142a6f3e, photo-1601362840469-51e4d8d58785, photo-1558618666-fcd25c85cd64, photo-1502877338535-766e1452684a, photo-1616455579100-2ceaa4eb2d37, photo-1503376780353-7e6692767b70, photo-1549317661-bd32c8ce0db2, photo-1580273916550-e323be2ae537.
+2. ${images?.hero?.length ? 'Image URLs are already filled in — do NOT change any "backgroundImage" or "image" value. Keep every URL exactly as provided.' : 'CRITICAL — every image URL MUST be a real Unsplash photo ID. Format: https://images.unsplash.com/photo-XXXXXXXXXXXXXXXXXX?w=1920 (hero/bg) or ?w=600 (service images). Real auto-detailing photo IDs to use: photo-1552519507-da3b142a6f3e, photo-1601362840469-51e4d8d58785, photo-1502877338535-766e1452684a, photo-1616455579100-2ceaa4eb2d37, photo-1503376780353-7e6692767b70, photo-1549317661-bd32c8ce0db2, photo-1580273916550-e323be2ae537.'}
 3. Write compelling, specific copy — not generic placeholder text. Tailor everything to this business.
 4. Reviews and testimonials should sound realistic and specific to the services offered.
 5. Include 3-4 services based on what was provided.

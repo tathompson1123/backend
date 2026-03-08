@@ -45,7 +45,7 @@ module.exports = {
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    background: linear-gradient(135deg, ${theme.textColor || '#1b2216'} 0%, #3d4f39 100%);
+    background: linear-gradient(135deg, ${theme.textColor || '#1b2216'} 0%, ${theme.primaryColor || '#3d4f39'} 100%);
   }
   .${s}-bg {
     position: absolute;
@@ -62,7 +62,7 @@ module.exports = {
   .${s}-overlay {
     position: absolute;
     inset: 0;
-    background: linear-gradient(to bottom, rgba(27, 34, 22, 0.2) 0%, rgba(27, 34, 22, 0.55) 100%);
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.45) 100%);
     z-index: 1;
   }
   .${s}-content {

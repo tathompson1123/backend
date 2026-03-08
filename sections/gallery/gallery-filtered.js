@@ -227,6 +227,12 @@ module.exports = {
       grid-auto-rows: 220px;
     }
   }
+  @media (max-width: 768px) {
+    .${s}-item-overlay {
+      opacity: 1;
+      background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 50%);
+    }
+  }
   @media (max-width: 500px) {
     .${s}-grid {
       grid-template-columns: 1fr;

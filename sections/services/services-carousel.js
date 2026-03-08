@@ -134,7 +134,7 @@ module.exports = {
     z-index: 0;
     pointer-events: none;
   }
-  .${s}-card.carousel-center {
+  .${s}-card.${s}-card.carousel-center {
     transform: translate(-50%, -50%) scale(1);
     opacity: 1;
     z-index: 10;
@@ -166,7 +166,7 @@ module.exports = {
     opacity: 0;
     transition: opacity 0.3s;
   }
-  .carousel-center .${s}-badge {
+  .${s}-card.carousel-center .${s}-badge {
     opacity: 1;
   }
   .${s}-card-image {
@@ -250,14 +250,14 @@ module.exports = {
     pointer-events: none;
     transition: background 0.3s, color 0.3s, box-shadow 0.3s;
   }
-  .carousel-center .${s}-cta {
+  .${s}-card.carousel-center .${s}-cta {
     background: ${theme.primaryColor};
     color: #fff;
     border-color: ${theme.primaryColor};
     pointer-events: auto;
     box-shadow: 0 4px 20px ${theme.primaryColor}40;
   }
-  .carousel-center .${s}-cta:hover {
+  .${s}-card.carousel-center .${s}-cta:hover {
     box-shadow: 0 6px 28px ${theme.primaryColor}60;
   }
   .${s}-arrow {
@@ -283,8 +283,8 @@ module.exports = {
     border-color: ${theme.primaryColor};
     color: #fff;
   }
-  .${s}-arrow-left  { left: 0; }
-  .${s}-arrow-right { right: 0; }
+  .${s}-arrow-left  { left: 1rem; }
+  .${s}-arrow-right { right: 1rem; }
   .${s}-dots {
     display: flex;
     justify-content: center;
@@ -313,8 +313,8 @@ module.exports = {
     .${s}-card.carousel-right {
       opacity: 0;
     }
-    .${s}-arrow-left  { left: 4px; }
-    .${s}-arrow-right { right: 4px; }
+    .${s}-arrow-left  { left: 0.5rem; }
+    .${s}-arrow-right { right: 0.5rem; }
   }
 </style>
 <script>

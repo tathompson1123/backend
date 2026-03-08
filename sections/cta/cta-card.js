@@ -96,12 +96,12 @@ module.exports = {
     font-family: '${theme.headingFont || 'Inter'}', sans-serif;
     font-size: clamp(1.8rem, 3.5vw, 2.75rem);
     font-weight: 900;
-    color: ${theme.textColor || '#ffffff'};
+    color: #ffffff;
     line-height: 1.2;
     margin-bottom: 1rem;
   }
   .${s}-subtitle {
-    color: ${theme.textMuted || 'rgba(255,255,255,0.6)'};
+    color: rgba(255,255,255,0.7);
     font-size: 1.05rem;
     line-height: 1.6;
     margin-bottom: 2.25rem;
@@ -137,7 +137,7 @@ module.exports = {
     display: inline-block;
     padding: 0.9rem 2.25rem;
     background: transparent;
-    color: ${theme.textColor || '#ffffff'};
+    color: #ffffff;
     border: 1px solid rgba(255,255,255,0.2);
     border-radius: ${theme.buttonRadius || '50px'};
     font-weight: 600;

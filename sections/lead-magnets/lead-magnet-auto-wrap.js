@@ -15,14 +15,15 @@ module.exports = {
     const accent = theme.accentColor || '#ffe4e6';
     const text = theme.textColor || '#1f2937';
     const bg = theme.bgColor || '#ffffff';
-    const headFont = theme.headFont || 'Inter';
+    const headFont = theme.headingFont || 'Inter';
 
     return `
+<section class="${s}-section" style="background:${bg}; padding: 80px 20px;">
       <style>
         .${s}-container {
           font-family: ${headFont}, sans-serif;
           max-width: 560px;
-          margin: 40px auto;
+          margin: 0 auto;
           background: ${bg};
           border-radius: 20px;
           box-shadow: 0 10px 30px rgba(0,0,0,0.08);
@@ -135,6 +136,24 @@ module.exports = {
           outline: none;
           border-color: ${primary};
           box-shadow: 0 0 0 3px ${accent};
+        }
+        .${s}-consent-label {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          font-size: 12px;
+          color: #6b7280;
+          line-height: 1.4;
+          cursor: pointer;
+          margin-top: 10px;
+        }
+        .${s}-consent-label input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
+          margin-top: 1px;
+          flex-shrink: 0;
+          accent-color: ${primary};
+          cursor: pointer;
         }
         .${s}-fineprint {
           font-size: 12px;
@@ -253,6 +272,7 @@ module.exports = {
                 <label class="${s}-label">Phone Number (Optional)</label>
                 <input type="tel" id="${s}-phone" class="${s}-input" placeholder="(555) 123-4567">
               </div>
+              <label class="${s}-consent-label"><input type="checkbox" id="${s}-sms-consent" required /> I consent to receive text messages about my wrap estimate. Message &amp; data rates may apply. Text STOP to opt out.</label>
               <button type="submit" class="${s}-btn" id="${s}-submit-btn">Get My Estimate</button>
               <p class="${s}-fineprint">No spam. We'll only contact you about your vehicle wrap design.</p>
             </form>
@@ -415,6 +435,7 @@ module.exports = {
           };
         })();
       </script>
+</section>
     `;
   }
 };

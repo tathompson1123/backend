@@ -22,29 +22,30 @@ module.exports = {
     }
   },
 
-  render(content, theme) {
-    const badge = content.badge ? `<div class="hero-grad-badge">${content.badge}</div>` : '';
+  render(content, theme, sectionId = 'hero-gradient') {
+    const s = `section-${sectionId}`;
+    const badge = content.badge ? `<div class="${s}-badge">${content.badge}</div>` : '';
     const features = (content.features || []).map(f =>
-      `<div class="hero-grad-feature">✓ ${f.text}</div>`
+      `<div class="${s}-feature">✓ ${f.text}</div>`
     ).join('\n');
-    const featuresHtml = features ? `<div class="hero-grad-features">${features}</div>` : '';
+    const featuresHtml = features ? `<div class="${s}-features">${features}</div>` : '';
 
     return `
-<section class="hero-gradient">
+<section class="${s}">
   ${badge}
-  <h1>${content.headline || 'Page Title'}</h1>
-  <p>${content.subtitle || ''}</p>
+  <h1 class="${s}-headline">${content.headline || 'Page Title'}</h1>
+  <p class="${s}-subtitle">${content.subtitle || ''}</p>
   ${featuresHtml}
 </section>
 <style>
-  .hero-gradient {
-    background: linear-gradient(135deg, ${theme.primaryColor}, ${theme.accentColor});
+  .${s} {
+    background: linear-gradient(135deg, ${theme.primaryColor}, ${theme.accentColor || theme.primaryColor});
     padding: 6rem 3rem 4rem;
     text-align: center;
     color: #ffffff;
     position: relative;
   }
-  .hero-grad-badge {
+  .${s}-badge {
     display: inline-block;
     background: rgba(255,255,255,0.2);
     padding: 0.5rem 1.5rem;
@@ -55,21 +56,23 @@ module.exports = {
     letter-spacing: 2px;
     margin-bottom: 1.5rem;
   }
-  .hero-gradient h1 {
-    font-family: '${theme.headingFont}', sans-serif;
-    font-size: 4.5rem;
+  .${s}-headline {
+    font-family: '${theme.headingFont || 'Inter'}', sans-serif;
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
     font-weight: 800;
     margin-bottom: 1.5rem;
     text-transform: uppercase;
     letter-spacing: 3px;
+    color: #ffffff;
   }
-  .hero-gradient p {
-    font-size: 1.4rem;
+  .${s}-subtitle {
+    font-size: clamp(1rem, 2vw, 1.4rem);
     max-width: 700px;
     margin: 0 auto 2rem;
     opacity: 0.95;
+    color: rgba(255, 255, 255, 0.95);
   }
-  .hero-grad-features {
+  .${s}-features {
     display: flex;
     gap: 3rem;
     justify-content: center;
@@ -78,14 +81,13 @@ module.exports = {
     font-weight: 600;
     flex-wrap: wrap;
   }
-  .hero-grad-feature { display: flex; align-items: center; gap: 0.5rem; }
+  .${s}-feature { display: flex; align-items: center; gap: 0.5rem; }
 
   @media (max-width: 768px) {
-    .hero-gradient {
-      padding-top: 8rem;
+    .${s} {
+      padding: 8rem 1.5rem 4rem;
     }
-    .hero-gradient h1 { font-size: 3rem; }
-    .hero-grad-features { flex-direction: column; gap: 1rem; }
+    .${s}-features { flex-direction: column; gap: 1rem; }
   }
 </style>`;
   }

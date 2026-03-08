@@ -27,7 +27,7 @@ module.exports = {
     const accent    = theme.accentColor    || '#0EA5E9';
     const text      = theme.textColor      || '#1f2937';
     const bg        = theme.bgColor        || '#ffffff';
-    const headFont  = theme.headFont       || 'Inter';
+    const headFont  = theme.headingFont       || 'Inter';
 
     const headline    = content.headline    || 'Get an Instant Cleaning Quote';
     const subheadline = content.subheadline || 'Answer 4 quick questions and see your price range in seconds.';
@@ -100,6 +100,7 @@ module.exports = {
         <input class="${s}-input" type="text"  name="name"  placeholder="Your Name"  required />
         <input class="${s}-input" type="email" name="email" placeholder="Email Address" required />
         <input class="${s}-input" type="tel"   name="phone" placeholder="Phone Number (optional)" />
+        <label class="${s}-consent"><input type="checkbox" name="sms_consent" required /> I consent to receive text messages about my quote. Message &amp; data rates may apply. Text STOP to opt out.</label>
         <button class="${s}-btn" type="submit">${ctaText}</button>
         <p class="${s}-fine">No spam. We'll only contact you about your quote.</p>
       </form>
@@ -196,8 +197,13 @@ module.exports = {
   font-size: 0.95rem;
   outline: none;
   transition: border 0.2s;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
 }
 .${s}-input:focus { border-color: ${primary}; }
+.${s}-consent { display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.82rem; color: #6b7280; line-height: 1.4; cursor: pointer; }
+.${s}-consent input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; accent-color: ${primary}; cursor: pointer; }
 .${s}-fine { font-size: 0.75rem; color: #9ca3af; text-align: center; margin-top: -8px; }
 .${s}-result-box {
   background: ${primary}14;

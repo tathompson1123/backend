@@ -100,17 +100,30 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       console.error('Error updating user plan:', error.message);
     }
 
-    // Auto-provision Twilio phone number for pro/scale plans
+    // Auto-provision phone number for pro/scale plans
     if (plan === 'pro' || plan === 'scale') {
       try {
         const userRow = await pool.query(
-          'SELECT twilio_phone_number, city, state FROM users WHERE id = $1',
+          'SELECT twilio_phone_number, telnyx_phone_number, city, state FROM users WHERE id = $1',
           [userId]
         );
         const userData = userRow.rows[0];
-        if (!userData?.twilio_phone_number) {
+
+        // ── Telnyx provisioning (preferred when configured) ──────────────
+        if (process.env.TELNYX_API_KEY && process.env.TELNYX_MESSAGING_PROFILE_ID) {
+          if (!userData?.telnyx_phone_number) {
+            const { purchasePhoneNumberTelnyx, getAreaCode } = require('../utils/telnyx');
+            const areaCode = getAreaCode(userData?.state, userData?.city);
+            const result = await purchasePhoneNumberTelnyx(areaCode);
+            await pool.query(
+              'UPDATE users SET telnyx_phone_number = $1, telnyx_order_id = $2 WHERE id = $3',
+              [result.phoneNumber, result.orderId, userId]
+            );
+            console.log(`✅ Auto-provisioned Telnyx number ${result.phoneNumber} for user ${userId} (${plan} plan, area ${areaCode})`);
+          }
+        } else if (!userData?.twilio_phone_number) {
+          // ── Twilio fallback ───────────────────────────────────────────
           const { purchasePhoneNumber } = require('../utils/twilio');
-          // Use area code based on city/state if possible, default to 800
           const result = await purchasePhoneNumber('800', userId);
           await pool.query(
             'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2 WHERE id = $3',
@@ -118,9 +131,9 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
           );
           console.log(`✅ Auto-provisioned Twilio number ${result.phoneNumber} for user ${userId} (${plan} plan)`);
         }
-      } catch (twilioError) {
+      } catch (provisionError) {
         // Non-fatal — user can provision manually
-        console.error(`⚠️ Could not auto-provision Twilio for user ${userId}:`, twilioError.message);
+        console.error(`⚠️ Could not auto-provision phone for user ${userId}:`, provisionError.message);
       }
     }
   }

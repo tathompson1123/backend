@@ -65,10 +65,10 @@ module.exports = {
     background: transparent;
   }
   .${s}.scrolled {
-    background: rgba(250, 248, 245, 0.95);
+    background: ${theme.bgColor ? theme.bgColor + 'f2' : 'rgba(250, 248, 245, 0.95)'};
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 1px 12px rgba(27, 34, 22, 0.08);
+    box-shadow: 0 1px 12px rgba(0, 0, 0, 0.08);
     padding: 0.75rem 0;
   }
   .${s}-inner {
@@ -159,7 +159,7 @@ module.exports = {
       top: 100%;
       left: 0;
       right: 0;
-      background: rgba(250, 248, 245, 0.97);
+      background: ${theme.bgColor ? theme.bgColor + 'fa' : 'rgba(250, 248, 245, 0.97)'};
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       flex-direction: column;

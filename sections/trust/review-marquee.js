@@ -75,9 +75,6 @@ module.exports = {
     margin: -2.5rem 0;
     position: relative;
     z-index: 5;
-    /* Fade edges so cards softly disappear rather than hard-cut */
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
   }
   .${s}-track-wrap {
     overflow: hidden;

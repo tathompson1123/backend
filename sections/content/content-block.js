@@ -8,8 +8,8 @@ module.exports = {
   name: 'Content Block',
   category: 'content',
 
-  render: (content = {}, theme, sectionId) => {
-    const s = sectionId;
+  render: (content = {}, theme, sectionId = 'content') => {
+    const s = `section-${sectionId}`;
     const {
       heading = '',
       text = '',

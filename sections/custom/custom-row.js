@@ -9,8 +9,8 @@ module.exports = {
   name: 'Custom Row',
   category: 'custom',
 
-  render: (content = {}, theme, sectionId) => {
-    const s = sectionId;
+  render: (content = {}, theme, sectionId = 'custom') => {
+    const s = `section-${sectionId}`;
     const {
       layout = '2col',
       columns = [],
