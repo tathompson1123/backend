@@ -377,9 +377,8 @@ async function purchaseDomain(domain, userInfo) {
  */
 async function updateNameservers(domain) {
   try {
-    if (!DYNADOT_API_KEY) {
-      console.warn('⚠️  Skipping nameserver update - API key not configured');
-      return;
+    if (!DYNADOT_API_KEY || !DYNADOT_SECRET_KEY) {
+      throw new Error('DYNADOT_API_KEY and DYNADOT_SECRET_KEY are required to update nameservers');
     }
 
     const params = {
