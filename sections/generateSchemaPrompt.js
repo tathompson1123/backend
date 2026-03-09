@@ -436,6 +436,18 @@ function buildAutoDetailingMultiPagePrompt({ businessInfo, businessName, phone, 
   const cards  = images?.cards || [];
   const gc = (i) => cards[i] || images?.hero?.[i + 1] || null;
 
+  // Auto-detailing fallback Unsplash IDs (verified car photos, no cleaning images)
+  const AUTO_GALLERY_FALLBACKS = [
+    'photo-1552519507-da3b142a6f3e',
+    'photo-1601362840469-51e4d8d58785',
+    'photo-1502877338535-766e1452684a',
+    'photo-1616455579100-2ceaa4eb2d37',
+    'photo-1549317661-bd32c8ce0db2',
+    'photo-1580273916550-e323be2ae537',
+  ];
+  // Gallery images: use Pexels cards[6-11], fall back to known auto-detailing Unsplash IDs
+  const gg = (i) => cards[6 + i] || `https://images.unsplash.com/${AUTO_GALLERY_FALLBACKS[i % AUTO_GALLERY_FALLBACKS.length]}?w=800`;
+
   const paddedServicesList = [...servicesList];
   for (const svc of DEFAULT_AUTO_SERVICES) {
     if (paddedServicesList.length >= 6) break;
@@ -641,12 +653,12 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "highlight": "Work",
             "categories": ["All", "Full Detail", "Ceramic Coating", "Paint Correction", "Interior"],
             "items": [
-              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-1?w=800", "title": "Project description 1", "category": "Full Detail" },
-              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-2?w=800", "title": "Project description 2", "category": "Ceramic Coating" },
-              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-3?w=800", "title": "Project description 3", "category": "Paint Correction" },
-              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-4?w=800", "title": "Project description 4", "category": "Interior" },
-              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-5?w=800", "title": "Project description 5", "category": "Full Detail" },
-              { "url": "https://images.unsplash.com/RELEVANT-AUTO-PHOTO-6?w=800", "title": "Project description 6", "category": "Ceramic Coating" }
+              { "url": "${gg(0)}", "title": "Project description 1", "category": "Full Detail" },
+              { "url": "${gg(1)}", "title": "Project description 2", "category": "Ceramic Coating" },
+              { "url": "${gg(2)}", "title": "Project description 3", "category": "Paint Correction" },
+              { "url": "${gg(3)}", "title": "Project description 4", "category": "Interior" },
+              { "url": "${gg(4)}", "title": "Project description 5", "category": "Full Detail" },
+              { "url": "${gg(5)}", "title": "Project description 6", "category": "Ceramic Coating" }
             ]
           }
         }
@@ -683,7 +695,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 
 == RULES ==
 1. Return ONLY the JSON object. No other text.
-2. ${images?.hero?.length ? 'Image URLs are already filled in — do NOT change any "backgroundImage" or "image" value. Keep every URL exactly as provided.' : 'CRITICAL — every image URL MUST be a real Unsplash photo ID. Format: https://images.unsplash.com/photo-XXXXXXXXXXXXXXXXXX?w=1920 (hero/bg) or ?w=600 (service images). Real auto-detailing photo IDs to use: photo-1552519507-da3b142a6f3e, photo-1601362840469-51e4d8d58785, photo-1502877338535-766e1452684a, photo-1616455579100-2ceaa4eb2d37, photo-1503376780353-7e6692767b70, photo-1549317661-bd32c8ce0db2, photo-1580273916550-e323be2ae537.'}
+2. All image URLs ("backgroundImage", "image", "url") are pre-filled with verified car/auto photos — do NOT modify any URL field. Keep every URL exactly as-is. Only write the text fields (titles, descriptions, categories, quotes, etc.).
 3. Write compelling, specific copy — not generic placeholder text. Tailor everything to this business.
 4. Reviews and testimonials should sound realistic and specific to the services offered.
 5. Include 3-4 services based on what was provided.
