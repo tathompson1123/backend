@@ -16,9 +16,21 @@ module.exports = {
   },
 
   contentSchema: {
-    headline:    { type: 'text', label: 'Headline',    default: 'Find Your Perfect Package' },
-    subheadline: { type: 'text', label: 'Subheadline', default: 'Answer 4 quick questions and discover which package fits your vision.' },
-    ctaText:     { type: 'text', label: 'CTA Button',  default: 'Find My Package' },
+    headline:       { type: 'text', label: 'Headline',              default: 'Find Your Perfect Package' },
+    subheadline:    { type: 'text', label: 'Subheadline',           default: 'Answer 4 quick questions and discover which package fits your vision.' },
+    ctaText:        { type: 'text', label: 'CTA Button',            default: 'Find My Package' },
+    contactTitle:   { type: 'text', label: 'Contact Step Title',    default: 'Almost done!' },
+    contactSubtitle:{ type: 'text', label: 'Contact Step Subtitle', default: 'Where should we send your package recommendation?' },
+    steps: {
+      type: 'steps',
+      label: 'Quiz Steps',
+      default: [
+        { question: 'What type of session are you looking for?', choices: ['Wedding', 'Portraits / Headshots', 'Family Session', 'Commercial / Branding'] },
+        { question: 'Where would you like to shoot?', choices: ['Studio', 'Outdoor / Park', 'Your Home / Office', 'Venue / Event Space'] },
+        { question: 'How long do you need coverage?', choices: ['Under 2 Hours', 'Half Day (4 hrs)', 'Full Day (8 hrs)', 'Multi-Day'] },
+        { question: 'When is your session?', choices: ['This Month', '1–3 Months Out', '3–6 Months Out', '6+ Months Out'] },
+      ]
+    }
   },
 
   render(content, theme, sectionId = 'lm-photography') {
@@ -29,9 +41,34 @@ module.exports = {
     const bg        = theme.bgColor        || '#fafaf9';
     const headFont  = theme.headingFont       || 'Playfair Display';
 
-    const headline    = content.headline    || 'Find Your Perfect Package';
-    const subheadline = content.subheadline || 'Answer 4 quick questions and discover which package fits your vision.';
-    const ctaText     = content.ctaText     || 'Find My Package';
+    const headline      = content.headline      || 'Find Your Perfect Package';
+    const subheadline   = content.subheadline   || 'Answer 4 quick questions and discover which package fits your vision.';
+    const ctaText       = content.ctaText       || 'Find My Package';
+    const contactTitle  = content.contactTitle  || 'Almost done!';
+    const contactSub    = content.contactSubtitle || 'Where should we send your package recommendation?';
+
+    const defaultSteps = [
+      { question: 'What type of session are you looking for?', choices: ['Wedding', 'Portraits / Headshots', 'Family Session', 'Commercial / Branding'] },
+      { question: 'Where would you like to shoot?', choices: ['Studio', 'Outdoor / Park', 'Your Home / Office', 'Venue / Event Space'] },
+      { question: 'How long do you need coverage?', choices: ['Under 2 Hours', 'Half Day (4 hrs)', 'Full Day (8 hrs)', 'Multi-Day'] },
+      { question: 'When is your session?', choices: ['This Month', '1–3 Months Out', '3–6 Months Out', '6+ Months Out'] },
+    ];
+    const steps = (content.steps && content.steps.length > 0) ? content.steps : defaultSteps;
+    const totalSteps = steps.length + 1;
+
+    const stepsHtml = steps.map((step, i) => {
+      const choicesHtml = (step.choices || []).map(choice =>
+        `<div class="${s}-choice" onclick="${s}Pick(this,'ans${i}',${JSON.stringify(choice)})">${choice}</div>`
+      ).join('\n        ');
+      return `
+    <!-- Step ${i + 1} -->
+    <div class="${s}-step" data-step="${i + 1}">
+      <p class="${s}-q">${step.question}</p>
+      <div class="${s}-choices">
+        ${choicesHtml}
+      </div>
+    </div>`;
+    }).join('\n');
 
     return `
 <section class="${s}">
@@ -48,54 +85,12 @@ module.exports = {
       <button class="${s}-btn" onclick="${s}Next()">Find My Package →</button>
     </div>
 
-    <!-- Step 1: Session type -->
-    <div class="${s}-step" data-step="1">
-      <p class="${s}-q">What type of session are you looking for?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Wedding')">💍 Wedding</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Portrait')">🧑‍🎨 Portraits / Headshots</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Family')">👨‍👩‍👧 Family Session</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Commercial')">🏢 Commercial / Branding</div>
-      </div>
-    </div>
+    ${stepsHtml}
 
-    <!-- Step 2: Location -->
-    <div class="${s}-step" data-step="2">
-      <p class="${s}-q">Where would you like to shoot?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'location','Studio')">🎬 Studio</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'location','Outdoor')">🌿 Outdoor / Park</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'location','Your Location')">🏠 Your Home / Office</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'location','Venue')">🏛 Venue / Event Space</div>
-      </div>
-    </div>
-
-    <!-- Step 3: Coverage -->
-    <div class="${s}-step" data-step="3">
-      <p class="${s}-q">How long do you need coverage?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'coverage','Under 2 Hours')">⏱ Under 2 Hours</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'coverage','Half Day')">☀️ Half Day (4 hrs)</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'coverage','Full Day')">🌅 Full Day (8 hrs)</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'coverage','Multi-Day')">📆 Multi-Day</div>
-      </div>
-    </div>
-
-    <!-- Step 4: Timeline -->
-    <div class="${s}-step" data-step="4">
-      <p class="${s}-q">When is your session?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'when','This Month')">⚡ This Month</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'when','1–3 Months')">📅 1–3 Months Out</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'when','3–6 Months')">🗓 3–6 Months Out</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'when','6+ Months')">💭 6+ Months Out</div>
-      </div>
-    </div>
-
-    <!-- Step 5: Contact -->
-    <div class="${s}-step" data-step="5">
+    <!-- Contact Step -->
+    <div class="${s}-step" data-step="${totalSteps}">
       <div class="${s}-icon">📋</div>
-      <p class="${s}-q">Where should we send your package recommendation?</p>
+      <p class="${s}-q">${contactSub}</p>
       <form class="${s}-form" onsubmit="${s}Submit(event)">
         <input class="${s}-input" type="text"  name="name"  placeholder="Your Name"  required />
         <input class="${s}-input" type="email" name="email" placeholder="Email Address" required />
@@ -118,7 +113,7 @@ module.exports = {
     <div class="${s}-step" data-step="error">
       <div class="${s}-icon">⚠️</div>
       <p class="${s}-q">Something went wrong. Please try again.</p>
-      <button class="${s}-btn" onclick="${s}GoTo(5)">Try Again</button>
+      <button class="${s}-btn" onclick="${s}GoTo(TOTAL_STEPS)">Try Again</button>
     </div>
 
   </div>
@@ -223,7 +218,7 @@ module.exports = {
 <script>
 (function() {
   var _state = { step: 0, answers: {} };
-  var TOTAL_STEPS = 5;
+  var TOTAL_STEPS = ${totalSteps};
 
   var ESTIMATE_MAP = {
     'Wedding': {
@@ -276,11 +271,9 @@ module.exports = {
     var userId = window.__SORCE_USER_ID__;
     if (!userId) { window.${s}GoTo('error'); return; }
 
-    var estimate = (ESTIMATE_MAP[_state.answers.type] || {})[_state.answers.coverage] || 'Custom package';
-    var message = 'Session: ' + (_state.answers.type || '') +
-                  ' | Location: ' + (_state.answers.location || '') +
-                  ' | Coverage: ' + (_state.answers.coverage || '') +
-                  ' | When: ' + (_state.answers.when || '');
+    var estimate = (ESTIMATE_MAP[_state.answers.ans0] || {})[_state.answers.ans2] || 'Custom package';
+    var answerParts = Object.keys(_state.answers).map(function(k) { return _state.answers[k]; });
+    var message = answerParts.join(' | ');
 
     fetch('/api/leads/public/' + userId, {
       method: 'POST',
@@ -289,7 +282,7 @@ module.exports = {
         name: name,
         email: email,
         phone: phone,
-        service: _state.answers.type || 'Photography',
+        service: _state.answers.ans0 || 'Photography',
         message: message,
         sms_consent: true
       })
@@ -297,8 +290,8 @@ module.exports = {
     .then(function(r) {
       var box = document.getElementById('${s}-result-text');
       if (box) {
-        box.innerHTML = 'Recommended package for a <strong>' + (_state.answers.coverage || '') +
-          '</strong> <strong>' + (_state.answers.type || 'session') + '</strong>:<br><br>' +
+        box.innerHTML = 'Recommended package for a <strong>' + (_state.answers.ans2 || '') +
+          '</strong> <strong>' + (_state.answers.ans0 || 'session') + '</strong>:<br><br>' +
           '<span style="font-size:1.4rem">' + estimate + '</span>';
       }
       window.${s}GoTo('result');

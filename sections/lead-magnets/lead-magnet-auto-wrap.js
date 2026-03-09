@@ -8,6 +8,18 @@ module.exports = {
     headline: { type: 'text', label: 'Headline', default: 'Design Your Custom Vehicle Wrap' },
     subheadline: { type: 'text', label: 'Subheadline', default: 'Answer 4 quick questions to get a personalized wrap estimate.' },
     ctaText: { type: 'text', label: 'CTA Button', default: 'Start My Design' },
+    contactTitle: { type: 'text', label: 'Contact Step Title', default: 'Almost done!' },
+    contactSubtitle: { type: 'text', label: 'Contact Step Subtitle', default: 'Where should we send your personalized estimate?' },
+    steps: {
+      type: 'steps',
+      label: 'Quiz Steps',
+      default: [
+        { question: 'What type of vehicle are you wrapping?', choices: ['Coupe / Sedan', 'SUV / Crossover', 'Truck', 'Van / Commercial'] },
+        { question: 'How much of the vehicle are we wrapping?', choices: ['Full Wrap', 'Partial Wrap', 'Roof / Hood Only', 'Chrome Delete / Accents'] },
+        { question: 'What kind of finish are you looking for?', choices: ['Gloss / Satin', 'Matte', 'Chrome / Reflective', 'Color Shift'] },
+        { question: 'When do you want this done?', choices: ['ASAP', 'Within 1 month', '1-3 months', 'Just exploring'] },
+      ]
+    }
   },
   render(content, theme, sectionId = 'lm-auto-wrap') {
     const s = `section-${sectionId}`;
@@ -16,6 +28,33 @@ module.exports = {
     const text = theme.textColor || '#1f2937';
     const bg = theme.bgColor || '#ffffff';
     const headFont = theme.headingFont || 'Inter';
+
+    const defaultSteps = [
+      { question: 'What type of vehicle are you wrapping?', choices: ['Coupe / Sedan', 'SUV / Crossover', 'Truck', 'Van / Commercial'] },
+      { question: 'How much of the vehicle are we wrapping?', choices: ['Full Wrap', 'Partial Wrap', 'Roof / Hood Only', 'Chrome Delete / Accents'] },
+      { question: 'What kind of finish are you looking for?', choices: ['Gloss / Satin', 'Matte', 'Chrome / Reflective', 'Color Shift'] },
+      { question: 'When do you want this done?', choices: ['ASAP', 'Within 1 month', '1-3 months', 'Just exploring'] },
+    ];
+    const steps = (content.steps && content.steps.length > 0) ? content.steps : defaultSteps;
+    const contactTitle = content.contactTitle || 'Almost done!';
+    const contactSubtitle = content.contactSubtitle || 'Where should we send your personalized estimate?';
+
+    const stepsHtml = steps.map((step, i) => {
+      const answerKey = `ans${i}`;
+      const choicesHtml = (step.choices || []).map(choice =>
+        `<div class="${s}-choice" onclick="window['${s}Pick'](this, '${answerKey}', ${JSON.stringify(choice)})">${choice}</div>`
+      ).join('\n              ');
+      return `
+          <!-- Step ${i + 1} -->
+          <div class="${s}-step" data-step="${i + 1}">
+            <p class="${s}-q">${step.question}</p>
+            <div class="${s}-grid">
+              ${choicesHtml}
+            </div>
+          </div>`;
+    }).join('\n');
+
+    const totalSteps = steps.length + 1; // +1 for contact step
 
     return `
 <section class="${s}-section" style="background:${bg}; padding: 80px 20px;">
@@ -211,54 +250,12 @@ module.exports = {
             <button class="${s}-btn" onclick="window['${s}GoTo'](1)">${content.ctaText || 'Start My Design'}</button>
           </div>
 
-          <!-- Step 1: Vehicle Type -->
-          <div class="${s}-step" data-step="1">
-            <p class="${s}-q">What type of vehicle are you wrapping?</p>
-            <div class="${s}-grid">
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'vehicle', 'Coupe / Sedan')">Coupe / Sedan</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'vehicle', 'SUV / Crossover')">SUV / Crossover</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'vehicle', 'Truck')">Truck</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'vehicle', 'Van / Commercial')">Van / Commercial</div>
-            </div>
-          </div>
+          ${stepsHtml}
 
-          <!-- Step 2: Wrap Style -->
-          <div class="${s}-step" data-step="2">
-            <p class="${s}-q">How much of the vehicle are we wrapping?</p>
-            <div class="${s}-grid">
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'style', 'Full Wrap')">Full Wrap</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'style', 'Partial Wrap')">Partial Wrap</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'style', 'Roof / Hood Only')">Roof / Hood Only</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'style', 'Chrome Delete / Accents')">Chrome Delete / Accents</div>
-            </div>
-          </div>
-
-          <!-- Step 3: Finish -->
-          <div class="${s}-step" data-step="3">
-            <p class="${s}-q">What kind of finish are you looking for?</p>
-            <div class="${s}-grid">
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'finish', 'Gloss / Satin')">Gloss / Satin</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'finish', 'Matte')">Matte</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'finish', 'Chrome / Reflective')">Chrome / Reflective</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'finish', 'Color Shift')">Color Shift</div>
-            </div>
-          </div>
-
-          <!-- Step 4: Timeline -->
-          <div class="${s}-step" data-step="4">
-            <p class="${s}-q">When do you want this done?</p>
-            <div class="${s}-grid">
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'timeline', 'ASAP')">ASAP</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'timeline', 'Within 1 month')">Within 1 month</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'timeline', '1-3 months')">1-3 months</div>
-              <div class="${s}-choice" onclick="window['${s}Pick'](this, 'timeline', 'Just exploring')">Just exploring</div>
-            </div>
-          </div>
-
-          <!-- Step 5: Contact -->
-          <div class="${s}-step" data-step="5">
-            <h2 class="${s}-title">Almost done!</h2>
-            <p class="${s}-subtitle">Where should we send your personalized estimate?</p>
+          <!-- Contact Step -->
+          <div class="${s}-step" data-step="${totalSteps}">
+            <h2 class="${s}-title">${contactTitle}</h2>
+            <p class="${s}-subtitle">${contactSubtitle}</p>
             <form onsubmit="window['${s}Submit'](event)">
               <div class="${s}-form-group">
                 <label class="${s}-label">Full Name</label>
@@ -295,7 +292,7 @@ module.exports = {
               <h3 style="margin-top:0; font-size:18px;">Oops, something went wrong.</h3>
               <p style="font-size:14px; margin-bottom:0;">We couldn't submit your request. Please try again.</p>
             </div>
-            <button class="${s}-btn" onclick="window['${s}GoTo'](5)">Try Again</button>
+            <button class="${s}-btn" onclick="window['${s}GoTo'](${totalSteps})">Try Again</button>
           </div>
 
         </div>
@@ -356,7 +353,7 @@ module.exports = {
             if (fill) {
               var percent = 0;
               if (typeof step === 'number') {
-                percent = (step / 5) * 100;
+                percent = (step / ${totalSteps}) * 100;
               } else if (step === 'result') {
                 percent = 100;
               }
@@ -389,10 +386,10 @@ module.exports = {
             var userId = window.__SORCE_USER_ID__;
             if (!userId) { window['${s}GoTo']('error'); return; }
 
-            var vehicle = state.answers.vehicle || 'Coupe / Sedan';
-            var style = state.answers.style || 'Full Wrap';
-            var finish = state.answers.finish || 'Gloss / Satin';
-            var timeline = state.answers.timeline || 'ASAP';
+            var vehicle = state.answers.ans0 || 'Coupe / Sedan';
+            var style = state.answers.ans1 || 'Full Wrap';
+            var finish = state.answers.ans2 || 'Gloss / Satin';
+            var timeline = state.answers.ans3 || 'ASAP';
 
             var basePrice = ESTIMATE_MAP[vehicle] && ESTIMATE_MAP[vehicle][style] ? ESTIMATE_MAP[vehicle][style] : 'Custom Quote';
             var finalPrice = basePrice;
@@ -407,7 +404,8 @@ module.exports = {
               }
             }
 
-            var message = 'Vehicle: ' + vehicle + ' | Wrap Style: ' + style + ' | Finish: ' + finish + ' | Timeline: ' + timeline + ' | Estimated Price: ' + finalPrice;
+            var answerParts = Object.keys(state.answers).map(function(k) { return state.answers[k]; });
+            var message = answerParts.join(' | ') + ' | Estimated Price: ' + finalPrice;
 
             fetch('/api/leads/public/' + userId, {
               method: 'POST',

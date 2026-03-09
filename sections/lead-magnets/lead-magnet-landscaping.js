@@ -16,9 +16,21 @@ module.exports = {
   },
 
   contentSchema: {
-    headline:    { type: 'text', label: 'Headline',    default: 'Get Your Free Landscape Estimate' },
-    subheadline: { type: 'text', label: 'Subheadline', default: 'Answer 4 quick questions and we\'ll send you a personalized estimate in seconds.' },
-    ctaText:     { type: 'text', label: 'CTA Button',  default: 'Get My Free Estimate' },
+    headline:       { type: 'text', label: 'Headline',              default: 'Get Your Free Landscape Estimate' },
+    subheadline:    { type: 'text', label: 'Subheadline',           default: 'Answer 4 quick questions and we\'ll send you a personalized estimate in seconds.' },
+    ctaText:        { type: 'text', label: 'CTA Button',            default: 'Get My Free Estimate' },
+    contactTitle:   { type: 'text', label: 'Contact Step Title',    default: 'Almost done!' },
+    contactSubtitle:{ type: 'text', label: 'Contact Step Subtitle', default: 'Where should we send your estimate?' },
+    steps: {
+      type: 'steps',
+      label: 'Quiz Steps',
+      default: [
+        { question: 'What type of project are you looking for?', choices: ['Lawn Maintenance', 'Garden Design', 'Hardscaping / Patio', 'Full Landscape Renovation'] },
+        { question: 'How large is the area being worked on?', choices: ['Small (under ¼ acre)', 'Medium (¼ – ½ acre)', 'Large (½ – 1 acre)', 'Estate (1+ acre)'] },
+        { question: 'When are you looking to get started?', choices: ['ASAP', 'Within 1 Month', '1–3 Months', 'Just Planning'] },
+        { question: 'What is your approximate budget?', choices: ['Under $1,000', '$1,000 – $5,000', '$5,000 – $15,000', '$15,000+'] },
+      ]
+    }
   },
 
   render(content, theme, sectionId = 'lm-landscaping') {
@@ -29,9 +41,34 @@ module.exports = {
     const bg        = theme.bgColor        || '#ffffff';
     const headFont  = theme.headingFont       || 'Inter';
 
-    const headline    = content.headline    || 'Get Your Free Landscape Estimate';
-    const subheadline = content.subheadline || 'Answer 4 quick questions and we\'ll send you a personalized estimate in seconds.';
-    const ctaText     = content.ctaText     || 'Get My Free Estimate';
+    const headline      = content.headline      || 'Get Your Free Landscape Estimate';
+    const subheadline   = content.subheadline   || 'Answer 4 quick questions and we\'ll send you a personalized estimate in seconds.';
+    const ctaText       = content.ctaText       || 'Get My Free Estimate';
+    const contactTitle  = content.contactTitle  || 'Almost done!';
+    const contactSub    = content.contactSubtitle || 'Where should we send your estimate?';
+
+    const defaultSteps = [
+      { question: 'What type of project are you looking for?', choices: ['Lawn Maintenance', 'Garden Design', 'Hardscaping / Patio', 'Full Landscape Renovation'] },
+      { question: 'How large is the area being worked on?', choices: ['Small (under ¼ acre)', 'Medium (¼ – ½ acre)', 'Large (½ – 1 acre)', 'Estate (1+ acre)'] },
+      { question: 'When are you looking to get started?', choices: ['ASAP', 'Within 1 Month', '1–3 Months', 'Just Planning'] },
+      { question: 'What is your approximate budget?', choices: ['Under $1,000', '$1,000 – $5,000', '$5,000 – $15,000', '$15,000+'] },
+    ];
+    const steps = (content.steps && content.steps.length > 0) ? content.steps : defaultSteps;
+    const totalSteps = steps.length + 1;
+
+    const stepsHtml = steps.map((step, i) => {
+      const choicesHtml = (step.choices || []).map(choice =>
+        `<div class="${s}-choice" onclick="${s}Pick(this,'ans${i}',${JSON.stringify(choice)})">${choice}</div>`
+      ).join('\n        ');
+      return `
+    <!-- Step ${i + 1} -->
+    <div class="${s}-step" data-step="${i + 1}">
+      <p class="${s}-q">${step.question}</p>
+      <div class="${s}-choices">
+        ${choicesHtml}
+      </div>
+    </div>`;
+    }).join('\n');
 
     return `
 <section class="${s}">
@@ -48,54 +85,12 @@ module.exports = {
       <button class="${s}-btn" onclick="${s}Next()">Start Free Estimate →</button>
     </div>
 
-    <!-- Step 1: Project type -->
-    <div class="${s}-step" data-step="1">
-      <p class="${s}-q">What type of project are you looking for?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Lawn Maintenance')">🌱 Lawn Maintenance</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Garden Design')">🌸 Garden Design</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Hardscaping')">🪨 Hardscaping / Patio</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Full Landscape Renovation')">🏡 Full Landscape Renovation</div>
-      </div>
-    </div>
+    ${stepsHtml}
 
-    <!-- Step 2: Property size -->
-    <div class="${s}-step" data-step="2">
-      <p class="${s}-q">How large is the area being worked on?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'size','Small (under ¼ acre)')">🏠 Small (under ¼ acre)</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'size','Medium (¼ – ½ acre)')">🏡 Medium (¼–½ acre)</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'size','Large (½ – 1 acre)')">🌳 Large (½–1 acre)</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'size','Estate (1+ acre)')">🏰 Estate (1+ acre)</div>
-      </div>
-    </div>
-
-    <!-- Step 3: Timeline -->
-    <div class="${s}-step" data-step="3">
-      <p class="${s}-q">When are you looking to get started?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','ASAP')">⚡ ASAP</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','Within 1 Month')">📅 Within 1 Month</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','1–3 Months')">🗓 1–3 Months</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','Just Planning')">💭 Just Planning</div>
-      </div>
-    </div>
-
-    <!-- Step 4: Budget -->
-    <div class="${s}-step" data-step="4">
-      <p class="${s}-q">What is your approximate budget?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'budget','Under $1,000')">💵 Under $1,000</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'budget','$1,000 – $5,000')">💰 $1,000–$5,000</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'budget','$5,000 – $15,000')">💎 $5,000–$15,000</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'budget','$15,000+')">🏆 $15,000+</div>
-      </div>
-    </div>
-
-    <!-- Step 5: Contact -->
-    <div class="${s}-step" data-step="5">
+    <!-- Contact Step -->
+    <div class="${s}-step" data-step="${totalSteps}">
       <div class="${s}-icon">📋</div>
-      <p class="${s}-q">Where should we send your estimate?</p>
+      <p class="${s}-q">${contactSub}</p>
       <form class="${s}-form" onsubmit="${s}Submit(event)">
         <input class="${s}-input" type="text"  name="name"  placeholder="Your Name"  required />
         <input class="${s}-input" type="email" name="email" placeholder="Email Address" required />
@@ -118,7 +113,7 @@ module.exports = {
     <div class="${s}-step" data-step="error">
       <div class="${s}-icon">⚠️</div>
       <p class="${s}-q">Something went wrong. Please try again.</p>
-      <button class="${s}-btn" onclick="${s}GoTo(5)">Try Again</button>
+      <button class="${s}-btn" onclick="${s}GoTo(TOTAL_STEPS)">Try Again</button>
     </div>
 
   </div>
@@ -225,7 +220,7 @@ module.exports = {
 <script>
 (function() {
   var _state = { step: 0, answers: {} };
-  var TOTAL_STEPS = 5;
+  var TOTAL_STEPS = ${totalSteps};
 
   var ESTIMATE_MAP = {
     'Lawn Maintenance':          { 'Small (under ¼ acre)': '$75–$150/visit',   'Medium (¼ – ½ acre)': '$120–$250/visit', 'Large (½ – 1 acre)': '$200–$400/visit',  'Estate (1+ acre)': '$350–$700/visit' },
@@ -266,11 +261,9 @@ module.exports = {
     var userId = window.__SORCE_USER_ID__;
     if (!userId) { window.${s}GoTo('error'); return; }
 
-    var estimate = (ESTIMATE_MAP[_state.answers.type] || {})[_state.answers.size] || 'Custom estimate';
-    var message = 'Project: ' + (_state.answers.type || '') +
-                  ' | Size: ' + (_state.answers.size || '') +
-                  ' | Timeline: ' + (_state.answers.timeline || '') +
-                  ' | Budget: ' + (_state.answers.budget || '');
+    var estimate = (ESTIMATE_MAP[_state.answers.ans0] || {})[_state.answers.ans1] || 'Custom estimate';
+    var answerParts = Object.keys(_state.answers).map(function(k) { return _state.answers[k]; });
+    var message = answerParts.join(' | ');
 
     fetch('/api/leads/public/' + userId, {
       method: 'POST',
@@ -279,7 +272,7 @@ module.exports = {
         name: name,
         email: email,
         phone: phone,
-        service: _state.answers.type || 'Landscaping',
+        service: _state.answers.ans0 || 'Landscaping',
         message: message,
         sms_consent: true
       })
@@ -287,8 +280,8 @@ module.exports = {
     .then(function(r) {
       var box = document.getElementById('${s}-result-text');
       if (box) {
-        box.innerHTML = 'Estimated range for your <strong>' + (_state.answers.type || 'project') +
-          '</strong> on a <strong>' + (_state.answers.size || '') + '</strong> property:<br><br>' +
+        box.innerHTML = 'Estimated range for your <strong>' + (_state.answers.ans0 || 'project') +
+          '</strong> on a <strong>' + (_state.answers.ans1 || '') + '</strong> property:<br><br>' +
           '<span style="font-size:1.4rem">' + estimate + '</span>';
       }
       window.${s}GoTo('result');

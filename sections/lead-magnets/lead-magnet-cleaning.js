@@ -16,9 +16,21 @@ module.exports = {
   },
 
   contentSchema: {
-    headline:    { type: 'text', label: 'Headline',    default: 'Get an Instant Cleaning Quote' },
-    subheadline: { type: 'text', label: 'Subheadline', default: 'Answer 4 quick questions and see your price range in seconds.' },
-    ctaText:     { type: 'text', label: 'CTA Button',  default: 'Get My Free Quote' },
+    headline:       { type: 'text', label: 'Headline',              default: 'Get an Instant Cleaning Quote' },
+    subheadline:    { type: 'text', label: 'Subheadline',           default: 'Answer 4 quick questions and see your price range in seconds.' },
+    ctaText:        { type: 'text', label: 'CTA Button',            default: 'Get My Free Quote' },
+    contactTitle:   { type: 'text', label: 'Contact Step Title',    default: 'Almost done!' },
+    contactSubtitle:{ type: 'text', label: 'Contact Step Subtitle', default: 'Where should we send your quote?' },
+    steps: {
+      type: 'steps',
+      label: 'Quiz Steps',
+      default: [
+        { question: 'What type of cleaning do you need?', choices: ['Carpet Cleaning', 'House Cleaning', 'Deep Clean', 'Commercial / Office'] },
+        { question: 'How large is the space?', choices: ['Studio / 1BR', '2–3 Bedrooms', '4–5 Bedrooms', 'Commercial Space'] },
+        { question: 'How often would you like service?', choices: ['One-Time', 'Weekly', 'Bi-Weekly', 'Monthly'] },
+        { question: 'When do you need it done?', choices: ['ASAP', 'This Week', 'This Month', 'Just Exploring'] },
+      ]
+    }
   },
 
   render(content, theme, sectionId = 'lm-cleaning') {
@@ -29,9 +41,34 @@ module.exports = {
     const bg        = theme.bgColor        || '#ffffff';
     const headFont  = theme.headingFont       || 'Inter';
 
-    const headline    = content.headline    || 'Get an Instant Cleaning Quote';
-    const subheadline = content.subheadline || 'Answer 4 quick questions and see your price range in seconds.';
-    const ctaText     = content.ctaText     || 'Get My Free Quote';
+    const headline      = content.headline      || 'Get an Instant Cleaning Quote';
+    const subheadline   = content.subheadline   || 'Answer 4 quick questions and see your price range in seconds.';
+    const ctaText       = content.ctaText       || 'Get My Free Quote';
+    const contactTitle  = content.contactTitle  || 'Almost done!';
+    const contactSub    = content.contactSubtitle || 'Where should we send your quote?';
+
+    const defaultSteps = [
+      { question: 'What type of cleaning do you need?', choices: ['Carpet Cleaning', 'House Cleaning', 'Deep Clean', 'Commercial / Office'] },
+      { question: 'How large is the space?', choices: ['Studio / 1BR', '2–3 Bedrooms', '4–5 Bedrooms', 'Commercial Space'] },
+      { question: 'How often would you like service?', choices: ['One-Time', 'Weekly', 'Bi-Weekly', 'Monthly'] },
+      { question: 'When do you need it done?', choices: ['ASAP', 'This Week', 'This Month', 'Just Exploring'] },
+    ];
+    const steps = (content.steps && content.steps.length > 0) ? content.steps : defaultSteps;
+    const totalSteps = steps.length + 1;
+
+    const stepsHtml = steps.map((step, i) => {
+      const choicesHtml = (step.choices || []).map(choice =>
+        `<div class="${s}-choice" onclick="${s}Pick(this,'ans${i}',${JSON.stringify(choice)})">${choice}</div>`
+      ).join('\n        ');
+      return `
+    <!-- Step ${i + 1} -->
+    <div class="${s}-step" data-step="${i + 1}">
+      <p class="${s}-q">${step.question}</p>
+      <div class="${s}-choices">
+        ${choicesHtml}
+      </div>
+    </div>`;
+    }).join('\n');
 
     return `
 <section class="${s}">
@@ -48,54 +85,12 @@ module.exports = {
       <button class="${s}-btn" onclick="${s}Next()">Start Free Quote →</button>
     </div>
 
-    <!-- Step 1: Service type -->
-    <div class="${s}-step" data-step="1">
-      <p class="${s}-q">What type of cleaning do you need?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Carpet Cleaning')">🟫 Carpet Cleaning</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','House Cleaning')">🏠 House Cleaning</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Deep Clean')">✨ Deep Clean</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Commercial')">🏢 Commercial / Office</div>
-      </div>
-    </div>
+    ${stepsHtml}
 
-    <!-- Step 2: Property size -->
-    <div class="${s}-step" data-step="2">
-      <p class="${s}-q">How large is the space?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'size','Studio / 1BR')">🛏 Studio or 1 Bedroom</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'size','2–3 Bedrooms')">🏡 2–3 Bedrooms</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'size','4–5 Bedrooms')">🏘 4–5 Bedrooms</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'size','Commercial Space')">🏗 Commercial Space</div>
-      </div>
-    </div>
-
-    <!-- Step 3: Frequency -->
-    <div class="${s}-step" data-step="3">
-      <p class="${s}-q">How often would you like service?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'frequency','One-Time')">1️⃣ One-Time</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'frequency','Weekly')">📅 Weekly</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'frequency','Bi-Weekly')">🗓 Every 2 Weeks</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'frequency','Monthly')">📆 Monthly</div>
-      </div>
-    </div>
-
-    <!-- Step 4: Timeline -->
-    <div class="${s}-step" data-step="4">
-      <p class="${s}-q">When do you need it done?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','ASAP')">⚡ ASAP</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','This Week')">📅 This Week</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','This Month')">🗓 This Month</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','Just Exploring')">💭 Just Exploring</div>
-      </div>
-    </div>
-
-    <!-- Step 5: Contact -->
-    <div class="${s}-step" data-step="5">
+    <!-- Contact Step -->
+    <div class="${s}-step" data-step="${totalSteps}">
       <div class="${s}-icon">📋</div>
-      <p class="${s}-q">Where should we send your quote?</p>
+      <p class="${s}-q">${contactSub}</p>
       <form class="${s}-form" onsubmit="${s}Submit(event)">
         <input class="${s}-input" type="text"  name="name"  placeholder="Your Name"  required />
         <input class="${s}-input" type="email" name="email" placeholder="Email Address" required />
@@ -118,7 +113,7 @@ module.exports = {
     <div class="${s}-step" data-step="error">
       <div class="${s}-icon">⚠️</div>
       <p class="${s}-q">Something went wrong. Please try again.</p>
-      <button class="${s}-btn" onclick="${s}GoTo(5)">Try Again</button>
+      <button class="${s}-btn" onclick="${s}GoTo(TOTAL_STEPS)">Try Again</button>
     </div>
 
   </div>
@@ -225,7 +220,7 @@ module.exports = {
 <script>
 (function() {
   var _state = { step: 0, answers: {} };
-  var TOTAL_STEPS = 5;
+  var TOTAL_STEPS = ${totalSteps};
 
   var ESTIMATE_MAP = {
     'Carpet Cleaning': {
@@ -278,11 +273,9 @@ module.exports = {
     var userId = window.__SORCE_USER_ID__;
     if (!userId) { window.${s}GoTo('error'); return; }
 
-    var estimate = (ESTIMATE_MAP[_state.answers.type] || {})[_state.answers.size] || 'Custom estimate';
-    var message = 'Service: ' + (_state.answers.type || '') +
-                  ' | Size: ' + (_state.answers.size || '') +
-                  ' | Frequency: ' + (_state.answers.frequency || '') +
-                  ' | Timeline: ' + (_state.answers.timeline || '');
+    var estimate = (ESTIMATE_MAP[_state.answers.ans0] || {})[_state.answers.ans1] || 'Custom estimate';
+    var answerParts = Object.keys(_state.answers).map(function(k) { return _state.answers[k]; });
+    var message = answerParts.join(' | ');
 
     fetch('/api/leads/public/' + userId, {
       method: 'POST',
@@ -291,7 +284,7 @@ module.exports = {
         name: name,
         email: email,
         phone: phone,
-        service: _state.answers.type || 'Cleaning',
+        service: _state.answers.ans0 || 'Cleaning',
         message: message,
         sms_consent: true
       })
@@ -299,8 +292,8 @@ module.exports = {
     .then(function(r) {
       var box = document.getElementById('${s}-result-text');
       if (box) {
-        box.innerHTML = 'Estimated range for <strong>' + (_state.answers.type || 'your service') +
-          '</strong> in a <strong>' + (_state.answers.size || '') + '</strong> space:<br><br>' +
+        box.innerHTML = 'Estimated range for <strong>' + (_state.answers.ans0 || 'your service') +
+          '</strong> in a <strong>' + (_state.answers.ans1 || '') + '</strong> space:<br><br>' +
           '<span style="font-size:1.4rem">' + estimate + '</span>';
       }
       window.${s}GoTo('result');

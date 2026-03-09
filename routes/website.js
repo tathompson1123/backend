@@ -1988,4 +1988,164 @@ Keep responses under 200 words. Use numbered steps.`;
   }
 });
 
+// ============================================
+// POST - Update lead magnet section content
+// Body: { sectionId, steps, headline, subheadline, ctaText, contactTitle, contactSubtitle }
+// Finds the section in page_data, updates content, re-renders, saves, and optionally redeploys.
+// ============================================
+router.post('/lead-magnet-config', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { sectionId, steps, headline, subheadline, ctaText, contactTitle, contactSubtitle } = req.body;
+
+    if (!sectionId) {
+      return res.status(400).json({ error: 'sectionId is required' });
+    }
+
+    // Load website
+    const websiteResult = await pool.query(
+      'SELECT page_data, is_published FROM websites WHERE user_id = $1',
+      [userId]
+    );
+
+    if (websiteResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No website found' });
+    }
+
+    let pageData = websiteResult.rows[0].page_data;
+    const isPublished = websiteResult.rows[0].is_published;
+
+    if (typeof pageData === 'string') {
+      pageData = JSON.parse(pageData);
+    }
+
+    if (!pageData) {
+      return res.status(400).json({ error: 'No page_data found on website' });
+    }
+
+    // Find the section in page_data (handles both single-page and multi-page schemas)
+    let sectionFound = false;
+
+    function updateSectionInList(sections) {
+      if (!Array.isArray(sections)) return;
+      for (const section of sections) {
+        if (section.id === sectionId) {
+          if (!section.content) section.content = {};
+          if (headline !== undefined)       section.content.headline       = headline;
+          if (subheadline !== undefined)    section.content.subheadline    = subheadline;
+          if (ctaText !== undefined)        section.content.ctaText        = ctaText;
+          if (contactTitle !== undefined)   section.content.contactTitle   = contactTitle;
+          if (contactSubtitle !== undefined) section.content.contactSubtitle = contactSubtitle;
+          if (steps !== undefined)          section.content.steps          = steps;
+          sectionFound = true;
+          return;
+        }
+      }
+    }
+
+    if (pageData.multiPage && Array.isArray(pageData.pages)) {
+      for (const page of pageData.pages) {
+        updateSectionInList(page.sections);
+        if (sectionFound) break;
+      }
+      // Also check shared nav/footer
+      if (!sectionFound) {
+        if (pageData.nav) updateSectionInList([pageData.nav]);
+        if (pageData.footer) updateSectionInList([pageData.footer]);
+      }
+    } else {
+      updateSectionInList(pageData.sections);
+    }
+
+    if (!sectionFound) {
+      return res.status(404).json({ error: `Section "${sectionId}" not found in page_data` });
+    }
+
+    // Ensure userId is in meta for lead submission to work
+    if (!pageData.meta) pageData.meta = {};
+    pageData.meta.userId = userId;
+
+    // Re-render
+    const { renderPage, renderMultiPage } = require('../sections/renderer');
+    const { injectAgents } = require('../utils/injectAgents');
+
+    let html, pages;
+
+    if (pageData.multiPage && Array.isArray(pageData.pages)) {
+      const renderedPages = renderMultiPage(pageData);
+      pages = {};
+      for (const [filename, pageHtml] of Object.entries(renderedPages)) {
+        pages[filename] = await injectAgents(pageHtml, userId, pool, pageData.theme);
+      }
+      html = pages['index.html'] || Object.values(pages)[0];
+    } else {
+      html = renderPage(pageData);
+      html = await injectAgents(html, userId, pool, pageData.theme);
+      pages = { 'index.html': html };
+    }
+
+    // Save updated page_data + html
+    await pool.query(
+      `UPDATE websites
+       SET page_data = $1, html_content = $2, pages = $3, updated_at = NOW()
+       WHERE user_id = $4`,
+      [JSON.stringify(pageData), html, JSON.stringify(pages), userId]
+    );
+
+    console.log(`✅ Lead magnet config saved for user ${userId}, section ${sectionId}`);
+
+    // Auto-redeploy if already published
+    let deployed = false;
+    let deployUrl = null;
+    if (isPublished) {
+      try {
+        const vercelToken = process.env.VERCEL_TOKEN;
+        if (vercelToken) {
+          const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${vercelToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: `website-${userId}`,
+              files: [
+                ...Object.entries(pages).map(([filename, pageHtml]) => ({ file: filename, data: pageHtml })),
+                { file: 'vercel.json', data: JSON.stringify({ cleanUrls: true, trailingSlash: false }) }
+              ],
+              projectSettings: { framework: null }
+            })
+          });
+
+          if (deployResponse.ok) {
+            const deployData = await deployResponse.json();
+            deployUrl = `https://${deployData.url}`;
+            await pool.query(
+              'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
+              [deployUrl, deployData.id, userId]
+            );
+            deployed = true;
+            console.log(`✅ Auto-redeployed lead magnet update to ${deployUrl}`);
+          } else {
+            console.error('⚠️ Lead magnet redeploy failed:', await deployResponse.text());
+          }
+        }
+      } catch (deployErr) {
+        console.error('⚠️ Lead magnet redeploy error:', deployErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      deployed,
+      url: deployUrl,
+      message: deployed ? 'Lead magnet saved and redeployed' : 'Lead magnet saved'
+    });
+
+  } catch (error) {
+    console.error('❌ Lead magnet config error:', error.message);
+    res.status(500).json({ error: 'Failed to update lead magnet', details: error.message });
+  }
+});
+
 module.exports = router;

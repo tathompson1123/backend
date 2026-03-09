@@ -16,9 +16,21 @@ module.exports = {
   },
 
   contentSchema: {
-    headline:    { type: 'text', label: 'Headline',    default: 'What Will Your Project Cost?' },
-    subheadline: { type: 'text', label: 'Subheadline', default: 'Answer 4 quick questions and get a free project estimate.' },
-    ctaText:     { type: 'text', label: 'CTA Button',  default: 'Get My Free Estimate' },
+    headline:       { type: 'text', label: 'Headline',              default: 'What Will Your Project Cost?' },
+    subheadline:    { type: 'text', label: 'Subheadline',           default: 'Answer 4 quick questions and get a free project estimate.' },
+    ctaText:        { type: 'text', label: 'CTA Button',            default: 'Get My Free Estimate' },
+    contactTitle:   { type: 'text', label: 'Contact Step Title',    default: 'Almost done!' },
+    contactSubtitle:{ type: 'text', label: 'Contact Step Subtitle', default: 'Where should we send your estimate?' },
+    steps: {
+      type: 'steps',
+      label: 'Quiz Steps',
+      default: [
+        { question: 'What type of project are you planning?', choices: ['Kitchen Remodel', 'Bathroom Remodel', 'Full Home Renovation', 'Outdoor / Deck'] },
+        { question: 'What is the scope of work?', choices: ['Minor Update / Refresh', 'Full Renovation', 'Addition / Expansion', 'Complete Gut / Rebuild'] },
+        { question: 'When are you looking to start?', choices: ['ASAP', '1–3 Months', '3–6 Months', 'Just Planning'] },
+        { question: 'What is your approximate budget?', choices: ['Under $10K', '$10K–$30K', '$30K–$75K', '$75K+'] },
+      ]
+    }
   },
 
   render(content, theme, sectionId = 'lm-renovation') {
@@ -29,9 +41,34 @@ module.exports = {
     const bg        = theme.bgColor        || '#ffffff';
     const headFont  = theme.headingFont       || 'Inter';
 
-    const headline    = content.headline    || 'What Will Your Project Cost?';
-    const subheadline = content.subheadline || 'Answer 4 quick questions and get a free project estimate.';
-    const ctaText     = content.ctaText     || 'Get My Free Estimate';
+    const headline      = content.headline      || 'What Will Your Project Cost?';
+    const subheadline   = content.subheadline   || 'Answer 4 quick questions and get a free project estimate.';
+    const ctaText       = content.ctaText       || 'Get My Free Estimate';
+    const contactTitle  = content.contactTitle  || 'Almost done!';
+    const contactSub    = content.contactSubtitle || 'Where should we send your estimate?';
+
+    const defaultSteps = [
+      { question: 'What type of project are you planning?', choices: ['Kitchen Remodel', 'Bathroom Remodel', 'Full Home Renovation', 'Outdoor / Deck'] },
+      { question: 'What is the scope of work?', choices: ['Minor Update / Refresh', 'Full Renovation', 'Addition / Expansion', 'Complete Gut / Rebuild'] },
+      { question: 'When are you looking to start?', choices: ['ASAP', '1–3 Months', '3–6 Months', 'Just Planning'] },
+      { question: 'What is your approximate budget?', choices: ['Under $10K', '$10K–$30K', '$30K–$75K', '$75K+'] },
+    ];
+    const steps = (content.steps && content.steps.length > 0) ? content.steps : defaultSteps;
+    const totalSteps = steps.length + 1;
+
+    const stepsHtml = steps.map((step, i) => {
+      const choicesHtml = (step.choices || []).map(choice =>
+        `<div class="${s}-choice" onclick="${s}Pick(this,'ans${i}',${JSON.stringify(choice)})">${choice}</div>`
+      ).join('\n        ');
+      return `
+    <!-- Step ${i + 1} -->
+    <div class="${s}-step" data-step="${i + 1}">
+      <p class="${s}-q">${step.question}</p>
+      <div class="${s}-choices">
+        ${choicesHtml}
+      </div>
+    </div>`;
+    }).join('\n');
 
     return `
 <section class="${s}">
@@ -48,54 +85,12 @@ module.exports = {
       <button class="${s}-btn" onclick="${s}Next()">Start Free Estimate →</button>
     </div>
 
-    <!-- Step 1: Project type -->
-    <div class="${s}-step" data-step="1">
-      <p class="${s}-q">What type of project are you planning?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Kitchen Remodel')">🍳 Kitchen Remodel</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Bathroom Remodel')">🚿 Bathroom Remodel</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Full Home Renovation')">🏠 Full Home Renovation</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'type','Outdoor / Deck')">🌿 Outdoor / Deck</div>
-      </div>
-    </div>
+    ${stepsHtml}
 
-    <!-- Step 2: Scope -->
-    <div class="${s}-step" data-step="2">
-      <p class="${s}-q">What is the scope of work?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'scope','Minor Update')">🔧 Minor Update / Refresh</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'scope','Full Renovation')">🏗 Full Renovation</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'scope','Addition')">➕ Addition / Expansion</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'scope','Complete Gut')">💥 Complete Gut / Rebuild</div>
-      </div>
-    </div>
-
-    <!-- Step 3: Timeline -->
-    <div class="${s}-step" data-step="3">
-      <p class="${s}-q">When are you looking to start?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','ASAP')">⚡ ASAP</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','1–3 Months')">📅 1–3 Months</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','3–6 Months')">🗓 3–6 Months</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'timeline','Just Planning')">💭 Just Planning</div>
-      </div>
-    </div>
-
-    <!-- Step 4: Budget -->
-    <div class="${s}-step" data-step="4">
-      <p class="${s}-q">What is your approximate budget?</p>
-      <div class="${s}-choices">
-        <div class="${s}-choice" onclick="${s}Pick(this,'budget','Under $10K')">💵 Under $10,000</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'budget','$10K–$30K')">💰 $10,000–$30,000</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'budget','$30K–$75K')">💎 $30,000–$75,000</div>
-        <div class="${s}-choice" onclick="${s}Pick(this,'budget','$75K+')">🏆 $75,000+</div>
-      </div>
-    </div>
-
-    <!-- Step 5: Contact -->
-    <div class="${s}-step" data-step="5">
+    <!-- Contact Step -->
+    <div class="${s}-step" data-step="${totalSteps}">
       <div class="${s}-icon">📋</div>
-      <p class="${s}-q">Where should we send your estimate?</p>
+      <p class="${s}-q">${contactSub}</p>
       <form class="${s}-form" onsubmit="${s}Submit(event)">
         <input class="${s}-input" type="text"  name="name"  placeholder="Your Name"  required />
         <input class="${s}-input" type="email" name="email" placeholder="Email Address" required />
@@ -118,7 +113,7 @@ module.exports = {
     <div class="${s}-step" data-step="error">
       <div class="${s}-icon">⚠️</div>
       <p class="${s}-q">Something went wrong. Please try again.</p>
-      <button class="${s}-btn" onclick="${s}GoTo(5)">Try Again</button>
+      <button class="${s}-btn" onclick="${s}GoTo(TOTAL_STEPS)">Try Again</button>
     </div>
 
   </div>
@@ -225,7 +220,7 @@ module.exports = {
 <script>
 (function() {
   var _state = { step: 0, answers: {} };
-  var TOTAL_STEPS = 5;
+  var TOTAL_STEPS = ${totalSteps};
 
   var ESTIMATE_MAP = {
     'Kitchen Remodel': {
@@ -278,11 +273,9 @@ module.exports = {
     var userId = window.__SORCE_USER_ID__;
     if (!userId) { window.${s}GoTo('error'); return; }
 
-    var estimate = (ESTIMATE_MAP[_state.answers.type] || {})[_state.answers.scope] || 'Custom estimate';
-    var message = 'Project: ' + (_state.answers.type || '') +
-                  ' | Scope: ' + (_state.answers.scope || '') +
-                  ' | Timeline: ' + (_state.answers.timeline || '') +
-                  ' | Budget: ' + (_state.answers.budget || '');
+    var estimate = (ESTIMATE_MAP[_state.answers.ans0] || {})[_state.answers.ans1] || 'Custom estimate';
+    var answerParts = Object.keys(_state.answers).map(function(k) { return _state.answers[k]; });
+    var message = answerParts.join(' | ');
 
     fetch('/api/leads/public/' + userId, {
       method: 'POST',
@@ -291,7 +284,7 @@ module.exports = {
         name: name,
         email: email,
         phone: phone,
-        service: _state.answers.type || 'Renovation',
+        service: _state.answers.ans0 || 'Renovation',
         message: message,
         sms_consent: true
       })
@@ -299,8 +292,8 @@ module.exports = {
     .then(function(r) {
       var box = document.getElementById('${s}-result-text');
       if (box) {
-        box.innerHTML = 'Estimated range for a <strong>' + (_state.answers.scope || '') +
-          '</strong> <strong>' + (_state.answers.type || 'project') + '</strong>:<br><br>' +
+        box.innerHTML = 'Estimated range for a <strong>' + (_state.answers.ans1 || '') +
+          '</strong> <strong>' + (_state.answers.ans0 || 'project') + '</strong>:<br><br>' +
           '<span style="font-size:1.4rem">' + estimate + '</span>';
       }
       window.${s}GoTo('result');
