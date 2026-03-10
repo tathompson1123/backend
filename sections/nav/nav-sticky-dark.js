@@ -53,22 +53,26 @@ module.exports = {
   </div>
 </nav>
 <style>
-  .${s} { background: transparent; padding: 1.5rem 0; position: fixed; top: 0; left: 0; right: 0; z-index: 1000; transition: background 0.4s, backdrop-filter 0.4s, border-color 0.4s; border-bottom: 1px solid transparent; }
-  .${s}.scrolled { background: ${theme.bgColor ? theme.bgColor + 'f2' : 'rgba(10,10,10,0.95)'}; backdrop-filter: blur(10px); border-bottom-color: ${theme.borderAccent}; }
+  .${s} { background: transparent; padding: 1.5rem 0; position: fixed; top: 0; left: 0; right: 0; z-index: 1000; transition: background 0.4s, backdrop-filter 0.4s, border-color 0.4s, box-shadow 0.4s; border-bottom: 1px solid transparent; }
+  .${s}.scrolled { background: ${theme.bgColor ? theme.bgColor + 'f5' : 'rgba(10,10,10,0.95)'}; backdrop-filter: blur(12px); border-bottom-color: ${theme.borderAccent}; box-shadow: 0 1px 16px rgba(0,0,0,0.08); }
   .${s}-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; display: flex; justify-content: space-between; align-items: center; }
-  .${s}-logo { font-family: '${theme.headingFont}', sans-serif; font-size: 1.8rem; font-weight: 800; color: ${content.logoColor || theme.primaryColor}; text-transform: uppercase; letter-spacing: 2px; text-decoration: none; }
+  .${s}-logo { font-family: '${theme.headingFont}', sans-serif; font-size: 1.8rem; font-weight: 800; color: #ffffff; text-transform: uppercase; letter-spacing: 2px; text-decoration: none; transition: color 0.4s; }
+  .${s}.scrolled .${s}-logo { color: ${content.logoColor || theme.primaryColor}; }
   .${s}-logo-img { height: ${content.logoHeight || 40}px; max-width: 180px; object-fit: contain; display: block; }
   .${s}-links { display: flex; gap: 3rem; align-items: center; }
-  .${s}-links a { color: ${theme.textColor || '#ffffff'}; text-decoration: none; font-weight: 600; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; transition: color 0.3s; }
+  .${s}-links a { color: #ffffff; text-decoration: none; font-weight: 600; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; transition: color 0.3s; }
+  .${s}.scrolled .${s}-links a { color: ${theme.textColor || '#1f2937'}; }
   .${s}-links a:hover { color: ${theme.primaryColor}; }
+  .${s}.scrolled .${s}-links a:hover { color: ${theme.primaryColor}; }
   .${s}-cta { background: ${theme.primaryColor} !important; color: #ffffff !important; padding: 0.875rem 2rem !important; border-radius: ${theme.buttonRadius}; font-weight: 700 !important; transition: transform 0.3s, box-shadow 0.3s !important; }
   .${s}-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 25px ${theme.primaryColor}40; }
   .${s}-mobile { display: none; background: none; border: none; cursor: pointer; padding: 0.5rem; flex-direction: column; gap: 5px; }
-  .${s}-mobile span { display: block; width: 25px; height: 2px; background: ${theme.textColor || '#ffffff'}; transition: 0.3s; }
+  .${s}-mobile span { display: block; width: 25px; height: 2px; background: #ffffff; transition: background 0.4s; }
+  .${s}.scrolled .${s}-mobile span { background: ${theme.textColor || '#1f2937'}; }
 
   @media (max-width: 768px) {
     .${s} { padding: 0.875rem 0; background: linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 100%); }
-    .${s}.scrolled { background: ${theme.bgColor ? theme.bgColor + 'f2' : 'rgba(10,10,10,0.95)'}; }
+    .${s}.scrolled { background: ${theme.bgColor ? theme.bgColor + 'f5' : 'rgba(10,10,10,0.95)'}; }
     .${s}-container { padding: 0 1.25rem; min-height: 56px; overflow: hidden; }
     .${s}-logo { font-size: 1.15rem; letter-spacing: 1px; flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 0.75rem; }
     .${s}-mobile { display: flex; flex-shrink: 0; }

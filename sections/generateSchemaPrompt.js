@@ -546,18 +546,6 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
           }
         },
         {
-          "id": "features",
-          "template": "features-icon-row",
-          "content": {
-            "features": [
-              { "icon": "⭐", "title": "Feature 1 Title", "text": "Short description relevant to auto detailing" },
-              { "icon": "🛡️", "title": "Feature 2 Title", "text": "Short description relevant to auto detailing" },
-              { "icon": "⚡", "title": "Feature 3 Title", "text": "Short description relevant to auto detailing" },
-              { "icon": "🏆", "title": "Feature 4 Title", "text": "Short description relevant to auto detailing" }
-            ]
-          }
-        },
-        {
           "id": "services",
           "template": "services-carousel",
           "content": {
@@ -571,15 +559,26 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
           }
         },
         {
+          "id": "features",
+          "template": "features-icon-row",
+          "content": {
+            "features": [
+              { "icon": "⭐", "title": "Feature 1 Title", "text": "Short description relevant to auto detailing" },
+              { "icon": "🛡️", "title": "Feature 2 Title", "text": "Short description relevant to auto detailing" },
+              { "icon": "⚡", "title": "Feature 3 Title", "text": "Short description relevant to auto detailing" },
+              { "icon": "🏆", "title": "Feature 4 Title", "text": "Short description relevant to auto detailing" }
+            ]
+          }
+        },
+        {
           "id": "benefits",
-          "template": "benefits-cards",
+          "template": "benefits-numbered",
           "content": {
             "title": "Why Choose ${businessName}",
-            "subtitle": "Premium quality you can see and feel",
             "benefits": [
-              { "icon": "✨", "title": "Benefit 1 Title", "description": "Why this matters to the customer" },
-              { "icon": "🛡️", "title": "Benefit 2 Title", "description": "Why this matters to the customer" },
-              { "icon": "🏆", "title": "Benefit 3 Title", "description": "Why this matters to the customer" }
+              { "title": "Benefit 1 Title", "description": "Why this matters to the customer" },
+              { "title": "Benefit 2 Title", "description": "Why this matters to the customer" },
+              { "title": "Benefit 3 Title", "description": "Why this matters to the customer" }
             ]
           }
         },
@@ -622,14 +621,13 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
         },
         {
           "id": "benefits",
-          "template": "benefits-cards",
+          "template": "benefits-numbered",
           "content": {
             "title": "Why Choose ${businessName}",
-            "subtitle": "Premium quality you can see and feel",
             "benefits": [
-              { "icon": "✨", "title": "Benefit 1 Title", "description": "Why this matters to the customer" },
-              { "icon": "🛡️", "title": "Benefit 2 Title", "description": "Why this matters to the customer" },
-              { "icon": "🏆", "title": "Benefit 3 Title", "description": "Why this matters to the customer" }
+              { "title": "Benefit 1 Title", "description": "Why this matters to the customer" },
+              { "title": "Benefit 2 Title", "description": "Why this matters to the customer" },
+              { "title": "Benefit 3 Title", "description": "Why this matters to the customer" }
             ]
           }
         },

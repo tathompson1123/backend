@@ -83,10 +83,12 @@ module.exports = {
     font-family: '${theme.headingFont || 'Cormorant Garamond'}', serif;
     font-size: 1.7rem;
     font-weight: 700;
-    color: ${content.logoColor || theme.textColor || '#1b2216'};
+    color: #ffffff;
     text-decoration: none;
     letter-spacing: 0.5px;
+    transition: color 0.4s;
   }
+  .${s}.scrolled .${s}-logo { color: ${content.logoColor || theme.primaryColor || '#1b2216'}; }
   .${s}-logo-img { height: ${content.logoHeight || 40}px; max-width: 180px; object-fit: contain; display: block; }
   .${s}-links {
     display: flex;
@@ -96,12 +98,13 @@ module.exports = {
   .${s}-link {
     font-size: 0.9rem;
     font-weight: 600;
-    color: ${theme.textColor || '#1b2216'};
+    color: #ffffff;
     text-decoration: none;
     letter-spacing: 0.3px;
     transition: color 0.25s;
     position: relative;
   }
+  .${s}.scrolled .${s}-link { color: ${theme.textColor || '#1b2216'}; }
   .${s}-link::after {
     content: '';
     position: absolute;
@@ -144,10 +147,11 @@ module.exports = {
     display: block;
     width: 24px;
     height: 2px;
-    background: ${theme.textColor || '#1b2216'};
+    background: #ffffff;
     border-radius: 1px;
-    transition: 0.3s;
+    transition: background 0.4s;
   }
+  .${s}.scrolled .${s}-burger span { background: ${theme.textColor || '#1b2216'}; }
   @media (max-width: 768px) {
     .${s} { padding: 0.875rem 0; }
     .${s}-inner { padding: 0 1.25rem; min-height: 56px; overflow: hidden; }
@@ -169,6 +173,7 @@ module.exports = {
       align-items: flex-start;
     }
     .${s}-links.${s}-open { display: flex; }
+    .${s}-links.${s}-open .${s}-link { color: ${theme.textColor || '#1b2216'}; }
     .${s}-cta { margin-top: 0.25rem; }
   }
 </style>
