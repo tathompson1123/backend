@@ -504,8 +504,9 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
       "sections": [
         {
           "id": "hero",
-          "template": "hero-fullscreen-dark",
+          "template": "hero-auto-split",
           "content": {
+            "badge": "Premium Auto Detailing",
             "headline": "Main headline WITHOUT the highlight word (3-5 words max, e.g. 'Your Car, Perfectly')",
             "highlightText": "One highlight word (e.g. 'Detailed')",
             "subtitle": "Compelling subtitle 1-2 sentences about this business",
@@ -513,7 +514,11 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "ctaLink": "/booking",
             "ctaText2": "View Our Work",
             "ctaLink2": "/gallery",
-            "backgroundImage": "${heroBg}"
+            "backgroundImage": "${heroBg}",
+            "heroImage1": "${gc(0) || 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=600&q=80'}",
+            "heroImage2": "${gc(1) || 'https://images.unsplash.com/photo-1616455579100-2ceaa4eb2d37?w=600&q=80'}",
+            "yearsText": "10+ Years",
+            "locationText": "Serving ${areaText || 'Your Area'}"
           }
         },
         {
@@ -1784,6 +1789,16 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
           }
         },
         {
+          "id": "estimate",
+          "template": "lead-magnet-teaser-cleaning",
+          "content": {
+            "badge": "Home Health Analyzer",
+            "headline": "What's Hiding in Your Carpet?",
+            "subheadline": "Drag the slider to see how much builds up over time — then claim your exclusive discount.",
+            "ctaText": "Check My Carpet Health"
+          }
+        },
+        {
           "id": "services",
           "template": "services-carousel",
           "content": {
@@ -1803,16 +1818,6 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
               { "name": "Emily R.", "stars": 5, "text": "Review about how thorough the technicians were — mention a specific room or area", "date": "5 days ago", "avatarColor": "#b45309" },
               { "name": "David K.", "stars": 5, "text": "Review praising communication, fair pricing, and outstanding final results", "date": "1 month ago", "avatarColor": "#0891b2" }
             ]
-          }
-        },
-        {
-          "id": "estimate",
-          "template": "lead-magnet-teaser-cleaning",
-          "content": {
-            "badge": "Home Health Analyzer",
-            "headline": "What's Hiding in Your Carpet?",
-            "subheadline": "Drag the slider to see how much builds up over time — then claim your exclusive discount.",
-            "ctaText": "Check My Carpet Health"
           }
         },
         {

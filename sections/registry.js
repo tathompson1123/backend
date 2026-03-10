@@ -25,6 +25,7 @@ const sections = {
   'hero-split-portrait':   require('./hero/hero-split-portrait'),
   'hero-page-banner':      require('./hero/hero-page-banner'),
   'hero-cleaning-split':   require('./hero/hero-cleaning-split'),
+  'hero-auto-split':       require('./hero/hero-auto-split'),
 
   // Features
   'features-icon-row':   require('./features/features-icon-row'),
