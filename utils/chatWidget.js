@@ -171,7 +171,7 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
 }
 .chat-message.agent .message-bubble {
   background: white;
-  color: ${textColor};
+  color: #1f2937;
   border: 1px solid #e5e7eb;
 }
 .chat-message.user .message-bubble {

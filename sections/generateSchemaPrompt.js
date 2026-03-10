@@ -269,10 +269,11 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
             floatBadge: hero.floatBadge || '10+',
             floatBadgeLabel: hero.floatBadgeLabel || 'Years Experience',
           }},
-          { id: 'estimate', template: 'lead-magnet-landscaping', content: {
-            headline: hero.leadMagnetHeadline || 'How Much Will Your Project Cost?',
-            subheadline: hero.leadMagnetSubheadline || 'Answer 4 quick questions and get a free instant estimate.',
-            ctaText: hero.leadMagnetCtaText || 'Get My Free Estimate',
+          { id: 'estimate', template: 'lead-magnet-teaser-landscaping', content: {
+            badge: 'AI Design Preview',
+            headline: hero.leadMagnetHeadline || 'See Your Dream Yard Before We Break Ground',
+            subheadline: hero.leadMagnetSubheadline || 'Enter your address, pick your features, and get an AI-generated design plus instant cost estimate.',
+            ctaText: hero.leadMagnetCtaText || 'Design My Yard',
           }},
           { id: 'importance', template: 'importance-split', content: {
             badge: importance.badge || 'Why It Matters',
@@ -369,9 +370,9 @@ Return this exact JSON with real, compelling content for this specific business:
     "subtitle": "2-3 sentence value proposition specific to this business",
     "floatBadge": "10+",
     "floatBadgeLabel": "Years Experience",
-    "leadMagnetHeadline": "How Much Will Your Project Cost?",
-    "leadMagnetSubheadline": "Answer 4 quick questions and get a free instant estimate.",
-    "leadMagnetCtaText": "Get My Free Estimate"
+    "leadMagnetHeadline": "See Your Dream Yard Before We Break Ground",
+    "leadMagnetSubheadline": "Enter your address, pick your features, and get an AI-generated design plus instant cost estimate.",
+    "leadMagnetCtaText": "Design My Yard"
   },
   "importance": {
     "badge": "Why It Matters",
@@ -481,7 +482,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
         { "text": "Contact",  "url": "/contact" }
       ],
       "ctaText": "Book Now",
-      "ctaLink": "/contact"
+      "ctaLink": "/booking"
     }
   },
   "footer": {
@@ -509,7 +510,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "highlightText": "One or two highlight words",
             "subtitle": "Compelling subtitle 1-2 sentences about this business",
             "ctaText": "Book Your Detail",
-            "ctaLink": "/contact",
+            "ctaLink": "/booking",
             "ctaText2": "View Our Work",
             "ctaLink2": "/gallery",
             "backgroundImage": "${heroBg}"
@@ -517,11 +518,12 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
         },
         {
           "id": "estimate",
-          "template": "lead-magnet-auto-wrap",
+          "template": "lead-magnet-teaser-auto",
           "content": {
-            "headline": "What Will Your Detail Cost?",
-            "subheadline": "Answer 4 quick questions and get an instant price estimate.",
-            "ctaText": "Get My Instant Quote"
+            "badge": "Free Instant Quote",
+            "headline": "See Exactly What Your Detail Will Cost",
+            "subheadline": "Click the areas of your vehicle you want detailed — get an itemized price breakdown in seconds.",
+            "ctaText": "Build My Custom Quote"
           }
         },
         {
@@ -584,7 +586,7 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "headline": "Compelling CTA headline for auto detailing",
             "subtitle": "Supporting text that drives action",
             "ctaText": "Book Now",
-            "ctaLink": "/contact",
+            "ctaLink": "/booking",
             "ctaText2": "Call Now: ${phone}",
             "ctaLink2": "tel:${phoneClean}",
             "features": [
@@ -915,11 +917,12 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
         },
         {
           "id": "estimate",
-          "template": "lead-magnet-renovation",
+          "template": "lead-magnet-teaser-renovation",
           "content": {
-            "headline": "What Will Your Project Cost?",
-            "subheadline": "Answer 4 quick questions and get a free project estimate.",
-            "ctaText": "Get My Free Estimate"
+            "badge": "Instant Project Estimate",
+            "headline": "Get a Ballpark Before You Commit to Anything",
+            "subheadline": "Answer a few quick questions about your project and get an honest cost range — no sales pressure.",
+            "ctaText": "Estimate My Project"
           }
         },
         {
@@ -1224,7 +1227,7 @@ function buildPhotographyMultiPagePrompt({ businessInfo, businessName, phone, ph
             "headline": "Compelling urgency headline about booking (7-10 words)",
             "subtitle": "1-2 sentence value proposition",
             "ctaText": "Book Now",
-            "ctaLink": "/contact",
+            "ctaLink": "/booking",
             "ctaText2": "See All Packages",
             "ctaLink2": "/services",
             "features": [
@@ -1316,7 +1319,7 @@ function buildPhotographyMultiPagePrompt({ businessInfo, businessName, phone, ph
             "headline": "Compelling urgency headline about booking (7-10 words)",
             "subtitle": "1-2 sentence value proposition",
             "ctaText": "Book Now",
-            "ctaLink": "/contact",
+            "ctaLink": "/booking",
             "ctaText2": "See All Packages",
             "ctaLink2": "/services",
             "features": [
@@ -1391,7 +1394,7 @@ function buildPhotographyMultiPagePrompt({ businessInfo, businessName, phone, ph
             "headline": "Compelling headline inviting client to start their photography journey",
             "subtitle": "1-2 sentence warm, personal invitation to book",
             "ctaText": "Book Now",
-            "ctaLink": "/contact",
+            "ctaLink": "/booking",
             "ctaText2": "See All Packages",
             "ctaLink2": "/services",
             "features": [
@@ -1800,6 +1803,16 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
               { "name": "Emily R.", "stars": 5, "text": "Review about how thorough the technicians were — mention a specific room or area", "date": "5 days ago", "avatarColor": "#b45309" },
               { "name": "David K.", "stars": 5, "text": "Review praising communication, fair pricing, and outstanding final results", "date": "1 month ago", "avatarColor": "#0891b2" }
             ]
+          }
+        },
+        {
+          "id": "estimate",
+          "template": "lead-magnet-teaser-cleaning",
+          "content": {
+            "badge": "Home Health Analyzer",
+            "headline": "What's Hiding in Your Carpet?",
+            "subheadline": "Drag the slider to see how much builds up over time — then claim your exclusive discount.",
+            "ctaText": "Check My Carpet Health"
           }
         },
         {
