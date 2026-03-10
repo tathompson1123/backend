@@ -301,16 +301,14 @@ async function purchaseDomain(domain, userInfo) {
     console.log('💳 Purchasing domain via Dynadot:', domain);
 
     // Build request params — Dynadot API3 register command
+    // We keep Dynadot's own nameservers and set A/CNAME records via set_dns2
+    // instead of pointing to Vercel NS, which has unreliable zone provisioning.
     const params = {
       key: DYNADOT_API_KEY,
       command: 'register',
       domain: domain,
       duration: 1, // 1 year
-      // Use Dynadot privacy/WHOIS proxy
       privacy: 'full',
-      // Set nameservers to Vercel
-      ns0: 'ns1.vercel-dns.com',
-      ns1: 'ns2.vercel-dns.com'
     };
 
     // Add secret key if provided
@@ -414,6 +412,50 @@ async function updateNameservers(domain) {
 }
 
 /**
+ * Set Dynadot DNS records to point domain to Vercel via A + CNAME.
+ * This avoids the Vercel NS1 zone provisioning issue entirely —
+ * Dynadot serves the DNS, Vercel just handles routing and SSL.
+ *
+ * Records set:
+ *   A     @    → 76.76.21.21        (Vercel's anycast IP)
+ *   CNAME www  → cname.vercel-dns.com
+ */
+async function setDynadotDnsRecords(domain) {
+  if (!DYNADOT_API_KEY) {
+    throw new Error('DYNADOT_API_KEY required to set DNS records');
+  }
+
+  const params = {
+    key: DYNADOT_API_KEY,
+    command: 'set_dns2',
+    domain: domain,
+    // Root A record → Vercel anycast IP
+    main_record_type0: 'A',
+    main_record0: '76.76.21.21',
+    main_sub_record0: '',   // empty = apex
+    main_ttl0: 300,
+    // www CNAME → Vercel
+    main_record_type1: 'CNAME',
+    main_record1: 'cname.vercel-dns.com.',
+    main_sub_record1: 'www',
+    main_ttl1: 300,
+  };
+
+  if (DYNADOT_SECRET_KEY) params.secret = DYNADOT_SECRET_KEY;
+
+  const response = await axios.get(DYNADOT_API_URL, { params });
+  const xmlData = response.data;
+  console.log(`🔍 set_dns2 response for ${domain}:`, xmlData);
+
+  if (xmlData.includes('<SuccessCode>0</SuccessCode>') || xmlData.includes('<Status>success</Status>')) {
+    console.log(`✅ DNS records set for ${domain}: A @ → 76.76.21.21, CNAME www → cname.vercel-dns.com`);
+  } else {
+    const errMatch = xmlData.match(/<Error>(.+?)<\/Error>/i) || xmlData.match(/<Status>(.+?)<\/Status>/i);
+    throw new Error(`set_dns2 failed for ${domain}: ${errMatch ? errMatch[1] : 'Unknown error'}`);
+  }
+}
+
+/**
  * Get domain info
  */
 async function getDomainInfo(domain) {
@@ -443,6 +485,7 @@ async function getDomainInfo(domain) {
 module.exports = {
   searchDomains,
   purchaseDomain,
+  setDynadotDnsRecords,
   updateNameservers,
   getDomainInfo
 };

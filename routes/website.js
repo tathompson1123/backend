@@ -3,7 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
 const { deployToVercel, addDomainToVercel, checkDomainVerification, removeDomainFromVercel } = require('../services/vercel');
-const { searchDomains, purchaseDomain, updateNameservers } = require('../services/domain');
+const { searchDomains, purchaseDomain, setDynadotDnsRecords, updateNameservers } = require('../services/domain');
 const axios = require('axios');
 const { generateChatWidgetCode } = require('../utils/chatWidget');
 
@@ -1750,23 +1750,22 @@ router.post('/purchase-domain', authenticateToken, requirePlan('basic'), async (
       businessName: user.business_name
     });
 
-    // Set nameservers to Vercel. Dynadot needs ~30s after registration before
-    // it will accept a set_ns command — so we try immediately, then retry twice.
-    const trySetNs = async () => {
+    // Set Dynadot DNS records (A + CNAME) pointing to Vercel.
+    // Dynadot needs ~30s after registration before accepting DNS commands — retry up to 3x.
+    const trySetDns = async () => {
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          await updateNameservers(domain);
-          console.log(`✅ Nameservers set for ${domain} (attempt ${attempt})`);
+          await setDynadotDnsRecords(domain);
+          console.log(`✅ DNS records set for ${domain} (attempt ${attempt})`);
           return;
-        } catch (nsErr) {
-          console.warn(`⚠️ NS update attempt ${attempt} failed for ${domain}:`, nsErr.message);
-          if (attempt < 3) await new Promise(r => setTimeout(r, 30000)); // wait 30s before retry
+        } catch (dnsErr) {
+          console.warn(`⚠️ DNS record attempt ${attempt} failed for ${domain}:`, dnsErr.message);
+          if (attempt < 3) await new Promise(r => setTimeout(r, 30000));
         }
       }
-      console.error(`❌ All nameserver update attempts failed for ${domain} — manual fix required`);
+      console.error(`❌ All DNS record attempts failed for ${domain} — manual fix required`);
     };
-    // Run first attempt immediately, schedule retries in background so response isn't delayed
-    trySetNs();
+    trySetDns();
 
     // Add domain to Vercel project
     await addDomainToVercel(domain, userId);
@@ -1941,27 +1940,27 @@ router.post('/domain-assistant', authenticateToken, async (req, res) => {
     }
 
     const systemPrompt = `You are SORCE Assistant, helping a user connect their domain "${domain || 'their domain'}" to their SORCE website.
-The user needs to change their nameservers to:
-- ns1.vercel-dns.com
-- ns2.vercel-dns.com
+
+The user needs to add two DNS records at their registrar (this is more reliable than changing nameservers):
+- A Record: host "@" → value "76.76.21.21"
+- CNAME Record: host "www" → value "cname.vercel-dns.com"
 
 ${registrar ? `The user says their domain registrar is: ${registrar}` : "You don't know their registrar yet — ask them."}
 
-Provide step-by-step instructions specific to their registrar. Be concise and friendly.
-If the user mentions a registrar, give exact navigation steps (e.g., "Click Domain Manager > select your domain > Nameservers > Custom DNS").
-Common registrars and their paths:
-- GoDaddy: My Products > DNS > Nameservers > Change > Enter my own nameservers
-- Namecheap: Domain List > Manage > Nameservers > Custom DNS
-- Google Domains (now Squarespace): DNS > Custom name servers
-- Cloudflare: DNS > Records (note: they need to remove Cloudflare proxy first)
-- Hostinger: Domains > Manage > DNS/Nameservers
-- Bluehost: Domains > assign > nameservers
-- 1&1 IONOS: Domains > DNS > Nameservers
-- Porkbun: Domain Management > Authoritative Nameservers
-- Hover: DNS > Edit Nameservers
-- Name.com: My Domains > domain > Nameservers
+Provide step-by-step instructions specific to their registrar for adding these DNS records. Be concise and friendly.
+Common registrars and their DNS record paths:
+- GoDaddy: My Products > DNS > DNS Records > Add
+- Namecheap: Domain List > Manage > Advanced DNS > Add New Record
+- Google Domains (now Squarespace): DNS > Default name servers > Resource records > Manage custom records
+- Cloudflare: DNS > Records > Add record (set A record proxy status to DNS only, not proxied)
+- Hostinger: Domains > Manage > DNS / Nameservers > DNS Records
+- Bluehost: Domains > DNS Zone Editor
+- 1&1 IONOS: Domains > DNS > Add Record
+- Porkbun: Domain Management > DNS Records > Quick DNS
+- Hover: DNS > Edit > Add Record
+- Name.com: My Domains > domain > DNS Records > Add Record
 
-If the user is confused, offer the CNAME alternative: "Add a CNAME record pointing 'www' to 'cname.vercel-dns.com' and an A record pointing @ to 76.76.21.21"
+If the user prefers nameservers instead: ns1.vercel-dns.com and ns2.vercel-dns.com (less reliable).
 
 Keep responses under 200 words. Use numbered steps.`;
 
