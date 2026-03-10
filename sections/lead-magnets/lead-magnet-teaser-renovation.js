@@ -71,7 +71,7 @@ module.exports = {
   <script>
     (function() {
       window['${s}Open'] = function() {
-        var userId = window.__SORCE_USER_ID__;
+        var userId = window.__SORCE_USER_ID__ || (document.querySelector('meta[name="user-id"]')||{}).content;
         var appUrl = window.__SORCE_APP_URL__ || 'https://app.sorce.ai';
         if (!userId) return;
         var iframe = document.getElementById('${s}-iframe');

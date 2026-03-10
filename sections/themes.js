@@ -21,6 +21,23 @@ const THEMES = {
     borderAccent: 'rgba(255,255,255,0.1)',
     borderAccentHover: 'rgba(217, 119, 6, 0.4)',
   },
+  'autoDetailing-light': {
+    id: 'autoDetailing-light',
+    name: 'Auto Detailing (Light)',
+    primaryColor: '#d97706',        // amber orange — same brand colour
+    accentColor: '#f59e0b',         // golden yellow accent
+    bgColor: '#ffffff',             // clean white page background
+    surfaceColor: '#fafafa',        // near-white for cards/panels
+    textColor: '#111827',           // near-black body text
+    textMuted: 'rgba(17,24,39,0.55)',
+    headingFont: 'Montserrat',      // same premium fonts
+    bodyFont: 'Rajdhani',
+    fontImport: "https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap",
+    borderRadius: '16px',
+    buttonRadius: '50px',
+    borderAccent: 'rgba(217,119,6,0.15)',
+    borderAccentHover: 'rgba(217,119,6,0.35)',
+  },
   landscaping: {
     id: 'landscaping',
     name: 'Landscaping',
@@ -343,6 +360,10 @@ function getThemeForBusinessType(businessType) {
       // Cleaning alternates between blue and green variants for variety
       if (themeKey === 'cleaning') {
         return Math.random() < 0.5 ? THEMES['cleaning'] : THEMES['cleaning-green'];
+      }
+      // Auto detailing alternates between dark and light variants
+      if (themeKey === 'autoDetailing') {
+        return Math.random() < 0.5 ? THEMES['autoDetailing'] : THEMES['autoDetailing-light'];
       }
       return THEMES[themeKey];
     }
