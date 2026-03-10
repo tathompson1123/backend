@@ -425,34 +425,55 @@ async function setDynadotDnsRecords(domain) {
     throw new Error('DYNADOT_API_KEY required to set DNS records');
   }
 
-  const params = {
+  const base = { key: DYNADOT_API_KEY, command: 'set_dns2', domain };
+  if (DYNADOT_SECRET_KEY) base.secret = DYNADOT_SECRET_KEY;
+
+  // Step 1: Reset nameservers to Dynadot's own NS so Dynadot serves the DNS records
+  const nsParams = {
     key: DYNADOT_API_KEY,
-    command: 'set_dns2',
-    domain: domain,
-    // Root A record → Vercel anycast IP
-    main_record_type0: 'A',
-    main_record0: '76.76.21.21',
-    main_sub_record0: '',   // empty = apex
-    main_ttl0: 300,
-    // www CNAME → Vercel
-    main_record_type1: 'CNAME',
-    main_record1: 'cname.vercel-dns.com.',
-    main_sub_record1: 'www',
-    main_ttl1: 300,
+    command: 'set_ns',
+    domain,
+    ns0: 'ns1.dynadot.com',
+    ns1: 'ns2.dynadot.com',
   };
-
-  if (DYNADOT_SECRET_KEY) params.secret = DYNADOT_SECRET_KEY;
-
-  const response = await axios.get(DYNADOT_API_URL, { params });
-  const xmlData = response.data;
-  console.log(`🔍 set_dns2 response for ${domain}:`, xmlData);
-
-  if (xmlData.includes('<SuccessCode>0</SuccessCode>') || xmlData.includes('<Status>success</Status>')) {
-    console.log(`✅ DNS records set for ${domain}: A @ → 76.76.21.21, CNAME www → cname.vercel-dns.com`);
-  } else {
-    const errMatch = xmlData.match(/<Error>(.+?)<\/Error>/i) || xmlData.match(/<Status>(.+?)<\/Status>/i);
-    throw new Error(`set_dns2 failed for ${domain}: ${errMatch ? errMatch[1] : 'Unknown error'}`);
+  if (DYNADOT_SECRET_KEY) nsParams.secret = DYNADOT_SECRET_KEY;
+  const nsResp = await axios.get(DYNADOT_API_URL, { params: nsParams });
+  console.log(`🔍 set_ns response for ${domain}:`, nsResp.data);
+  if (!nsResp.data.includes('<SuccessCode>0</SuccessCode>')) {
+    const errMatch = nsResp.data.match(/<Error>(.+?)<\/Error>/i);
+    throw new Error(`set_ns failed for ${domain}: ${errMatch ? errMatch[1] : 'Unknown'}`);
   }
+  console.log(`✅ Nameservers reset to Dynadot for ${domain}`);
+
+  // Step 2: A record for apex (@) — Dynadot requires A and CNAME in separate calls
+  const aResp = await axios.get(DYNADOT_API_URL, { params: {
+    ...base,
+    main_record_type0: 'a',
+    main_record0: '76.76.21.21',
+    main_sub_record0: '',
+    main_ttl0: 300,
+  }});
+  console.log(`🔍 A record response for ${domain}:`, aResp.data);
+  if (!aResp.data.includes('<SuccessCode>0</SuccessCode>')) {
+    const errMatch = aResp.data.match(/<Error>(.+?)<\/Error>/i);
+    throw new Error(`A record failed for ${domain}: ${errMatch ? errMatch[1] : 'Unknown'}`);
+  }
+
+  // Step 3: CNAME for www
+  const cnameResp = await axios.get(DYNADOT_API_URL, { params: {
+    ...base,
+    main_record_type0: 'cname',
+    main_record0: 'cname.vercel-dns.com',
+    main_sub_record0: 'www',
+    main_ttl0: 300,
+  }});
+  console.log(`🔍 CNAME response for ${domain}:`, cnameResp.data);
+  if (!cnameResp.data.includes('<SuccessCode>0</SuccessCode>')) {
+    const errMatch = cnameResp.data.match(/<Error>(.+?)<\/Error>/i);
+    throw new Error(`CNAME record failed for ${domain}: ${errMatch ? errMatch[1] : 'Unknown'}`);
+  }
+
+  console.log(`✅ DNS records set for ${domain}: A @ → 76.76.21.21, CNAME www → cname.vercel-dns.com`);
 }
 
 /**
