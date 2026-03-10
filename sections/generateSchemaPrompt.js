@@ -167,7 +167,7 @@ ${sharedTail}
 4. Reviews and testimonials should sound realistic and specific to the services offered.
 5. Include 3-6 services in the services section based on what was provided.
 6. Keep the sections in the exact order shown above (${sectionOrder}).
-7. Make the headline punchy and benefit-focused, not just the business name.
+7. Make the headline punchy and benefit-focused, not just the business name. Hero "headline" must be 3-5 words MAX (the highlight word is separate). Keep it short and bold.
 8. Feature icons should be relevant emoji for the business type.
 9. Gallery images should showcase different aspects of the work.
 10. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
@@ -506,8 +506,8 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
           "id": "hero",
           "template": "hero-fullscreen-dark",
           "content": {
-            "headline": "Main headline WITHOUT the highlight word",
-            "highlightText": "One or two highlight words",
+            "headline": "Main headline WITHOUT the highlight word (3-5 words max, e.g. 'Your Car, Perfectly')",
+            "highlightText": "One highlight word (e.g. 'Detailed')",
             "subtitle": "Compelling subtitle 1-2 sentences about this business",
             "ctaText": "Book Your Detail",
             "ctaLink": "/booking",

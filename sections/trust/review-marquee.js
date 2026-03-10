@@ -70,14 +70,14 @@ module.exports = {
 <style>
   .${s} {
     background: ${theme.surfaceColor || 'rgba(255,255,255,0.05)'};
-    padding: 4.5rem 0;
-    /* Pull up into the section above and down into the section below */
-    margin: -2.5rem 0;
+    padding: 4rem 0;
     position: relative;
     z-index: 5;
   }
   .${s}-track-wrap {
     overflow: hidden;
+    padding: 12px 0; /* prevent card box-shadow clipping at top/bottom */
+    margin: -12px 0;
   }
   .${s}-track {
     display: flex;
@@ -97,7 +97,7 @@ module.exports = {
     background: #ffffff;
     border-radius: 12px;
     padding: 1.25rem;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 16px rgba(0,0,0,0.13), 0 0 0 1px rgba(0,0,0,0.07);
     display: flex;
     flex-direction: column;
     gap: 0.6rem;

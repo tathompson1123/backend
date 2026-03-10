@@ -14,9 +14,18 @@ module.exports = {
   },
   render(content, theme, sectionId = 'lmt-auto') {
     const s = `section-${sectionId}`;
-    const primary  = theme.primaryColor  || '#1d4ed8';
-    const accent   = theme.accentColor   || '#dbeafe';
+    const primary  = theme.primaryColor  || '#d97706';
     const headFont = theme.headingFont   || 'Inter';
+
+    // Detect light theme: use dark section bg on light-bg pages, native bg on dark pages
+    const isLight  = theme.bgColor && theme.bgColor !== '#020617' && theme.bgColor.startsWith('#f') || theme.bgColor === '#ffffff';
+    const sectionBg   = isLight ? '#111827'        : '#0f172a';
+    const headingColor = '#ffffff';
+    const subColor     = isLight ? '#94a3b8'        : '#94a3b8';
+    const pillBg       = isLight ? 'rgba(255,255,255,0.08)' : '#1e293b';
+    const pillBorder   = isLight ? 'rgba(255,255,255,0.15)' : '#334155';
+    const pillColor    = isLight ? '#e2e8f0'        : '#cbd5e1';
+    const noteColor    = isLight ? '#64748b'        : '#64748b';
 
     const badge    = content.badge       || 'Free Instant Quote';
     const headline = content.headline    || 'See Exactly What Your Detail Will Cost';
@@ -30,7 +39,7 @@ module.exports = {
     ).join('');
 
     return `
-<section class="${s}-wrap" style="background:#0f172a; padding:80px 20px; position:relative; overflow:hidden;">
+<section class="${s}-wrap" style="background:${sectionBg}; padding:80px 20px; position:relative; overflow:hidden;">
   <style>
     .${s}-wrap { font-family: ${headFont}, sans-serif; }
     .${s}-bg {
@@ -44,23 +53,23 @@ module.exports = {
     }
     .${s}-badge {
       display:inline-block; padding:6px 16px; border-radius:999px;
-      background:${primary}22; border:1px solid ${primary}55;
-      color:#93c5fd; font-size:13px; font-weight:600; letter-spacing:.5px;
+      background:${primary}33; border:1px solid ${primary}66;
+      color:${primary}; font-size:13px; font-weight:600; letter-spacing:.5px;
       text-transform:uppercase; margin-bottom:24px;
     }
     .${s}-h {
-      font-size:clamp(28px,4vw,44px); font-weight:800; color:#fff;
+      font-size:clamp(28px,4vw,44px); font-weight:800; color:${headingColor};
       line-height:1.2; margin-bottom:18px;
     }
     .${s}-sub {
-      font-size:17px; color:#94a3b8; line-height:1.6;
+      font-size:17px; color:${subColor}; line-height:1.6;
       max-width:560px; margin:0 auto 32px;
     }
     .${s}-pills { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-bottom:36px; }
     .${s}-pill {
       padding:7px 16px; border-radius:999px;
-      background:#1e293b; border:1px solid #334155;
-      color:#cbd5e1; font-size:14px; font-weight:500;
+      background:${pillBg}; border:1px solid ${pillBorder};
+      color:${pillColor}; font-size:14px; font-weight:500;
     }
     .${s}-btn {
       display:inline-flex; align-items:center; gap:10px;
@@ -71,7 +80,7 @@ module.exports = {
     }
     .${s}-btn:hover { opacity:.92; transform:translateY(-1px); }
     .${s}-btn svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
-    .${s}-note { margin-top:16px; color:#64748b; font-size:13px; }
+    .${s}-note { margin-top:16px; color:${noteColor}; font-size:13px; }
     /* Modal overlay */
     .${s}-modal {
       display:none; position:fixed; inset:0; z-index:9999;

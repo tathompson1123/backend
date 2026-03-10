@@ -35,8 +35,8 @@ const THEMES = {
     fontImport: "https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap",
     borderRadius: '16px',
     buttonRadius: '50px',
-    borderAccent: 'rgba(217,119,6,0.15)',
-    borderAccentHover: 'rgba(217,119,6,0.35)',
+    borderAccent: 'rgba(0,0,0,0.12)',
+    borderAccentHover: 'rgba(217,119,6,0.4)',
   },
   landscaping: {
     id: 'landscaping',
