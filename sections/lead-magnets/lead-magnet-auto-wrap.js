@@ -46,7 +46,7 @@ module.exports = {
       ).join('\n              ');
       return `
           <!-- Step ${i + 1} -->
-          <div class="${s}-step" data-step="${i + 1}">
+          <div class="${s}-step${i === 0 ? ' active' : ''}" data-step="${i + 1}">
             <p class="${s}-q">${step.question}</p>
             <div class="${s}-grid">
               ${choicesHtml}
@@ -77,7 +77,7 @@ module.exports = {
         .${s}-progress-fill {
           height: 100%;
           background: ${primary};
-          width: 0%;
+          width: ${Math.round((1 / totalSteps) * 100)}%;
           transition: width 0.4s ease;
         }
         .${s}-body {
@@ -243,12 +243,9 @@ module.exports = {
         </div>
         <div class="${s}-body">
 
-          <!-- Step 0: Intro -->
-          <div class="${s}-step active" data-step="0">
-            <h2 class="${s}-title">${content.headline || 'Design Your Custom Vehicle Wrap'}</h2>
-            <p class="${s}-subtitle">${content.subheadline || 'Answer 4 quick questions to get a personalized wrap estimate.'}</p>
-            <button class="${s}-btn" onclick="window['${s}GoTo'](1)">${content.ctaText || 'Start My Design'}</button>
-          </div>
+          <!-- Static Header -->
+          <h2 class="${s}-title">${content.headline || 'Design Your Custom Vehicle Wrap'}</h2>
+          <p class="${s}-subtitle">${content.subheadline || 'Answer 4 quick questions to get a personalized wrap estimate.'}</p>
 
           ${stepsHtml}
 
@@ -301,7 +298,7 @@ module.exports = {
       <script>
         (function() {
           var state = {
-            step: 0,
+            step: 1,
             answers: {}
           };
 

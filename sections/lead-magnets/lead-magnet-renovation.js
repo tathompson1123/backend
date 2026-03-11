@@ -62,7 +62,7 @@ module.exports = {
       ).join('\n        ');
       return `
     <!-- Step ${i + 1} -->
-    <div class="${s}-step" data-step="${i + 1}">
+    <div class="${s}-step${i === 0 ? ' active' : ''}" data-step="${i + 1}">
       <p class="${s}-q">${step.question}</p>
       <div class="${s}-choices">
         ${choicesHtml}
@@ -77,12 +77,10 @@ module.exports = {
     <!-- Progress bar -->
     <div class="${s}-progress-bar"><div class="${s}-progress-fill" id="${s}-fill"></div></div>
 
-    <!-- Step 0: Intro -->
-    <div class="${s}-step active" data-step="0">
-      <div class="${s}-icon">🔨</div>
+    <!-- Static Header -->
+    <div class="${s}-header">
       <h2 class="${s}-h2">${headline}</h2>
       <p class="${s}-sub">${subheadline}</p>
-      <button class="${s}-btn" onclick="${s}Next()">Start Free Estimate →</button>
     </div>
 
     ${stepsHtml}
@@ -140,9 +138,15 @@ module.exports = {
 .${s}-progress-fill {
   height: 100%;
   background: ${primary};
-  width: 0%;
+  width: ${Math.round((1 / totalSteps) * 100)}%;
   transition: width 0.4s ease;
 }
+.${s}-header {
+  padding: 40px 40px 0;
+  text-align: center;
+}
+.${s}-header .${s}-h2 { margin-bottom: 8px; }
+.${s}-header .${s}-sub { margin-bottom: 0; }
 .${s}-step {
   display: none;
   padding: 48px 40px;
@@ -219,7 +223,7 @@ module.exports = {
 
 <script>
 (function() {
-  var _state = { step: 0, answers: {} };
+  var _state = { step: 1, answers: {} };
   var TOTAL_STEPS = ${totalSteps};
 
   var ESTIMATE_MAP = {
