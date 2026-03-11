@@ -245,7 +245,7 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
           { text: 'Gallery', url: '/gallery' },
           { text: 'Contact', url: '/contact' },
         ],
-        ctaText: 'Get a Quote', ctaLink: '/contact',
+        ctaText: 'Book Online', ctaLink: '#book-online',
       },
     },
     footer: {
@@ -481,8 +481,8 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
         { "text": "Gallery",  "url": "/gallery" },
         { "text": "Contact",  "url": "/contact" }
       ],
-      "ctaText": "Book Now",
-      "ctaLink": "/booking"
+      "ctaText": "Book Online",
+      "ctaLink": "#book-online"
     }
   },
   "footer": {
@@ -738,8 +738,8 @@ function defaultSections({ businessName, phone, phoneClean, images }) {
           { "text": "Reviews", "url": "#reviews" },
           { "text": "Contact", "url": "#contact" }
         ],
-        "ctaText": "Get Free Quote",
-        "ctaLink": "#contact"
+        "ctaText": "Book Online",
+        "ctaLink": "#book-online"
       }
     },
     {

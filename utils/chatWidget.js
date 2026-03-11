@@ -307,6 +307,11 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
     }
   };
 
+  // Expose global hook so nav "Book Online" buttons can open the chat/booking widget
+  window.__sorceOpenBooking = function() {
+    if (!isOpen) window.toggleChat();
+  };
+
   window.handleKeyPress = function(event) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();

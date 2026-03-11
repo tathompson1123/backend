@@ -58,7 +58,7 @@ module.exports = {
 
     const stepsHtml = steps.map((step, i) => {
       const choicesHtml = (step.choices || []).map(choice =>
-        `<div class="${s}-choice" onclick="${s}Pick(this,'ans${i}',${JSON.stringify(choice)})">${choice}</div>`
+        `<div class="${s}-choice" onclick="window['${s}Pick'](this,'ans${i}',${JSON.stringify(choice)})">${choice}</div>`
       ).join('\n        ');
       return `
     <!-- Step ${i + 1} -->
@@ -89,7 +89,7 @@ module.exports = {
     <div class="${s}-step" data-step="${totalSteps}">
       <div class="${s}-icon">📋</div>
       <p class="${s}-q">${contactSub}</p>
-      <form class="${s}-form" onsubmit="${s}Submit(event)">
+      <form class="${s}-form" onsubmit="window['${s}Submit'](event)">
         <input class="${s}-input" type="text"  name="name"  placeholder="Your Name"  required />
         <input class="${s}-input" type="email" name="email" placeholder="Email Address" required />
         <input class="${s}-input" type="tel"   name="phone" placeholder="Phone Number (optional)" />
@@ -111,7 +111,7 @@ module.exports = {
     <div class="${s}-step" data-step="error">
       <div class="${s}-icon">⚠️</div>
       <p class="${s}-q">Something went wrong. Please try again.</p>
-      <button class="${s}-btn" onclick="${s}GoTo(TOTAL_STEPS)">Try Again</button>
+      <button class="${s}-btn" onclick="window['${s}GoTo'](TOTAL_STEPS)">Try Again</button>
     </div>
 
   </div>
@@ -251,31 +251,31 @@ module.exports = {
     if (fill) fill.style.width = pct + '%';
   }
 
-  window.${s}GoTo = function(step) {
+  window['${s}GoTo'] = function(step) {
     document.querySelectorAll('.${s}-step').forEach(function(el) { el.classList.remove('active'); });
     var target = document.querySelector('.${s}-step[data-step="' + step + '"]');
     if (target) { target.classList.add('active'); _state.step = step; }
     updateProgress(typeof step === 'number' ? step : TOTAL_STEPS);
   };
 
-  window.${s}Next = function() { window.${s}GoTo(_state.step + 1); };
+  window['${s}Next'] = function() { window['${s}GoTo'](_state.step + 1); };
 
-  window.${s}Pick = function(el, key, value) {
+  window['${s}Pick'] = function(el, key, value) {
     var parent = el.closest('.${s}-choices');
     if (parent) parent.querySelectorAll('.${s}-choice').forEach(function(c) { c.classList.remove('selected'); });
     el.classList.add('selected');
     _state.answers[key] = value;
-    setTimeout(function() { window.${s}GoTo(_state.step + 1); }, 350);
+    setTimeout(function() { window['${s}GoTo'](_state.step + 1); }, 350);
   };
 
-  window.${s}Submit = function(e) {
+  window['${s}Submit'] = function(e) {
     e.preventDefault();
     var form = e.target;
     var name  = form.name.value.trim();
     var email = form.email.value.trim();
     var phone = form.phone ? form.phone.value.trim() : '';
     var userId = window.__SORCE_USER_ID__;
-    if (!userId) { window.${s}GoTo('error'); return; }
+    if (!userId) { window['${s}GoTo']('error'); return; }
 
     var estimate = (ESTIMATE_MAP[_state.answers.ans0] || {})[_state.answers.ans1] || 'Custom estimate';
     var answerParts = Object.keys(_state.answers).map(function(k) { return _state.answers[k]; });
@@ -300,9 +300,9 @@ module.exports = {
           '</strong> in a <strong>' + (_state.answers.ans1 || '') + '</strong> space:<br><br>' +
           '<span style="font-size:1.4rem">' + estimate + '</span>';
       }
-      window.${s}GoTo('result');
+      window['${s}GoTo']('result');
     })
-    .catch(function() { window.${s}GoTo('error'); });
+    .catch(function() { window['${s}GoTo']('error'); });
   };
 })();
 </script>

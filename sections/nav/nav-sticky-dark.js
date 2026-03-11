@@ -25,8 +25,8 @@ module.exports = {
         url: { type: 'url', label: 'Link URL', default: '#' },
       }
     },
-    ctaText: { type: 'text', label: 'CTA Button Text', default: 'Book Now' },
-    ctaLink: { type: 'url', label: 'CTA Button Link', default: '#contact' },
+    ctaText: { type: 'text', label: 'CTA Button Text', default: 'Book Online' },
+    ctaLink: { type: 'url', label: 'CTA Button Link', default: '#book-online' },
   },
 
   render(content, theme, sectionId = 'nav') {
@@ -45,7 +45,7 @@ module.exports = {
     <a href="#" class="${s}-logo">${logoContent}</a>
     <div class="${s}-links">
       ${linksHtml}
-      <a href="${content.ctaLink || '#'}" class="${s}-cta">${content.ctaText || 'Book Now'}</a>
+      <a href="${content.ctaLink || '#book-online'}" class="${s}-cta">${content.ctaText || 'Book Online'}</a>
     </div>
     <button class="${s}-mobile" onclick="document.querySelector('.${s}-links').classList.toggle('${s}-open')">
       <span></span><span></span><span></span>
@@ -84,9 +84,21 @@ module.exports = {
 <script>
 (function(){
   var nav = document.querySelector('.${s}');
-  function onScroll() { nav.classList.toggle('scrolled', window.scrollY > 80); }
+  // If no hero section on this page, start in scrolled mode so text is visible on light backgrounds
+  var hasHero = !!document.querySelector('[class*="hero"]');
+  function onScroll() { nav.classList.toggle('scrolled', !hasHero || window.scrollY > 80); }
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
+  // Book Online handler: open Sorce booking widget if available
+  nav.addEventListener('click', function(e) {
+    var a = e.target.closest('a[href="#book-online"]');
+    if (a) {
+      e.preventDefault();
+      if (window.__sorceOpenBooking) { window.__sorceOpenBooking(); }
+      else if (document.querySelector('.sorce-chat-fab')) { document.querySelector('.sorce-chat-fab').click(); }
+      else { var c = document.getElementById('contact'); if (c) c.scrollIntoView({ behavior: 'smooth' }); }
+    }
+  });
 })();
 </script>`;
   }
