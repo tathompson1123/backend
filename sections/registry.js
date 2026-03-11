@@ -55,6 +55,7 @@ const sections = {
 
   // Content
   'content-block': require('./content/content-block'),
+  'media-row':     require('./content/media-row'),
 
   // Contact
   'contact-split': require('./contact/contact-split'),
@@ -68,6 +69,8 @@ const sections = {
   'lead-magnet-cleaning':    require('./lead-magnets/lead-magnet-cleaning'),
   'lead-magnet-renovation':  require('./lead-magnets/lead-magnet-renovation'),
   'lead-magnet-photography': require('./lead-magnets/lead-magnet-photography'),
+  'lead-magnet-slider-auto':     require('./lead-magnets/lead-magnet-slider-auto'),
+  'lead-magnet-slider-cleaning': require('./lead-magnets/lead-magnet-slider-cleaning'),
   // Teaser sections — CTA blocks that open interactive lead magnet pages in a modal
   'lead-magnet-teaser-auto':        require('./lead-magnets/lead-magnet-teaser-auto'),
   'lead-magnet-teaser-landscaping': require('./lead-magnets/lead-magnet-teaser-landscaping'),
