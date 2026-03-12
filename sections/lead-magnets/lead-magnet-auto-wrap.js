@@ -404,7 +404,8 @@ module.exports = {
             var answerParts = Object.keys(state.answers).map(function(k) { return state.answers[k]; });
             var message = answerParts.join(' | ') + ' | Estimated Price: ' + finalPrice;
 
-            fetch('/api/leads/public/' + userId, {
+            var apiUrl = window.__SORCE_API_URL__ || '';
+            fetch(apiUrl + '/api/leads/public/' + userId, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

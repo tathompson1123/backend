@@ -269,7 +269,8 @@ module.exports = {
     var answerParts = Object.keys(_state.answers).map(function(k) { return _state.answers[k]; });
     var message = answerParts.join(' | ');
 
-    fetch('/api/leads/public/' + userId, {
+    var apiUrl = window.__SORCE_API_URL__ || '';
+    fetch(apiUrl + '/api/leads/public/' + userId, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

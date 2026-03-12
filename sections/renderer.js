@@ -69,7 +69,7 @@ function renderSectionHtml(section, theme) {
 function buildPageHtml(sectionsHtml, theme, meta) {
   // Resolve /booking placeholder → real booking URL
   if (meta.userId) {
-    const appUrl = process.env.VITE_APP_URL || 'https://app.sorce.ai';
+    const appUrl = process.env.VITE_APP_URL || 'https://www.sorceintegrations.com';
     const bookingUrl = `${appUrl}/book/${meta.userId}`;
     sectionsHtml = sectionsHtml.replace(/href="\/booking"/g, `href="${bookingUrl}" target="_blank" rel="noopener noreferrer"`);
   }
@@ -82,7 +82,7 @@ function buildPageHtml(sectionsHtml, theme, meta) {
   <title>${escapeHtml(meta.title || 'Website')}</title>
   <meta name="description" content="${escapeHtml(meta.description || '')}">
   ${meta.userId ? `<meta name="user-id" content="${meta.userId}">` : ''}
-  ${meta.userId ? `<script>window.__SORCE_USER_ID__='${meta.userId}';window.__SORCE_APP_URL__='${process.env.VITE_APP_URL || 'https://app.sorce.ai'}';</script>` : ''}
+  ${meta.userId ? `<script>window.__SORCE_USER_ID__='${meta.userId}';window.__SORCE_APP_URL__='${process.env.VITE_APP_URL || 'https://www.sorceintegrations.com'}';window.__SORCE_API_URL__='${process.env.VITE_API_URL || process.env.BACKEND_URL || 'https://backend-production-ab50.up.railway.app'}';</script>` : ''}
   <link href="${theme.fontImport || 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'}" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }

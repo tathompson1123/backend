@@ -479,15 +479,15 @@ router.get('/domain-dns-status', authenticateToken, async (req, res) => {
 
   const dns = require('dns').promises;
   try {
-    // Try to resolve NS records — if they point to Vercel, DNS has propagated
-    const nsRecords = await dns.resolveNs(domain);
-    const propagated = nsRecords.some(ns =>
-      ns.toLowerCase().includes('vercel-dns.com')
-    );
-    return res.json({ propagated, ns: nsRecords });
+    // Check if domain resolves to Vercel's IP (A record) — works for both
+    // Vercel NS and Dynadot NS with A+CNAME pointing to Vercel
+    const addresses = await dns.resolve4(domain);
+    const vercelIPs = ['76.76.21.21', '76.76.21.22', '76.76.21.164'];
+    const propagated = addresses.some(ip => vercelIPs.includes(ip));
+    return res.json({ propagated, addresses });
   } catch {
     // SERVFAIL / NXDOMAIN — not propagated yet
-    return res.json({ propagated: false, ns: [] });
+    return res.json({ propagated: false, addresses: [] });
   }
 });
 
