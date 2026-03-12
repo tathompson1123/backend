@@ -598,6 +598,7 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
       body: JSON.stringify({
         name: `website-${userId}`,
         files: files,
+        target: 'production',
         projectSettings: { framework: null }
       })
     });
@@ -718,6 +719,7 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
                 ...Object.entries(pages).map(([filename, pageHtml]) => ({ file: filename, data: pageHtml })),
                 { file: 'vercel.json', data: JSON.stringify({ cleanUrls: true, trailingSlash: false }) }
               ],
+              target: 'production',
               projectSettings: { framework: null }
             })
           });
@@ -1665,6 +1667,7 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
                 { file: 'index.html', data: htmlContent },
                 { file: 'vercel.json', data: JSON.stringify({ cleanUrls: true, trailingSlash: false }) }
               ],
+              target: 'production',
               projectSettings: { framework: null }
             })
           });
@@ -2157,6 +2160,7 @@ router.post('/lead-magnet-config', authenticateToken, async (req, res) => {
                 ...Object.entries(pages).map(([filename, pageHtml]) => ({ file: filename, data: pageHtml })),
                 { file: 'vercel.json', data: JSON.stringify({ cleanUrls: true, trailingSlash: false }) }
               ],
+              target: 'production',
               projectSettings: { framework: null }
             })
           });

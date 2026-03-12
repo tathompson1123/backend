@@ -258,6 +258,7 @@ async function generateWebsite(req, res)
                       ...Object.entries(pages).map(([filename, pageHtml]) => ({ file: filename, data: pageHtml })),
                       { file: 'vercel.json', data: JSON.stringify({ cleanUrls: true, trailingSlash: false }) }
                     ],
+                    target: 'production',
                     projectSettings: { framework: null }
                   })
                 });
