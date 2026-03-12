@@ -445,35 +445,24 @@ async function setDynadotDnsRecords(domain) {
   }
   console.log(`✅ Nameservers reset to Dynadot for ${domain}`);
 
-  // Step 2: A record for apex (@) — Dynadot requires A and CNAME in separate calls
-  const aResp = await axios.get(DYNADOT_API_URL, { params: {
+  // Step 2: A record for apex + CNAME for www in a SINGLE set_dns2 call.
+  // Dynadot's set_dns2 replaces all records — separate calls would overwrite each other.
+  // Use main_record for the apex A record and subdomain params for www CNAME.
+  const dnsResp = await axios.get(DYNADOT_API_URL, { params: {
     ...base,
     main_record_type0: 'a',
     main_record0: '76.76.21.21',
-    main_sub_record0: '',
-    main_ttl0: 300,
+    subdomain0: 'www',
+    sub_record_type0: 'cname',
+    sub_record0: 'cname.vercel-dns.com',
   }});
-  console.log(`🔍 A record response for ${domain}:`, aResp.data);
-  if (!aResp.data.includes('<SuccessCode>0</SuccessCode>')) {
-    const errMatch = aResp.data.match(/<Error>(.+?)<\/Error>/i);
-    throw new Error(`A record failed for ${domain}: ${errMatch ? errMatch[1] : 'Unknown'}`);
+  console.log(`🔍 DNS records response for ${domain}:`, dnsResp.data);
+  if (!dnsResp.data.includes('<SuccessCode>0</SuccessCode>')) {
+    const errMatch = dnsResp.data.match(/<Error>(.+?)<\/Error>/i);
+    throw new Error(`DNS records failed for ${domain}: ${errMatch ? errMatch[1] : 'Unknown'}`);
   }
 
-  // Step 3: CNAME for www
-  const cnameResp = await axios.get(DYNADOT_API_URL, { params: {
-    ...base,
-    main_record_type0: 'cname',
-    main_record0: 'cname.vercel-dns.com',
-    main_sub_record0: 'www',
-    main_ttl0: 300,
-  }});
-  console.log(`🔍 CNAME response for ${domain}:`, cnameResp.data);
-  if (!cnameResp.data.includes('<SuccessCode>0</SuccessCode>')) {
-    const errMatch = cnameResp.data.match(/<Error>(.+?)<\/Error>/i);
-    throw new Error(`CNAME record failed for ${domain}: ${errMatch ? errMatch[1] : 'Unknown'}`);
-  }
-
-  console.log(`✅ DNS records set for ${domain}: A @ → 76.76.21.21, CNAME www → cname.vercel-dns.com`);
+  console.log(`✅ DNS records set for ${domain}: A @ → 76.76.21.21, CNAME www → cname.vercel-dns.com (single set_dns2 call)`);
 }
 
 /**

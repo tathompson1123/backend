@@ -39,4 +39,15 @@
 - `contact-split.js`: ~490 lines (largest standard section)
 - `services-carousel.js`: ~355 lines
 - `footer-4col-dark.js`: ~366 lines
-- Lead magnets: ~300 lines each
+- Lead magnets: ~300 lines each (cleaning slider now ~917 lines after multi-step rewrite)
+
+## Multi-Step Lead Magnet Pattern (established 2026-03-11)
+- 3-step flow: Slider -> Results+Form -> Success
+- Step transitions: hide/show with `.fade-in` CSS animation
+- Step 2 uses two-column grid (stacks on mobile)
+- Service checkboxes: hidden native checkbox + styled `.svc-check` span with SVG checkmark
+- Stat bars: start at `width:0%`, animated to target via `setTimeout(fn, 100)` after step2 shows
+- Health tiers: array of objects with `max` threshold, iterated with `for` loop
+- `hexToRgba()` utility for dynamic border/bg alpha on info boxes and badges
+- Slider value read from Step 1 `#range` element even in Step 2/3 (persists in DOM)
+- Auto detailing template (`lead-magnet-slider-auto.js`) uses same dark theme but is NOT multi-step (single two-column layout with form always visible)
