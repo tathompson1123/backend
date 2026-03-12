@@ -77,20 +77,29 @@ async function addDomainToVercel(domain, userId) {
     // First, ensure project exists by getting or creating it
     await ensureProject(projectName);
 
-    // Add domain to project
+    // Add apex domain to project
+    const headers = { 'Authorization': `Bearer ${VERCEL_TOKEN}`, 'Content-Type': 'application/json' };
+    const params = VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {};
     await axios.post(
       `https://api.vercel.com/v10/projects/${projectName}/domains`,
       { name: domain },
-      {
-        headers: {
-          'Authorization': `Bearer ${VERCEL_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
-      }
+      { headers, params }
     );
-
     console.log(`✅ Domain ${domain} added to Vercel project ${projectName}`);
+
+    // Also add www subdomain so both apex and www work
+    try {
+      await axios.post(
+        `https://api.vercel.com/v10/projects/${projectName}/domains`,
+        { name: `www.${domain}` },
+        { headers, params }
+      );
+      console.log(`✅ Domain www.${domain} added to Vercel project ${projectName}`);
+    } catch (wwwErr) {
+      // Non-fatal — apex is the important one
+      console.warn(`⚠️  Could not add www.${domain}:`, wwwErr.response?.data?.error?.message || wwwErr.message);
+    }
+
     return true;
   } catch (error) {
     console.error('Vercel add domain error:', error.response?.data || error.message);
