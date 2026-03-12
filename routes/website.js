@@ -431,18 +431,19 @@ router.post('/save-v2', authenticateToken, async (req, res) => {
 
     // Check if website exists
     const existing = await pool.query(
-      'SELECT id FROM websites WHERE user_id = $1',
+      'SELECT id, is_published FROM websites WHERE user_id = $1',
       [userId]
     );
 
+    const wasPublished = existing.rows[0]?.is_published || false;
+
     if (existing.rows.length > 0) {
-      // Update existing
+      // Update existing — preserve is_published status
       await pool.query(
-        `UPDATE websites 
-         SET page_data = $1, 
-             html_content = $2, 
-             is_published = false,
-             updated_at = CURRENT_TIMESTAMP 
+        `UPDATE websites
+         SET page_data = $1,
+             html_content = $2,
+             updated_at = CURRENT_TIMESTAMP
          WHERE user_id = $3`,
         [JSON.stringify(page_data), responsiveHtml, userId]
       );
@@ -1617,17 +1618,18 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
 
     // Save to database
     const existing = await pool.query(
-      'SELECT id FROM websites WHERE user_id = $1',
+      'SELECT id, is_published FROM websites WHERE user_id = $1',
       [userId]
     );
 
+    const wasPublished = existing.rows[0]?.is_published || false;
+
     if (existing.rows.length > 0) {
       await pool.query(
-        `UPDATE websites 
-         SET html_content = $1, 
-             page_data = $2, 
-             pages = NULL,
-             is_published = false,
+        `UPDATE websites
+         SET html_content = $1,
+             page_data = $2,
+             pages = jsonb_build_object('index.html', $1::text),
              primary_color = $3,
              accent_color = $4,
              updated_at = CURRENT_TIMESTAMP
@@ -1636,18 +1638,61 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
       );
     } else {
       await pool.query(
-        `INSERT INTO websites (user_id, html_content, page_data, is_published, primary_color, accent_color, created_at, updated_at)
-         VALUES ($1, $2, $3, false, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        `INSERT INTO websites (user_id, html_content, page_data, pages, is_published, primary_color, accent_color, created_at, updated_at)
+         VALUES ($1, $2, $3, jsonb_build_object('index.html', $2::text), false, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
         [userId, htmlContent, JSON.stringify(pageData), primaryColor, accentColor]
       );
     }
 
     console.log('✅ Website saved for user', userId);
 
-    res.json({ 
-      success: true, 
+    // Auto-redeploy if already published
+    let deployed = false;
+    let deployUrl = null;
+    if (wasPublished) {
+      try {
+        const vercelToken = process.env.VERCEL_TOKEN;
+        if (vercelToken) {
+          const deployResponse = await fetch('https://api.vercel.com/v13/deployments', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${vercelToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: `website-${userId}`,
+              files: [
+                { file: 'index.html', data: htmlContent },
+                { file: 'vercel.json', data: JSON.stringify({ cleanUrls: true, trailingSlash: false }) }
+              ],
+              projectSettings: { framework: null }
+            })
+          });
+
+          if (deployResponse.ok) {
+            const deployData = await deployResponse.json();
+            deployUrl = `https://${deployData.url}`;
+            await pool.query(
+              'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
+              [deployUrl, deployData.id, userId]
+            );
+            deployed = true;
+            console.log(`✅ Auto-redeployed save-page to ${deployUrl}`);
+          } else {
+            console.error('⚠️ Save-page auto-redeploy failed:', await deployResponse.text());
+          }
+        }
+      } catch (deployErr) {
+        console.error('⚠️ Save-page auto-redeploy error:', deployErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
       html: htmlContent,
       page_data: pageData,
+      deployed,
+      url: deployUrl,
       businessName: safeBusinessName,
       bookingUrl,
       phoneNumber,
