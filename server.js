@@ -77,11 +77,13 @@ const chatRoutes = require('./routes/chat');
 const templateRoutes = require('./routes/templates');
 const userRoutes = require('./routes/user');
 const reviewConfigRoutes = require('./routes/review-config');
+const publicRoutes = require('./routes/public');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/customers', customerRoutes);
+app.use('/api/public', embedCors, publicRoutes);
 app.use('/api/leads/public', embedCors); // CORS for embed form submissions
 app.use('/api/leads', leadRoutes);
 app.use('/api/services', serviceRoutes);
