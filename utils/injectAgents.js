@@ -9,6 +9,14 @@
 const { generateChatWidgetCode } = require('./chatWidget');
 const { generateBookingWidgetCode } = require('./bookingWidget');
 
+// Safe string insertion before </body> — avoids String.replace() special
+// patterns ($', $`, $&, etc.) that corrupt widget code containing '$'.
+function insertBeforeBody(html, code) {
+  const idx = html.lastIndexOf('</body>');
+  if (idx === -1) return html;
+  return html.slice(0, idx) + code + '\n' + html.slice(idx);
+}
+
 /**
  * Injects the chat widget into HTML if the user has one deployed.
  * @param {string} html       - The rendered page HTML
@@ -41,8 +49,8 @@ async function injectAgents(html, userId, pool, theme) {
       if (html.includes('sorce-chat-widget')) {
         html = html.replace(widgetRegex, widgetCode.trim());
         console.log('🔄 injectAgents: chat widget replaced with latest version');
-      } else if (html.includes('</body>')) {
-        html = html.replace('</body>', widgetCode + '\n</body>');
+      } else {
+        html = insertBeforeBody(html, widgetCode);
         console.log('✅ injectAgents: chat widget injected');
       }
     }
@@ -58,8 +66,8 @@ async function injectAgents(html, userId, pool, theme) {
     if (html.includes('sorce-booking-overlay')) {
       html = html.replace(bookingRegex, bookingWidget.trim());
       console.log('🔄 injectAgents: booking widget replaced');
-    } else if (html.includes('</body>')) {
-      html = html.replace('</body>', bookingWidget + '\n</body>');
+    } else {
+      html = insertBeforeBody(html, bookingWidget);
       console.log('✅ injectAgents: booking widget injected');
     }
   } catch (err) {

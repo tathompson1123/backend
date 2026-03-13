@@ -98,65 +98,65 @@ module.exports = {
     </button>
     <p class="${s}-note">Free concept — no obligation to book</p>
   </div>
-  <div class="${s}-modal" id="${s}-modal">
-    <div class="${s}-modal-box">
-      <button class="${s}-modal-close" id="${s}-close">&times;</button>
-      <div id="${s}-form-wrap">
-        <h3 class="${s}-modal-title">Design Your Dream Yard</h3>
-        <p class="${s}-modal-sub">Tell us what you're envisioning and we'll get back to you with a free design concept.</p>
-        <div id="${s}-err"></div>
-        <label class="${s}-lbl">Full Name <span class="${s}-req">*</span></label>
-        <input class="${s}-input" id="${s}-name" placeholder="John Doe">
-        <label class="${s}-lbl">Email <span class="${s}-req">*</span></label>
-        <input class="${s}-input" id="${s}-email" type="email" placeholder="john@example.com">
-        <label class="${s}-lbl">Phone <span class="${s}-req">*</span></label>
-        <input class="${s}-input" id="${s}-phone" type="tel" placeholder="(555) 123-4567">
-        <label class="${s}-lbl">Property Address</label>
-        <input class="${s}-input" id="${s}-address" placeholder="123 Main St, City, State">
-        <label class="${s}-lbl">Features You're Interested In</label>
-        <div class="${s}-feats">${featureCheckboxes}</div>
-        <button class="${s}-submit" id="${s}-submit">${ctaText}</button>
-        <p class="${s}-consent">By submitting, you agree to receive communications about your project. We respect your privacy.</p>
-      </div>
-      <div id="${s}-success" class="${s}-ok" style="display:none">
-        <div class="${s}-ok-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
-        <h4>You're All Set!</h4>
-        <p>We'll review your details and get back to you with a free design concept soon.</p>
-      </div>
+</section>
+<div class="${s}-modal" id="${s}-modal">
+  <div class="${s}-modal-box">
+    <button class="${s}-modal-close" id="${s}-close">&times;</button>
+    <div id="${s}-form-wrap">
+      <h3 class="${s}-modal-title">Design Your Dream Yard</h3>
+      <p class="${s}-modal-sub">Tell us what you're envisioning and we'll get back to you with a free design concept.</p>
+      <div id="${s}-err"></div>
+      <label class="${s}-lbl">Full Name <span class="${s}-req">*</span></label>
+      <input class="${s}-input" id="${s}-name" placeholder="John Doe">
+      <label class="${s}-lbl">Email <span class="${s}-req">*</span></label>
+      <input class="${s}-input" id="${s}-email" type="email" placeholder="john@example.com">
+      <label class="${s}-lbl">Phone <span class="${s}-req">*</span></label>
+      <input class="${s}-input" id="${s}-phone" type="tel" placeholder="(555) 123-4567">
+      <label class="${s}-lbl">Property Address</label>
+      <input class="${s}-input" id="${s}-address" placeholder="123 Main St, City, State">
+      <label class="${s}-lbl">Features You're Interested In</label>
+      <div class="${s}-feats">${featureCheckboxes}</div>
+      <button class="${s}-submit" id="${s}-submit">${ctaText}</button>
+      <p class="${s}-consent">By submitting, you agree to receive communications about your project. We respect your privacy.</p>
+    </div>
+    <div id="${s}-success" class="${s}-ok" style="display:none">
+      <div class="${s}-ok-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <h4>You're All Set!</h4>
+      <p>We'll review your details and get back to you with a free design concept soon.</p>
     </div>
   </div>
-  <script>
-    (function(){
-      var apiUrl=window.__SORCE_API_URL__||'';
-      var userId=window.__SORCE_USER_ID__||(document.querySelector('meta[name="user-id"]')||{}).content||'';
-      var modal=document.getElementById('${s}-modal');
-      var formWrap=document.getElementById('${s}-form-wrap');
-      var successEl=document.getElementById('${s}-success');
-      var errEl=document.getElementById('${s}-err');
-      document.getElementById('${s}-open').onclick=function(){modal.classList.add('open');document.body.style.overflow='hidden'};
-      document.getElementById('${s}-close').onclick=function(){modal.classList.remove('open');document.body.style.overflow=''};
-      modal.addEventListener('click',function(e){if(e.target===modal){modal.classList.remove('open');document.body.style.overflow=''}});
-      document.getElementById('${s}-submit').onclick=function(){
-        var name=document.getElementById('${s}-name').value.trim();
-        var email=document.getElementById('${s}-email').value.trim();
-        var phone=document.getElementById('${s}-phone').value.trim();
-        var address=document.getElementById('${s}-address').value.trim();
-        var feats=[];modal.querySelectorAll('.${s}-feat input:checked').forEach(function(cb){feats.push(cb.value)});
-        errEl.innerHTML='';
-        if(!name||!email||!phone){errEl.innerHTML='<div class="${s}-err">Please fill in all required fields.</div>';return}
-        var btn=document.getElementById('${s}-submit');btn.disabled=true;btn.textContent='Submitting...';
-        var msg='Address: '+(address||'Not provided')+' | Features: '+(feats.join(', ')||'None selected');
-        fetch(apiUrl+'/api/leads/public/'+userId,{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({name:name,email:email,phone:phone,service:'Landscaping Design',message:msg,source:'lead_form',smsConsent:true})
-        }).then(function(r){return r.json()}).then(function(d){
-          if(d.error){errEl.innerHTML='<div class="${s}-err">'+d.error+'</div>';btn.disabled=false;btn.textContent='${ctaText}';return}
-          formWrap.style.display='none';successEl.style.display='block';
-        }).catch(function(){errEl.innerHTML='<div class="${s}-err">Something went wrong. Please try again.</div>';btn.disabled=false;btn.textContent='${ctaText}'});
-      };
-    })();
-  </script>
-</section>
+</div>
+<script>
+  (function(){
+    var apiUrl=window.__SORCE_API_URL__||'';
+    var userId=window.__SORCE_USER_ID__||(document.querySelector('meta[name="user-id"]')||{}).content||'';
+    var modal=document.getElementById('${s}-modal');
+    var formWrap=document.getElementById('${s}-form-wrap');
+    var successEl=document.getElementById('${s}-success');
+    var errEl=document.getElementById('${s}-err');
+    document.getElementById('${s}-open').onclick=function(){modal.classList.add('open');document.body.style.overflow='hidden'};
+    document.getElementById('${s}-close').onclick=function(){modal.classList.remove('open');document.body.style.overflow=''};
+    modal.addEventListener('click',function(e){if(e.target===modal){modal.classList.remove('open');document.body.style.overflow=''}});
+    document.getElementById('${s}-submit').onclick=function(){
+      var name=document.getElementById('${s}-name').value.trim();
+      var email=document.getElementById('${s}-email').value.trim();
+      var phone=document.getElementById('${s}-phone').value.trim();
+      var address=document.getElementById('${s}-address').value.trim();
+      var feats=[];modal.querySelectorAll('.${s}-feat input:checked').forEach(function(cb){feats.push(cb.value)});
+      errEl.innerHTML='';
+      if(!name||!email||!phone){errEl.innerHTML='<div class="${s}-err">Please fill in all required fields.</div>';return}
+      var btn=document.getElementById('${s}-submit');btn.disabled=true;btn.textContent='Submitting...';
+      var msg='Address: '+(address||'Not provided')+' | Features: '+(feats.join(', ')||'None selected');
+      fetch(apiUrl+'/api/leads/public/'+userId,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:name,email:email,phone:phone,service:'Landscaping Design',message:msg,source:'lead_form',smsConsent:true})
+      }).then(function(r){return r.json()}).then(function(d){
+        if(d.error){errEl.innerHTML='<div class="${s}-err">'+d.error+'</div>';btn.disabled=false;btn.textContent='${ctaText}';return}
+        formWrap.style.display='none';successEl.style.display='block';
+      }).catch(function(){errEl.innerHTML='<div class="${s}-err">Something went wrong. Please try again.</div>';btn.disabled=false;btn.textContent='${ctaText}'});
+    };
+  })();
+</script>
 `;
   }
 };

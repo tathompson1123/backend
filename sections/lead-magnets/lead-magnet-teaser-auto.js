@@ -91,65 +91,65 @@ module.exports = {
     </button>
     <p class="${s}-note">No commitment — get your estimate in under 2 minutes</p>
   </div>
-  <div class="${s}-modal" id="${s}-modal">
-    <div class="${s}-modal-box">
-      <button class="${s}-modal-close" id="${s}-close">&times;</button>
-      <div id="${s}-form-wrap">
-        <h3 class="${s}-modal-title">Get Your Custom Quote</h3>
-        <p class="${s}-modal-sub">Select the services you need and we'll get back to you with a personalized price.</p>
-        <div id="${s}-err"></div>
-        <label class="${s}-lbl">Full Name <span class="${s}-req">*</span></label>
-        <input class="${s}-input" id="${s}-name" placeholder="John Doe">
-        <label class="${s}-lbl">Email <span class="${s}-req">*</span></label>
-        <input class="${s}-input" id="${s}-email" type="email" placeholder="john@example.com">
-        <label class="${s}-lbl">Phone <span class="${s}-req">*</span></label>
-        <input class="${s}-input" id="${s}-phone" type="tel" placeholder="(555) 123-4567">
-        <label class="${s}-lbl">Vehicle (Year, Make, Model)</label>
-        <input class="${s}-input" id="${s}-vehicle" placeholder="2023 Tesla Model 3">
-        <label class="${s}-lbl">Services Interested In</label>
-        <div class="${s}-svcs">${serviceCheckboxes}</div>
-        <button class="${s}-submit" id="${s}-submit">${ctaText}</button>
-        <p class="${s}-consent">By submitting, you agree to receive communications about your quote.</p>
-      </div>
-      <div id="${s}-success" class="${s}-ok" style="display:none">
-        <div class="${s}-ok-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
-        <h4>Quote Request Received!</h4>
-        <p>We'll review your details and get back to you with a custom quote shortly.</p>
-      </div>
+</section>
+<div class="${s}-modal" id="${s}-modal">
+  <div class="${s}-modal-box">
+    <button class="${s}-modal-close" id="${s}-close">&times;</button>
+    <div id="${s}-form-wrap">
+      <h3 class="${s}-modal-title">Get Your Custom Quote</h3>
+      <p class="${s}-modal-sub">Select the services you need and we'll get back to you with a personalized price.</p>
+      <div id="${s}-err"></div>
+      <label class="${s}-lbl">Full Name <span class="${s}-req">*</span></label>
+      <input class="${s}-input" id="${s}-name" placeholder="John Doe">
+      <label class="${s}-lbl">Email <span class="${s}-req">*</span></label>
+      <input class="${s}-input" id="${s}-email" type="email" placeholder="john@example.com">
+      <label class="${s}-lbl">Phone <span class="${s}-req">*</span></label>
+      <input class="${s}-input" id="${s}-phone" type="tel" placeholder="(555) 123-4567">
+      <label class="${s}-lbl">Vehicle (Year, Make, Model)</label>
+      <input class="${s}-input" id="${s}-vehicle" placeholder="2023 Tesla Model 3">
+      <label class="${s}-lbl">Services Interested In</label>
+      <div class="${s}-svcs">${serviceCheckboxes}</div>
+      <button class="${s}-submit" id="${s}-submit">${ctaText}</button>
+      <p class="${s}-consent">By submitting, you agree to receive communications about your quote.</p>
+    </div>
+    <div id="${s}-success" class="${s}-ok" style="display:none">
+      <div class="${s}-ok-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <h4>Quote Request Received!</h4>
+      <p>We'll review your details and get back to you with a custom quote shortly.</p>
     </div>
   </div>
-  <script>
-    (function(){
-      var apiUrl=window.__SORCE_API_URL__||'';
-      var userId=window.__SORCE_USER_ID__||(document.querySelector('meta[name="user-id"]')||{}).content||'';
-      var modal=document.getElementById('${s}-modal');
-      var formWrap=document.getElementById('${s}-form-wrap');
-      var successEl=document.getElementById('${s}-success');
-      var errEl=document.getElementById('${s}-err');
-      document.getElementById('${s}-open').onclick=function(){modal.classList.add('open');document.body.style.overflow='hidden'};
-      document.getElementById('${s}-close').onclick=function(){modal.classList.remove('open');document.body.style.overflow=''};
-      modal.addEventListener('click',function(e){if(e.target===modal){modal.classList.remove('open');document.body.style.overflow=''}});
-      document.getElementById('${s}-submit').onclick=function(){
-        var name=document.getElementById('${s}-name').value.trim();
-        var email=document.getElementById('${s}-email').value.trim();
-        var phone=document.getElementById('${s}-phone').value.trim();
-        var vehicle=document.getElementById('${s}-vehicle').value.trim();
-        var svcs=[];modal.querySelectorAll('.${s}-svc input:checked').forEach(function(cb){svcs.push(cb.value)});
-        errEl.innerHTML='';
-        if(!name||!email||!phone){errEl.innerHTML='<div class="${s}-err">Please fill in all required fields.</div>';return}
-        var btn=document.getElementById('${s}-submit');btn.disabled=true;btn.textContent='Submitting...';
-        var msg='Vehicle: '+(vehicle||'Not provided')+' | Services: '+(svcs.join(', ')||'None selected');
-        fetch(apiUrl+'/api/leads/public/'+userId,{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({name:name,email:email,phone:phone,service:'Auto Detailing',message:msg,source:'lead_form',smsConsent:true})
-        }).then(function(r){return r.json()}).then(function(d){
-          if(d.error){errEl.innerHTML='<div class="${s}-err">'+d.error+'</div>';btn.disabled=false;btn.textContent='${ctaText}';return}
-          formWrap.style.display='none';successEl.style.display='block';
-        }).catch(function(){errEl.innerHTML='<div class="${s}-err">Something went wrong. Please try again.</div>';btn.disabled=false;btn.textContent='${ctaText}'});
-      };
-    })();
-  </script>
-</section>
+</div>
+<script>
+  (function(){
+    var apiUrl=window.__SORCE_API_URL__||'';
+    var userId=window.__SORCE_USER_ID__||(document.querySelector('meta[name="user-id"]')||{}).content||'';
+    var modal=document.getElementById('${s}-modal');
+    var formWrap=document.getElementById('${s}-form-wrap');
+    var successEl=document.getElementById('${s}-success');
+    var errEl=document.getElementById('${s}-err');
+    document.getElementById('${s}-open').onclick=function(){modal.classList.add('open');document.body.style.overflow='hidden'};
+    document.getElementById('${s}-close').onclick=function(){modal.classList.remove('open');document.body.style.overflow=''};
+    modal.addEventListener('click',function(e){if(e.target===modal){modal.classList.remove('open');document.body.style.overflow=''}});
+    document.getElementById('${s}-submit').onclick=function(){
+      var name=document.getElementById('${s}-name').value.trim();
+      var email=document.getElementById('${s}-email').value.trim();
+      var phone=document.getElementById('${s}-phone').value.trim();
+      var vehicle=document.getElementById('${s}-vehicle').value.trim();
+      var svcs=[];modal.querySelectorAll('.${s}-svc input:checked').forEach(function(cb){svcs.push(cb.value)});
+      errEl.innerHTML='';
+      if(!name||!email||!phone){errEl.innerHTML='<div class="${s}-err">Please fill in all required fields.</div>';return}
+      var btn=document.getElementById('${s}-submit');btn.disabled=true;btn.textContent='Submitting...';
+      var msg='Vehicle: '+(vehicle||'Not provided')+' | Services: '+(svcs.join(', ')||'None selected');
+      fetch(apiUrl+'/api/leads/public/'+userId,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:name,email:email,phone:phone,service:'Auto Detailing',message:msg,source:'lead_form',smsConsent:true})
+      }).then(function(r){return r.json()}).then(function(d){
+        if(d.error){errEl.innerHTML='<div class="${s}-err">'+d.error+'</div>';btn.disabled=false;btn.textContent='${ctaText}';return}
+        formWrap.style.display='none';successEl.style.display='block';
+      }).catch(function(){errEl.innerHTML='<div class="${s}-err">Something went wrong. Please try again.</div>';btn.disabled=false;btn.textContent='${ctaText}'});
+    };
+  })();
+</script>
 `;
   }
 };

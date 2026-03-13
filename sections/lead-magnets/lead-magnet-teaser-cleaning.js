@@ -75,65 +75,65 @@ module.exports = {
     </button>
     <p class="${s}-note">Takes 30 seconds — claim your discount instantly</p>
   </div>
-  <div class="${s}-modal" id="${s}-modal">
-    <div class="${s}-modal-box">
-      <button class="${s}-modal-close" id="${s}-close">&times;</button>
-      <div id="${s}-form-wrap">
-        <h3 class="${s}-modal-title">Get Your Free Assessment</h3>
-        <p class="${s}-modal-sub">Tell us a bit about your space and we'll send you a personalized cleaning plan.</p>
-        <div id="${s}-err"></div>
-        <label class="${s}-lbl">Full Name <span class="${s}-req">*</span></label>
-        <input class="${s}-input" id="${s}-name" placeholder="John Doe">
-        <label class="${s}-lbl">Email <span class="${s}-req">*</span></label>
-        <input class="${s}-input" id="${s}-email" type="email" placeholder="john@example.com">
-        <label class="${s}-lbl">Phone <span class="${s}-req">*</span></label>
-        <input class="${s}-input" id="${s}-phone" type="tel" placeholder="(555) 123-4567">
-        <label class="${s}-lbl">Number of Rooms</label>
-        <input class="${s}-input" id="${s}-rooms" type="number" placeholder="4" min="1" max="20">
-        <label class="${s}-lbl">Anything we should know?</label>
-        <textarea class="${s}-input" id="${s}-notes" rows="2" placeholder="Pets, stains, last cleaning date..." style="resize:vertical"></textarea>
-        <button class="${s}-submit" id="${s}-submit">${ctaText}</button>
-        <p class="${s}-consent">By submitting, you agree to receive communications about your cleaning estimate.</p>
-      </div>
-      <div id="${s}-success" class="${s}-ok" style="display:none">
-        <div class="${s}-ok-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
-        <h4>Assessment Request Sent!</h4>
-        <p>We'll review your details and get back to you with a personalized cleaning plan and discount.</p>
-      </div>
+</section>
+<div class="${s}-modal" id="${s}-modal">
+  <div class="${s}-modal-box">
+    <button class="${s}-modal-close" id="${s}-close">&times;</button>
+    <div id="${s}-form-wrap">
+      <h3 class="${s}-modal-title">Get Your Free Assessment</h3>
+      <p class="${s}-modal-sub">Tell us a bit about your space and we'll send you a personalized cleaning plan.</p>
+      <div id="${s}-err"></div>
+      <label class="${s}-lbl">Full Name <span class="${s}-req">*</span></label>
+      <input class="${s}-input" id="${s}-name" placeholder="John Doe">
+      <label class="${s}-lbl">Email <span class="${s}-req">*</span></label>
+      <input class="${s}-input" id="${s}-email" type="email" placeholder="john@example.com">
+      <label class="${s}-lbl">Phone <span class="${s}-req">*</span></label>
+      <input class="${s}-input" id="${s}-phone" type="tel" placeholder="(555) 123-4567">
+      <label class="${s}-lbl">Number of Rooms</label>
+      <input class="${s}-input" id="${s}-rooms" type="number" placeholder="4" min="1" max="20">
+      <label class="${s}-lbl">Anything we should know?</label>
+      <textarea class="${s}-input" id="${s}-notes" rows="2" placeholder="Pets, stains, last cleaning date..." style="resize:vertical"></textarea>
+      <button class="${s}-submit" id="${s}-submit">${ctaText}</button>
+      <p class="${s}-consent">By submitting, you agree to receive communications about your cleaning estimate.</p>
+    </div>
+    <div id="${s}-success" class="${s}-ok" style="display:none">
+      <div class="${s}-ok-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <h4>Assessment Request Sent!</h4>
+      <p>We'll review your details and get back to you with a personalized cleaning plan and discount.</p>
     </div>
   </div>
-  <script>
-    (function(){
-      var apiUrl=window.__SORCE_API_URL__||'';
-      var userId=window.__SORCE_USER_ID__||(document.querySelector('meta[name="user-id"]')||{}).content||'';
-      var modal=document.getElementById('${s}-modal');
-      var formWrap=document.getElementById('${s}-form-wrap');
-      var successEl=document.getElementById('${s}-success');
-      var errEl=document.getElementById('${s}-err');
-      document.getElementById('${s}-open').onclick=function(){modal.classList.add('open');document.body.style.overflow='hidden'};
-      document.getElementById('${s}-close').onclick=function(){modal.classList.remove('open');document.body.style.overflow=''};
-      modal.addEventListener('click',function(e){if(e.target===modal){modal.classList.remove('open');document.body.style.overflow=''}});
-      document.getElementById('${s}-submit').onclick=function(){
-        var name=document.getElementById('${s}-name').value.trim();
-        var email=document.getElementById('${s}-email').value.trim();
-        var phone=document.getElementById('${s}-phone').value.trim();
-        var rooms=document.getElementById('${s}-rooms').value.trim();
-        var notes=document.getElementById('${s}-notes').value.trim();
-        errEl.innerHTML='';
-        if(!name||!email||!phone){errEl.innerHTML='<div class="${s}-err">Please fill in all required fields.</div>';return}
-        var btn=document.getElementById('${s}-submit');btn.disabled=true;btn.textContent='Submitting...';
-        var msg='Rooms: '+(rooms||'Not specified')+' | Notes: '+(notes||'None');
-        fetch(apiUrl+'/api/leads/public/'+userId,{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({name:name,email:email,phone:phone,service:'Carpet Cleaning',message:msg,source:'lead_form',smsConsent:true})
-        }).then(function(r){return r.json()}).then(function(d){
-          if(d.error){errEl.innerHTML='<div class="${s}-err">'+d.error+'</div>';btn.disabled=false;btn.textContent='${ctaText}';return}
-          formWrap.style.display='none';successEl.style.display='block';
-        }).catch(function(){errEl.innerHTML='<div class="${s}-err">Something went wrong. Please try again.</div>';btn.disabled=false;btn.textContent='${ctaText}'});
-      };
-    })();
-  </script>
-</section>
+</div>
+<script>
+  (function(){
+    var apiUrl=window.__SORCE_API_URL__||'';
+    var userId=window.__SORCE_USER_ID__||(document.querySelector('meta[name="user-id"]')||{}).content||'';
+    var modal=document.getElementById('${s}-modal');
+    var formWrap=document.getElementById('${s}-form-wrap');
+    var successEl=document.getElementById('${s}-success');
+    var errEl=document.getElementById('${s}-err');
+    document.getElementById('${s}-open').onclick=function(){modal.classList.add('open');document.body.style.overflow='hidden'};
+    document.getElementById('${s}-close').onclick=function(){modal.classList.remove('open');document.body.style.overflow=''};
+    modal.addEventListener('click',function(e){if(e.target===modal){modal.classList.remove('open');document.body.style.overflow=''}});
+    document.getElementById('${s}-submit').onclick=function(){
+      var name=document.getElementById('${s}-name').value.trim();
+      var email=document.getElementById('${s}-email').value.trim();
+      var phone=document.getElementById('${s}-phone').value.trim();
+      var rooms=document.getElementById('${s}-rooms').value.trim();
+      var notes=document.getElementById('${s}-notes').value.trim();
+      errEl.innerHTML='';
+      if(!name||!email||!phone){errEl.innerHTML='<div class="${s}-err">Please fill in all required fields.</div>';return}
+      var btn=document.getElementById('${s}-submit');btn.disabled=true;btn.textContent='Submitting...';
+      var msg='Rooms: '+(rooms||'Not specified')+' | Notes: '+(notes||'None');
+      fetch(apiUrl+'/api/leads/public/'+userId,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:name,email:email,phone:phone,service:'Carpet Cleaning',message:msg,source:'lead_form',smsConsent:true})
+      }).then(function(r){return r.json()}).then(function(d){
+        if(d.error){errEl.innerHTML='<div class="${s}-err">'+d.error+'</div>';btn.disabled=false;btn.textContent='${ctaText}';return}
+        formWrap.style.display='none';successEl.style.display='block';
+      }).catch(function(){errEl.innerHTML='<div class="${s}-err">Something went wrong. Please try again.</div>';btn.disabled=false;btn.textContent='${ctaText}'});
+    };
+  })();
+</script>
 `;
   }
 };
