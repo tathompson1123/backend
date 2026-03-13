@@ -185,16 +185,6 @@ module.exports = {
   function onScroll() { nav.classList.toggle('scrolled', !hasHero || window.scrollY > 60); }
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
-  // Book Online handler: open Sorce booking widget if available
-  nav.addEventListener('click', function(e) {
-    var a = e.target.closest('a[href="#book-online"]');
-    if (a) {
-      e.preventDefault();
-      if (window.__sorceOpenBooking) { window.__sorceOpenBooking(); }
-      else if (document.querySelector('.sorce-chat-fab')) { document.querySelector('.sorce-chat-fab').click(); }
-      else { var c = document.getElementById('contact'); if (c) c.scrollIntoView({ behavior: 'smooth' }); }
-    }
-  });
 })();
 </script>`;
   }

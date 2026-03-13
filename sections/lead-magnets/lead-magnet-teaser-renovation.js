@@ -7,7 +7,7 @@ module.exports = {
   contentSchema: {
     badge:       { type: 'text',  label: 'Badge Text',    default: 'Instant Project Estimate' },
     headline:    { type: 'text',  label: 'Headline',      default: 'Get a Ballpark Before You Commit to Anything' },
-    subheadline: { type: 'text',  label: 'Subheadline',   default: 'Answer a few quick questions about your project and get an honest cost range — no sales pressure.' },
+    subheadline: { type: 'text',  label: 'Subheadline',   default: 'Tell us about your project and get an honest cost range — no sales pressure.' },
     ctaText:     { type: 'text',  label: 'Button Label',  default: 'Estimate My Project' },
     features:    { type: 'array', label: 'Feature Pills', default: ['Kitchen Remodel', 'Bathroom', 'Flooring', 'Full Home'] },
     magnetType:  { type: 'hidden', default: 'renovation' },
@@ -19,13 +19,16 @@ module.exports = {
 
     const badge    = content.badge       || 'Instant Project Estimate';
     const headline = content.headline    || 'Get a Ballpark Before You Commit to Anything';
-    const sub      = content.subheadline || 'Answer a few quick questions about your project and get an honest cost range — no sales pressure.';
+    const sub      = content.subheadline || 'Tell us about your project and get an honest cost range — no sales pressure.';
     const ctaText  = content.ctaText     || 'Estimate My Project';
     const features = Array.isArray(content.features) ? content.features : ['Kitchen Remodel', 'Bathroom', 'Flooring', 'Full Home'];
-    const magType  = content.magnetType  || 'renovation';
 
     const featurePills = features.map(f =>
       `<span class="${s}-pill">${f}</span>`
+    ).join('');
+
+    const projectCheckboxes = features.map(f =>
+      `<label class="${s}-proj"><input type="checkbox" value="${f}"><span>${f}</span></label>`
     ).join('');
 
     return `
@@ -43,12 +46,30 @@ module.exports = {
     .${s}-btn:hover { opacity:.92; transform:translateY(-1px); }
     .${s}-btn svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
     .${s}-note { margin-top:16px; color:#5c4a00; font-size:13px; }
-    .${s}-modal { display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.85); backdrop-filter:blur(4px); align-items:center; justify-content:center; }
+    .${s}-modal { display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.7); backdrop-filter:blur(4px); align-items:center; justify-content:center; }
     .${s}-modal.open { display:flex; }
-    .${s}-modal-inner { position:relative; width:100%; max-width:960px; height:90vh; border-radius:16px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.5); }
-    .${s}-modal-close { position:absolute; top:12px; right:12px; z-index:10; width:36px; height:36px; border-radius:50%; border:none; cursor:pointer; background:#1e293b; color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,.4); }
-    .${s}-modal iframe { width:100%; height:100%; border:0; }
-    @media(max-width:600px){ .${s}-modal-inner { height:100vh; border-radius:0; } }
+    .${s}-modal-box { position:relative; width:95%; max-width:480px; max-height:90vh; overflow-y:auto; background:#fff; border-radius:16px; box-shadow:0 25px 60px rgba(0,0,0,.4); padding:32px; animation:${s}-up .25s ease; }
+    .${s}-modal-close { position:absolute; top:12px; right:12px; width:32px; height:32px; border-radius:50%; border:none; cursor:pointer; background:#f3f4f6; color:#374151; font-size:18px; display:flex; align-items:center; justify-content:center; }
+    .${s}-modal-title { font-size:22px; font-weight:700; color:#111; margin:0 0 4px; }
+    .${s}-modal-sub { font-size:14px; color:#6b7280; margin:0 0 20px; }
+    .${s}-input { width:100%; padding:12px 14px; border:2px solid #e5e7eb; border-radius:8px; font-size:15px; outline:none; transition:border .15s; box-sizing:border-box; margin-bottom:12px; font-family:inherit; }
+    .${s}-input:focus { border-color:${primary}; }
+    .${s}-lbl { display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:4px; }
+    .${s}-req { color:#ef4444; }
+    .${s}-projs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+    .${s}-proj { display:flex; align-items:center; gap:6px; padding:8px 14px; border:2px solid #e5e7eb; border-radius:8px; cursor:pointer; font-size:14px; color:#374151; transition:border .15s; }
+    .${s}-proj:has(input:checked) { border-color:${primary}; background:${primary}0d; }
+    .${s}-proj input { display:none; }
+    .${s}-submit { width:100%; padding:14px; border:none; border-radius:10px; background:${primary}; color:#fff; font-size:16px; font-weight:600; cursor:pointer; transition:opacity .15s; margin-top:4px; }
+    .${s}-submit:hover { opacity:.9; }
+    .${s}-submit:disabled { opacity:.5; cursor:not-allowed; }
+    .${s}-err { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; padding:10px 14px; border-radius:8px; font-size:14px; margin-bottom:12px; }
+    .${s}-ok { text-align:center; padding:20px 0; }
+    .${s}-ok-icon { width:56px; height:56px; border-radius:50%; background:#d1fae5; display:flex; align-items:center; justify-content:center; margin:0 auto 12px; }
+    .${s}-ok h4 { font-size:20px; font-weight:700; color:#111; margin:0 0 6px; }
+    .${s}-ok p { font-size:14px; color:#6b7280; margin:0; }
+    .${s}-consent { font-size:12px; color:#9ca3af; margin-top:10px; text-align:center; }
+    @keyframes ${s}-up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
   </style>
   <div class="${s}-bg"></div>
   <div class="${s}-inner">
@@ -56,34 +77,68 @@ module.exports = {
     <h2 class="${s}-h">${headline}</h2>
     <p class="${s}-sub">${sub}</p>
     <div class="${s}-pills">${featurePills}</div>
-    <button class="${s}-btn" onclick="window['${s}Open']()">
+    <button class="${s}-btn" id="${s}-open">
       ${ctaText}
       <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </button>
     <p class="${s}-note">Free estimate — takes under 2 minutes</p>
   </div>
   <div class="${s}-modal" id="${s}-modal">
-    <div class="${s}-modal-inner">
-      <button class="${s}-modal-close" onclick="window['${s}Close']()">✕</button>
-      <iframe id="${s}-iframe" src="" title="Estimate My Project" allow="forms"></iframe>
+    <div class="${s}-modal-box">
+      <button class="${s}-modal-close" id="${s}-close">&times;</button>
+      <div id="${s}-form-wrap">
+        <h3 class="${s}-modal-title">Get Your Project Estimate</h3>
+        <p class="${s}-modal-sub">Select your project type and tell us what you need — we'll get back to you with an honest cost range.</p>
+        <div id="${s}-err"></div>
+        <label class="${s}-lbl">Full Name <span class="${s}-req">*</span></label>
+        <input class="${s}-input" id="${s}-name" placeholder="John Doe">
+        <label class="${s}-lbl">Email <span class="${s}-req">*</span></label>
+        <input class="${s}-input" id="${s}-email" type="email" placeholder="john@example.com">
+        <label class="${s}-lbl">Phone <span class="${s}-req">*</span></label>
+        <input class="${s}-input" id="${s}-phone" type="tel" placeholder="(555) 123-4567">
+        <label class="${s}-lbl">Project Type</label>
+        <div class="${s}-projs">${projectCheckboxes}</div>
+        <label class="${s}-lbl">Describe Your Project</label>
+        <textarea class="${s}-input" id="${s}-desc" rows="3" placeholder="Tell us about the scope, timeline, and any specifics..." style="resize:vertical"></textarea>
+        <button class="${s}-submit" id="${s}-submit">${ctaText}</button>
+        <p class="${s}-consent">By submitting, you agree to receive communications about your project estimate.</p>
+      </div>
+      <div id="${s}-success" class="${s}-ok" style="display:none">
+        <div class="${s}-ok-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <h4>Estimate Request Sent!</h4>
+        <p>We'll review your project details and get back to you with an honest cost range shortly.</p>
+      </div>
     </div>
   </div>
   <script>
-    (function() {
-      window['${s}Open'] = function() {
-        var userId = window.__SORCE_USER_ID__ || (document.querySelector('meta[name="user-id"]')||{}).content;
-        var appUrl = window.__SORCE_APP_URL__ || 'https://app.sorce.ai';
-        if (!userId) return;
-        var iframe = document.getElementById('${s}-iframe');
-        if (iframe.src === '') iframe.src = appUrl + '/lead/' + userId + '/${magType}';
-        document.getElementById('${s}-modal').classList.add('open');
-        document.body.style.overflow = 'hidden';
+    (function(){
+      var apiUrl=window.__SORCE_API_URL__||'';
+      var userId=window.__SORCE_USER_ID__||(document.querySelector('meta[name="user-id"]')||{}).content||'';
+      var modal=document.getElementById('${s}-modal');
+      var formWrap=document.getElementById('${s}-form-wrap');
+      var successEl=document.getElementById('${s}-success');
+      var errEl=document.getElementById('${s}-err');
+      document.getElementById('${s}-open').onclick=function(){modal.classList.add('open');document.body.style.overflow='hidden'};
+      document.getElementById('${s}-close').onclick=function(){modal.classList.remove('open');document.body.style.overflow=''};
+      modal.addEventListener('click',function(e){if(e.target===modal){modal.classList.remove('open');document.body.style.overflow=''}});
+      document.getElementById('${s}-submit').onclick=function(){
+        var name=document.getElementById('${s}-name').value.trim();
+        var email=document.getElementById('${s}-email').value.trim();
+        var phone=document.getElementById('${s}-phone').value.trim();
+        var desc=document.getElementById('${s}-desc').value.trim();
+        var projs=[];modal.querySelectorAll('.${s}-proj input:checked').forEach(function(cb){projs.push(cb.value)});
+        errEl.innerHTML='';
+        if(!name||!email||!phone){errEl.innerHTML='<div class="${s}-err">Please fill in all required fields.</div>';return}
+        var btn=document.getElementById('${s}-submit');btn.disabled=true;btn.textContent='Submitting...';
+        var msg='Projects: '+(projs.join(', ')||'Not specified')+' | Description: '+(desc||'None');
+        fetch(apiUrl+'/api/leads/public/'+userId,{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({name:name,email:email,phone:phone,service:'Renovation',message:msg,source:'lead_form',smsConsent:true})
+        }).then(function(r){return r.json()}).then(function(d){
+          if(d.error){errEl.innerHTML='<div class="${s}-err">'+d.error+'</div>';btn.disabled=false;btn.textContent='${ctaText}';return}
+          formWrap.style.display='none';successEl.style.display='block';
+        }).catch(function(){errEl.innerHTML='<div class="${s}-err">Something went wrong. Please try again.</div>';btn.disabled=false;btn.textContent='${ctaText}'});
       };
-      window['${s}Close'] = function() {
-        document.getElementById('${s}-modal').classList.remove('open');
-        document.body.style.overflow = '';
-      };
-      document.getElementById('${s}-modal').addEventListener('click', function(e) { if (e.target === this) window['${s}Close'](); });
     })();
   </script>
 </section>
