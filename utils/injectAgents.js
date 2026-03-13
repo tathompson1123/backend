@@ -7,6 +7,7 @@
 // ============================================
 
 const { generateChatWidgetCode } = require('./chatWidget');
+const { generateBookingWidgetCode } = require('./bookingWidget');
 
 /**
  * Injects the chat widget into HTML if the user has one deployed.
@@ -48,6 +49,21 @@ async function injectAgents(html, userId, pool, theme) {
   } catch (err) {
     // Non-fatal: website still renders, widget just won't be present
     console.error('⚠️ injectAgents: could not check chat agent config:', err.message);
+  }
+
+  // Always inject booking widget (uses public endpoints, no config needed)
+  try {
+    const bookingWidget = generateBookingWidgetCode(userId, theme || {});
+    const bookingRegex = /<!-- SORCE Booking Widget -->[\s\S]*?<\/script>\s*/;
+    if (html.includes('sorce-booking-overlay')) {
+      html = html.replace(bookingRegex, bookingWidget.trim());
+      console.log('🔄 injectAgents: booking widget replaced');
+    } else if (html.includes('</body>')) {
+      html = html.replace('</body>', bookingWidget + '\n</body>');
+      console.log('✅ injectAgents: booking widget injected');
+    }
+  } catch (err) {
+    console.error('⚠️ injectAgents: booking widget injection failed:', err.message);
   }
 
   return html;

@@ -67,11 +67,9 @@ function renderSectionHtml(section, theme) {
 }
 
 function buildPageHtml(sectionsHtml, theme, meta) {
-  // Resolve /booking placeholder → real booking URL
+  // Resolve /booking links → #book-online so the injected booking widget handles them
   if (meta.userId) {
-    const appUrl = process.env.VITE_APP_URL || 'https://www.sorceintegrations.com';
-    const bookingUrl = `${appUrl}/book/${meta.userId}`;
-    sectionsHtml = sectionsHtml.replace(/href="\/booking"/g, `href="${bookingUrl}" target="_blank" rel="noopener noreferrer"`);
+    sectionsHtml = sectionsHtml.replace(/href="\/booking"/g, 'href="#book-online"');
   }
 
   return `<!DOCTYPE html>
