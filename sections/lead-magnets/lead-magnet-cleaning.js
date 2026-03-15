@@ -58,7 +58,7 @@ module.exports = {
 
     const stepsHtml = steps.map((step, i) => {
       const choicesHtml = (step.choices || []).map(choice =>
-        `<div class="${s}-choice" onclick="window['${s}Pick'](this,'ans${i}',${JSON.stringify(choice)})">${choice}</div>`
+        `<div class="${s}-choice" onclick="window['${s}Pick'](this,'ans${i}',${JSON.stringify(choice).replace(/"/g, '&quot;')})">${choice}</div>`
       ).join('\n        ');
       return `
     <!-- Step ${i + 1} -->

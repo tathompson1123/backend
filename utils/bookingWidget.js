@@ -165,7 +165,7 @@ function generateBookingWidgetCode(userId, theme = {}) {
       h+='<label class="sbk-label">Phone <span class="sbk-req">*</span></label><input class="sbk-input" data-field="phone" type="tel" value="'+esc(state.cust.phone)+'" placeholder="(555) 123-4567">';
       h+='<label class="sbk-label">Notes (Optional)</label><textarea class="sbk-input" data-field="notes" rows="2" placeholder="Anything we should know..." style="resize:vertical">'+esc(state.cust.notes)+'</textarea>';
       h+='<button class="sbk-btn" id="sbk-submit"'+(state.loading?' disabled':'')+'>'+( state.loading?'<span class="sbk-spin" style="width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>Confirming...':'Confirm Booking')+'</button>';
-      h+='<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px">You\'ll receive a confirmation email</p>';
+      h+='<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px">You\\'ll receive a confirmation email</p>';
     }
     content.innerHTML=h;
 
