@@ -252,7 +252,36 @@ function generateBookingWidgetCode(userId, theme = {}) {
   }
 
   function needsPayment(){
-    return state.config&&state.config.requirePayment&&state.config.paymentConnected;
+    var cfg=state.config;
+    if(!cfg)return false;
+    // New config: paymentMode 'card_on_file' or 'pay_at_booking'
+    if(cfg.paymentMode&&cfg.paymentMode!=='none')return!!cfg.paymentConnected;
+    // Legacy compat
+    return!!(cfg.requirePayment&&cfg.paymentConnected);
+  }
+
+  function getPaymentMode(){
+    var cfg=state.config;
+    if(!cfg)return'none';
+    return cfg.paymentMode||'none';
+  }
+
+  function getDepositAmount(){
+    var cfg=state.config;
+    if(!cfg||!cfg.depositEnabled||getPaymentMode()!=='pay_at_booking')return state.totalPrice;
+    if(cfg.depositType==='percent')return Math.round(state.totalPrice*(cfg.depositAmount||50)/100*100)/100;
+    return Math.min(cfg.depositAmount||0,state.totalPrice);
+  }
+
+  function getContactFields(){
+    var cfg=state.config;
+    if(!cfg||!cfg.contactFields)return[
+      {key:'name',label:'Full Name',type:'text',required:true,enabled:true},
+      {key:'email',label:'Email',type:'email',required:true,enabled:true},
+      {key:'phone',label:'Phone',type:'tel',required:true,enabled:true},
+      {key:'notes',label:'Notes',type:'textarea',required:false,enabled:true}
+    ];
+    return cfg.contactFields.filter(function(f){return f.enabled});
   }
 
   function getStepList(){
@@ -278,12 +307,16 @@ function generateBookingWidgetCode(userId, theme = {}) {
 
   function submit(){
     var c=state.cust;
-    if(!c.name||!c.email||!c.phone){state.error='Please fill in all required fields';render();return}
+    var fields=getContactFields();
+    var missing=fields.filter(function(f){return f.required&&!c[f.key]});
+    if(missing.length){state.error='Please fill in all required fields';render();return}
     state.loading=true;state.error=null;render();
     var addonIds=state.selAddons.map(function(a){return a.id});
+    var custInfo={name:c.name||'',email:c.email||'',phone:c.phone||''};
+    if(c.address)custInfo.address=c.address;
     fetch(API+'/api/public/bookings/create',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({businessId:UID,serviceId:state.selService.id,additionalServiceIds:addonIds,bookingDate:state.selDate,startTime:state.selTime,customerInfo:{name:c.name,email:c.email,phone:c.phone},customerNotes:c.notes,assignmentType:'any'})
+      body:JSON.stringify({businessId:UID,serviceId:state.selService.id,additionalServiceIds:addonIds,bookingDate:state.selDate,startTime:state.selTime,customerInfo:custInfo,customerNotes:c.notes||'',assignmentType:'any'})
     }).then(function(r){return r.json()}).then(function(d){
       if(d.success){state.success=true;state.bookingNum=d.bookingNumber;state.step='confirmation'}else{state.error=d.error||'Booking failed'}
       state.loading=false;render();
@@ -312,9 +345,12 @@ function generateBookingWidgetCode(userId, theme = {}) {
 
   function setupPayment(){
     state.loading=true;state.error=null;render();
+    calcTotal();
+    var pMode=getPaymentMode();
+    var chargeAmt=pMode==='card_on_file'?0:Math.round(getDepositAmount()*100);
     fetch(API+'/api/public/bookings/payment-setup',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({businessId:UID,amount:Math.round(state.totalPrice*100),customerEmail:state.cust.email})
+      body:JSON.stringify({businessId:UID,amount:chargeAmt,customerEmail:state.cust.email,paymentMode:pMode})
     }).then(function(r){return r.json()}).then(function(d){
       if(d.clientSecret){
         state.clientSecret=d.clientSecret;
@@ -493,10 +529,16 @@ function generateBookingWidgetCode(userId, theme = {}) {
       h+='<div class="sbk-summary-row"><span>Time</span><span>'+state.selTime+'</span></div>';
       h+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
       h+='</div>';
-      h+='<label class="sbk-label">Full Name <span class="sbk-req">*</span></label><input class="sbk-input" data-field="name" value="'+esc(state.cust.name)+'" placeholder="John Doe">';
-      h+='<label class="sbk-label">Email <span class="sbk-req">*</span></label><input class="sbk-input" data-field="email" type="email" value="'+esc(state.cust.email)+'" placeholder="john@example.com">';
-      h+='<label class="sbk-label">Phone <span class="sbk-req">*</span></label><input class="sbk-input" data-field="phone" type="tel" value="'+esc(state.cust.phone)+'" placeholder="(555) 123-4567">';
-      h+='<label class="sbk-label">Notes (Optional)</label><textarea class="sbk-input" data-field="notes" rows="2" placeholder="Anything we should know..." style="resize:vertical">'+esc(state.cust.notes)+'</textarea>';
+      var cfields=getContactFields();
+      cfields.forEach(function(f){
+        var reqMark=f.required?'<span class="sbk-req">*</span>':'';
+        h+='<label class="sbk-label">'+esc(f.label)+' '+reqMark+'</label>';
+        if(f.type==='textarea'){
+          h+='<textarea class="sbk-input" data-field="'+f.key+'" rows="2" placeholder="'+esc(f.label)+'..." style="resize:vertical">'+esc(state.cust[f.key]||'')+'</textarea>';
+        }else{
+          h+='<input class="sbk-input" data-field="'+f.key+'" type="'+(f.type||'text')+'" value="'+esc(state.cust[f.key]||'')+'" placeholder="'+esc(f.label)+'...">';
+        }
+      });
       if(needsPayment()){
         h+='<button class="sbk-btn" id="sbk-to-payment"'+(state.loading?' disabled':'')+'>Continue to Payment &rarr;</button>';
       }else{
@@ -506,18 +548,32 @@ function generateBookingWidgetCode(userId, theme = {}) {
 
     }else if(state.step==='payment'){
       if(prev)h+='<button class="sbk-btn-back" data-goback>&larr; Back</button>';
-      h+='<h3 class="sbk-title">Payment</h3>';
-      h+='<p class="sbk-sub">Enter your payment details</p>';
+      var pMode=getPaymentMode();
+      h+='<h3 class="sbk-title">'+(pMode==='card_on_file'?'Save Card':'Payment')+'</h3>';
+      h+='<p class="sbk-sub">'+(pMode==='card_on_file'?'Your card will be saved securely but not charged now':'Enter your payment details')+'</p>';
       calcTotal();
+      var depAmt=getDepositAmount();
       h+='<div class="sbk-summary" style="margin-bottom:20px">';
-      h+='<div class="sbk-summary-row" style="font-weight:700"><span>Total Due</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      if(pMode==='card_on_file'){
+        h+='<div class="sbk-summary-row" style="font-weight:700"><span>Service Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+        h+='<div class="sbk-summary-row" style="font-size:13px;color:#6b7280"><span>Charged at appointment</span></div>';
+      }else{
+        h+='<div class="sbk-summary-row" style="font-weight:700"><span>Due Now</span><span class="sbk-price" style="font-size:18px">$'+depAmt.toFixed(2)+'</span></div>';
+        if(depAmt<state.totalPrice){
+          h+='<div class="sbk-summary-row" style="font-size:13px;color:#6b7280"><span>Remainder due at appointment</span><span>$'+(state.totalPrice-depAmt).toFixed(2)+'</span></div>';
+        }
+      }
       h+='</div>';
       if(state.loading){
         h+='<div class="sbk-loading" style="padding:20px"><div class="sbk-spin"></div>Setting up payment...</div>';
       }else{
         h+='<label class="sbk-label">Card Details</label>';
         h+='<div class="sbk-stripe-card"></div>';
-        h+='<button class="sbk-btn" id="sbk-pay">Pay $'+state.totalPrice.toFixed(2)+'</button>';
+        if(pMode==='card_on_file'){
+          h+='<button class="sbk-btn" id="sbk-pay">Save Card & Confirm</button>';
+        }else{
+          h+='<button class="sbk-btn" id="sbk-pay">Pay $'+depAmt.toFixed(2)+'</button>';
+        }
       }
       h+='<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Secured by Stripe</p>';
     }

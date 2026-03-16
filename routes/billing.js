@@ -21,12 +21,15 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
 
     // Define prices
     const prices = {
-      pro: { amount: 9550, name: 'Pro Plan' },          // $95.50
-      scale: { amount: 17550, name: 'Scale Plan' },     // $175.50
+      basic: { amount: 2995, name: 'Basic Plan' },      // $29.95
+      pro: { amount: 9995, name: 'Pro Plan' },           // $99.95
+      scale: { amount: 17595, name: 'Scale Plan' },      // $175.95
       // Legacy plans kept for existing subscribers
-      basic: { amount: 2995, name: 'Basic Plan' },
       expert: { amount: 9995, name: 'Expert Plan' }
     };
+
+    // Trial days: basic = 14-day PRO trial, pro = 7-day, scale = 7-day
+    const trialDays = { basic: 14, pro: 7, scale: 7 };
 
     const selectedPrice = prices[plan];
     if (!selectedPrice) {
@@ -54,6 +57,9 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
         },
       ],
       mode: 'subscription',
+      subscription_data: {
+        trial_period_days: trialDays[plan] || 0,
+      },
       success_url: `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/dashboard?session_id={CHECKOUT_SESSION_ID}&plan=${plan}`,
       cancel_url: `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/dashboard?view=billing`,
       metadata: {
@@ -90,12 +96,18 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const plan = session.metadata.plan;
 
     // Update user's plan in database
+    // Basic plan gets PRO features during 14-day trial
+    const effectivePlan = plan === 'basic' ? 'pro' : plan;
+    const trialEnds = plan === 'basic' ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+                    : (plan === 'pro' || plan === 'scale') ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+                    : null;
     try {
       await pool.query(
-        'UPDATE users SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3 WHERE id = $4',
-        [plan, session.customer, session.subscription, userId]
+        `UPDATE users SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3,
+         base_plan = $5, trial_ends_at = $6 WHERE id = $4`,
+        [effectivePlan, session.customer, session.subscription, userId, plan, trialEnds]
       );
-      console.log(`✅ User ${userId} upgraded to ${plan} plan`);
+      console.log(`✅ User ${userId} subscribed to ${plan} plan (effective: ${effectivePlan}, trial ends: ${trialEnds || 'none'})`);
     } catch (error) {
       console.error('Error updating user plan:', error.message);
     }
@@ -156,11 +168,13 @@ router.post('/create-embedded-checkout', authenticateToken, async (req, res) => 
     const userEmail = userResult.rows[0]?.email;
 
     const prices = {
-      pro: { amount: 9550, name: 'Pro Plan' },
-      scale: { amount: 17550, name: 'Scale Plan' },
       basic: { amount: 2995, name: 'Basic Plan' },
+      pro: { amount: 9995, name: 'Pro Plan' },
+      scale: { amount: 17595, name: 'Scale Plan' },
       expert: { amount: 9995, name: 'Expert Plan' }
     };
+
+    const trialDays = { basic: 14, pro: 7, scale: 7 };
 
     const selectedPrice = prices[plan];
     if (!selectedPrice) {
@@ -183,6 +197,9 @@ router.post('/create-embedded-checkout', authenticateToken, async (req, res) => 
         quantity: 1,
       }],
       mode: 'subscription',
+      subscription_data: {
+        trial_period_days: trialDays[plan] || 0,
+      },
       ui_mode: 'embedded',
       redirect_on_completion: 'if_required',
       return_url: `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/dashboard?tab=website&flow=publish&plan=${plan}`,

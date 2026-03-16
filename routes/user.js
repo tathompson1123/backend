@@ -271,4 +271,50 @@ router.get('/sendgrid/status', authenticateToken, async (req, res) => {
   }
 });
 
+// DELETE - Delete user account (requires confirmation token)
+router.delete('/account', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { confirmPhrase } = req.body;
+
+    if (confirmPhrase !== 'DELETE MY ACCOUNT') {
+      return res.status(400).json({ error: 'Invalid confirmation phrase' });
+    }
+
+    // Cancel Stripe subscription if exists
+    const userRow = await pool.query('SELECT stripe_subscription_id FROM users WHERE id = $1', [userId]);
+    const subId = userRow.rows[0]?.stripe_subscription_id;
+    if (subId) {
+      try {
+        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+        await stripe.subscriptions.cancel(subId);
+      } catch (stripeErr) {
+        console.error('Stripe cancel error (non-fatal):', stripeErr.message);
+      }
+    }
+
+    // Delete user data in order (respecting FK constraints)
+    await pool.query('DELETE FROM sms_messages WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM review_requests WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM leads WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM booking_items WHERE booking_id IN (SELECT id FROM bookings WHERE user_id = $1)', [userId]);
+    await pool.query('DELETE FROM bookings WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM customers WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM services WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM service_categories WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM agent_configs WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM websites WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM business_information WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM payment_connections WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM booking_widget_configs WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+
+    console.log(`🗑️ Account deleted: user ${userId}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Account deletion error:', error.message);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
 module.exports = router;

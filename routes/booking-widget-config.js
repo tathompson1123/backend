@@ -13,15 +13,31 @@ const DEFAULT_CONFIG = {
     payment: { title: "Confirm & Pay", subtitle: "" },
     confirmation: { title: "Booking Confirmed!", subtitle: "" }
   },
-  requirePayment: false,
-  depositPercent: null,
+  // Payment mode: 'none' | 'card_on_file' | 'pay_at_booking'
+  paymentMode: 'none',
+  // Deposit settings (only relevant when paymentMode is 'pay_at_booking')
+  depositEnabled: false,
+  depositType: 'percent', // 'percent' or 'fixed'
+  depositAmount: 50,
+  // Contact form field configuration
+  contactFields: [
+    { key: 'name', label: 'Full Name', type: 'text', required: true, enabled: true, removable: false },
+    { key: 'email', label: 'Email', type: 'email', required: true, enabled: true, removable: false },
+    { key: 'phone', label: 'Phone', type: 'tel', required: true, enabled: true, removable: false },
+    { key: 'address', label: 'Address', type: 'text', required: false, enabled: false, removable: true },
+    { key: 'notes', label: 'Notes', type: 'textarea', required: false, enabled: true, removable: true }
+  ],
+  // Display options
   showPrices: true,
   showDurations: true,
-  accentColor: null
+  accentColor: null,
+  // Legacy compat
+  requirePayment: false,
+  depositPercent: null
 };
 
 // ============================================
-// GET - Fetch booking widget config
+// GET - Fetch booking widget config (authenticated)
 // ============================================
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -36,7 +52,16 @@ router.get('/', authenticateToken, async (req, res) => {
       return res.json({ config: DEFAULT_CONFIG });
     }
 
-    res.json({ config: result.rows[0].config });
+    // Merge saved config with defaults so new fields are always present
+    const saved = result.rows[0].config;
+    const merged = {
+      ...DEFAULT_CONFIG,
+      ...saved,
+      steps: { ...DEFAULT_CONFIG.steps, ...(saved.steps || {}) },
+      contactFields: saved.contactFields || DEFAULT_CONFIG.contactFields
+    };
+
+    res.json({ config: merged });
   } catch (error) {
     console.error('Error fetching booking widget config:', error.message);
     res.status(500).json({ error: 'Failed to fetch booking widget config' });

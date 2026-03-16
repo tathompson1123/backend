@@ -750,6 +750,8 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_site_key ON users(site_key)");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS sendgrid_sender_id INTEGER");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS sendgrid_verified BOOLEAN DEFAULT false");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS base_plan VARCHAR(20)");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ");
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS embed_configs (
@@ -1114,6 +1116,23 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err.message || err);
   res.status(500).json({ error: 'Internal server error' });
+});
+
+// ── Trial expiry cron — runs every hour, reverts basic users after PRO trial ends ──
+cron.schedule('0 * * * *', async () => {
+  try {
+    const result = await pool.query(
+      `UPDATE users SET plan = base_plan, trial_ends_at = NULL
+       WHERE base_plan = 'basic' AND trial_ends_at IS NOT NULL AND trial_ends_at <= NOW()
+       RETURNING id, email, base_plan`
+    );
+    if (result.rows.length > 0) {
+      console.log(`⏰ Trial expired: reverted ${result.rows.length} user(s) from PRO back to basic`);
+      result.rows.forEach(u => console.log(`   → user ${u.id} (${u.email}) → basic`));
+    }
+  } catch (err) {
+    console.error('Trial expiry cron error:', err.message);
+  }
 });
 
 // Start server
