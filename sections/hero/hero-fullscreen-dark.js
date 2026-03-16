@@ -30,9 +30,17 @@ module.exports = {
   render(content, theme, sectionId = 'hero') {
     const s = `section-${sectionId}`;
     const bgImage = content.backgroundImage || '';
-    const btn2 = content.ctaText2 
-      ? `<a href="${content.ctaLink2 || '#'}" class="${s}-btn-secondary">${content.ctaText2}</a>` 
-      : '';
+    const overlayVal = content.overlayOpacity !== undefined ? Math.min(Math.max(Number(content.overlayOpacity), 0), 100) / 100 : 1;
+    const hasBtn1 = content.ctaText !== '';
+    const hasBtn2 = !!content.ctaText2;
+    const btn1Html = hasBtn1 ? `
+      <a href="${content.ctaLink || '#contact'}" class="${s}-btn-primary">
+        <span>${content.ctaText || 'Get Started'}</span>
+        <svg class="${s}-btn-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </a>` : '';
+    const btn2Html = hasBtn2 ? `<a href="${content.ctaLink2 || '#'}" class="${s}-btn-secondary">${content.ctaText2}</a>` : '';
 
     return `
 <section class="${s}" id="hero">
@@ -40,21 +48,13 @@ module.exports = {
   <div class="${s}-overlay"></div>
   <div class="${s}-particles"></div>
   <div class="${s}-content">
-    <div class="${s}-badge">${content.badge || `Professional ${theme.name || 'Services'}`}</div>
+    ${content.badge !== '' ? `<div class="${s}-badge">${content.badge || `Professional ${theme.name || 'Services'}`}</div>` : ''}
     <h1 class="${s}-title">
       ${content.headline || 'Professional'}
       <span class="${s}-highlight">${content.highlightText || 'Services'}</span>
     </h1>
     <p class="${s}-subtitle">${content.subtitle || 'Quality you can trust.'}</p>
-    <div class="${s}-buttons">
-      <a href="${content.ctaLink || '#contact'}" class="${s}-btn-primary">
-        <span>${content.ctaText || 'Get Started'}</span>
-        <svg class="${s}-btn-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-      </a>
-      ${btn2}
-    </div>
+    ${(hasBtn1 || hasBtn2) ? `<div class="${s}-buttons">${btn1Html}${btn2Html}</div>` : ''}
     <div class="${s}-stats">
       <div class="${s}-stat">
         <span class="${s}-stat-number">500+</span>
@@ -112,6 +112,7 @@ module.exports = {
       rgba(0, 0, 0, 0.75) 50%,
       rgba(0, 0, 0, 0.4) 100%
     );
+    opacity: ${overlayVal};
     z-index: 1;
   }
   

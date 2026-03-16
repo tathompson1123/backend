@@ -29,6 +29,7 @@ module.exports = {
   render(content, theme, sectionId = 'splitcta') {
     const s = `section-${sectionId}`;
     const checkpoints = content.checkpoints || [];
+    const imgRight = content.imagePosition === 'right';
 
     const checksHtml = checkpoints.map(cp => `
       <div class="${s}-checkpoint">
@@ -37,21 +38,26 @@ module.exports = {
       </div>
     `).join('');
 
-    return `
-<section class="${s}">
-  <div class="${s}-grid">
+    const imageBlock = `
     <div class="${s}-image-wrap reveal">
       <img src="${content.image || ''}" alt="${content.imageAlt || 'Featured image'}" class="${s}-img" loading="lazy">
       <div class="${s}-overlay"></div>
-    </div>
+    </div>`;
+
+    const contentBlock = `
     <div class="${s}-content reveal" style="background:${theme.surfaceColor || '#0f172a'}; transition-delay:0.15s;">
       <h2 class="${s}-headline">${content.headline || 'Restore Factory Glory'}</h2>
       ${content.body ? `<p class="${s}-body">${content.body}</p>` : ''}
       <div class="${s}-checkpoints">
         ${checksHtml}
       </div>
-      <a href="${content.ctaLink || '#contact'}" class="${s}-cta">${content.ctaText || 'Book Now'}</a>
-    </div>
+      ${content.ctaText !== '' ? `<a href="${content.ctaLink || '#contact'}" class="${s}-cta">${content.ctaText || 'Book Now'}</a>` : ''}
+    </div>`;
+
+    return `
+<section class="${s}">
+  <div class="${s}-grid">
+    ${imgRight ? contentBlock + imageBlock : imageBlock + contentBlock}
   </div>
 </section>
 <style>

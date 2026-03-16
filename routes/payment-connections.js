@@ -60,7 +60,10 @@ router.get('/stripe/callback', async (req, res) => {
     // Account link expired — generate a fresh one and redirect
     if (refresh === 'true') {
       const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+      const isLive = (process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_');
+      const backendUrl = isLive
+        ? (process.env.PRODUCTION_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:3001')
+        : (process.env.BACKEND_URL || 'http://localhost:3001');
       const returnUrl = `${backendUrl}/api/payment-connections/stripe/callback?userId=${userId}&accountId=${accountId}`;
       const refreshUrl = `${backendUrl}/api/payment-connections/stripe/callback?userId=${userId}&accountId=${accountId}&refresh=true`;
       const accountLink = await stripe.accountLinks.create({

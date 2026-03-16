@@ -35,6 +35,7 @@ module.exports = {
   render(content, theme, sectionId = 'importance') {
     const s = `section-${sectionId}`;
     const highlights = content.highlights || [];
+    const imgLeft = content.imagePosition === 'left';
 
     const highlightsHtml = highlights.map(h => `
       <div class="${s}-highlight">
@@ -43,9 +44,7 @@ module.exports = {
       </div>
     `).join('');
 
-    return `
-<section class="${s}" style="background:${theme.bgColor || '#020617'};">
-  <div class="${s}-container">
+    const textBlock = `
     <div class="${s}-left reveal">
       <span class="${s}-badge">${content.badge || 'Why It Matters'}</span>
       <h2 class="${s}-headline">${content.headline || 'Protect Your Investment'}</h2>
@@ -54,11 +53,18 @@ module.exports = {
       <div class="${s}-highlights">
         ${highlightsHtml}
       </div>
-    </div>
+    </div>`;
+
+    const imageBlock = `
     <div class="${s}-right reveal" style="transition-delay:0.15s;">
       <div class="${s}-glow"></div>
       <img src="${content.image || ''}" alt="${content.imageAlt || 'Feature image'}" class="${s}-image" loading="lazy">
-    </div>
+    </div>`;
+
+    return `
+<section class="${s}" style="background:${theme.bgColor || '#020617'};">
+  <div class="${s}-container">
+    ${imgLeft ? imageBlock + textBlock : textBlock + imageBlock}
   </div>
 </section>
 <style>

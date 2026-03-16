@@ -1,6 +1,8 @@
 /**
  * Generates a self-contained booking widget (HTML+CSS+JS) that opens as a modal
  * when any `a[href="#book-online"]` link is clicked.
+ *
+ * Multi-step flow: categories → services → addons → datetime → contact → payment → confirmation
  */
 function generateBookingWidgetCode(userId, theme = {}) {
   const apiUrl = process.env.VITE_API_URL || process.env.BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
@@ -40,7 +42,22 @@ function generateBookingWidgetCode(userId, theme = {}) {
   .sbk-slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin:12px 0}
   .sbk-slot{padding:10px 8px;border:2px solid #e5e7eb;border-radius:8px;text-align:center;cursor:pointer;font-size:14px;font-weight:500;transition:all .15s}
   .sbk-slot:hover,.sbk-slot.sel{border-color:${primary};background:${primary};color:#fff}
-  .sbk-date-select{width:100%;padding:12px;border:2px solid #e5e7eb;border-radius:8px;font-size:15px;outline:none;margin-bottom:12px}
+  .sbk-cal{border:2px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:16px}
+  .sbk-cal-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f9fafb}
+  .sbk-cal-header button{background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:8px;font-size:18px;color:#374151;transition:background .15s}
+  .sbk-cal-header button:hover{background:#e5e7eb}
+  .sbk-cal-header span{font-weight:700;font-size:15px;color:#111}
+  .sbk-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);text-align:center}
+  .sbk-cal-dow{padding:8px 0;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase}
+  .sbk-cal-day{padding:8px 0;font-size:14px;color:#d1d5db;position:relative;cursor:default}
+  .sbk-cal-day.avail{color:#111;cursor:pointer;font-weight:500}
+  .sbk-cal-day.avail:hover{background:#f3f4f6}
+  .sbk-cal-day.sel{background:${primary};color:#fff;font-weight:700}
+  .sbk-cal-day.sel:hover{background:${primary}}
+  .sbk-cal-day.today::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:${primary}}
+  .sbk-cal-day.sel.today::after{background:#fff}
+  .sbk-times-section{animation:sbkFadeIn .2s ease}
+  @keyframes sbkFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
   .sbk-summary{background:#f9fafb;border-radius:10px;padding:16px;margin-bottom:16px}
   .sbk-summary-row{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px}
   .sbk-summary-row span:last-child{font-weight:600}
@@ -51,151 +68,588 @@ function generateBookingWidgetCode(userId, theme = {}) {
   .sbk-loading{display:flex;align-items:center;justify-content:center;padding:40px;color:#9ca3af}
   .sbk-spin{width:24px;height:24px;border:3px solid #e5e7eb;border-top-color:${primary};border-radius:50%;animation:sbkSpin .6s linear infinite;margin-right:10px}
   @keyframes sbkSpin{to{transform:rotate(360deg)}}
+  .sbk-cat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:12px}
+  .sbk-cat-card{position:relative;border-radius:12px;height:120px;cursor:pointer;overflow:hidden;background:#e5e7eb;background-size:cover;background-position:center;display:flex;flex-direction:column;justify-content:flex-end;padding:14px;transition:transform .15s,box-shadow .15s}
+  .sbk-cat-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.15)}
+  .sbk-cat-card::before{content:'';position:absolute;inset:0;background:linear-gradient(transparent 30%,rgba(0,0,0,.65));border-radius:12px}
+  .sbk-cat-card h4{position:relative;z-index:1;margin:0;font-size:16px;font-weight:700;color:#fff}
+  .sbk-cat-card .sbk-cat-count{position:relative;z-index:1;display:inline-block;margin-top:4px;background:rgba(255,255,255,.25);backdrop-filter:blur(4px);color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px}
+  .sbk-svc-img{width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:14px}
+  .sbk-addon-row{display:flex;align-items:center;padding:12px 0;border-bottom:1px solid #f3f4f6}
+  .sbk-addon-row:last-child{border-bottom:none}
+  .sbk-addon-check{width:20px;height:20px;accent-color:${primary};cursor:pointer;flex-shrink:0;margin-right:12px}
+  .sbk-total-bar{position:sticky;bottom:0;background:#fff;border-top:2px solid #f3f4f6;padding:14px 0 0;margin-top:12px;display:flex;justify-content:space-between;align-items:center}
+  .sbk-steps-indicator{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:18px;padding-top:4px}
+  .sbk-steps-indicator .sbk-dot{width:8px;height:8px;border-radius:50%;background:#e5e7eb;transition:background .2s}
+  .sbk-steps-indicator .sbk-dot.active{background:${primary}}
+  .sbk-steps-indicator .sbk-dot.done{background:${primary};opacity:.4}
+  .sbk-stripe-card{border:2px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:12px;transition:border .15s}
+  .sbk-stripe-card.StripeElement--focus{border-color:${primary}}
+  .sbk-svc-card-inner{display:flex;align-items:center}
+  .sbk-svc-card-info{flex:1;min-width:0}
 </style>
 <script>
 (function(){
   var API='${apiUrl}';
   var UID='${userId}';
+  var PRIMARY='${primary}';
   var overlay=document.getElementById('sorce-booking-overlay');
   var content=document.getElementById('sorce-booking-content');
-  var state={step:1,services:[],hours:[],biz:null,selService:null,selDate:'',selTime:'',slots:[],loading:false,error:null,success:false,bookingNum:'',cust:{name:'',email:'',phone:'',notes:''}};
 
-  function open(){overlay.classList.add('open');document.body.style.overflow='hidden';if(!state.services.length)loadData()}
+  var state={
+    step:'loading',
+    config:null,
+    categories:[],
+    services:[],
+    addonMap:{},
+    uncategorized:[],
+    hours:[],
+    biz:null,
+    selCategory:null,
+    selService:null,
+    selAddons:[],
+    selDate:'',
+    selTime:'',
+    slots:[],
+    loading:false,
+    error:null,
+    success:false,
+    bookingNum:'',
+    cust:{name:'',email:'',phone:'',notes:''},
+    totalPrice:0,
+    stripeReady:false,
+    stripeInstance:null,
+    cardElement:null,
+    clientSecret:'',
+    calMonth:new Date().getMonth(),
+    calYear:new Date().getFullYear()
+  };
+
+  function open(){
+    overlay.classList.add('open');
+    document.body.style.overflow='hidden';
+    if(!state.services.length)loadData();
+    else render();
+  }
   function close(){overlay.classList.remove('open');document.body.style.overflow=''}
 
   document.getElementById('sorce-booking-close').onclick=close;
   overlay.addEventListener('click',function(e){if(e.target===overlay)close()});
 
-  // Intercept all #book-online links
   document.addEventListener('click',function(e){
     var a=e.target.closest('a[href="#book-online"],a[href="/booking"]');
     if(a){e.preventDefault();open()}
   });
 
   function loadData(){
-    state.loading=true;render();
+    state.loading=true;state.step='loading';render();
     Promise.all([
       fetch(API+'/api/public/services?businessId='+UID).then(function(r){return r.json()}),
       fetch(API+'/api/public/business-hours?businessId='+UID).then(function(r){return r.json()}),
-      fetch(API+'/api/public/business-info?businessId='+UID).then(function(r){return r.json()})
+      fetch(API+'/api/public/business-info?businessId='+UID).then(function(r){return r.json()}),
+      fetch(API+'/api/public/booking-widget-config?businessId='+UID).then(function(r){return r.json()})
     ]).then(function(res){
       state.services=res[0].services||[];
+      state.categories=res[0].categories||[];
+      state.uncategorized=res[0].uncategorized||[];
+      state.addonMap=res[0].addonMap||{};
       state.hours=res[1].businessHours||[];
       state.biz=res[2].business||null;
-      state.loading=false;render();
-    }).catch(function(){state.loading=false;state.error='Failed to load booking info';render()});
+      state.config=res[3].config||null;
+      state.loading=false;
+      state.step=state.categories.length>0?'categories':'services';
+      render();
+    }).catch(function(){state.loading=false;state.error='Failed to load booking info';state.step='services';render()});
+  }
+
+  function getServicesByCategory(catId){
+    var cat=state.categories.find(function(c){return c.id===catId});
+    if(cat&&cat.services)return cat.services;
+    return state.services.filter(function(s){return s.category_id===catId&&!s.is_addon});
+  }
+
+  function getVisibleServices(){
+    if(state.selCategory){
+      return getServicesByCategory(state.selCategory.id);
+    }
+    if(state.uncategorized.length)return state.uncategorized;
+    return state.services.filter(function(s){return !s.is_addon});
+  }
+
+  function getAddonsForService(serviceId){
+    var ids=state.addonMap[serviceId]||[];
+    if(!ids.length)return[];
+    return state.services.filter(function(s){
+      return ids.indexOf(s.id)!==-1;
+    });
+  }
+
+  function calcTotal(){
+    var t=0;
+    if(state.selService)t+=parseFloat(state.selService.price)||0;
+    state.selAddons.forEach(function(a){t+=parseFloat(a.price)||0});
+    state.totalPrice=t;
+  }
+
+  function getAllServiceIds(){
+    var ids=[];
+    if(state.selService)ids.push(state.selService.id);
+    state.selAddons.forEach(function(a){ids.push(a.id)});
+    return ids;
   }
 
   function loadSlots(){
     if(!state.selDate||!state.selService)return;
     state.loading=true;state.selTime='';render();
-    fetch(API+'/api/public/availability?businessId='+UID+'&serviceIds='+state.selService.id+'&date='+state.selDate)
+    var ids=getAllServiceIds().join(',');
+    fetch(API+'/api/public/availability?businessId='+UID+'&serviceIds='+ids+'&date='+state.selDate)
       .then(function(r){return r.json()})
       .then(function(d){state.slots=d.slots||[];state.loading=false;render()})
-      .catch(function(){state.loading=false;state.error='Failed to load times';render()});
+      .catch(function(){state.loading=false;state.error='Failed to load available times';render()});
   }
 
-  function getAvailDates(){
-    var dates=[];var now=new Date();
-    for(var i=0;i<30;i++){
-      var d=new Date(now);d.setDate(now.getDate()+i);
-      var dow=d.getDay();
-      var h=state.hours.find(function(x){return x.day_of_week===dow});
-      if(h&&h.is_open)dates.push(d);
+  function isDateAvail(y,m,d){
+    var dt=new Date(y,m,d);
+    var now=new Date();now.setHours(0,0,0,0);
+    if(dt<now)return false;
+    var dow=dt.getDay();
+    var hr=state.hours.find(function(x){return x.day_of_week===dow});
+    return !!(hr&&hr.is_open);
+  }
+
+  function pad2(n){return n<10?'0'+n:''+n}
+
+  function renderCalendar(){
+    var y=state.calYear,m=state.calMonth;
+    var months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var dows=['Su','Mo','Tu','We','Th','Fr','Sa'];
+    var firstDay=new Date(y,m,1).getDay();
+    var daysInMonth=new Date(y,m+1,0).getDate();
+    var today=new Date();today.setHours(0,0,0,0);
+    var h='<div class="sbk-cal">';
+    h+='<div class="sbk-cal-header">';
+    h+='<button data-caldir="-1">&lsaquo;</button>';
+    h+='<span>'+months[m]+' '+y+'</span>';
+    h+='<button data-caldir="1">&rsaquo;</button>';
+    h+='</div>';
+    h+='<div class="sbk-cal-grid">';
+    for(var i=0;i<7;i++)h+='<div class="sbk-cal-dow">'+dows[i]+'</div>';
+    for(var i=0;i<firstDay;i++)h+='<div class="sbk-cal-day"></div>';
+    for(var d=1;d<=daysInMonth;d++){
+      var avail=isDateAvail(y,m,d);
+      var ds=y+'-'+pad2(m+1)+'-'+pad2(d);
+      var isToday=(new Date(y,m,d).getTime()===today.getTime());
+      var isSel=(state.selDate===ds);
+      var cls='sbk-cal-day';
+      if(avail)cls+=' avail';
+      if(isSel)cls+=' sel';
+      if(isToday)cls+=' today';
+      if(avail)h+='<div class="'+cls+'" data-caldate="'+ds+'">'+d+'</div>';
+      else h+='<div class="'+cls+'">'+d+'</div>';
     }
-    return dates;
+    h+='</div></div>';
+    return h;
+  }
+
+  function needsPayment(){
+    return state.config&&state.config.requirePayment&&state.config.paymentConnected;
+  }
+
+  function getStepList(){
+    var steps=[];
+    if(state.categories.length>0)steps.push('categories');
+    steps.push('services');
+    if(state.selService&&getAddonsForService(state.selService.id).length>0)steps.push('addons');
+    steps.push('datetime');
+    steps.push('contact');
+    if(needsPayment())steps.push('payment');
+    steps.push('confirmation');
+    return steps;
+  }
+
+  function goStep(s){state.step=s;state.error=null;render()}
+
+  function getPrevStep(){
+    var steps=getStepList();
+    var idx=steps.indexOf(state.step);
+    if(idx>0)return steps[idx-1];
+    return null;
   }
 
   function submit(){
     var c=state.cust;
     if(!c.name||!c.email||!c.phone){state.error='Please fill in all required fields';render();return}
     state.loading=true;state.error=null;render();
+    var addonIds=state.selAddons.map(function(a){return a.id});
     fetch(API+'/api/public/bookings/create',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({businessId:UID,serviceId:state.selService.id,additionalServiceIds:[],bookingDate:state.selDate,startTime:state.selTime,customerInfo:{name:c.name,email:c.email,phone:c.phone},customerNotes:c.notes,assignmentType:'any'})
+      body:JSON.stringify({businessId:UID,serviceId:state.selService.id,additionalServiceIds:addonIds,bookingDate:state.selDate,startTime:state.selTime,customerInfo:{name:c.name,email:c.email,phone:c.phone},customerNotes:c.notes,assignmentType:'any'})
     }).then(function(r){return r.json()}).then(function(d){
-      if(d.success){state.success=true;state.bookingNum=d.bookingNumber}else{state.error=d.error||'Booking failed'}
+      if(d.success){state.success=true;state.bookingNum=d.bookingNumber;state.step='confirmation'}else{state.error=d.error||'Booking failed'}
       state.loading=false;render();
     }).catch(function(){state.loading=false;state.error='Failed to submit booking';render()});
   }
 
+  function loadStripeJs(cb){
+    if(window.Stripe){cb();return}
+    var sc=document.createElement('script');
+    sc.src='https://js.stripe.com/v3/';
+    sc.onload=cb;
+    sc.onerror=function(){state.error='Failed to load payment system';render()};
+    document.head.appendChild(sc);
+  }
+
+  function initStripe(){
+    if(!state.config||!state.config.stripePublicKey)return;
+    loadStripeJs(function(){
+      state.stripeInstance=window.Stripe(state.config.stripePublicKey);
+      var elements=state.stripeInstance.elements();
+      state.cardElement=elements.create('card',{style:{base:{fontSize:'16px',color:'#374151','::placeholder':{color:'#9ca3af'}}}});
+      var el=document.querySelector('.sbk-stripe-card');
+      if(el){state.cardElement.mount(el);state.stripeReady=true}
+    });
+  }
+
+  function setupPayment(){
+    state.loading=true;state.error=null;render();
+    fetch(API+'/api/public/bookings/payment-setup',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({businessId:UID,amount:Math.round(state.totalPrice*100),customerEmail:state.cust.email})
+    }).then(function(r){return r.json()}).then(function(d){
+      if(d.clientSecret){
+        state.clientSecret=d.clientSecret;
+        state.loading=false;
+        render();
+        initStripe();
+      }else{
+        state.error=d.error||'Failed to initialize payment';
+        state.loading=false;render();
+      }
+    }).catch(function(){state.loading=false;state.error='Failed to set up payment';render()});
+  }
+
+  function confirmPayment(){
+    if(!state.stripeInstance||!state.cardElement){state.error='Payment not ready';render();return}
+    state.loading=true;state.error=null;render();
+    var confirmFn=state.clientSecret.indexOf('seti_')===0
+      ?state.stripeInstance.confirmCardSetup(state.clientSecret,{payment_method:{card:state.cardElement,billing_details:{email:state.cust.email,name:state.cust.name}}})
+      :state.stripeInstance.confirmCardPayment(state.clientSecret,{payment_method:{card:state.cardElement,billing_details:{email:state.cust.email,name:state.cust.name}}});
+    confirmFn.then(function(result){
+      if(result.error){state.error=result.error.message;state.loading=false;render()}
+      else{submit()}
+    });
+  }
+
+  function renderStepDots(){
+    var steps=getStepList();
+    var idx=steps.indexOf(state.step);
+    if(idx<0)return'';
+    var h='<div class="sbk-steps-indicator">';
+    for(var i=0;i<steps.length;i++){
+      var cls='sbk-dot';
+      if(i<idx)cls+=' done';
+      else if(i===idx)cls+=' active';
+      h+='<div class="'+cls+'"></div>';
+    }
+    h+='</div>';
+    return h;
+  }
+
   function render(){
-    if(state.loading&&!state.services.length){content.innerHTML='<div class="sbk-loading"><div class="sbk-spin"></div>Loading...</div>';return}
-    if(state.success){
-      content.innerHTML='<div class="sbk-success"><div style="width:60px;height:60px;border-radius:50%;background:#d1fae5;display:flex;align-items:center;justify-content:center;margin:0 auto"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><h3>Booking Confirmed!</h3><p style="color:#6b7280;margin:0 0 16px">Confirmation #'+state.bookingNum+'</p><div class="sbk-summary"><div class="sbk-summary-row"><span>Service</span><span>'+esc(state.selService.name)+'</span></div><div class="sbk-summary-row"><span>Date</span><span>'+fmtDate(state.selDate)+'</span></div><div class="sbk-summary-row"><span>Time</span><span>'+state.selTime+'</span></div><div class="sbk-summary-row"><span>Total</span><span>$'+parseFloat(state.selService.price).toFixed(2)+'</span></div></div><p style="font-size:14px;color:#6b7280">A confirmation email has been sent to '+esc(state.cust.email)+'</p><button class="sbk-btn" onclick="document.getElementById(\\'sorce-booking-overlay\\').classList.remove(\\'open\\');document.body.style.overflow=\\'\\'">Done</button></div>';
+    if(state.step==='loading'){
+      content.innerHTML='<div class="sbk-loading"><div class="sbk-spin"></div>Loading...</div>';
       return;
     }
+
+    if(state.step==='confirmation'&&state.success){
+      calcTotal();
+      var ch='';
+      ch+=renderStepDots();
+      ch+='<div class="sbk-success">';
+      ch+='<div style="width:60px;height:60px;border-radius:50%;background:#d1fae5;display:flex;align-items:center;justify-content:center;margin:0 auto">';
+      ch+='<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>';
+      ch+='<h3>Booking Confirmed!</h3>';
+      ch+='<p style="color:#6b7280;margin:0 0 16px">Confirmation #'+state.bookingNum+'</p>';
+      ch+='<div class="sbk-summary">';
+      ch+='<div class="sbk-summary-row"><span>Service</span><span>'+esc(state.selService.name)+'</span></div>';
+      if(state.selAddons.length){
+        state.selAddons.forEach(function(a){
+          ch+='<div class="sbk-summary-row"><span style="color:#6b7280">+ '+esc(a.name)+'</span><span>$'+parseFloat(a.price).toFixed(2)+'</span></div>';
+        });
+      }
+      ch+='<div class="sbk-summary-row"><span>Date</span><span>'+fmtDate(state.selDate)+'</span></div>';
+      ch+='<div class="sbk-summary-row"><span>Time</span><span>'+state.selTime+'</span></div>';
+      ch+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      ch+='</div>';
+      ch+='<p style="font-size:14px;color:#6b7280">A confirmation email has been sent to '+esc(state.cust.email)+'</p>';
+      ch+='<button class="sbk-btn" onclick="document.getElementById(\\'sorce-booking-overlay\\').classList.remove(\\'open\\');document.body.style.overflow=\\'\\'">Done</button>';
+      ch+='</div>';
+      content.innerHTML=ch;
+      return;
+    }
+
     var h='';
+    h+=renderStepDots();
     if(state.error)h+='<div class="sbk-error">'+esc(state.error)+'</div>';
 
-    if(state.step===1){
+    var prev=getPrevStep();
+
+    if(state.step==='categories'){
       h+='<h3 class="sbk-title">'+(state.biz?esc(state.biz.business_name):'Book Online')+'</h3>';
-      h+='<p class="sbk-sub">Select a service to get started</p>';
-      if(!state.services.length)h+='<p style="color:#9ca3af;text-align:center;padding:20px">No services available yet.</p>';
-      state.services.forEach(function(s){
-        h+='<div class="sbk-card" data-sid="'+s.id+'"><h4>'+esc(s.name)+'</h4>'+(s.description?'<p>'+esc(s.description)+'</p>':'')+'<div class="sbk-row" style="margin-top:8px"><span class="sbk-price">$'+parseFloat(s.price).toFixed(2)+'</span><span class="sbk-dur">'+s.duration_hours+'h</span></div></div>';
+      h+='<p class="sbk-sub">Select a category to get started</p>';
+      if(!state.categories.length){
+        h+='<p style="color:#9ca3af;text-align:center;padding:20px">No categories available.</p>';
+      }else{
+        h+='<div class="sbk-cat-grid">';
+        state.categories.forEach(function(cat){
+          var count=cat.services?cat.services.length:getServicesByCategory(cat.id).length;
+          var bgStyle=cat.image_url?'background-image:url('+esc(cat.image_url)+')':'background:#374151';
+          h+='<div class="sbk-cat-card" data-catid="'+cat.id+'" style="'+bgStyle+'">';
+          h+='<h4>'+esc(cat.name)+'</h4>';
+          h+='<span class="sbk-cat-count">'+count+' service'+(count!==1?'s':'')+'</span>';
+          h+='</div>';
+        });
+        h+='</div>';
+      }
+      if(state.uncategorized.length){
+        h+='<p style="font-size:13px;color:#6b7280;margin:8px 0 4px">Other Services</p>';
+        state.uncategorized.forEach(function(s){
+          h+=renderServiceCard(s);
+        });
+      }
+
+    }else if(state.step==='services'){
+      if(prev)h+='<button class="sbk-btn-back" data-goback>&larr; Back</button>';
+      h+='<h3 class="sbk-title">'+(state.selCategory?esc(state.selCategory.name):(state.biz?esc(state.biz.business_name):'Book Online'))+'</h3>';
+      h+='<p class="sbk-sub">Select a service</p>';
+      var svcs=getVisibleServices();
+      if(!svcs.length)h+='<p style="color:#9ca3af;text-align:center;padding:20px">No services available.</p>';
+      svcs.forEach(function(s){
+        h+=renderServiceCard(s);
       });
-    } else if(state.step===2){
-      h+='<button class="sbk-btn-back" data-back="1">&larr; Back</button>';
+
+    }else if(state.step==='addons'){
+      if(prev)h+='<button class="sbk-btn-back" data-goback>&larr; Back</button>';
+      h+='<h3 class="sbk-title">Add Extras</h3>';
+      h+='<p class="sbk-sub">Enhance your '+esc(state.selService.name)+' experience</p>';
+      var addons=getAddonsForService(state.selService.id);
+      addons.forEach(function(a){
+        var checked=state.selAddons.find(function(sa){return sa.id===a.id});
+        h+='<div class="sbk-addon-row">';
+        h+='<input type="checkbox" class="sbk-addon-check" data-addonid="'+a.id+'"'+(checked?' checked':'')+'>';
+        h+='<div style="flex:1;min-width:0">';
+        h+='<div style="font-weight:600;font-size:15px;color:#111">'+esc(a.name)+'</div>';
+        if(a.description)h+='<div style="font-size:13px;color:#6b7280;margin-top:2px">'+esc(a.description)+'</div>';
+        h+='</div>';
+        h+='<div style="font-weight:700;color:'+PRIMARY+';font-size:15px;margin-left:12px;white-space:nowrap">+$'+parseFloat(a.price).toFixed(2)+'</div>';
+        h+='</div>';
+      });
+      calcTotal();
+      h+='<div class="sbk-total-bar">';
+      h+='<div><span style="font-size:13px;color:#6b7280">Total</span><br><span style="font-size:20px;font-weight:700;color:#111">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      h+='<button class="sbk-btn" style="width:auto;padding:14px 32px;margin:0" data-gonext="datetime">Continue &rarr;</button>';
+      h+='</div>';
+
+    }else if(state.step==='datetime'){
+      if(prev)h+='<button class="sbk-btn-back" data-goback>&larr; Back</button>';
       h+='<h3 class="sbk-title">Choose Date & Time</h3>';
-      h+='<div class="sbk-summary" style="padding:12px 14px;margin-bottom:14px"><div class="sbk-row"><span style="font-weight:600">'+esc(state.selService.name)+'</span><span class="sbk-price" style="font-size:16px">$'+parseFloat(state.selService.price).toFixed(2)+'</span></div></div>';
-      h+='<label class="sbk-label">Select Date</label><select class="sbk-date-select" id="sbk-date"><option value="">Choose a date...</option>';
-      getAvailDates().forEach(function(d){
-        var ds=d.toISOString().split('T')[0];
-        var dn=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-        h+='<option value="'+ds+'"'+(state.selDate===ds?' selected':'')+'>'+dn+'</option>';
-      });
-      h+='</select>';
+      calcTotal();
+      h+='<div class="sbk-summary" style="padding:12px 14px;margin-bottom:14px">';
+      h+='<div class="sbk-row"><span style="font-weight:600">'+esc(state.selService.name)+'</span><span class="sbk-price" style="font-size:16px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      if(state.selAddons.length){
+        state.selAddons.forEach(function(a){
+          h+='<div class="sbk-row" style="margin-top:4px"><span style="font-size:13px;color:#6b7280">+ '+esc(a.name)+'</span><span style="font-size:13px;color:#6b7280">$'+parseFloat(a.price).toFixed(2)+'</span></div>';
+        });
+      }
+      h+='</div>';
+      h+=renderCalendar();
       if(state.selDate){
-        h+='<label class="sbk-label">Select Time</label>';
+        h+='<div class="sbk-times-section">';
+        h+='<label class="sbk-label">Available Times for '+fmtDate(state.selDate)+'</label>';
         if(state.loading)h+='<div class="sbk-loading" style="padding:20px"><div class="sbk-spin"></div></div>';
         else if(state.slots.length){
           h+='<div class="sbk-slots">';
           state.slots.forEach(function(s){h+='<div class="sbk-slot'+(state.selTime===s.time?' sel':'')+'" data-time="'+s.time+'">'+s.displayTime+'</div>'});
           h+='</div>';
         }else h+='<p style="color:#9ca3af;font-size:14px">No available times for this date.</p>';
+        h+='</div>';
       }
-      if(state.selDate&&state.selTime)h+='<button class="sbk-btn" data-next="3">Continue &rarr;</button>';
-    } else if(state.step===3){
-      h+='<button class="sbk-btn-back" data-back="2">&larr; Back</button>';
+      if(state.selDate&&state.selTime){
+        h+='<button class="sbk-btn" data-gonext="contact">Continue &rarr;</button>';
+      }
+
+    }else if(state.step==='contact'){
+      if(prev)h+='<button class="sbk-btn-back" data-goback>&larr; Back</button>';
       h+='<h3 class="sbk-title">Your Information</h3>';
-      h+='<div class="sbk-summary"><div class="sbk-summary-row"><span>Service</span><span>'+esc(state.selService.name)+'</span></div><div class="sbk-summary-row"><span>Date</span><span>'+fmtDate(state.selDate)+'</span></div><div class="sbk-summary-row"><span>Time</span><span>'+state.selTime+'</span></div><div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+parseFloat(state.selService.price).toFixed(2)+'</span></div></div>';
+      calcTotal();
+      h+='<div class="sbk-summary">';
+      h+='<div class="sbk-summary-row"><span>Service</span><span>'+esc(state.selService.name)+'</span></div>';
+      if(state.selAddons.length){
+        state.selAddons.forEach(function(a){
+          h+='<div class="sbk-summary-row"><span style="color:#6b7280">+ '+esc(a.name)+'</span><span>$'+parseFloat(a.price).toFixed(2)+'</span></div>';
+        });
+      }
+      h+='<div class="sbk-summary-row"><span>Date</span><span>'+fmtDate(state.selDate)+'</span></div>';
+      h+='<div class="sbk-summary-row"><span>Time</span><span>'+state.selTime+'</span></div>';
+      h+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      h+='</div>';
       h+='<label class="sbk-label">Full Name <span class="sbk-req">*</span></label><input class="sbk-input" data-field="name" value="'+esc(state.cust.name)+'" placeholder="John Doe">';
       h+='<label class="sbk-label">Email <span class="sbk-req">*</span></label><input class="sbk-input" data-field="email" type="email" value="'+esc(state.cust.email)+'" placeholder="john@example.com">';
       h+='<label class="sbk-label">Phone <span class="sbk-req">*</span></label><input class="sbk-input" data-field="phone" type="tel" value="'+esc(state.cust.phone)+'" placeholder="(555) 123-4567">';
       h+='<label class="sbk-label">Notes (Optional)</label><textarea class="sbk-input" data-field="notes" rows="2" placeholder="Anything we should know..." style="resize:vertical">'+esc(state.cust.notes)+'</textarea>';
-      h+='<button class="sbk-btn" id="sbk-submit"'+(state.loading?' disabled':'')+'>'+( state.loading?'<span class="sbk-spin" style="width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>Confirming...':'Confirm Booking')+'</button>';
+      if(needsPayment()){
+        h+='<button class="sbk-btn" id="sbk-to-payment"'+(state.loading?' disabled':'')+'>Continue to Payment &rarr;</button>';
+      }else{
+        h+='<button class="sbk-btn" id="sbk-submit"'+(state.loading?' disabled':'')+'>'+( state.loading?'<span class="sbk-spin" style="width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>Confirming...':'Confirm Booking')+'</button>';
+      }
       h+='<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px">You\\'ll receive a confirmation email</p>';
-    }
-    content.innerHTML=h;
 
-    // Bind events
-    content.querySelectorAll('.sbk-card').forEach(function(el){
+    }else if(state.step==='payment'){
+      if(prev)h+='<button class="sbk-btn-back" data-goback>&larr; Back</button>';
+      h+='<h3 class="sbk-title">Payment</h3>';
+      h+='<p class="sbk-sub">Enter your payment details</p>';
+      calcTotal();
+      h+='<div class="sbk-summary" style="margin-bottom:20px">';
+      h+='<div class="sbk-summary-row" style="font-weight:700"><span>Total Due</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      h+='</div>';
+      if(state.loading){
+        h+='<div class="sbk-loading" style="padding:20px"><div class="sbk-spin"></div>Setting up payment...</div>';
+      }else{
+        h+='<label class="sbk-label">Card Details</label>';
+        h+='<div class="sbk-stripe-card"></div>';
+        h+='<button class="sbk-btn" id="sbk-pay">Pay $'+state.totalPrice.toFixed(2)+'</button>';
+      }
+      h+='<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Secured by Stripe</p>';
+    }
+
+    content.innerHTML=h;
+    bindEvents();
+  }
+
+  function renderServiceCard(s){
+    var h='<div class="sbk-card" data-sid="'+s.id+'">';
+    h+='<div class="sbk-svc-card-inner">';
+    if(s.image_url)h+='<img class="sbk-svc-img" src="'+esc(s.image_url)+'" alt="'+esc(s.name)+'">';
+    h+='<div class="sbk-svc-card-info">';
+    h+='<h4>'+esc(s.name)+'</h4>';
+    if(s.description)h+='<p>'+esc(s.description)+'</p>';
+    h+='<div class="sbk-row" style="margin-top:8px"><span class="sbk-price">$'+parseFloat(s.price).toFixed(2)+'</span><span class="sbk-dur">'+s.duration_hours+'h</span></div>';
+    h+='</div></div></div>';
+    return h;
+  }
+
+  function bindEvents(){
+    // Category clicks
+    content.querySelectorAll('.sbk-cat-card').forEach(function(el){
+      el.onclick=function(){
+        var cid=parseInt(el.getAttribute('data-catid'));
+        state.selCategory=state.categories.find(function(c){return c.id===cid})||null;
+        goStep('services');
+      };
+    });
+
+    // Service clicks
+    content.querySelectorAll('.sbk-card[data-sid]').forEach(function(el){
       el.onclick=function(){
         var sid=parseInt(el.getAttribute('data-sid'));
         state.selService=state.services.find(function(s){return s.id===sid});
-        state.step=2;state.error=null;render();
+        if(!state.selService){
+          state.selService=state.uncategorized.find(function(s){return s.id===sid});
+        }
+        state.selAddons=[];
+        calcTotal();
+        var addons=getAddonsForService(state.selService.id);
+        if(addons.length>0){
+          goStep('addons');
+        }else{
+          goStep('datetime');
+        }
       };
     });
-    var dateEl=document.getElementById('sbk-date');
-    if(dateEl)dateEl.onchange=function(){state.selDate=dateEl.value;state.selTime='';loadSlots()};
+
+    // Addon checkboxes
+    content.querySelectorAll('.sbk-addon-check').forEach(function(el){
+      el.onchange=function(){
+        var aid=parseInt(el.getAttribute('data-addonid'));
+        var addon=state.services.find(function(s){return s.id===aid});
+        if(!addon)return;
+        if(el.checked){
+          state.selAddons.push(addon);
+        }else{
+          state.selAddons=state.selAddons.filter(function(a){return a.id!==aid});
+        }
+        calcTotal();
+        // Update total display without full re-render
+        var totalBar=content.querySelector('.sbk-total-bar');
+        if(totalBar){
+          var priceEl=totalBar.querySelector('span[style*="font-size:20px"]');
+          if(priceEl)priceEl.textContent='$'+state.totalPrice.toFixed(2);
+        }
+      };
+    });
+
+    // Calendar nav arrows
+    content.querySelectorAll('[data-caldir]').forEach(function(el){
+      el.onclick=function(){
+        var dir=parseInt(el.getAttribute('data-caldir'));
+        state.calMonth+=dir;
+        if(state.calMonth>11){state.calMonth=0;state.calYear++}
+        if(state.calMonth<0){state.calMonth=11;state.calYear--}
+        render();
+      };
+    });
+
+    // Calendar date clicks
+    content.querySelectorAll('[data-caldate]').forEach(function(el){
+      el.onclick=function(){
+        state.selDate=el.getAttribute('data-caldate');
+        state.selTime='';
+        loadSlots();
+      };
+    });
+
+    // Time slots
     content.querySelectorAll('.sbk-slot').forEach(function(el){
       el.onclick=function(){state.selTime=el.getAttribute('data-time');render()};
     });
-    content.querySelectorAll('[data-next]').forEach(function(el){
-      el.onclick=function(){state.step=parseInt(el.getAttribute('data-next'));state.error=null;render()};
+
+    // Go next
+    content.querySelectorAll('[data-gonext]').forEach(function(el){
+      el.onclick=function(){goStep(el.getAttribute('data-gonext'))};
     });
-    content.querySelectorAll('[data-back]').forEach(function(el){
-      el.onclick=function(){state.step=parseInt(el.getAttribute('data-back'));state.error=null;render()};
+
+    // Go back
+    content.querySelectorAll('[data-goback]').forEach(function(el){
+      el.onclick=function(){
+        var p=getPrevStep();
+        if(p)goStep(p);
+      };
     });
+
+    // Input fields
     content.querySelectorAll('[data-field]').forEach(function(el){
       el.oninput=function(){state.cust[el.getAttribute('data-field')]=el.value};
     });
+
+    // Submit button (no payment)
     var submitEl=document.getElementById('sbk-submit');
     if(submitEl)submitEl.onclick=submit;
+
+    // To payment button
+    var toPayEl=document.getElementById('sbk-to-payment');
+    if(toPayEl)toPayEl.onclick=function(){
+      var c=state.cust;
+      if(!c.name||!c.email||!c.phone){state.error='Please fill in all required fields';render();return}
+      goStep('payment');
+      setupPayment();
+    };
+
+    // Pay button
+    var payEl=document.getElementById('sbk-pay');
+    if(payEl)payEl.onclick=confirmPayment;
   }
 
-  function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+  function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
   function fmtDate(d){if(!d)return'';var p=d.split('-');return new Date(p[0],p[1]-1,p[2]).toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'})}
 })();
 </script>

@@ -104,7 +104,10 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     if (plan === 'pro' || plan === 'scale') {
       try {
         const userRow = await pool.query(
-          'SELECT twilio_phone_number, telnyx_phone_number, city, state FROM users WHERE id = $1',
+          `SELECT u.twilio_phone_number, u.telnyx_phone_number, bi.city, bi.state
+           FROM users u
+           LEFT JOIN business_information bi ON bi.user_id = u.id
+           WHERE u.id = $1`,
           [userId]
         );
         const userData = userRow.rows[0];
@@ -124,7 +127,9 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         } else if (!userData?.twilio_phone_number) {
           // ── Twilio fallback ───────────────────────────────────────────
           const { purchasePhoneNumber } = require('../utils/twilio');
-          const result = await purchasePhoneNumber('800', userId);
+          const { getAreaCode } = require('../utils/telnyx');
+          const twAreaCode = getAreaCode(userData?.state, userData?.city);
+          const result = await purchasePhoneNumber(twAreaCode, userId);
           await pool.query(
             'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2 WHERE id = $3',
             [result.phoneNumber, result.phoneSid, userId]

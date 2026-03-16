@@ -66,6 +66,8 @@ const bookingRoutes = require('./routes/bookings');
 const customerRoutes = require('./routes/customers');
 const leadRoutes = require('./routes/leads');
 const serviceRoutes = require('./routes/services');
+const serviceCategoryRoutes = require('./routes/service-categories');
+const bookingWidgetConfigRoutes = require('./routes/booking-widget-config');
 const employeeRoutes = require('./routes/employees');
 const websiteRoutes = require('./routes/website');
 const aiAgentRoutes = require('./routes/ai-agents');
@@ -87,6 +89,8 @@ app.use('/api/public', embedCors, publicRoutes);
 app.use('/api/leads/public', embedCors); // CORS for embed form submissions
 app.use('/api/leads', leadRoutes);
 app.use('/api/services', serviceRoutes);
+app.use('/api/service-categories', serviceCategoryRoutes);
+app.use('/api/booking-widget-config', bookingWidgetConfigRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/website', websiteRoutes);
 app.use('/api/agents', aiAgentRoutes);
@@ -634,7 +638,8 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
   try {
     await pool.query('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS booking_id INTEGER REFERENCES bookings(id)');
     await pool.query('CREATE INDEX IF NOT EXISTS idx_sms_booking_id ON sms_messages(booking_id)');
-    console.log('✅ sms_messages booking_id column verified');
+    await pool.query('ALTER TABLE sms_messages ALTER COLUMN lead_id DROP NOT NULL');
+    console.log('✅ sms_messages columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify sms_messages booking_id:', e.message);
   }
@@ -743,6 +748,8 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
   try {
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS site_key UUID DEFAULT gen_random_uuid()");
     await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_site_key ON users(site_key)");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS sendgrid_sender_id INTEGER");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS sendgrid_verified BOOLEAN DEFAULT false");
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS embed_configs (
@@ -811,23 +818,102 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
   }
 })();
 
+// ── Booking system v2: categories, addons, widget config ──
+(async () => {
+  try {
+    // Service categories
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS service_categories (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        description TEXT DEFAULT '',
+        image_url TEXT DEFAULT '',
+        sort_order INTEGER DEFAULT 0,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_service_categories_user ON service_categories(user_id)');
+
+    // Add new columns to services
+    await pool.query('ALTER TABLE services ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES service_categories(id) ON DELETE SET NULL');
+    await pool.query('ALTER TABLE services ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT \'\'');
+    await pool.query('ALTER TABLE services ADD COLUMN IF NOT EXISTS buffer_minutes INTEGER DEFAULT 0');
+    await pool.query('ALTER TABLE services ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0');
+    await pool.query('ALTER TABLE services ADD COLUMN IF NOT EXISTS is_addon BOOLEAN DEFAULT false');
+
+    // Service addon relationships
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS service_addons (
+        id SERIAL PRIMARY KEY,
+        main_service_id INTEGER REFERENCES services(id) ON DELETE CASCADE,
+        addon_service_id INTEGER REFERENCES services(id) ON DELETE CASCADE,
+        sort_order INTEGER DEFAULT 0,
+        UNIQUE(main_service_id, addon_service_id)
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_service_addons_main ON service_addons(main_service_id)');
+
+    // Booking widget configuration
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS booking_widget_configs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        config JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Payment columns on bookings
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deposit_amount DECIMAL(10,2) DEFAULT 0');
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_payment_intent_id VARCHAR(255)');
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_setup_intent_id VARCHAR(255)');
+
+    console.log('✅ Booking system v2 tables verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify booking v2 tables:', e.message);
+  }
+})();
+
 // ── SMS processing cron job ──────────────────────────────
 // Runs every 30 seconds. Picks up leads in 'sms_pending' status
-// whose sms_scheduled_at has passed, sends the SMS via Twilio,
+// whose sms_scheduled_at has passed, sends the SMS via Twilio or Telnyx,
 // and updates the lead status. Survives server restarts.
 const cron = require('node-cron');
 const { sendSMS } = require('./utils/twilio');
+const { sendSMSTelnyx } = require('./utils/telnyx');
+
+// Helper: send SMS using whichever provider the user has a number on
+async function sendSMSAuto(to, message, userId) {
+  const userRow = await pool.query(
+    'SELECT telnyx_phone_number, twilio_phone_number FROM users WHERE id = $1',
+    [userId]
+  );
+  const u = userRow.rows[0];
+  if (u?.telnyx_phone_number) {
+    const result = await sendSMSTelnyx(to, message, u.telnyx_phone_number);
+    return { messageSid: result.messageId, provider: 'telnyx' };
+  }
+  if (u?.twilio_phone_number) {
+    const result = await sendSMS(to, message, userId);
+    return { messageSid: result.messageSid, provider: 'twilio' };
+  }
+  throw new Error(`No SMS phone number assigned to user ${userId}`);
+}
 
 cron.schedule('*/30 * * * * *', async () => {
   try {
     const pending = await pool.query(
-      `SELECT l.*, u.twilio_phone_number
+      `SELECT l.*, u.twilio_phone_number, u.telnyx_phone_number
        FROM leads l
        JOIN users u ON u.id = l.user_id
        WHERE l.status = 'sms_pending'
          AND l.sms_scheduled_at IS NOT NULL
          AND l.sms_scheduled_at <= NOW()
-         AND u.twilio_phone_number IS NOT NULL`
+         AND (u.twilio_phone_number IS NOT NULL OR u.telnyx_phone_number IS NOT NULL)`
     );
 
     for (const lead of pending.rows) {
@@ -873,7 +959,7 @@ cron.schedule('*/30 * * * * *', async () => {
           .replace(/\{\{service\}\}/g, lead.service || 'our services')
           .replace(/\{\{message\}\}/g, lead.message || '');
 
-        const smsResult = await sendSMS(lead.phone, personalizedSms, lead.user_id);
+        const smsResult = await sendSMSAuto(lead.phone, personalizedSms, lead.user_id);
 
         await pool.query(
           `INSERT INTO sms_messages (lead_id, user_id, direction, to_number, message, twilio_message_sid, created_at)
@@ -886,7 +972,7 @@ cron.schedule('*/30 * * * * *', async () => {
           [lead.id]
         );
 
-        console.log(`✅ Cron: SMS sent to lead ${lead.id} (${lead.phone})`);
+        console.log(`✅ Cron: SMS sent to lead ${lead.id} (${lead.phone}) via ${smsResult.provider}`);
       } catch (sendErr) {
         console.error(`❌ Cron: SMS failed for lead ${lead.id}:`, sendErr.message);
         await pool.query("UPDATE leads SET status = 'sms_failed' WHERE id = $1", [lead.id]);
@@ -894,6 +980,87 @@ cron.schedule('*/30 * * * * *', async () => {
     }
   } catch (err) {
     console.error('❌ SMS cron error:', err.message || err);
+  }
+});
+
+// ── Review request SMS cron job ──────────────────────────
+// Runs every 60 seconds. Picks up pending review requests whose
+// scheduled_send_time has passed and sends the review SMS.
+cron.schedule('*/60 * * * * *', async () => {
+  try {
+    const pending = await pool.query(
+      `SELECT rr.id, rr.user_id, rr.customer_id, rr.incentive_code,
+              c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email,
+              c.last_service AS service_name,
+              u.business_name, u.telnyx_phone_number, u.twilio_phone_number,
+              rc.message_template, rc.incentive, rc.incentive_enabled
+       FROM review_requests rr
+       JOIN users u ON u.id = rr.user_id
+       JOIN customers c ON c.id = rr.customer_id
+       LEFT JOIN review_configs rc ON rc.user_id = rr.user_id
+       WHERE rr.status = 'pending'
+         AND rr.sms_sent = false
+         AND c.phone IS NOT NULL
+         AND rr.scheduled_send_time <= NOW()
+         AND (u.telnyx_phone_number IS NOT NULL OR u.twilio_phone_number IS NOT NULL)`
+    );
+
+    for (const req of pending.rows) {
+      try {
+        // Check monthly SMS limit
+        const planRow = await pool.query('SELECT plan FROM users WHERE id = $1', [req.user_id]);
+        const userPlan = planRow.rows[0]?.plan;
+        const SMS_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
+        const smsLimit = SMS_LIMITS[userPlan] || 0;
+        if (smsLimit === 0) {
+          await pool.query("UPDATE review_requests SET status = 'skipped' WHERE id = $1", [req.id]);
+          continue;
+        }
+        const usageRow = await pool.query(
+          `SELECT COUNT(*) FROM sms_messages
+           WHERE user_id = $1 AND direction = 'outgoing'
+           AND created_at >= date_trunc('month', NOW())`,
+          [req.user_id]
+        );
+        if (parseInt(usageRow.rows[0].count, 10) >= smsLimit) {
+          await pool.query("UPDATE review_requests SET status = 'sms_limit_reached' WHERE id = $1", [req.id]);
+          continue;
+        }
+
+        // Build message from template
+        const defaultTemplate = "Hi {name}! Thank you for choosing {business}. We'd love to hear about your experience with {service}! Could you take a moment to leave us a review?";
+        let message = (req.message_template || defaultTemplate)
+          .replace(/\{name\}/g, req.customer_name || 'there')
+          .replace(/\{business\}/g, req.business_name || 'us')
+          .replace(/\{service\}/g, req.service_name || 'our service');
+
+        if (req.incentive_enabled && req.incentive_code) {
+          message += ` Use code ${req.incentive_code} for ${req.incentive || '$10 off your next service'}!`;
+        }
+
+        // Format phone number for sending
+        const toPhone = req.customer_phone.startsWith('+') ? req.customer_phone : `+1${req.customer_phone.replace(/\D/g, '')}`;
+        const smsResult = await sendSMSAuto(toPhone, message, req.user_id);
+
+        await pool.query(
+          `INSERT INTO sms_messages (user_id, direction, to_number, message, twilio_message_sid, created_at)
+           VALUES ($1, 'outgoing', $2, $3, $4, CURRENT_TIMESTAMP)`,
+          [req.user_id, toPhone, message, smsResult.messageSid]
+        );
+
+        await pool.query(
+          `UPDATE review_requests SET sms_sent = true, sms_sent_at = NOW(), actual_send_time = NOW(), status = 'sent' WHERE id = $1`,
+          [req.id]
+        );
+
+        console.log(`✅ Cron: Review SMS sent for request ${req.id} to ${toPhone} via ${smsResult.provider}`);
+      } catch (sendErr) {
+        console.error(`❌ Cron: Review SMS failed for request ${req.id}:`, sendErr.message);
+        await pool.query("UPDATE review_requests SET status = 'sms_failed', sms_error = $2 WHERE id = $1", [req.id, sendErr.message]);
+      }
+    }
+  } catch (err) {
+    console.error('❌ Review SMS cron error:', err.message || err);
   }
 });
 

@@ -1,6 +1,13 @@
 {
   "permissions": {
-    "defaultMode": "bypassPermissions",
-    "allow": ["Read", "Edit", "Write", "Bash", "*"]
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Bash",
+      "*",
+      "WebFetch(domain:salazarlandscape.com)"
+    ],
+    "defaultMode": "bypassPermissions"
   }
 }

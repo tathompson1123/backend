@@ -373,15 +373,8 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
       const autoSend = config ? config.auto_send_enabled : true;
 
       if (autoSend && (booking.customer_email || booking.customer_phone)) {
-        // Get service name from booking items
-        const itemsResult = await pool.query(
-          'SELECT service_name FROM booking_items WHERE booking_id = $1 LIMIT 1',
-          [id]
-        );
-        const serviceName = itemsResult.rows[0]?.service_name || 'Service';
-
-        // Calculate scheduled send time (SMS goes out first based on send_delay hours, default 2)
-        const delayHours = 2; // SMS always goes 2 hours after completion
+        // Calculate scheduled send time (SMS goes out based on send_delay hours, default 2)
+        const delayHours = config ? (config.send_delay || 2) : 2;
         const scheduledTime = new Date(Date.now() + delayHours * 60 * 60 * 1000);
 
         // Generate incentive code if incentives are enabled
@@ -390,17 +383,17 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
           ? `REV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
           : null;
 
-        // Check if review request already exists for this booking
+        // Check if review request already exists for this customer recently
         const existing = await pool.query(
-          'SELECT id FROM review_requests WHERE user_id = $1 AND customer_email = $2 AND service_name = $3 AND created_at > NOW() - INTERVAL \'24 hours\'',
-          [userId, booking.customer_email || '', serviceName]
+          'SELECT id FROM review_requests WHERE user_id = $1 AND customer_id = $2 AND created_at > NOW() - INTERVAL \'24 hours\'',
+          [userId, booking.customer_id]
         );
 
         if (existing.rows.length === 0) {
           await pool.query(
-            `INSERT INTO review_requests (user_id, customer_name, customer_email, customer_phone, service_name, status, scheduled_send_time, incentive_code, created_at)
-             VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, NOW())`,
-            [userId, booking.customer_name, booking.customer_email, booking.customer_phone, serviceName, scheduledTime, incentiveCode]
+            `INSERT INTO review_requests (user_id, customer_id, status, scheduled_send_time, incentive_code, created_at)
+             VALUES ($1, $2, 'pending', $3, $4, NOW())`,
+            [userId, booking.customer_id, scheduledTime, incentiveCode]
           );
           console.log(`✅ Review request created for booking ${id}`);
         }

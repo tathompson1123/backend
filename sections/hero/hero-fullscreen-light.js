@@ -26,7 +26,8 @@ module.exports = {
 
   render(content, theme, sectionId = 'hero') {
     const s = `section-${sectionId}`;
-    const overlay = Math.min(Math.max(parseFloat(content.overlayOpacity) || 0.12, 0), 0.5);
+    const rawOverlay = content.overlayOpacity !== undefined ? Number(content.overlayOpacity) : 12;
+    const overlay = Math.min(Math.max(rawOverlay > 1 ? rawOverlay / 100 : rawOverlay, 0), 0.5);
 
     return `
 <section class="${s}">

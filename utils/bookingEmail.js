@@ -48,13 +48,14 @@ async function sendBookingEmails(opts) {
   try {
     // Get business info
     const userResult = await pool.query(
-      'SELECT business_name, email FROM users WHERE id = $1',
+      'SELECT business_name, email, sendgrid_verified FROM users WHERE id = $1',
       [opts.userId]
     );
     if (userResult.rows.length === 0) return;
 
-    const { business_name: businessName, email: ownerEmail } = userResult.rows[0];
-    const fromEmail = process.env.SENDGRID_FROM_EMAIL || ownerEmail;
+    const { business_name: businessName, email: ownerEmail, sendgrid_verified: sgVerified } = userResult.rows[0];
+    // Use verified business email if available, otherwise fall back to platform email
+    const fromEmail = sgVerified ? ownerEmail : (process.env.SENDGRID_FROM_EMAIL || ownerEmail);
     if (!fromEmail) return;
 
     const formattedDate = formatDate(opts.bookingDate);

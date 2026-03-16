@@ -163,4 +163,112 @@ router.put('/password', authenticateToken, async (req, res) => {
   }
 });
 
+// ============================================
+// SENDGRID SENDER VERIFICATION
+// ============================================
+
+// POST - Request sender verification for business email
+router.post('/sendgrid/verify', authenticateToken, async (req, res) => {
+  try {
+    if (!process.env.SENDGRID_API_KEY) {
+      return res.status(400).json({ error: 'Email service not configured' });
+    }
+
+    const userId = req.user.userId;
+    const { email, businessName } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    const sgClient = require('@sendgrid/client');
+    sgClient.setApiKey(process.env.SENDGRID_API_KEY);
+
+    // Check if already a verified sender
+    const [existingRes] = await sgClient.request({
+      method: 'GET',
+      url: '/v3/verified_senders',
+    });
+    const existing = (existingRes.body?.results || []).find(s => s.from_email === email);
+    if (existing && existing.verified) {
+      // Save to DB
+      await pool.query(
+        `UPDATE users SET sendgrid_sender_id = $1, sendgrid_verified = true WHERE id = $2`,
+        [existing.id, userId]
+      );
+      return res.json({ status: 'verified', message: 'Email is already verified' });
+    }
+
+    // Create new verified sender request
+    const [createRes] = await sgClient.request({
+      method: 'POST',
+      url: '/v3/verified_senders',
+      body: {
+        nickname: businessName || email,
+        from_email: email,
+        from_name: businessName || 'Business',
+        reply_to: email,
+        reply_to_name: businessName || 'Business',
+        address: '123 Main St',
+        city: 'Any',
+        state: 'CA',
+        zip: '90001',
+        country: 'US',
+      },
+    });
+
+    const senderId = createRes.body?.id;
+    // Save sender ID to DB (not yet verified - they need to click the email)
+    await pool.query(
+      `UPDATE users SET sendgrid_sender_id = $1, sendgrid_verified = false WHERE id = $2`,
+      [senderId || 0, userId]
+    );
+
+    res.json({ status: 'pending', message: 'Verification email sent — check your inbox and click the link' });
+  } catch (error) {
+    console.error('SendGrid verify error:', error.response?.body || error.message);
+    const sgError = error.response?.body?.errors?.[0]?.message || error.message;
+    res.status(500).json({ error: sgError || 'Failed to send verification' });
+  }
+});
+
+// GET - Check sender verification status
+router.get('/sendgrid/status', authenticateToken, async (req, res) => {
+  try {
+    if (!process.env.SENDGRID_API_KEY) {
+      return res.json({ status: 'unconfigured' });
+    }
+
+    const userId = req.user.userId;
+    const userResult = await pool.query(
+      'SELECT sendgrid_sender_id, sendgrid_verified FROM users WHERE id = $1',
+      [userId]
+    );
+    const user = userResult.rows[0];
+    if (!user || !user.sendgrid_sender_id) {
+      return res.json({ status: 'not_setup' });
+    }
+
+    if (user.sendgrid_verified) {
+      return res.json({ status: 'verified' });
+    }
+
+    // Check with SendGrid if it's been verified since last check
+    const sgClient = require('@sendgrid/client');
+    sgClient.setApiKey(process.env.SENDGRID_API_KEY);
+
+    const [sgRes] = await sgClient.request({
+      method: 'GET',
+      url: '/v3/verified_senders',
+    });
+    const sender = (sgRes.body?.results || []).find(s => s.id === user.sendgrid_sender_id);
+    if (sender?.verified) {
+      await pool.query('UPDATE users SET sendgrid_verified = true WHERE id = $1', [userId]);
+      return res.json({ status: 'verified' });
+    }
+
+    return res.json({ status: 'pending' });
+  } catch (error) {
+    console.error('SendGrid status error:', error.message);
+    res.json({ status: 'unknown' });
+  }
+});
+
 module.exports = router;

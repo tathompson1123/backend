@@ -38,6 +38,7 @@ module.exports = {
     const bgImage = content.backgroundImage || '';
     const img1    = content.heroImage1 || '';
     const img2    = content.heroImage2 || '';
+    const overlayVal = content.overlayOpacity !== undefined ? Math.min(Math.max(Number(content.overlayOpacity), 0), 100) / 100 : 1;
     const years   = content.yearsText   || '10+ Years';
     const location = content.locationText || 'Serving Your Area';
 
@@ -54,13 +55,13 @@ module.exports = {
         <span class="${s}-highlight">${content.highlightText || 'Detailed'}</span>
       </h1>
       <p class="${s}-subtitle">${content.subtitle || ''}</p>
-      <div class="${s}-buttons">
-        <a href="${content.ctaLink || '#contact'}" class="${s}-btn-primary">
+      ${(content.ctaText !== '' || content.ctaText2) ? `<div class="${s}-buttons">
+        ${content.ctaText !== '' ? `<a href="${content.ctaLink || '#contact'}" class="${s}-btn-primary">
           <span>${content.ctaText || 'Book Your Detail'}</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </a>
+        </a>` : ''}
         ${content.ctaText2 ? `<a href="${content.ctaLink2 || '#'}" class="${s}-btn-secondary">${content.ctaText2}</a>` : ''}
-      </div>
+      </div>` : ''}
       <div class="${s}-trust">
         <div class="${s}-trust-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="${primary}" stroke="none"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Certified Detailers</div>
         <div class="${s}-trust-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="${primary}" stroke="none"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Premium Products</div>
@@ -113,6 +114,7 @@ module.exports = {
       rgba(9, 9, 11, 0.85) 45%,
       rgba(9, 9, 11, 0.4) 100%
     );
+    opacity: ${overlayVal};
     z-index: 1;
   }
   .${s}-container {

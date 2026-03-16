@@ -26,6 +26,7 @@ module.exports = {
   render(content, theme, sectionId = 'pagebanner') {
     const s = `section-${sectionId}`;
     const hasBg = !!content.bgImage;
+    const overlayVal = content.overlayOpacity !== undefined ? Math.min(Math.max(Number(content.overlayOpacity), 0), 100) / 100 : 1;
 
     return `
 <section class="${s}">
@@ -63,6 +64,7 @@ module.exports = {
     position: absolute;
     inset: 0;
     background: linear-gradient(to bottom, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.45) 100%);
+    opacity: ${overlayVal};
     z-index: 1;
   }
   .${s}-content {

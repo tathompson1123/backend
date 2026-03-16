@@ -122,7 +122,11 @@ class StripeConnectProcessor extends PaymentProcessor {
    */
   static async getOAuthUrl(userId) {
     const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+    // Live mode Stripe requires HTTPS — use production URL when using live keys
+    const isLive = (process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_');
+    const backendUrl = isLive
+      ? (process.env.PRODUCTION_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:3001')
+      : (process.env.BACKEND_URL || 'http://localhost:3001');
 
     const account = await stripe.accounts.create({ type: 'express' });
 

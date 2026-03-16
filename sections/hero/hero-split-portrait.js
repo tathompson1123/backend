@@ -36,6 +36,7 @@ module.exports = {
     const s = `section-${sectionId}`;
     const hasBg = !!content.bgImage;
     const hasFloat = !!content.floatBadge;
+    const overlayVal = content.overlayOpacity !== undefined ? Math.min(Math.max(Number(content.overlayOpacity), 0), 100) / 100 : 1;
 
     return `
 <section class="${s}">
@@ -49,10 +50,10 @@ module.exports = {
         <span class="${s}-highlight">${content.highlightText || 'Landscapes'}</span>
       </h1>
       <p class="${s}-subtitle">${content.subtitle || ''}</p>
-      <div class="${s}-buttons">
-        <a href="${content.ctaLink || '#contact'}" class="${s}-btn-primary">${content.ctaText || 'Get a Free Quote'}</a>
+      ${(content.ctaText !== '' || content.ctaText2) ? `<div class="${s}-buttons">
+        ${content.ctaText !== '' ? `<a href="${content.ctaLink || '#contact'}" class="${s}-btn-primary">${content.ctaText || 'Get a Free Quote'}</a>` : ''}
         ${content.ctaText2 ? `<a href="${content.ctaLink2 || '#'}" class="${s}-btn-secondary">${content.ctaText2}</a>` : ''}
-      </div>
+      </div>` : ''}
     </div>
     <div class="${s}-portrait-wrap">
       <img src="${content.portraitImage || ''}" alt="" class="${s}-portrait" loading="lazy">
@@ -89,6 +90,7 @@ module.exports = {
     position: absolute;
     inset: 0;
     background: linear-gradient(135deg, ${theme.bgColor || '#faf8f5'}70 0%, transparent 65%);
+    opacity: ${overlayVal};
     z-index: 1;
   }
   .${s}-container {

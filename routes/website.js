@@ -700,10 +700,11 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
 
     console.log('✅ Saved schema and HTML for user', userId);
 
-    // Auto-redeploy if already published
+    // Auto-redeploy if already published (skip if draft save)
     let deployed = false;
     let deployUrl = null;
-    if (existing.rows[0]?.is_published) {
+    const isDraft = req.body.draft === true;
+    if (existing.rows[0]?.is_published && !isDraft) {
       try {
         const vercelToken = process.env.VERCEL_TOKEN;
         if (vercelToken) {
