@@ -252,16 +252,6 @@ router.get('/my-ip', async (req, res) => {
 });
 
 // GET - Fetch user's website
-// Temporary diagnostic — remove after debugging
-router.get('/debug-url', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT vercel_url FROM websites WHERE user_id = $1', [req.user.userId]);
-    const raw = result.rows[0]?.vercel_url || null;
-    const cleaned = raw ? `https://${raw.replace(/^(https?:?\/*)+/i, '')}` : null;
-    res.json({ raw, cleaned, charCodes: raw ? [...raw.slice(0, 30)].map(c => c.charCodeAt(0)) : null });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 router.get('/', authenticateToken, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -291,6 +281,13 @@ router.get('/', authenticateToken, async (req, res) => {
         website.vercel_url = clean;
         pool.query('UPDATE websites SET vercel_url = $1 WHERE id = $2', [clean, website.id]).catch(() => {});
       }
+    }
+
+    // Clear custom_domain if it's actually a Vercel URL (incorrectly stored)
+    if (website.custom_domain && website.custom_domain.includes('vercel.app')) {
+      website.custom_domain = null;
+      website.domain_verified = false;
+      pool.query('UPDATE websites SET custom_domain = NULL, domain_verified = false WHERE id = $1', [website.id]).catch(() => {});
     }
 
     res.json({
