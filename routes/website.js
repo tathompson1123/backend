@@ -610,7 +610,10 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
     }
 
     const deployData = await deployResponse.json();
-    const deploymentUrl = `https://${deployData.url}`;
+    // Prefer stable alias URL over unique per-deployment URL
+    const stableAlias = deployData.alias?.[0];
+    const deploymentUrl = stableAlias ? `https://${stableAlias}` : `https://${deployData.url}`;
+    console.log(`🔍 Vercel deploy response — url: ${deployData.url}, alias: ${JSON.stringify(deployData.alias)}, saved: ${deploymentUrl}`);
 
     // Update database with new deployment info
     await pool.query(
@@ -727,7 +730,8 @@ router.post('/save-schema', authenticateToken, async (req, res) => {
 
           if (deployResponse.ok) {
             const deployData = await deployResponse.json();
-            deployUrl = `https://${deployData.url}`;
+            const stableAlias = deployData.alias?.[0];
+            deployUrl = stableAlias ? `https://${stableAlias}` : `https://${deployData.url}`;
             await pool.query(
               'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
               [deployUrl, deployData.id, userId]
@@ -1257,13 +1261,14 @@ function fixContactFormHTML(html, pageName) {
 
           if (deployResponse.ok) {
             const deployData = await deployResponse.json();
-            deployUrl = `https://${deployData.url}`;
-            
+            const stableAlias = deployData.alias?.[0];
+            deployUrl = stableAlias ? `https://${stableAlias}` : `https://${deployData.url}`;
+
             await pool.query(
               'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
               [deployUrl, deployData.id, userId]
             );
-            
+
             redeployed = true;
             console.log(`✅ Auto-deployed to ${deployUrl}`);
           } else {
@@ -1675,7 +1680,8 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
 
           if (deployResponse.ok) {
             const deployData = await deployResponse.json();
-            deployUrl = `https://${deployData.url}`;
+            const stableAlias = deployData.alias?.[0];
+            deployUrl = stableAlias ? `https://${stableAlias}` : `https://${deployData.url}`;
             await pool.query(
               'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
               [deployUrl, deployData.id, userId]
@@ -2168,7 +2174,8 @@ router.post('/lead-magnet-config', authenticateToken, async (req, res) => {
 
           if (deployResponse.ok) {
             const deployData = await deployResponse.json();
-            deployUrl = `https://${deployData.url}`;
+            const stableAlias = deployData.alias?.[0];
+            deployUrl = stableAlias ? `https://${stableAlias}` : `https://${deployData.url}`;
             await pool.query(
               'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
               [deployUrl, deployData.id, userId]

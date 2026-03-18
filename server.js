@@ -639,6 +639,8 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
     await pool.query('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS booking_id INTEGER REFERENCES bookings(id)');
     await pool.query('CREATE INDEX IF NOT EXISTS idx_sms_booking_id ON sms_messages(booking_id)');
     await pool.query('ALTER TABLE sms_messages ALTER COLUMN lead_id DROP NOT NULL');
+    await pool.query('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS from_number VARCHAR(20)');
+    await pool.query('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS provider VARCHAR(10)');
     console.log('✅ sms_messages columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify sms_messages booking_id:', e.message);
@@ -898,11 +900,11 @@ async function sendSMSAuto(to, message, userId) {
   const u = userRow.rows[0];
   if (u?.telnyx_phone_number) {
     const result = await sendSMSTelnyx(to, message, u.telnyx_phone_number);
-    return { messageSid: result.messageId, provider: 'telnyx' };
+    return { messageSid: result.messageId, provider: 'telnyx', fromNumber: u.telnyx_phone_number };
   }
   if (u?.twilio_phone_number) {
     const result = await sendSMS(to, message, userId);
-    return { messageSid: result.messageSid, provider: 'twilio' };
+    return { messageSid: result.messageSid, provider: 'twilio', fromNumber: u.twilio_phone_number };
   }
   throw new Error(`No SMS phone number assigned to user ${userId}`);
 }
@@ -955,8 +957,9 @@ cron.schedule('*/30 * * * * *', async () => {
         }
 
         const smsTemplate = agentResult.rows[0].sms_template;
+        const firstName = (lead.name || 'there').split(' ')[0];
         const personalizedSms = smsTemplate
-          .replace(/\{\{name\}\}/g, lead.name || 'there')
+          .replace(/\{\{name\}\}/g, firstName)
           .replace(/\{\{email\}\}/g, lead.email || '')
           .replace(/\{\{phone\}\}/g, lead.phone)
           .replace(/\{\{service\}\}/g, lead.service || 'our services')
@@ -965,9 +968,9 @@ cron.schedule('*/30 * * * * *', async () => {
         const smsResult = await sendSMSAuto(lead.phone, personalizedSms, lead.user_id);
 
         await pool.query(
-          `INSERT INTO sms_messages (lead_id, user_id, direction, to_number, message, twilio_message_sid, created_at)
-           VALUES ($1, $2, 'outgoing', $3, $4, $5, CURRENT_TIMESTAMP)`,
-          [lead.id, lead.user_id, lead.phone, personalizedSms, smsResult.messageSid]
+          `INSERT INTO sms_messages (lead_id, user_id, direction, to_number, from_number, provider, message, twilio_message_sid, created_at)
+           VALUES ($1, $2, 'outgoing', $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+          [lead.id, lead.user_id, lead.phone, smsResult.fromNumber, smsResult.provider, personalizedSms, smsResult.messageSid]
         );
 
         await pool.query(
@@ -1032,8 +1035,9 @@ cron.schedule('*/60 * * * * *', async () => {
 
         // Build message from template
         const defaultTemplate = "Hi {name}! Thank you for choosing {business}. We'd love to hear about your experience with {service}! Could you take a moment to leave us a review?";
+        const reviewFirstName = (req.customer_name || 'there').split(' ')[0];
         let message = (req.message_template || defaultTemplate)
-          .replace(/\{name\}/g, req.customer_name || 'there')
+          .replace(/\{name\}/g, reviewFirstName)
           .replace(/\{business\}/g, req.business_name || 'us')
           .replace(/\{service\}/g, req.service_name || 'our service');
 
@@ -1046,9 +1050,9 @@ cron.schedule('*/60 * * * * *', async () => {
         const smsResult = await sendSMSAuto(toPhone, message, req.user_id);
 
         await pool.query(
-          `INSERT INTO sms_messages (user_id, direction, to_number, message, twilio_message_sid, created_at)
-           VALUES ($1, 'outgoing', $2, $3, $4, CURRENT_TIMESTAMP)`,
-          [req.user_id, toPhone, message, smsResult.messageSid]
+          `INSERT INTO sms_messages (user_id, direction, to_number, from_number, provider, message, twilio_message_sid, created_at)
+           VALUES ($1, 'outgoing', $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+          [req.user_id, toPhone, smsResult.fromNumber, smsResult.provider, message, smsResult.messageSid]
         );
 
         await pool.query(

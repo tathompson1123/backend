@@ -265,7 +265,8 @@ async function generateWebsite(req, res)
 
                 if (deployResponse.ok) {
                   const deployData = await deployResponse.json();
-                  const deployUrl = `https://${deployData.url}`;
+                  const stableAlias = deployData.alias?.[0];
+                  const deployUrl = stableAlias ? `https://${stableAlias}` : `https://${deployData.url}`;
                   await pool.query(
                     'UPDATE websites SET vercel_url = $1, vercel_deployment_id = $2 WHERE user_id = $3',
                     [deployUrl, deployData.id, userId]
