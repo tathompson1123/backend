@@ -278,11 +278,21 @@ async function fetchPexelsImages(businessType, layout) {
       query2 ? fetchFromPexels(query2, 10) : Promise.resolve([]),
     ]);
 
-    // Merge, dedupe by ID
+    // Merge, dedupe by ID, filter out black & white photos
     const seen = new Set();
     const photos = [];
     for (const p of [...(photos1 || []), ...(photos2 || [])]) {
-      if (!seen.has(p.id)) { seen.add(p.id); photos.push(p); }
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      // Skip grayscale/B&W images: avg_color with R≈G≈B within 15 is likely monochrome
+      if (p.avg_color) {
+        const hex = p.avg_color.replace('#', '');
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        if (Math.max(r, g, b) - Math.min(r, g, b) < 15) continue;
+      }
+      photos.push(p);
     }
 
     if (photos.length === 0) return { hero: [], cards: [] };

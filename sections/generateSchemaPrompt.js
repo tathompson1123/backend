@@ -170,7 +170,8 @@ ${sharedTail}
 7. Make the headline punchy and benefit-focused, not just the business name. Hero "headline" must be 3-5 words MAX (the highlight word is separate). Keep it short and bold.
 8. Feature icons should be relevant emoji for the business type.
 9. Gallery images should showcase different aspects of the work.
-10. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
+10. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.
+11. NEVER use black and white or grayscale images. All photos must be full-color.`;
 }
 
 // ── Organic/Landscaping: content-only prompt + schema builder ────────
@@ -704,7 +705,8 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 3. Write compelling, specific copy — not generic placeholder text. Tailor everything to this business.
 4. Reviews and testimonials should sound realistic and specific to the services offered.
 5. Include 3-4 services based on what was provided.
-6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
+6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.
+7. NEVER use black and white or grayscale images. All photos must be full-color.`;
 }
 
 // ── Default layout (dark theme, generic service businesses) ─────────
@@ -1123,7 +1125,8 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 3. Write compelling, specific copy — not generic placeholder text. Tailor everything to this business type and the services listed.
 4. Reviews should sound realistic and specific to the type of work done.
 5. List 3-6 services based on what was provided. Match services to relevant photo IDs.
-6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
+6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.
+7. NEVER use black and white or grayscale images. All photos must be full-color.`;
 }
 
 // ── Photography: 3 style variants, chosen randomly at generation time ──
@@ -1666,7 +1669,8 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 3. Write compelling, specific copy — not generic placeholder text. Tailor everything to ${businessName} and their services: ${servicesList.slice(0, 5).join(', ')}.
 4. Reviews must sound realistic and mention specific photography services or outcomes.
 5. Adjust package pricing based on the services provided if different from defaults.
-6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
+6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.
+7. NEVER use black and white or grayscale images. All photos must be full-color.`;
 }
 
 // ============================================
@@ -2008,7 +2012,8 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
 3. Write compelling, specific copy — not generic placeholder text. Tailor everything to ${businessName} and their services: ${servicesList.slice(0, 6).join(', ')}.
 4. Reviews and testimonials must sound realistic and mention specific cleaning services or outcomes.
 5. Adjust any pricing or service names to match what this business actually offers.
-6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.`;
+6. The JSON must be parseable by JSON.parse() — no trailing commas, no comments.
+7. NEVER use black and white or grayscale images. All photos must be full-color.`;
 }
 
 module.exports = { buildSchemaPrompt, detectLayout, buildOrganicSchemaFromContent };
