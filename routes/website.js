@@ -252,6 +252,16 @@ router.get('/my-ip', async (req, res) => {
 });
 
 // GET - Fetch user's website
+// Temporary diagnostic — remove after debugging
+router.get('/debug-url', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT vercel_url FROM websites WHERE user_id = $1', [req.user.userId]);
+    const raw = result.rows[0]?.vercel_url || null;
+    const cleaned = raw ? `https://${raw.replace(/^(https?:?\/*)+/i, '')}` : null;
+    res.json({ raw, cleaned, charCodes: raw ? [...raw.slice(0, 30)].map(c => c.charCodeAt(0)) : null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/', authenticateToken, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
