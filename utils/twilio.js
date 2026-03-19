@@ -20,17 +20,34 @@ async function purchasePhoneNumber(areaCode, userId) {
   try {
     const twilioClient = getClient();
 
-    // 1. Search for available number
-    const availableNumbers = await twilioClient.availablePhoneNumbers('US')
-      .local
-      .list({ 
-        areaCode, 
-        smsEnabled: true,
-        limit: 1 
-      });
+    // 1. Search for available number — try requested area code first, then fallbacks
+    let availableNumbers = [];
+
+    // Try the requested area code
+    if (areaCode) {
+      availableNumbers = await twilioClient.availablePhoneNumbers('US')
+        .local
+        .list({ areaCode, smsEnabled: true, limit: 1 });
+    }
+
+    // Fallback: try any US local number in the same state/region
+    if (availableNumbers.length === 0) {
+      console.log(`⚠️  No numbers in area code ${areaCode}, trying nearby...`);
+      availableNumbers = await twilioClient.availablePhoneNumbers('US')
+        .local
+        .list({ smsEnabled: true, limit: 1 });
+    }
+
+    // Last resort: try toll-free
+    if (availableNumbers.length === 0) {
+      console.log('⚠️  No local numbers available, trying toll-free...');
+      availableNumbers = await twilioClient.availablePhoneNumbers('US')
+        .tollFree
+        .list({ smsEnabled: true, limit: 1 });
+    }
 
     if (availableNumbers.length === 0) {
-      throw new Error(`No available numbers in area code ${areaCode}`);
+      throw new Error('No available phone numbers found. Please try again later.');
     }
 
     const selectedNumber = availableNumbers[0].phoneNumber;

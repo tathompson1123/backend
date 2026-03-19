@@ -866,18 +866,31 @@ router.post('/assistant', authenticateToken, async (req, res) => {
     }
 
     // Get user's business info for context
-    const userResult = await pool.query(
-      'SELECT business_name FROM users WHERE id = $1',
-      [userId]
-    );
+    const [userResult, bizResult, servicesResult, hoursResult] = await Promise.all([
+      pool.query('SELECT business_name, email FROM users WHERE id = $1', [userId]),
+      pool.query('SELECT phone, email, address, city, state, zip_code, service_area_type, service_zip_codes, service_radius FROM business_information WHERE user_id = $1', [userId]),
+      pool.query('SELECT name, description, price FROM services WHERE user_id = $1 LIMIT 20', [userId]),
+      pool.query('SELECT day_of_week, start_time, end_time, is_closed FROM business_hours WHERE user_id = $1 ORDER BY day_of_week', [userId])
+    ]);
     const businessName = userResult.rows[0]?.business_name || '';
-
-    // Get services for context
-    const servicesResult = await pool.query(
-      'SELECT name, description, price FROM services WHERE user_id = $1 LIMIT 10',
-      [userId]
-    );
+    const accountEmail = userResult.rows[0]?.email || '';
+    const bizInfo = bizResult.rows[0] || {};
     const services = servicesResult.rows;
+    const hours = hoursResult.rows;
+
+    // Build rich business context string
+    const bizContext = [
+      businessName ? `Business name: ${businessName}` : null,
+      bizInfo.phone ? `Phone: ${bizInfo.phone}` : null,
+      (bizInfo.email || accountEmail) ? `Email: ${bizInfo.email || accountEmail}` : null,
+      bizInfo.address ? `Address: ${[bizInfo.address, bizInfo.city, bizInfo.state, bizInfo.zip_code].filter(Boolean).join(', ')}` : null,
+      bizInfo.service_area_type === 'radius' && bizInfo.service_radius ? `Service area: ${bizInfo.service_radius} mile radius` : null,
+      bizInfo.service_area_type === 'zipcodes' && bizInfo.service_zip_codes?.length ? `Service zip codes: ${bizInfo.service_zip_codes.join(', ')}` : null,
+      services.length > 0 ? `Services: ${services.map(s => `${s.name}${s.price ? ` ($${s.price})` : ''}`).join(', ')}` : null,
+      hours.length > 0 ? `Business hours: ${hours.filter(h => !h.is_closed).map(h => `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][h.day_of_week]} ${h.start_time}-${h.end_time}`).join(', ')}` : null,
+    ].filter(Boolean);
+
+    const hasBusinessInfo = businessName || bizInfo.phone || services.length > 0;
 
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic();
@@ -896,9 +909,8 @@ Only run the full interview below if ALL fields are clearly still defaults.
 
 YOUR ROLE: Ask specific questions to understand exactly what the user wants. DO NOT suggest tone, personality, or style - instead ASK the user what they want and apply it exactly.
 
-USER'S BUSINESS:
-- Business name: ${businessName || 'Not set'}
-- Services: ${services.length > 0 ? services.map(s => s.name).join(', ') : 'Not configured yet'}
+USER'S BUSINESS (from their settings — DO NOT ask about info that's already here):
+${bizContext.length > 0 ? bizContext.join('\n') : 'No business info set yet.'}
 
 CURRENT CONFIGURATION:
 ${JSON.stringify(currentConfig, null, 2)}
@@ -917,7 +929,9 @@ CONFIGURABLE OPTIONS (only include changed fields in suggestedConfig — do NOT 
 11. objectionNotes - Additional notes on how to handle objections
 
 INTERVIEW QUESTIONS (ask one at a time, in order — ONLY if config is at defaults):
-1. "What type of business do you have?" (to understand context)
+IMPORTANT: SKIP any question whose answer is already known from USER'S BUSINESS above. For example, if business name and services are already set, do NOT ask "What type of business do you have?" — instead acknowledge what you know and jump to the first question that ISN'T already answered.
+${hasBusinessInfo ? `The user has already filled out their business settings. Start by acknowledging their business info (e.g. "I can see you run ${businessName}${services.length > 0 ? ` and offer services like ${services.slice(0, 3).map(s => s.name).join(', ')}` : ''}") and skip straight to the agent-specific questions.` : ''}
+1. "What type of business do you have?" (SKIP if business name or services exist above)
 2. "What name should the chat agent use when greeting visitors?"
 3. "What should the greeting message say? What do you want visitors to see first?"
 4. "What's the main goal - booking appointments, answering questions, or capturing contact info?"
@@ -956,9 +970,8 @@ Only run the full interview below if ALL fields are clearly still defaults.
 
 YOUR ROLE: Ask specific questions to understand how the user wants leads handled via SMS. DO NOT suggest tone or style - ASK what they want and apply it exactly.
 
-USER'S BUSINESS:
-- Business name: ${businessName || 'Not set'}
-- Services: ${services.length > 0 ? services.map(s => s.name).join(', ') : 'Not configured yet'}
+USER'S BUSINESS (from their settings — DO NOT ask about info that's already here):
+${bizContext.length > 0 ? bizContext.join('\n') : 'No business info set yet.'}
 
 CURRENT CONFIGURATION:
 ${JSON.stringify(currentConfig, null, 2)}
@@ -973,13 +986,15 @@ CONFIGURABLE OPTIONS (only include changed fields in suggestedConfig — do NOT 
 7. servicesInfo - Services and pricing info
 
 INTERVIEW QUESTIONS (ask one at a time, in order — ONLY if config is at defaults):
-1. "What type of business do you have?" (to understand context)
+IMPORTANT: SKIP any question whose answer is already known from USER'S BUSINESS above. For example, if business name and services are already set, do NOT ask "What type of business do you have?" or "What services do you offer?" — instead acknowledge what you know and jump to the first question that ISN'T already answered.
+${hasBusinessInfo ? `The user has already filled out their business settings. Start by acknowledging their business info (e.g. "I can see you run ${businessName}${services.length > 0 ? ` and offer services like ${services.slice(0, 3).map(s => s.name).join(', ')}` : ''}") and skip straight to the agent-specific questions.` : ''}
+1. "What type of business do you have?" (SKIP if business name or services exist above)
 2. "When a new lead comes in, what should the first SMS say? Write it out exactly how you want it."
 3. "What name should appear as the sender in SMS messages?"
 4. "If a lead doesn't respond, should we follow up? After how long?"
-5. "What services do you offer and what's your typical pricing?"
+5. "What services do you offer and what's your typical pricing?" (SKIP if services exist above)
 6. "Should the agent try to book appointments directly, or just get them to call/respond?"
-7. "What's your typical availability for bookings?"
+7. "What's your typical availability for bookings?" (SKIP if business hours exist above)
 8. "Is there anything the SMS agent should ALWAYS mention?"
 9. "Is there anything the SMS agent should NEVER say?"
 
