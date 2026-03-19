@@ -102,6 +102,22 @@ async function sendSMS(to, message, userId, mediaUrl) {
   }
 }
 
+// Set voice webhook URL on a phone number (for missed call text-back)
+async function setVoiceWebhook(phoneSid, voiceUrl) {
+  try {
+    const twilioClient = getClient();
+    await twilioClient.incomingPhoneNumbers(phoneSid).update({
+      voiceUrl: voiceUrl,
+      voiceMethod: 'POST'
+    });
+    console.log(`✅ Voice webhook set on ${phoneSid}: ${voiceUrl}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Error setting voice webhook:', error);
+    throw error;
+  }
+}
+
 // Release phone number (for when user cancels)
 async function releasePhoneNumber(phoneSid) {
   try {
@@ -128,5 +144,6 @@ module.exports = {
   getClient,
   purchasePhoneNumber,
   sendSMS,
+  setVoiceWebhook,
   releasePhoneNumber
 };

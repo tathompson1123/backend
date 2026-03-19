@@ -104,6 +104,9 @@ app.use('/api/templates', templateRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/review-config', reviewConfigRoutes);
 
+const voiceRoutes = require('./routes/voice');
+app.use('/api/voice', voiceRoutes);
+
 const gbpAnalyzerRoutes = require('./routes/gbp-analyzer');
 app.use('/api/gbp-analyzer', gbpAnalyzerRoutes);
 
@@ -881,6 +884,32 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
   } catch (e) {
     console.warn('⚠️ Could not verify booking v2 tables:', e.message);
   }
+
+  // Missed calls table (for missed call text-back feature)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS missed_calls (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        caller_phone VARCHAR(20) NOT NULL,
+        called_number VARCHAR(20) NOT NULL,
+        call_sid VARCHAR(64),
+        call_status VARCHAR(20) NOT NULL DEFAULT 'no-answer',
+        call_duration INTEGER DEFAULT 0,
+        forwarded_to VARCHAR(20),
+        textback_sent BOOLEAN DEFAULT false,
+        textback_sent_at TIMESTAMP,
+        textback_message_sid VARCHAR(64),
+        lead_id INTEGER REFERENCES leads(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_missed_calls_user ON missed_calls(user_id, created_at DESC)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_missed_calls_sid ON missed_calls(call_sid)');
+    console.log('✅ Missed calls table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify missed_calls table:', e.message);
+  }
 })();
 
 // ── SMS processing cron job ──────────────────────────────
@@ -912,7 +941,7 @@ async function sendSMSAuto(to, message, userId) {
 cron.schedule('*/30 * * * * *', async () => {
   try {
     const pending = await pool.query(
-      `SELECT l.*, u.twilio_phone_number, u.telnyx_phone_number
+      `SELECT l.*, u.twilio_phone_number, u.telnyx_phone_number, u.business_name
        FROM leads l
        JOIN users u ON u.id = l.user_id
        WHERE l.status = 'sms_pending'
@@ -946,9 +975,11 @@ cron.schedule('*/30 * * * * *', async () => {
           continue;
         }
 
+        // Determine which agent config to use based on lead source
+        const agentType = lead.source === 'missed_call' ? 'missed_call' : 'lead_form';
         const agentResult = await pool.query(
           'SELECT config, sms_template FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
-          [lead.user_id, 'lead_form']
+          [lead.user_id, agentType]
         );
 
         if (agentResult.rows.length === 0 || !agentResult.rows[0].config?.smsEnabled || !agentResult.rows[0].sms_template) {
@@ -957,13 +988,17 @@ cron.schedule('*/30 * * * * *', async () => {
         }
 
         const smsTemplate = agentResult.rows[0].sms_template;
+        const agentConfig = agentResult.rows[0].config;
         const firstName = (lead.name || 'there').split(' ')[0];
+        const agentName = agentConfig?.training?.agentName || '';
         const personalizedSms = smsTemplate
           .replace(/\{\{name\}\}/g, firstName)
           .replace(/\{\{email\}\}/g, lead.email || '')
           .replace(/\{\{phone\}\}/g, lead.phone)
           .replace(/\{\{service\}\}/g, lead.service || 'our services')
-          .replace(/\{\{message\}\}/g, lead.message || '');
+          .replace(/\{\{message\}\}/g, lead.message || '')
+          .replace(/\{\{agentName\}\}/g, agentName)
+          .replace(/\{\{businessName\}\}/g, lead.business_name || '');
 
         const smsResult = await sendSMSAuto(lead.phone, personalizedSms, lead.user_id);
 
@@ -977,6 +1012,15 @@ cron.schedule('*/30 * * * * *', async () => {
           `UPDATE leads SET status = 'contacted_sms', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
           [lead.id]
         );
+
+        // Update missed_calls record if this was a missed call text-back
+        if (lead.source === 'missed_call') {
+          await pool.query(
+            `UPDATE missed_calls SET textback_sent = true, textback_sent_at = NOW(), textback_message_sid = $1
+             WHERE lead_id = $2 AND textback_sent = false`,
+            [smsResult.messageSid, lead.id]
+          );
+        }
 
         console.log(`✅ Cron: SMS sent to lead ${lead.id} (${lead.phone}) via ${smsResult.provider}`);
       } catch (sendErr) {
