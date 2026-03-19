@@ -175,8 +175,21 @@ router.post('/sendgrid/verify', authenticateToken, async (req, res) => {
     }
 
     const userId = req.user.userId;
-    const { email, businessName } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email is required' });
+    let { email, businessName } = req.body || {};
+
+    // Auto-fill from user profile and business settings when not provided
+    if (!email || !businessName) {
+      const [userRow, bizRow] = await Promise.all([
+        pool.query('SELECT email, business_name FROM users WHERE id = $1', [userId]),
+        pool.query('SELECT email FROM business_information WHERE user_id = $1', [userId]),
+      ]);
+      const u = userRow.rows[0] || {};
+      const b = bizRow.rows[0] || {};
+      if (!email) email = b.email || u.email;
+      if (!businessName) businessName = u.business_name || '';
+    }
+
+    if (!email) return res.status(400).json({ error: 'Email is required. Set your email in Business Settings first.' });
 
     const sgClient = require('@sendgrid/client');
     sgClient.setApiKey(process.env.SENDGRID_API_KEY);
