@@ -1278,6 +1278,7 @@ function fixContactFormHTML(html, pageName) {
             body: JSON.stringify({
               name: `website-${userId}`,
               files: files,
+              target: 'production',
               projectSettings: {
                 framework: null
               }

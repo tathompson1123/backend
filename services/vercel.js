@@ -42,6 +42,7 @@ async function deployToVercel(userId, htmlContent, pages = null) {
       {
         name: projectName,
         files: files,
+        target: 'production',
         projectSettings: {
           framework: null,
           buildCommand: null,
@@ -58,9 +59,10 @@ async function deployToVercel(userId, htmlContent, pages = null) {
       }
     );
 
-    const deploymentUrl = `https://${response.data.url}`;
+    const stableAlias = response.data.alias?.[0];
+    const deploymentUrl = `https://${(stableAlias || response.data.url || '').replace(/^https?:?\/*/, '')}`;
     console.log(`✅ Deployed to Vercel: ${deploymentUrl}`);
-    
+
     return deploymentUrl;
   } catch (error) {
     console.error('Vercel deployment error:', error.response?.data || error.message);

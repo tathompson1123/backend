@@ -15,9 +15,9 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     const { From, To, CallSid } = req.body;
     console.log(`📞 Incoming call: ${From} → ${To} (CallSid: ${CallSid})`);
 
-    // Find user by their Twilio phone number
+    // Find user by their Twilio or Telnyx phone number
     const userResult = await pool.query(
-      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1',
+      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
       [To]
     );
 
@@ -82,9 +82,9 @@ router.post('/status', express.urlencoded({ extended: false }), async (req, res)
     const { CallSid, From, To, DialCallStatus, DialCallDuration } = req.body;
     console.log(`📞 Call status: ${From} → ${To} | DialCallStatus: ${DialCallStatus}`);
 
-    // Find user by their Twilio phone number
+    // Find user by their Twilio or Telnyx phone number
     const userResult = await pool.query(
-      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1',
+      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
       [To]
     );
 
@@ -264,18 +264,14 @@ router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) =
     );
 
     const user = userResult.rows[0];
-    if (!user?.twilio_phone_number && !user?.telnyx_phone_number) {
+    const phoneNumber = user?.twilio_phone_number || user?.telnyx_phone_number;
+    if (!phoneNumber) {
       return res.status(400).json({
         error: 'No phone number provisioned. Deploy the Lead Form Agent first to get a phone number.'
       });
     }
 
-    // Voice forwarding requires a Twilio number (TwiML). Telnyx uses a different voice API.
-    if (!user?.twilio_phone_number || !user?.twilio_phone_sid) {
-      return res.status(400).json({
-        error: 'Call forwarding requires a Twilio number. Your account has a Telnyx number — contact support to add a Twilio number for voice features.'
-      });
-    }
+    const hasTwilio = !!(user.twilio_phone_number && user.twilio_phone_sid);
 
     // Build config
     const config = {
@@ -285,6 +281,7 @@ router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) =
       ringTimeout: ringTimeout || 20,
       delayMin: req.body.delayMin || 30,
       delayMax: req.body.delayMax || 60,
+      callForwardingActive: hasTwilio,
       training: training || {
         responseTone: 'friendly',
         agentName: '',
@@ -304,16 +301,23 @@ router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) =
       [userId, config, smsTemplate || null, defaultTemplate]
     );
 
-    // Set voice webhook on the Twilio number
-    const voiceWebhookUrl = `${BACKEND_URL}/api/voice/webhook`;
-    await setVoiceWebhook(user.twilio_phone_sid, voiceWebhookUrl);
-
-    console.log(`✅ Missed call text-back deployed for user ${userId}`);
+    // Set voice webhook on the Twilio number if available
+    let voiceWebhookUrl = null;
+    if (hasTwilio) {
+      voiceWebhookUrl = `${BACKEND_URL}/api/voice/webhook`;
+      await setVoiceWebhook(user.twilio_phone_sid, voiceWebhookUrl);
+      console.log(`✅ Missed call text-back deployed with call forwarding for user ${userId}`);
+    } else {
+      console.log(`✅ Missed call text-back deployed (SMS only, no call forwarding — Telnyx number) for user ${userId}`);
+    }
 
     res.json({
       success: true,
-      message: 'Missed call text-back is now active',
-      phoneNumber: user.twilio_phone_number,
+      message: hasTwilio
+        ? 'Missed call text-back is now active with call forwarding'
+        : 'Missed call text-back is now active (SMS text-back enabled). Call forwarding requires a Twilio number — calls to your Telnyx number can still trigger text-backs manually.',
+      phoneNumber,
+      callForwarding: hasTwilio,
       webhookUrl: voiceWebhookUrl
     });
   } catch (err) {
