@@ -233,7 +233,7 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      `SELECT e.*, u.business_name FROM estimates e
+      `SELECT e.*, u.business_name, u.email as owner_email FROM estimates e
        JOIN users u ON u.id = e.user_id
        WHERE e.id=$1 AND e.user_id=$2`,
       [id, userId]
@@ -274,7 +274,8 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
       await sgMail.send({
         to: estimate.customer_email,
-        from: process.env.SENDGRID_FROM_EMAIL || 'noreply@sorceintegrations.com',
+        from: { name: estimate.business_name || 'SORCE', email: 'noreply@sorceintegrations.com' },
+        replyTo: estimate.owner_email ? { name: estimate.business_name || '', email: estimate.owner_email } : undefined,
         subject: `Estimate ${estimate.estimate_number} from ${estimate.business_name}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">

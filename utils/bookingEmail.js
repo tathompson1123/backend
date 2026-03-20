@@ -48,15 +48,13 @@ async function sendBookingEmails(opts) {
   try {
     // Get business info
     const userResult = await pool.query(
-      'SELECT business_name, email, sendgrid_verified FROM users WHERE id = $1',
+      'SELECT business_name, email FROM users WHERE id = $1',
       [opts.userId]
     );
     if (userResult.rows.length === 0) return;
 
-    const { business_name: businessName, email: ownerEmail, sendgrid_verified: sgVerified } = userResult.rows[0];
-    // Use verified business email if available, otherwise fall back to platform email
-    const fromEmail = sgVerified ? ownerEmail : (process.env.SENDGRID_FROM_EMAIL || ownerEmail);
-    if (!fromEmail) return;
+    const { business_name: businessName, email: ownerEmail } = userResult.rows[0];
+    const fromEmail = 'noreply@sorceintegrations.com';
 
     const formattedDate = formatDate(opts.bookingDate);
     const formattedStart = formatTime(opts.startTime);
@@ -81,6 +79,7 @@ async function sendBookingEmails(opts) {
       emails.push({
         to: opts.customerEmail,
         from: { name: businessName || 'Your Service Provider', email: fromEmail },
+        replyTo: ownerEmail ? { name: businessName || '', email: ownerEmail } : undefined,
         subject: `Booking Confirmed — ${opts.serviceName} on ${formattedDate}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
@@ -107,6 +106,7 @@ async function sendBookingEmails(opts) {
       emails.push({
         to: ownerEmail,
         from: { name: 'SORCE Bookings', email: fromEmail },
+        replyTo: ownerEmail ? { email: ownerEmail } : undefined,
         subject: `New Booking: ${opts.serviceName} — ${opts.customerName}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">

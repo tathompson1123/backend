@@ -238,8 +238,9 @@ router.post('/:id/invite', async (req, res) => {
     );
 
     // Get business name for the email
-    const userResult = await pool.query('SELECT business_name FROM users WHERE id = $1', [userId]);
+    const userResult = await pool.query('SELECT business_name, email FROM users WHERE id = $1', [userId]);
     const businessName = userResult.rows[0]?.business_name || 'Your employer';
+    const ownerEmail = userResult.rows[0]?.email;
 
     // Send invite email via SendGrid
     const inviteUrl = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/employee-invite?token=${inviteToken}`;
@@ -250,7 +251,8 @@ router.post('/:id/invite', async (req, res) => {
 
       await sgMail.send({
         to: employee.email,
-        from: process.env.SENDGRID_FROM_EMAIL || 'noreply@sorceintegrations.com',
+        from: { name: businessName, email: 'noreply@sorceintegrations.com' },
+        replyTo: ownerEmail ? { name: businessName, email: ownerEmail } : undefined,
         subject: `You're invited to join ${businessName} on SORCE`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">

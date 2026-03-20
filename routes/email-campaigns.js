@@ -209,12 +209,12 @@ async function sendCampaign(userId, config, campaignId) {
   const c = campaign.rows[0];
 
   const fromName = config.from_name || 'Your Business';
-  const fromEmail = config.from_email || process.env.SENDGRID_FROM_EMAIL;
-  if (!fromEmail) throw new Error('No from_email configured');
+  const ownerReplyEmail = config.from_email;
 
   const messages = customersResult.rows.map(customer => ({
     to: customer.email,
-    from: { name: fromName, email: fromEmail },
+    from: { name: fromName, email: 'noreply@sorceintegrations.com' },
+    replyTo: ownerReplyEmail ? { name: fromName, email: ownerReplyEmail } : undefined,
     subject: c.subject,
     text: c.body_text,
     html: c.body_html,
