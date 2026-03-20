@@ -187,9 +187,9 @@ async function generateWebsite(req, res)
     pageSchema.theme = theme;
     pageSchema.version = 2;
 
-    if (req.user && req.user.id) {
+    if (req.user && (req.user.userId || req.user.id)) {
       if (!pageSchema.meta) pageSchema.meta = {};
-      pageSchema.meta.userId = req.user.id;
+      pageSchema.meta.userId = req.user.userId || req.user.id;
     }
 
     const { injectAgents } = require('../utils/injectAgents');

@@ -26,6 +26,7 @@ function renderPageToHtml(pageData, options = {}) {
   <title>${escapeHtml(pageData.title || 'Untitled Page')}</title>
   <meta name="description" content="${escapeHtml(pageData.description || '')}">
   ${userId ? `<meta name="user-id" content="${userId}">` : ''}
+  ${userId ? `<script>window.__SORCE_USER_ID__='${userId}';window.__SORCE_APP_URL__='${process.env.VITE_APP_URL || 'https://www.sorceintegrations.com'}';window.__SORCE_API_URL__='${process.env.VITE_API_URL || process.env.BACKEND_URL || 'https://backend-production-ab50.up.railway.app'}';</script>` : ''}
   ${pageData.settings?.favicon ? `<link rel="icon" href="${pageData.settings.favicon}">` : ''}
   ${pageData.settings?.ogImage ? `<meta property="og:image" content="${pageData.settings.ogImage}">` : ''}
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">

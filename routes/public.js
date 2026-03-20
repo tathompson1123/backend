@@ -168,7 +168,7 @@ router.get('/business-info', async (req, res) => {
     if (!businessId) return res.status(400).json({ error: 'businessId required' });
 
     const result = await pool.query(
-      'SELECT business_name, business_type FROM websites WHERE user_id = $1',
+      'SELECT business_name, business_type, custom_domain, vercel_url FROM websites WHERE user_id = $1',
       [businessId]
     );
 
@@ -180,6 +180,11 @@ router.get('/business-info', async (req, res) => {
 
     const website = result.rows[0] || {};
     const info = bizInfo.rows[0] || {};
+    const websiteUrl = website.custom_domain
+      ? `https://${website.custom_domain.replace(/^https?:?\/?\/?\/?/i, '')}`
+      : website.vercel_url
+        ? (website.vercel_url.startsWith('http') ? website.vercel_url : `https://${website.vercel_url}`)
+        : null;
 
     res.json({
       business: {
@@ -189,6 +194,7 @@ router.get('/business-info', async (req, res) => {
         address: info.address || '',
         city: info.city || '',
         state: info.state || '',
+        website_url: websiteUrl,
       }
     });
   } catch (error) {
