@@ -1184,6 +1184,28 @@ cron.schedule('0 * * * *', async () => {
   }
 });
 
+// ── Square auto-sync cron — runs every 10 minutes, syncs payments & invoices for all connected users ──
+cron.schedule('*/10 * * * *', async () => {
+  try {
+    const { syncSquarePayments, syncSquareInvoices } = require('./utils/squareSync');
+    const connections = await pool.query(
+      "SELECT user_id, square_access_token, square_location_id FROM payment_connections WHERE processor = 'square' AND is_active = true"
+    );
+    for (const conn of connections.rows) {
+      try {
+        await syncSquarePayments(conn.user_id, conn.square_access_token, pool);
+        if (conn.square_location_id) {
+          await syncSquareInvoices(conn.user_id, conn.square_access_token, conn.square_location_id, pool);
+        }
+      } catch (syncErr) {
+        console.error(`Square sync error for user ${conn.user_id}:`, syncErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('Square auto-sync cron error:', err.message);
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

@@ -51,10 +51,11 @@ async function syncSquareInvoices(userId, accessToken, locationId, pool) {
   let synced = 0;
   for (const inv of squareInvoices) {
     const status = statusMap[inv.status] || 'sent';
-    const totalAmount = inv.paymentRequests?.[0]?.requestedMoney?.amount
-      ? Number(inv.paymentRequests[0].requestedMoney.amount) / 100 : 0;
-    const amountPaid = inv.paymentRequests?.[0]?.totalCompletedAmountMoney?.amount
-      ? Number(inv.paymentRequests[0].totalCompletedAmountMoney.amount) / 100 : 0;
+    const rawTotal = inv.paymentRequests?.[0]?.computedAmountMoney?.amount
+      ?? inv.paymentRequests?.[0]?.requestedMoney?.amount;
+    const totalAmount = rawTotal ? Number(rawTotal) / 100 : 0;
+    const rawPaid = inv.paymentRequests?.[0]?.totalCompletedAmountMoney?.amount;
+    const amountPaid = rawPaid ? Number(rawPaid) / 100 : 0;
     const amountDue = Math.max(0, totalAmount - amountPaid);
     const dueDate = inv.paymentRequests?.[0]?.dueDate || null;
     const customerName = inv.primaryRecipient?.givenName
