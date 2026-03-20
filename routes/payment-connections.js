@@ -265,7 +265,22 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     );
 
     if (result.rows.length === 0) return res.status(404).json({ error: 'Connection not found' });
-    res.json({ success: true });
+
+    const processor = result.rows[0].processor;
+
+    // Remove synced transactions from this processor
+    await pool.query(
+      'DELETE FROM payments WHERE user_id = $1 AND processor = $2',
+      [userId, processor]
+    );
+
+    // Remove synced invoices from this processor
+    await pool.query(
+      'DELETE FROM invoices WHERE user_id = $1 AND payment_processor = $2',
+      [userId, processor]
+    );
+
+    res.json({ success: true, processor });
   } catch (error) {
     console.error('Error disconnecting processor:', error.message);
     res.status(500).json({ error: 'Failed to disconnect' });
