@@ -146,10 +146,11 @@ router.post('/', authenticateToken, async (req, res) => {
     const randomSuffix = crypto.randomBytes(2).toString('hex').toUpperCase();
     const invoiceNumber = `INV-${dateStr}-${randomSuffix}`;
 
-    // Calculate totals
+    // Calculate totals — tax only applies to taxable line items
     const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    const taxableSubtotal = items.reduce((sum, item) => item.taxable !== false ? sum + (item.quantity * item.unitPrice) : sum, 0);
     const effectiveTaxRate = taxRate || 0;
-    const taxAmount = subtotal * effectiveTaxRate;
+    const taxAmount = taxableSubtotal * effectiveTaxRate;
     const effectiveDiscount = discountAmount || 0;
     const totalAmount = subtotal + taxAmount - effectiveDiscount;
 
@@ -173,9 +174,9 @@ router.post('/', authenticateToken, async (req, res) => {
     // Insert line items
     for (const item of items) {
       await pool.query(
-        `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount, service_id)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [invoice.id, item.description, item.quantity, item.unitPrice, item.quantity * item.unitPrice, item.serviceId || null]
+        `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount, service_id, taxable)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [invoice.id, item.description, item.quantity, item.unitPrice, item.quantity * item.unitPrice, item.serviceId || null, item.taxable !== false]
       );
     }
 
@@ -277,19 +278,22 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { customerName, customerEmail, customerPhone, items, notes, terms, dueDate, taxRate, discountAmount } = req.body;
 
-    // Verify invoice exists and is draft
+    // Verify invoice exists and is editable
     const existing = await pool.query(
       'SELECT status FROM invoices WHERE id = $1 AND user_id = $2',
       [id, userId]
     );
 
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Invoice not found' });
-    if (existing.rows[0].status !== 'draft') return res.status(400).json({ error: 'Only draft invoices can be edited' });
+    if (['paid', 'cancelled', 'refunded'].includes(existing.rows[0].status)) {
+      return res.status(400).json({ error: 'Paid, cancelled, or refunded invoices cannot be edited' });
+    }
 
-    // Recalculate totals
+    // Recalculate totals — tax only applies to taxable line items
     const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    const taxableSubtotal = items.reduce((sum, item) => item.taxable !== false ? sum + (item.quantity * item.unitPrice) : sum, 0);
     const effectiveTaxRate = taxRate || 0;
-    const taxAmount = subtotal * effectiveTaxRate;
+    const taxAmount = taxableSubtotal * effectiveTaxRate;
     const effectiveDiscount = discountAmount || 0;
     const totalAmount = subtotal + taxAmount - effectiveDiscount;
 
@@ -308,9 +312,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
     await pool.query('DELETE FROM invoice_items WHERE invoice_id = $1', [id]);
     for (const item of items) {
       await pool.query(
-        `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount, service_id)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [id, item.description, item.quantity, item.unitPrice, item.quantity * item.unitPrice, item.serviceId || null]
+        `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount, service_id, taxable)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [id, item.description, item.quantity, item.unitPrice, item.quantity * item.unitPrice, item.serviceId || null, item.taxable !== false]
       );
     }
 
@@ -328,7 +332,7 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
     const { id } = req.params;
 
     const invoiceResult = await pool.query(
-      `SELECT i.*, u.business_name FROM invoices i
+      `SELECT i.*, u.business_name, u.email as owner_email FROM invoices i
        JOIN users u ON u.id = i.user_id
        WHERE i.id = $1 AND i.user_id = $2`,
       [id, userId]
@@ -343,31 +347,33 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
 
     const paymentUrl = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/pay/${invoice.payment_link_token}`;
 
+    // Fetch line items for the email
+    const itemsResult = await pool.query('SELECT * FROM invoice_items WHERE invoice_id = $1 ORDER BY id', [id]);
+
     // Send email via SendGrid
     try {
       const sgMail = require('@sendgrid/mail');
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      const { buildInvoiceEmailHtml } = require('../utils/invoiceEmail');
 
       await sgMail.send({
         to: invoice.customer_email,
-        from: process.env.SENDGRID_FROM_EMAIL || 'noreply@sorceintegrations.com',
+        from: { name: invoice.business_name, email: 'noreply@sorceintegrations.com' },
+        replyTo: invoice.owner_email ? { name: invoice.business_name, email: invoice.owner_email } : undefined,
         subject: `Invoice ${invoice.invoice_number} from ${invoice.business_name}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #d97706;">${invoice.business_name}</h2>
-            <p>Hi ${invoice.customer_name},</p>
-            <p>You have a new invoice.</p>
-            <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin: 20px 0;">
-              <p style="margin: 0;"><strong>Invoice:</strong> ${invoice.invoice_number}</p>
-              <p style="margin: 8px 0 0;"><strong>Amount Due:</strong> $${parseFloat(invoice.amount_due).toFixed(2)}</p>
-              ${invoice.due_date ? `<p style="margin: 8px 0 0;"><strong>Due Date:</strong> ${new Date(invoice.due_date).toLocaleDateString()}</p>` : ''}
-            </div>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${paymentUrl}" style="background-color: #d97706; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Pay Now</a>
-            </div>
-            ${invoice.notes ? `<p style="color: #666; font-size: 14px;"><strong>Notes:</strong> ${invoice.notes}</p>` : ''}
-          </div>
-        `
+        html: buildInvoiceEmailHtml({
+          businessName: invoice.business_name,
+          customerName: invoice.customer_name,
+          invoiceNumber: invoice.invoice_number,
+          amountDue: invoice.amount_due,
+          dueDate: invoice.due_date,
+          paymentUrl,
+          items: itemsResult.rows,
+          subtotal: invoice.subtotal,
+          taxAmount: invoice.tax_amount,
+          totalAmount: invoice.total_amount,
+          notes: invoice.notes,
+        }),
       });
     } catch (emailErr) {
       console.error('Failed to send invoice email:', emailErr.message);
@@ -394,7 +400,7 @@ router.post('/:id/remind', authenticateToken, async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      `SELECT i.*, u.business_name FROM invoices i
+      `SELECT i.*, u.business_name, u.email as owner_email FROM invoices i
        JOIN users u ON u.id = i.user_id
        WHERE i.id = $1 AND i.user_id = $2 AND i.status IN ('sent', 'viewed', 'overdue')`,
       [id, userId]
@@ -405,23 +411,32 @@ router.post('/:id/remind', authenticateToken, async (req, res) => {
 
     const paymentUrl = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/pay/${invoice.payment_link_token}`;
 
+    // Fetch line items for the email
+    const itemsResult = await pool.query('SELECT * FROM invoice_items WHERE invoice_id = $1 ORDER BY id', [id]);
+
     const sgMail = require('@sendgrid/mail');
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    const { buildInvoiceEmailHtml } = require('../utils/invoiceEmail');
 
     await sgMail.send({
       to: invoice.customer_email,
-      from: process.env.SENDGRID_FROM_EMAIL || 'noreply@sorceintegrations.com',
+      from: { name: invoice.business_name, email: 'noreply@sorceintegrations.com' },
+      replyTo: invoice.owner_email ? { name: invoice.business_name, email: invoice.owner_email } : undefined,
       subject: `Payment Reminder: Invoice ${invoice.invoice_number} from ${invoice.business_name}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #d97706;">Payment Reminder</h2>
-          <p>Hi ${invoice.customer_name},</p>
-          <p>This is a friendly reminder that invoice <strong>${invoice.invoice_number}</strong> for <strong>$${parseFloat(invoice.amount_due).toFixed(2)}</strong> is still outstanding.</p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${paymentUrl}" style="background-color: #d97706; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Pay Now</a>
-          </div>
-        </div>
-      `
+      html: buildInvoiceEmailHtml({
+        businessName: invoice.business_name,
+        customerName: invoice.customer_name,
+        invoiceNumber: invoice.invoice_number,
+        amountDue: invoice.amount_due,
+        dueDate: invoice.due_date,
+        paymentUrl,
+        items: itemsResult.rows,
+        subtotal: invoice.subtotal,
+        taxAmount: invoice.tax_amount,
+        totalAmount: invoice.total_amount,
+        notes: invoice.notes,
+        isReminder: true,
+      }),
     });
 
     await pool.query('UPDATE invoices SET reminder_sent_at = NOW() WHERE id = $1', [id]);
@@ -847,11 +862,11 @@ router.put('/settings', authenticateToken, async (req, res) => {
 
 router.post('/catalog', authenticateToken, async (req, res) => {
   try {
-    const { name, category, amountType, amount } = req.body;
+    const { name, category, amountType, amount, taxable } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
     const result = await pool.query(
-      'INSERT INTO invoice_items_catalog (user_id, name, category, amount_type, amount) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [req.user.userId, name.trim(), category || 'fee', amountType || 'fixed', parseFloat(amount) || 0]
+      'INSERT INTO invoice_items_catalog (user_id, name, category, amount_type, amount, taxable) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [req.user.userId, name.trim(), category || 'fee', amountType || 'fixed', parseFloat(amount) || 0, taxable !== undefined ? taxable : false]
     );
     res.json({ item: result.rows[0] });
   } catch (error) {

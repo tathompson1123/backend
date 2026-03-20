@@ -9,7 +9,8 @@ router.get('/profile', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT id, email, business_name, plan, base_plan, trial_ends_at, google_review_link,
               twilio_phone_number, telnyx_phone_number,
-              onboarding_completed, onboarding_current_step, onboarding_steps_completed
+              onboarding_completed, onboarding_current_step, onboarding_steps_completed,
+              default_tax_rate
        FROM users WHERE id = $1`,
       [req.user.userId]
     );
@@ -33,7 +34,8 @@ router.get('/profile', authenticateToken, async (req, res) => {
         telnyx_phone_number: user.telnyx_phone_number,
         onboarding_completed: user.onboarding_completed,
         onboarding_current_step: user.onboarding_current_step,
-        onboarding_steps_completed: user.onboarding_steps_completed
+        onboarding_steps_completed: user.onboarding_steps_completed,
+        default_tax_rate: parseFloat(user.default_tax_rate || 0)
       }
     });
   } catch (error) {

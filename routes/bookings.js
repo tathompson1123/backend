@@ -182,7 +182,7 @@ router.post('/create', authenticateToken, async (req, res) => {
     const bookingResult = await pool.query(
       `INSERT INTO bookings (
         user_id, customer_id, booking_number, booking_date, start_time, end_time,
-        subtotal, total_amount, customer_name, customer_email, 
+        subtotal, total_amount, customer_name, customer_email,
         customer_phone, customer_notes, status, employee_id, group_id
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)

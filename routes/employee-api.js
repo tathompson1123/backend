@@ -88,6 +88,7 @@ router.get('/my-bookings/:id', requirePermission('view_bookings'), async (req, r
 
     const result = await pool.query(
       `SELECT b.*,
+        u.default_tax_rate,
         json_agg(
           json_build_object(
             'service_name', bi.service_name,
@@ -98,8 +99,9 @@ router.get('/my-bookings/:id', requirePermission('view_bookings'), async (req, r
         ) as items
        FROM bookings b
        LEFT JOIN booking_items bi ON b.id = bi.booking_id
+       JOIN users u ON u.id = b.user_id
        WHERE b.id = $1 AND b.user_id = $2 AND b.employee_id = $3
-       GROUP BY b.id`,
+       GROUP BY b.id, u.default_tax_rate`,
       [id, userId, employeeId]
     );
 
@@ -471,33 +473,37 @@ router.post('/my-bookings/:id/invoice/send', requirePermission('process_payments
       try {
         const sgMail = require('@sendgrid/mail');
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        const { buildInvoiceEmailHtml } = require('../utils/invoiceEmail');
 
         const userResult = await pool.query('SELECT business_name, email FROM users WHERE id = $1', [userId]);
         const businessName = userResult.rows[0]?.business_name || 'Your Service Provider';
         const ownerEmail = userResult.rows[0]?.email;
+
+        // Fetch invoice details + line items
+        const invResult = await pool.query('SELECT * FROM invoices WHERE id = $1', [data.invoice_id]);
+        const inv = invResult.rows[0] || {};
+        const itemsResult = await pool.query('SELECT * FROM invoice_items WHERE invoice_id = $1 ORDER BY id', [data.invoice_id]);
 
         await sgMail.send({
           to: data.customer_email,
           from: { name: businessName, email: 'noreply@sorceintegrations.com' },
           replyTo: ownerEmail ? { name: businessName, email: ownerEmail } : undefined,
           subject: `Invoice ${data.invoice_number} from ${businessName}`,
-          html: `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-              <h2 style="color:#d97706;">${businessName}</h2>
-              <p>Hi ${data.customer_name},</p>
-              <p>Here is your invoice.</p>
-              <div style="background:#f9fafb;border-radius:8px;padding:20px;margin:20px 0;">
-                <p style="margin:0;"><strong>Invoice:</strong> ${data.invoice_number}</p>
-                <p style="margin:8px 0 0;"><strong>Amount Due:</strong> $${parseFloat(data.amount_due).toFixed(2)}</p>
-              </div>
-              <div style="text-align:center;margin:30px 0;">
-                <a href="${paymentUrl}" style="background-color:#d97706;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;">Pay Now</a>
-              </div>
-              <p style="color:#666;font-size:12px;">If you have questions about this invoice, reply to this email.</p>
-            </div>
-          `
+          html: buildInvoiceEmailHtml({
+            businessName,
+            customerName: data.customer_name,
+            invoiceNumber: data.invoice_number,
+            amountDue: data.amount_due,
+            dueDate: inv.due_date,
+            paymentUrl,
+            items: itemsResult.rows,
+            subtotal: inv.subtotal,
+            taxAmount: inv.tax_amount,
+            totalAmount: inv.total_amount,
+            notes: inv.notes,
+          }),
         });
-        console.log(`📧 Invoice email sent to ${data.customer_email}`);
+        console.log(`Invoice email sent to ${data.customer_email}`);
       } catch (emailErr) {
         console.error('Failed to send invoice email:', emailErr.message);
       }

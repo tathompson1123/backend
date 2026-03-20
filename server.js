@@ -215,9 +215,12 @@ app.post('/api/generate-v2', authenticateToken, generateV2);
       category VARCHAR(20) DEFAULT 'fee',
       amount_type VARCHAR(10) DEFAULT 'fixed',
       amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+      taxable BOOLEAN DEFAULT false,
       active BOOLEAN DEFAULT true,
       created_at TIMESTAMP DEFAULT NOW()
     )`);
+    await pool.query("ALTER TABLE invoice_items_catalog ADD COLUMN IF NOT EXISTS taxable BOOLEAN DEFAULT false");
+    await pool.query("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS taxable BOOLEAN DEFAULT true");
     console.log('✅ SMS scheduling columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify sms_scheduled_at column:', e.message);
