@@ -269,16 +269,18 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     const processor = result.rows[0].processor;
 
     // Remove synced transactions from this processor
-    await pool.query(
+    const delPayments = await pool.query(
       'DELETE FROM payments WHERE user_id = $1 AND processor = $2',
       [userId, processor]
     );
+    console.log(`🗑️ Deleted ${delPayments.rowCount} payments for processor ${processor}`);
 
-    // Remove synced invoices from this processor
-    await pool.query(
+    // Remove ALL invoices tied to this processor (synced + sent-via)
+    const delInvoices = await pool.query(
       'DELETE FROM invoices WHERE user_id = $1 AND payment_processor = $2',
       [userId, processor]
     );
+    console.log(`🗑️ Deleted ${delInvoices.rowCount} invoices for processor ${processor}`);
 
     res.json({ success: true, processor });
   } catch (error) {
