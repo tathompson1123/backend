@@ -36,8 +36,12 @@
         config = data;
         injectStyles();
         if (config.chatEnabled) injectChatWidget();
-        if (config.bookingEnabled) injectBookingWidget();
+        if (config.bookingEnabled) {
+          injectBookingWidget();
+          scanBookingButtons(); // Hijack existing "Book Now" / "Book Online" buttons
+        }
         if (config.leadFormEnabled) injectLeadForm();
+        if (config.leadFormEnabled || config.bookingEnabled) startDOMObserver();
       })
       .catch(function(e) { console.warn('SORCE Embed: Failed to load config', e.message); });
   }
@@ -114,6 +118,9 @@
       '.sorce-slot.selected { border-color: ' + tc + '; background: ' + tc + '; color: white; }\n' +
       '.sorce-success { text-align: center; padding: 20px; }\n' +
       '.sorce-success h3 { color: #059669; font-size: 20px; margin: 12px 0 8px; }\n' +
+
+      /* Replaced form styling — fits into the original form's container */
+      '.sorce-replaced-form { max-width: 520px; padding: 24px; background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }\n' +
 
       /* Mobile responsive */
       '@media (max-width: 480px) {\n' +
@@ -462,10 +469,7 @@
     };
   }
 
-  // ── Form Intercept ─────────────────────────────────────
-  // Instead of replacing forms, we listen for submit events on their existing
-  // forms and forward the captured data to our leads API (triggers SMS agent).
-  // The original form still works normally — we just piggyback on the data.
+  // ── Form Detection ────────────────────────────────────
 
   function isContactForm(form) {
     // Skip forms inside nav, header (search bars, login forms)
@@ -482,76 +486,24 @@
     return inputs.length >= 2;
   }
 
-  // Extract field values from a native form by inspecting input types, names, placeholders, labels
-  function extractFormData(form) {
-    var data = { name: '', email: '', phone: '', message: '', service: '' };
-    var inputs = form.querySelectorAll('input, textarea, [role="textbox"]');
-
-    for (var i = 0; i < inputs.length; i++) {
-      var inp = inputs[i];
-      var val = (inp.value || inp.textContent || '').trim();
-      if (!val) continue;
-
-      var type = (inp.type || '').toLowerCase();
-      var name = (inp.name || '').toLowerCase();
-      var placeholder = (inp.placeholder || '').toLowerCase();
-      var ariaLabel = (inp.getAttribute('aria-label') || '').toLowerCase();
-      var hint = name + ' ' + placeholder + ' ' + ariaLabel;
-
-      // Match by input type first
-      if (type === 'email') { data.email = val; continue; }
-      if (type === 'tel') { data.phone = val; continue; }
-
-      // Match by name/placeholder/label keywords
-      if (inp.tagName === 'TEXTAREA' || hint.indexOf('message') !== -1 || hint.indexOf('comment') !== -1 || hint.indexOf('detail') !== -1) {
-        data.message = val; continue;
-      }
-      if (hint.indexOf('email') !== -1) { data.email = val; continue; }
-      if (hint.indexOf('phone') !== -1 || hint.indexOf('tel') !== -1 || hint.indexOf('mobile') !== -1 || hint.indexOf('cell') !== -1) {
-        data.phone = val; continue;
-      }
-      if (hint.indexOf('name') !== -1 || hint.indexOf('full name') !== -1 || hint.indexOf('your name') !== -1) {
-        data.name = val; continue;
-      }
-      if (hint.indexOf('service') !== -1 || hint.indexOf('subject') !== -1) {
-        data.service = val; continue;
-      }
-      // If nothing matched and name is still empty, assume first text input is name
-      if (!data.name && type !== 'hidden' && type !== 'submit' && type !== 'checkbox' && type !== 'radio') {
-        data.name = val;
-      }
+  // Wix/Squarespace often don't use <form> — detect form-like containers
+  function isFormLikeContainer(el) {
+    if (el.tagName === 'FORM') return false; // already handled
+    var inputs = el.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type]), textarea, [role="textbox"]');
+    if (inputs.length < 2) return false;
+    var submitBtn = el.querySelector('button[type="submit"], input[type="submit"], button');
+    if (!submitBtn) return false;
+    // Check it's not inside nav/header
+    var ancestor = el;
+    while (ancestor) {
+      var tag = ancestor.tagName;
+      if (tag === 'NAV' || tag === 'HEADER') return false;
+      ancestor = ancestor.parentElement;
     }
-    return data;
+    return true;
   }
 
-  function interceptForm(form) {
-    if (form.getAttribute('data-sorce-intercepted')) return;
-    form.setAttribute('data-sorce-intercepted', 'true');
-
-    // Listen for native submit event
-    form.addEventListener('submit', function() {
-      var data = extractFormData(form);
-      if (data.name || data.email || data.phone) {
-        sendLeadToAPI(data);
-      }
-    });
-
-    // Also listen for click on submit buttons (Wix forms may not fire submit event)
-    var submitBtns = form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])');
-    for (var k = 0; k < submitBtns.length; k++) {
-      submitBtns[k].addEventListener('click', function() {
-        // Small delay to let form values populate
-        setTimeout(function() {
-          var data = extractFormData(form);
-          if (data.name || data.email || data.phone) {
-            sendLeadToAPI(data);
-          }
-        }, 100);
-      });
-    }
-  }
-
-  function sendLeadToAPI(data) {
+  function sendLeadToAPI(data, source) {
     fetch(API_BASE + '/api/leads/public/' + config.userId, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -561,43 +513,83 @@
         phone: data.phone,
         service: data.service,
         message: data.message,
-        sms_consent: true,
-        source: 'embed_intercept'
+        sms_consent: data.sms_consent !== undefined ? data.sms_consent : true,
+        source: source || 'embed'
       })
     }).catch(function(e) { console.warn('SORCE: lead forward failed', e.message); });
   }
 
+  // ── Form Replacement ─────────────────────────────────
+  // Finds existing contact forms on the page, removes them entirely,
+  // and drops in a SORCE lead capture form that feeds the dashboard.
+
+  function replaceFormElement(formEl) {
+    if (formEl.getAttribute('data-sorce-replaced')) return false;
+    formEl.setAttribute('data-sorce-replaced', 'true');
+
+    var formConfig = resolveFormConfig();
+    var tc = config.themeColor || '#d97706';
+
+    // Build the replacement form
+    var wrapper = document.createElement('div');
+    wrapper.className = 'sorce-replaced-form';
+    wrapper.setAttribute('data-sorce-form', 'true');
+    wrapper.innerHTML = buildLeadFormHTML(formConfig.fields, tc, formConfig.submitText, formConfig.title);
+
+    // Wire up submit
+    wrapper.querySelector('[data-sorce-submit]').addEventListener('click', function(e) {
+      e.preventDefault();
+      submitLeadForm(wrapper);
+    });
+
+    // Replace the original form
+    formEl.style.display = 'none';
+    formEl.parentNode.insertBefore(wrapper, formEl.nextSibling);
+    return true;
+  }
+
   var leadFormFabCreated = false;
 
-  function scanAndInterceptForms() {
-    var allForms = document.querySelectorAll('form:not([data-sorce-intercepted])');
-    var intercepted = 0;
+  function scanAndReplaceForms() {
+    var replaced = 0;
+
+    // Standard <form> elements
+    var allForms = document.querySelectorAll('form:not([data-sorce-replaced])');
     for (var i = 0; i < allForms.length; i++) {
       if (!isContactForm(allForms[i])) continue;
-      interceptForm(allForms[i]);
-      intercepted++;
+      if (replaceFormElement(allForms[i])) replaced++;
     }
-    return intercepted;
+
+    // Wix/SPA form-like containers (no <form> tag)
+    var divs = document.querySelectorAll('[data-mesh-id], [class*="form"], [class*="contact"], [id*="form"], [id*="contact"]');
+    for (var j = 0; j < divs.length; j++) {
+      if (divs[j].getAttribute('data-sorce-replaced')) continue;
+      if (divs[j].querySelector('[data-sorce-form]')) continue; // already has our form inside
+      if (!isFormLikeContainer(divs[j])) continue;
+      if (replaceFormElement(divs[j])) replaced++;
+    }
+
+    return replaced;
   }
 
   function injectLeadForm() {
-    var formConfig = resolveFormConfig();
-    var intercepted = scanAndInterceptForms();
+    var replaced = scanAndReplaceForms();
 
-    if (intercepted > 0) {
+    if (replaced > 0) {
       leadFormFabCreated = true;
       return;
     }
 
     // Retry — Wix/SPA frameworks hydrate forms after initial load
-    var retries = [1000, 3000, 6000];
+    var retries = [1000, 3000, 6000, 10000];
     var retryIdx = 0;
-    function retryIntercept() {
+    function retryReplace() {
       if (retryIdx >= retries.length) {
-        // All retries exhausted — show FAB fallback
+        // All retries exhausted — show FAB fallback so they still get a lead form
         if (!leadFormFabCreated) {
           leadFormFabCreated = true;
           var container = getOrCreateContainer();
+          var formConfig = resolveFormConfig();
           var fab = document.createElement('button');
           fab.className = 'sorce-fab sorce-fab-lead';
           fab.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg><span class="sorce-fab-label">' + escapeHtml(formConfig.title) + '</span>';
@@ -607,16 +599,72 @@
         return;
       }
       setTimeout(function() {
-        var found = scanAndInterceptForms();
+        var found = scanAndReplaceForms();
         if (found > 0) {
           leadFormFabCreated = true;
         } else {
           retryIdx++;
-          retryIntercept();
+          retryReplace();
         }
       }, retries[retryIdx]);
     }
-    retryIntercept();
+    retryReplace();
+  }
+
+  // ── Booking Button Hijack ───────────────────────────────
+  // Finds existing "Book Now", "Book Online", "Schedule" buttons/links
+  // and rewires them to open the SORCE booking modal instead.
+
+  var bookingPatterns = /\b(book\s*(now|online|today|here|appointment)?|schedule|make\s*an?\s*appointment|reserve|get\s*started)\b/i;
+
+  function hijackBookingButtons() {
+    var candidates = document.querySelectorAll('a, button, [role="button"]');
+    var hijacked = 0;
+
+    for (var i = 0; i < candidates.length; i++) {
+      var el = candidates[i];
+      if (el.getAttribute('data-sorce-hijacked')) continue;
+      if (el.closest('#sorce-embed-container') || el.closest('.sorce-modal-overlay')) continue;
+
+      var text = (el.textContent || '').trim();
+      if (!text || text.length > 40) continue;
+      if (!bookingPatterns.test(text)) continue;
+
+      // Don't hijack nav links that go to separate pages (only anchors or same-page)
+      var href = el.getAttribute('href') || '';
+      var isExternalPage = href && !href.startsWith('#') && !href.startsWith('tel:') && !href.startsWith('javascript:');
+
+      el.setAttribute('data-sorce-hijacked', 'true');
+      (function(element, wasExternal) {
+        element.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          openBookingModal();
+        });
+        // Visual hint — keep existing styling but override click
+        element.style.cursor = 'pointer';
+      })(el, isExternalPage);
+      hijacked++;
+    }
+    return hijacked;
+  }
+
+  function scanBookingButtons() {
+    var found = hijackBookingButtons();
+    if (found === 0) {
+      // Retry for SPA hydration
+      var retries = [1000, 3000, 6000];
+      var idx = 0;
+      function retry() {
+        if (idx >= retries.length) return;
+        setTimeout(function() {
+          hijackBookingButtons();
+          idx++;
+          retry();
+        }, retries[idx]);
+      }
+      retry();
+    }
   }
 
   function buildLeadFormHTML(fields, tc, submitText, title) {
@@ -752,6 +800,31 @@
     var d = new Date();
     d.setDate(d.getDate() + 1);
     return d.toISOString().split('T')[0];
+  }
+
+  // ── Persistent DOM observer ──────────────────────────────
+  // SPAs (Wix, Squarespace, etc.) may re-render sections after navigation,
+  // restoring original forms and removing our replacements. This observer
+  // detects those changes and re-applies replacements automatically.
+  function startDOMObserver() {
+    if (typeof MutationObserver === 'undefined') return;
+    var debounceTimer = null;
+    var observer = new MutationObserver(function(mutations) {
+      // Quick-check: only act if nodes were added
+      var dominated = false;
+      for (var i = 0; i < mutations.length; i++) {
+        if (mutations[i].addedNodes.length > 0) { dominated = true; break; }
+      }
+      if (!dominated) return;
+
+      // Debounce to avoid thrashing during hydration
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function() {
+        if (config.leadFormEnabled) scanAndReplaceForms();
+        if (config.bookingEnabled) hijackBookingButtons();
+      }, 300);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   // ── Start ──────────────────────────────────────────────
