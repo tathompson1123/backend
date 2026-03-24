@@ -61,9 +61,12 @@ async function purchasePhoneNumber({ zipCode, areaCode, userId }) {
     const selectedNumber = availableNumbers[0].phoneNumber;
 
     // 5. Purchase the number
+    const webhookUrl = `${process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app'}/api/sms/webhook`;
     const purchasedNumber = await twilioClient.incomingPhoneNumbers.create({
       phoneNumber: selectedNumber,
-      friendlyName: `SORCE-User-${userId}`
+      friendlyName: `SORCE-User-${userId}`,
+      smsUrl: webhookUrl,
+      smsMethod: 'POST'
     });
 
     console.log(`✅ Purchased number: ${selectedNumber} (zip: ${zipCode})`);
