@@ -6,6 +6,8 @@
 (function() {
   'use strict';
 
+  console.log('SORCE Embed: script loaded');
+
   // Find our script tag and read the site key
   var scripts = document.getElementsByTagName('script');
   var currentScript = null;
@@ -19,6 +21,7 @@
 
   var SITE_KEY = currentScript.getAttribute('data-site-key');
   var API_BASE = currentScript.src.replace(/\/embed\.js.*$/, '');
+  console.log('SORCE Embed: site key=' + SITE_KEY + ', API=' + API_BASE);
 
   // ── State ──────────────────────────────────────────────
   var config = null;
@@ -31,9 +34,11 @@
   scanBookingButtons();
 
   function init() {
+    console.log('SORCE Embed: fetching config...');
     fetch(API_BASE + '/api/embed/config/' + SITE_KEY)
       .then(function(r) { return r.json(); })
       .then(function(data) {
+        console.log('SORCE Embed: config loaded', data.enabled ? 'ENABLED' : 'DISABLED', 'chat=' + data.chatEnabled, 'booking=' + data.bookingEnabled, 'leadForm=' + data.leadFormEnabled);
         if (!data.enabled) return;
         config = data;
         injectStyles();
