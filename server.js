@@ -6,7 +6,7 @@ const { setupMiddleware } = require('./config/middleware');
 const { pool } = require('./config/database');
 const app = express();
 const PORT = process.env.PORT || 3001;
-const { authenticateToken } = require('./config/middleware');
+const { authenticateToken, previewGenerateLimiter } = require('./config/middleware');
 
 app.set('pool', pool);
 // Security & CORS
@@ -173,6 +173,8 @@ app.get('/api/groups', (req, res) => {
 
 const generateV2 = require('./routes/generateV2');
 app.post('/api/generate-v2', authenticateToken, generateV2);
+app.post('/api/generate-preview', previewGenerateLimiter, generateV2.generatePreview);
+app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPreview);
 
 // ── Startup: ensure required tables/columns exist ────────
 (async () => {
@@ -926,17 +928,17 @@ const { sendSMSTelnyx } = require('./utils/telnyx');
 // Helper: send SMS using whichever provider the user has a number on
 async function sendSMSAuto(to, message, userId) {
   const userRow = await pool.query(
-    'SELECT telnyx_phone_number, twilio_phone_number FROM users WHERE id = $1',
+    'SELECT twilio_phone_number, telnyx_phone_number FROM users WHERE id = $1',
     [userId]
   );
   const u = userRow.rows[0];
-  if (u?.telnyx_phone_number) {
-    const result = await sendSMSTelnyx(to, message, u.telnyx_phone_number);
-    return { messageSid: result.messageId, provider: 'telnyx', fromNumber: u.telnyx_phone_number };
-  }
   if (u?.twilio_phone_number) {
     const result = await sendSMS(to, message, userId);
     return { messageSid: result.messageSid, provider: 'twilio', fromNumber: u.twilio_phone_number };
+  }
+  if (u?.telnyx_phone_number) {
+    const result = await sendSMSTelnyx(to, message, u.telnyx_phone_number);
+    return { messageSid: result.messageId, provider: 'telnyx', fromNumber: u.telnyx_phone_number };
   }
   throw new Error(`No SMS phone number assigned to user ${userId}`);
 }

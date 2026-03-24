@@ -16,29 +16,37 @@ function getClient() {
 }
 
 // Purchase number and add to Messaging Service
-async function purchasePhoneNumber(areaCode, userId) {
+// Searches by zip code first, then area code fallback, then any US number
+async function purchasePhoneNumber({ zipCode, areaCode, userId }) {
   try {
     const twilioClient = getClient();
 
-    // 1. Search for available number — try requested area code first, then fallbacks
     let availableNumbers = [];
 
-    // Try the requested area code
-    if (areaCode) {
+    // 1. Try by zip code (best match for business location)
+    if (zipCode) {
       availableNumbers = await twilioClient.availablePhoneNumbers('US')
         .local
-        .list({ areaCode, smsEnabled: true, limit: 1 });
+        .list({ inPostalCode: zipCode, smsEnabled: true, voiceEnabled: true, limit: 1 });
     }
 
-    // Fallback: try any US local number in the same state/region
+    // 2. Fallback: try by area code
+    if (availableNumbers.length === 0 && areaCode) {
+      console.log(`⚠️  No numbers near zip ${zipCode}, trying area code ${areaCode}...`);
+      availableNumbers = await twilioClient.availablePhoneNumbers('US')
+        .local
+        .list({ areaCode, smsEnabled: true, voiceEnabled: true, limit: 1 });
+    }
+
+    // 3. Fallback: any US local number
     if (availableNumbers.length === 0) {
-      console.log(`⚠️  No numbers in area code ${areaCode}, trying nearby...`);
+      console.log(`⚠️  No local numbers found, trying any US number...`);
       availableNumbers = await twilioClient.availablePhoneNumbers('US')
         .local
-        .list({ smsEnabled: true, limit: 1 });
+        .list({ smsEnabled: true, voiceEnabled: true, limit: 1 });
     }
 
-    // Last resort: try toll-free
+    // 4. Last resort: toll-free
     if (availableNumbers.length === 0) {
       console.log('⚠️  No local numbers available, trying toll-free...');
       availableNumbers = await twilioClient.availablePhoneNumbers('US')
@@ -52,15 +60,15 @@ async function purchasePhoneNumber(areaCode, userId) {
 
     const selectedNumber = availableNumbers[0].phoneNumber;
 
-    // 2. Purchase the number
+    // 5. Purchase the number
     const purchasedNumber = await twilioClient.incomingPhoneNumbers.create({
       phoneNumber: selectedNumber,
       friendlyName: `SORCE-User-${userId}`
     });
 
-    console.log(`✅ Purchased number: ${selectedNumber}`);
+    console.log(`✅ Purchased number: ${selectedNumber} (zip: ${zipCode})`);
 
-    // 3. Add to Messaging Service (this sets the webhook automatically)
+    // 6. Add to Messaging Service
     await twilioClient.messaging.v1
       .services(process.env.TWILIO_MESSAGING_SERVICE_SID)
       .phoneNumbers
@@ -86,7 +94,7 @@ async function sendSMS(to, message, userId, mediaUrl) {
     // Get user's phone number from database
     const { pool } = require('../config/database');
     const userResult = await pool.query(
-      'SELECT twilio_phone_number FROM users WHERE id = $1',
+      'SELECT twilio_phone_number, twilio_phone_sid FROM users WHERE id = $1',
       [userId]
     );
 
@@ -94,14 +102,17 @@ async function sendSMS(to, message, userId, mediaUrl) {
       throw new Error(`No phone number assigned to this user (userId: ${userId})`);
     }
 
-    const from = userResult.rows[0].twilio_phone_number;
-
+    const userData = userResult.rows[0];
     const msgParams = {
       body: message,
       to: to,
-      messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
-      from: from
+      messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID
     };
+
+    // Dedicated numbers send with explicit from; shared trial numbers let the Messaging Service pick
+    if (userData.twilio_phone_sid) {
+      msgParams.from = userData.twilio_phone_number;
+    }
 
     if (mediaUrl) {
       msgParams.mediaUrl = Array.isArray(mediaUrl) ? mediaUrl : [mediaUrl];

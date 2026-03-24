@@ -10,6 +10,17 @@ const { syncSquareInvoices } = require('../utils/squareSync');
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
+
+    // Clean up orphaned invoices from disconnected processors
+    await pool.query(
+      `DELETE FROM invoices WHERE user_id = $1
+       AND payment_processor IS NOT NULL
+       AND payment_processor NOT IN (
+         SELECT processor FROM payment_connections WHERE user_id = $1 AND is_active = true
+       )`,
+      [userId]
+    );
+
     const { status, startDate, endDate, customerId } = req.query;
 
     let query = `

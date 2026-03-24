@@ -36,6 +36,14 @@ const publicApiLimiter = rateLimit({
   message: { error: 'Too many requests from this IP' }
 });
 
+const previewGenerateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 preview generations per hour per IP
+  message: { error: 'Generation limit reached. Please try again later or sign up for unlimited access.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Authentication middleware
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -133,5 +141,6 @@ module.exports = {
   authenticateToken,
   requirePlan,
   setupMiddleware,
+  previewGenerateLimiter,
   EFFECTIVE_JWT_SECRET
 };

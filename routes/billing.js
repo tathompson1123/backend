@@ -164,46 +164,43 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       console.error('Error updating user plan:', error.message);
     }
 
-    // Auto-provision phone number for pro/scale plans
-    if (plan === 'pro' || plan === 'scale') {
-      try {
-        const userRow = await pool.query(
-          `SELECT u.twilio_phone_number, u.telnyx_phone_number, bi.city, bi.state
-           FROM users u
-           LEFT JOIN business_information bi ON bi.user_id = u.id
-           WHERE u.id = $1`,
-          [userId]
-        );
-        const userData = userRow.rows[0];
+    // Auto-provision phone number
+    // Pro/Scale: dedicated purchased number based on business zip code
+    // Basic (trial): shared default number from Messaging Service
+    try {
+      const userRow = await pool.query(
+        `SELECT u.twilio_phone_number, bi.zip_code
+         FROM users u
+         LEFT JOIN business_information bi ON bi.user_id = u.id
+         WHERE u.id = $1`,
+        [userId]
+      );
+      const userData = userRow.rows[0];
 
-        // ── Telnyx provisioning (preferred when configured) ──────────────
-        if (process.env.TELNYX_API_KEY && process.env.TELNYX_MESSAGING_PROFILE_ID) {
-          if (!userData?.telnyx_phone_number) {
-            const { purchasePhoneNumberTelnyx, getAreaCode } = require('../utils/telnyx');
-            const areaCode = getAreaCode(userData?.state, userData?.city);
-            const result = await purchasePhoneNumberTelnyx(areaCode);
-            await pool.query(
-              'UPDATE users SET telnyx_phone_number = $1, telnyx_order_id = $2 WHERE id = $3',
-              [result.phoneNumber, result.orderId, userId]
-            );
-            console.log(`✅ Auto-provisioned Telnyx number ${result.phoneNumber} for user ${userId} (${plan} plan, area ${areaCode})`);
-          }
-        } else if (!userData?.twilio_phone_number) {
-          // ── Twilio fallback ───────────────────────────────────────────
-          const { purchasePhoneNumber } = require('../utils/twilio');
-          const { getAreaCode } = require('../utils/telnyx');
-          const twAreaCode = getAreaCode(userData?.state, userData?.city);
-          const result = await purchasePhoneNumber(twAreaCode, userId);
+      if ((plan === 'pro' || plan === 'scale') && !userData?.twilio_phone_number) {
+        const { purchasePhoneNumber } = require('../utils/twilio');
+        const result = await purchasePhoneNumber({
+          zipCode: userData?.zip_code,
+          userId
+        });
+        await pool.query(
+          'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2 WHERE id = $3',
+          [result.phoneNumber, result.phoneSid, userId]
+        );
+        console.log(`✅ Auto-provisioned Twilio number ${result.phoneNumber} for user ${userId} (${plan} plan, zip ${userData?.zip_code})`);
+      } else if (plan === 'basic' && !userData?.twilio_phone_number) {
+        // Basic trial: assign the shared default number (no purchase needed)
+        const sharedNumber = process.env.TWILIO_SHARED_TRIAL_NUMBER;
+        if (sharedNumber) {
           await pool.query(
-            'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2 WHERE id = $3',
-            [result.phoneNumber, result.phoneSid, userId]
+            'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = NULL WHERE id = $2',
+            [sharedNumber, userId]
           );
-          console.log(`✅ Auto-provisioned Twilio number ${result.phoneNumber} for user ${userId} (${plan} plan)`);
+          console.log(`✅ Assigned shared trial number ${sharedNumber} to user ${userId} (basic trial)`);
         }
-      } catch (provisionError) {
-        // Non-fatal — user can provision manually
-        console.error(`⚠️ Could not auto-provision phone for user ${userId}:`, provisionError.message);
       }
+    } catch (provisionError) {
+      console.error(`⚠️ Could not auto-provision phone for user ${userId}:`, provisionError.message);
     }
   }
 

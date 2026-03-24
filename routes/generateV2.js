@@ -314,4 +314,209 @@ async function generateWebsite(req, res)
   }
 }
 
+// ============================================
+// Public preview endpoint — no auth required.
+// Generates the website but does NOT save to DB or inject agents.
+// Returns HTML + schema for the preview page.
+// ============================================
+async function generatePreview(req, res) {
+  try {
+    const {
+      businessName,
+      businessType,
+      tagline,
+      services,
+      description,
+      uniqueSellingPoints,
+      targetCustomer,
+      yearsInBusiness,
+      certifications,
+      phone,
+      email,
+      city,
+      state,
+    } = req.body;
+
+    if (!businessName || !businessType) {
+      return res.status(400).json({ error: 'businessName and businessType are required' });
+    }
+
+    console.log(`🚀 [Preview] Generating website for: ${businessName} (${businessType})`);
+
+    // STEP 1: Pre-fetch images
+    const layout = detectLayout(businessType);
+    const pexelsImages = await fetchPexelsImages(businessType, layout);
+
+    // STEP 2: Build prompt + call Claude
+    const prompt = buildSchemaPrompt({
+      businessName,
+      businessType,
+      phone: phone || '(555) 555-5555',
+      email: email || 'info@business.com',
+      city: city || '',
+      state: state || '',
+      services,
+      description,
+      images: pexelsImages,
+    });
+
+    console.log('🤖 [Preview] Calling Claude API...');
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8192,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    // STEP 3: Parse JSON
+    let rawText = message.content[0].text.trim();
+    if (rawText.startsWith('```json')) rawText = rawText.slice(7);
+    else if (rawText.startsWith('```')) rawText = rawText.slice(3);
+    if (rawText.endsWith('```')) rawText = rawText.slice(0, -3);
+    rawText = rawText.trim();
+
+    let pageSchema;
+    try {
+      pageSchema = JSON.parse(rawText);
+    } catch (parseErr) {
+      console.error('❌ [Preview] Failed to parse AI response:', parseErr.message);
+      return res.status(500).json({ error: 'AI returned invalid JSON', details: parseErr.message });
+    }
+
+    // STEP 3b: Organic layout
+    if (layout === 'organic') {
+      const hoursRaw = req.body.hours || '';
+      const serviceArea = req.body.serviceArea || '';
+      const phoneClean = (phone || '').replace(/\D/g, '');
+      const hoursText = hoursRaw || 'Mon-Fri: 8AM-6PM\nSat: 9AM-4PM\nSun: Closed';
+      const areaText = serviceArea || ((city || state) ? [city, state].filter(Boolean).join(', ') + ' and surrounding areas' : 'Local and surrounding areas');
+
+      let parsedServices = services;
+      if (typeof services === 'string' && services.trim()) {
+        parsedServices = services.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      const servicesList = Array.isArray(parsedServices) && parsedServices.length > 0
+        ? parsedServices.map(s => typeof s === 'string' ? s : (s.name || s.title || '')).filter(Boolean)
+        : ['Lawn Care', 'Garden Design', 'Landscaping'];
+
+      pageSchema = buildOrganicSchemaFromContent(pageSchema, {
+        businessName,
+        phone: phone || '(555) 555-5555',
+        phoneClean,
+        email: email || 'info@business.com',
+        hoursText,
+        areaText,
+        servicesList,
+      });
+    }
+
+    // STEP 4: Apply theme + render HTML (no agent injection)
+    const theme = (pageSchema.themeId && THEMES[pageSchema.themeId])
+      ? THEMES[pageSchema.themeId]
+      : getThemeForBusinessType(businessType);
+
+    pageSchema.theme = theme;
+    pageSchema.version = 2;
+
+    let html;
+    let pages;
+
+    if (pageSchema.multiPage) {
+      const renderedPages = renderMultiPage(pageSchema);
+      pages = renderedPages;
+      html = pages['index.html'] || Object.values(pages)[0];
+    } else {
+      html = renderPage(pageSchema);
+      pages = { 'index.html': html };
+    }
+
+    console.log('✅ [Preview] Website generated successfully!');
+    res.json({
+      success: true,
+      html,
+      pages,
+      schema: pageSchema,
+      theme: theme.id,
+      formData: { businessName, businessType, tagline, services, description, phone, email, city, state },
+    });
+  } catch (err) {
+    console.error('❌ [Preview] Generation error:', err);
+    res.status(500).json({ error: 'Failed to generate website', details: err.message });
+  }
+}
+
+// ============================================
+// Claim endpoint — after signup, save preview website to new user's account.
+// Expects: { schema, pages, html, formData } in body + auth token.
+// ============================================
+async function claimPreview(req, res) {
+  try {
+    const { schema, pages, html, formData } = req.body;
+    const pool = req.app.get('pool');
+    const userId = req.user.userId;
+
+    if (!schema || !html) {
+      return res.status(400).json({ error: 'Missing preview data' });
+    }
+
+    // Save business info
+    if (formData && (formData.phone || formData.email || formData.city || formData.state)) {
+      try {
+        const existing = await pool.query('SELECT id FROM business_information WHERE user_id = $1', [userId]);
+        if (existing.rows.length > 0) {
+          const updates = [];
+          const values = [];
+          let i = 1;
+          if (formData.phone) { updates.push(`phone = $${i++}`); values.push(formData.phone); }
+          if (formData.email) { updates.push(`email = $${i++}`); values.push(formData.email); }
+          if (formData.city) { updates.push(`city = $${i++}`); values.push(formData.city); }
+          if (formData.state) { updates.push(`state = $${i++}`); values.push(formData.state); }
+          if (updates.length > 0) {
+            updates.push('updated_at = NOW()');
+            values.push(userId);
+            await pool.query(`UPDATE business_information SET ${updates.join(', ')} WHERE user_id = $${i}`, values);
+          }
+        } else {
+          await pool.query(
+            'INSERT INTO business_information (user_id, phone, email, city, state) VALUES ($1, $2, $3, $4, $5)',
+            [userId, formData.phone || '', formData.email || '', formData.city || '', formData.state || '']
+          );
+        }
+      } catch (bizErr) {
+        console.error('⚠️ Could not save business info during claim:', bizErr.message);
+      }
+    }
+
+    // Update business name on user record
+    if (formData?.businessName) {
+      await pool.query('UPDATE users SET business_name = $1 WHERE id = $2 AND (business_name IS NULL OR business_name = $3)',
+        [formData.businessName, userId, '']);
+    }
+
+    // Save website
+    const existing = await pool.query('SELECT id FROM websites WHERE user_id = $1', [userId]);
+    const schemaStr = JSON.stringify(schema);
+    const pagesStr = JSON.stringify(pages);
+
+    if (existing.rows.length > 0) {
+      await pool.query(
+        `UPDATE websites SET html_content = $1, page_data = $2, pages = $3, business_name = $4, business_type = $5, updated_at = NOW() WHERE user_id = $6`,
+        [html, schemaStr, pagesStr, formData?.businessName || '', formData?.businessType || '', userId]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO websites (user_id, html_content, page_data, pages, business_name, business_type) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [userId, html, schemaStr, pagesStr, formData?.businessName || '', formData?.businessType || '']
+      );
+    }
+
+    console.log(`✅ Preview claimed by user ${userId}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ Claim error:', err);
+    res.status(500).json({ error: 'Failed to save website', details: err.message });
+  }
+}
+
 module.exports = generateWebsite;
+module.exports.generatePreview = generatePreview;
+module.exports.claimPreview = claimPreview;

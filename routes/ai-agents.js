@@ -601,35 +601,54 @@ router.get('/lead-form/stats', authenticateToken, async (req, res) => {
 router.post('/lead-form/deploy', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { areaCode } = req.body; // Frontend passes user's area code
-
     // Check if already has a number
     const userCheck = await pool.query(
-      'SELECT twilio_phone_number FROM users WHERE id = $1',
+      `SELECT u.twilio_phone_number, u.plan, bi.zip_code
+       FROM users u
+       LEFT JOIN business_information bi ON bi.user_id = u.id
+       WHERE u.id = $1`,
       [userId]
     );
 
-    let phoneNumber = userCheck.rows[0]?.twilio_phone_number;
+    const userData = userCheck.rows[0];
+    let phoneNumber = userData?.twilio_phone_number;
 
     // Auto-provision phone number if they don't have one
     if (!phoneNumber) {
       try {
-        const { purchasePhoneNumber } = require('../utils/twilio');
-        const result = await purchasePhoneNumber(areaCode || '206', userId);
-        
-        // Update user record
-        await pool.query(
-          'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2 WHERE id = $3',
-          [result.phoneNumber, result.phoneSid, userId]
-        );
-
-        phoneNumber = result.phoneNumber;
-        console.log(`✅ Auto-provisioned ${phoneNumber} for user ${userId}`);
+        const userPlan = userData?.plan;
+        if (userPlan === 'pro' || userPlan === 'scale' || userPlan === 'expert') {
+          // Paid plans get a dedicated number based on business zip
+          const { purchasePhoneNumber } = require('../utils/twilio');
+          const result = await purchasePhoneNumber({
+            zipCode: userData?.zip_code,
+            userId
+          });
+          await pool.query(
+            'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2 WHERE id = $3',
+            [result.phoneNumber, result.phoneSid, userId]
+          );
+          phoneNumber = result.phoneNumber;
+          console.log(`✅ Auto-provisioned ${phoneNumber} for user ${userId} (zip: ${userData?.zip_code})`);
+        } else {
+          // Basic/trial: assign shared number
+          const sharedNumber = process.env.TWILIO_SHARED_TRIAL_NUMBER;
+          if (sharedNumber) {
+            await pool.query(
+              'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = NULL WHERE id = $2',
+              [sharedNumber, userId]
+            );
+            phoneNumber = sharedNumber;
+            console.log(`✅ Assigned shared trial number ${sharedNumber} to user ${userId}`);
+          } else {
+            return res.status(500).json({ error: 'SMS not available on trial plan. Please upgrade.' });
+          }
+        }
       } catch (error) {
         console.error('Error provisioning phone:', error.message);
-        return res.status(500).json({ 
+        return res.status(500).json({
           error: 'Failed to provision phone number. Please contact support.',
-          details: error.message 
+          details: error.message
         });
       }
     }

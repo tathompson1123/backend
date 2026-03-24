@@ -12,16 +12,31 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
 
     // Find user by their Twilio phone number
     const userResult = await pool.query(
-      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1',
+      'SELECT id, business_name, twilio_phone_sid FROM users WHERE twilio_phone_number = $1',
       [To]
     );
 
+    let user;
     if (userResult.rows.length === 0) {
       console.log(`⚠️ No user found for ${To}`);
       return res.status(200).send('<Response></Response>');
+    } else if (userResult.rows.length === 1) {
+      user = userResult.rows[0];
+    } else {
+      // Shared trial number — multiple users have this number
+      // Route by finding which user owns a lead with this From number
+      const leadLookup = await pool.query(
+        `SELECT user_id FROM leads WHERE phone = $1 AND user_id = ANY($2)
+         ORDER BY created_at DESC LIMIT 1`,
+        [From, userResult.rows.map(r => r.id)]
+      );
+      if (leadLookup.rows.length > 0) {
+        user = userResult.rows.find(r => r.id === leadLookup.rows[0].user_id);
+      } else {
+        // No existing lead — assign to first matching user
+        user = userResult.rows[0];
+      }
     }
-
-    const user = userResult.rows[0];
 
     // Find or create lead
     let leadResult = await pool.query(
