@@ -251,7 +251,9 @@ router.post('/book/:siteKey', async (req, res) => {
       endTime,
       price: service.price,
       notes: notes || '',
-    }).catch(() => {});
+    }).then(() => {
+      console.log(`📧 Embed booking email sent for ${bookingNumber}`);
+    }).catch(err => console.error(`📧 Embed booking email FAILED for ${bookingNumber}:`, err.message, err.response?.body));
 
     res.json({
       success: true,

@@ -101,8 +101,10 @@ async function createBookingFromChat(userId, bookingData) {
         [userId, customerName, customerEmail, customerPhone]
       );
       customerId = customerResult.rows[0].id;
+      console.log(`✅ Chat booking: created NEW customer ${customerId} (${customerName}, ${customerEmail})`);
     } else {
       customerId = customerResult.rows[0].id;
+      console.log(`✅ Chat booking: found EXISTING customer ${customerId}`);
     }
 
     // Create booking
@@ -133,6 +135,8 @@ async function createBookingFromChat(userId, bookingData) {
       [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
     );
 
+    console.log(`✅ Chat booking created: #${bookingNumber} customer=${customerId} employee=${employeeId}`);
+
     // Send booking confirmation emails (non-blocking)
     sendBookingEmails({
       userId,
@@ -145,7 +149,9 @@ async function createBookingFromChat(userId, bookingData) {
       startTime,
       endTime,
       price: service.price,
-    }).catch(err => console.error('Chat booking email error:', err.message));
+    }).then(() => {
+      console.log(`📧 Chat booking email sent successfully for ${bookingNumber}`);
+    }).catch(err => console.error('📧 Chat booking email FAILED:', err.message, err.response?.body));
 
     return {
       success: true,
@@ -156,7 +162,7 @@ async function createBookingFromChat(userId, bookingData) {
     };
 
   } catch (error) {
-    console.error('Error creating booking from chat:', error.message);
+    console.error('❌ Error creating booking from chat:', error.message, error.stack);
     return { success: false, error: error.message };
   }
 }
@@ -293,10 +299,11 @@ IMPORTANT RULES:
 
     // Check if AI wants to create a booking
     const bookingMatch = reply.match(/BOOKING_REQUEST\|(\d+)\|([\d-]+)\|([\d:]+)\|([^|]+)\|([^|]+)\|([^|]+)/);
-    
+
     if (bookingMatch) {
       const [_, serviceId, bookingDate, startTime, customerName, customerEmail, customerPhone] = bookingMatch;
-      
+      console.log(`🤖 Chat BOOKING_REQUEST: service=${serviceId} date=${bookingDate} time=${startTime} name=${customerName} email=${customerEmail} phone=${customerPhone}`);
+
       // Create the booking
       const bookingResult = await createBookingFromChat(userId, {
         serviceId: parseInt(serviceId),
@@ -306,6 +313,8 @@ IMPORTANT RULES:
         customerEmail: customerEmail.trim(),
         customerPhone: customerPhone.trim()
       });
+
+      console.log(`🤖 Chat booking result: success=${bookingResult.success}${bookingResult.error ? ' error=' + bookingResult.error : ''}`);
 
       if (bookingResult.success) {
         // Remove the BOOKING_REQUEST line from reply

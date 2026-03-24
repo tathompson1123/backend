@@ -43,7 +43,10 @@ function formatTime(timeStr) {
  * @param {string} opts.notes
  */
 async function sendBookingEmails(opts) {
-  if (!process.env.SENDGRID_API_KEY) return;
+  if (!process.env.SENDGRID_API_KEY) {
+    console.warn('📧 SENDGRID_API_KEY not set — skipping booking emails');
+    return;
+  }
 
   try {
     // Get business info
