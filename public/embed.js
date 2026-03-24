@@ -29,6 +29,9 @@
   var chatOpen = false;
   var leadFormOpen = false;
 
+  // Regex for booking-related button text (must be defined before scanBookingButtons)
+  var bookingPatterns = /\b(book\s*(now|online|today|here|appointment)?|schedule|make\s*an?\s*appointment|reserve|get\s*started)\b/i;
+
   // ── Init ───────────────────────────────────────────────
   // Hijack booking buttons immediately (before config loads) so fast clicks are caught
   scanBookingButtons();
@@ -614,8 +617,6 @@
   // ── Booking Button Hijack ───────────────────────────────
   // Finds existing "Book Now", "Book Online", "Schedule" buttons/links
   // and rewires them to open the SORCE booking modal instead.
-
-  var bookingPatterns = /\b(book\s*(now|online|today|here|appointment)?|schedule|make\s*an?\s*appointment|reserve|get\s*started)\b/i;
 
   function hijackBookingButtons() {
     var candidates = document.querySelectorAll('a, button, [role="button"]');
