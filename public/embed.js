@@ -528,6 +528,7 @@
     var wrapper = document.createElement('div');
     wrapper.className = 'sorce-replaced-form';
     wrapper.setAttribute('data-sorce-form', 'true');
+    wrapper.setAttribute('data-sorce-replaced', 'true');
     wrapper.innerHTML = buildLeadFormHTML(formConfig.fields, tc, formConfig.submitText, formConfig.title);
 
     // Wire up submit
@@ -544,12 +545,17 @@
 
   var leadFormFabCreated = false;
 
+  function isSorceOwned(el) {
+    return el.closest && (el.closest('.sorce-replaced-form') || el.closest('.sorce-modal-overlay') || el.closest('#sorce-embed-container') || el.closest('[data-sorce-form]'));
+  }
+
   function scanAndReplaceForms() {
     var replaced = 0;
 
     // Standard <form> elements
     var allForms = document.querySelectorAll('form:not([data-sorce-replaced])');
     for (var i = 0; i < allForms.length; i++) {
+      if (isSorceOwned(allForms[i])) continue;
       if (!isContactForm(allForms[i])) continue;
       if (replaceFormElement(allForms[i])) replaced++;
     }
@@ -557,8 +563,9 @@
     // Wix/SPA form-like containers (no <form> tag)
     var divs = document.querySelectorAll('[data-mesh-id], [class*="form"], [class*="contact"], [id*="form"], [id*="contact"]');
     for (var j = 0; j < divs.length; j++) {
+      if (isSorceOwned(divs[j])) continue;
       if (divs[j].getAttribute('data-sorce-replaced')) continue;
-      if (divs[j].querySelector('[data-sorce-form]')) continue; // already has our form inside
+      if (divs[j].querySelector('[data-sorce-form]')) continue;
       if (!isFormLikeContainer(divs[j])) continue;
       if (replaceFormElement(divs[j])) replaced++;
     }
@@ -789,7 +796,6 @@
     var debounceTimer = null;
     var isProcessing = false;
     var observer = new MutationObserver(function(mutations) {
-      // Ignore mutations we caused ourselves
       if (isProcessing) return;
 
       // Only act if nodes were added outside our own containers
@@ -804,7 +810,10 @@
       }
       if (!dominated) return;
 
-      // Debounce to avoid thrashing during hydration
+      // Don't re-scan if our replacement forms are still in the DOM
+      // (Wix triggers mutations constantly — only re-scan if our forms were removed)
+      if (config.leadFormEnabled && document.querySelectorAll('.sorce-replaced-form').length > 0) return;
+
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(function() {
         isProcessing = true;
