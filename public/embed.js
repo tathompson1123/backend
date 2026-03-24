@@ -27,6 +27,9 @@
   var leadFormOpen = false;
 
   // ── Init ───────────────────────────────────────────────
+  // Hijack booking buttons immediately (before config loads) so fast clicks are caught
+  scanBookingButtons();
+
   function init() {
     fetch(API_BASE + '/api/embed/config/' + SITE_KEY)
       .then(function(r) { return r.json(); })
@@ -36,10 +39,9 @@
         injectStyles();
         if (config.chatEnabled) injectChatWidget();
         if (config.bookingEnabled) {
-          scanBookingButtons(); // Hijack existing "Book Now" / "Book Online" buttons
+          scanBookingButtons();
+          startDOMObserver();
         }
-        if (config.leadFormEnabled) injectLeadForm();
-        if (config.leadFormEnabled || config.bookingEnabled) startDOMObserver();
       })
       .catch(function(e) { console.warn('SORCE Embed: Failed to load config', e.message); });
   }
@@ -281,6 +283,13 @@
 
   function openBookingModal() {
     if (bookingModalOpen) return;
+    // If config hasn't loaded yet, wait and retry
+    if (!config) {
+      var waitInterval = setInterval(function() {
+        if (config) { clearInterval(waitInterval); openBookingModal(); }
+      }, 100);
+      return;
+    }
     bookingModalOpen = true;
 
     var tc = config.themeColor || '#d97706';
@@ -810,14 +819,9 @@
       }
       if (!dominated) return;
 
-      // Don't re-scan if our replacement forms are still in the DOM
-      // (Wix triggers mutations constantly — only re-scan if our forms were removed)
-      if (config.leadFormEnabled && document.querySelectorAll('.sorce-replaced-form').length > 0) return;
-
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(function() {
         isProcessing = true;
-        if (config.leadFormEnabled) scanAndReplaceForms();
         if (config.bookingEnabled) hijackBookingButtons();
         isProcessing = false;
       }, 500);
