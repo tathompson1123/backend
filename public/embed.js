@@ -96,9 +96,25 @@
       '.sorce-typing-dot:nth-child(3) { animation-delay: 0.4s; }\n' +
       '@keyframes sorceTyping { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-8px); } }\n' +
 
-      /* Lead form modal */
+      /* Modal overlay */
       '.sorce-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 100001; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }\n' +
       '.sorce-modal { background: white; color: #1f2937; border-radius: 16px; max-width: 480px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 32px; box-shadow: 0 16px 48px rgba(0,0,0,0.2); }\n' +
+      '.sorce-modal h2 { margin: 0 0 8px; font-size: 22px; color: #1f2937; }\n' +
+      '.sorce-modal p { margin: 0 0 24px; color: #6b7280; font-size: 14px; }\n' +
+      '.sorce-form-group { margin-bottom: 16px; }\n' +
+      '.sorce-form-group label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; color: #374151; }\n' +
+      '.sorce-form-group input, .sorce-form-group select, .sorce-form-group textarea { width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; box-sizing: border-box; font-family: inherit; color: #1f2937; background: white; }\n' +
+      '.sorce-form-group input:focus, .sorce-form-group select:focus, .sorce-form-group textarea:focus { outline: none; border-color: ' + tc + '; }\n' +
+      '.sorce-btn-primary { width: 100%; padding: 12px; background: ' + tc + '; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 15px; transition: opacity 0.2s; }\n' +
+      '.sorce-btn-primary:hover { opacity: 0.9; }\n' +
+      '.sorce-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }\n' +
+      '.sorce-btn-secondary { width: 100%; padding: 10px; background: #f3f4f6; color: #374151; border: none; border-radius: 8px; font-weight: 500; cursor: pointer; font-size: 14px; margin-top: 8px; }\n' +
+      '.sorce-slots-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }\n' +
+      '.sorce-slot { padding: 8px; text-align: center; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }\n' +
+      '.sorce-slot:hover { border-color: ' + tc + '; background: ' + tc + '10; }\n' +
+      '.sorce-slot.selected { border-color: ' + tc + '; background: ' + tc + '; color: white; }\n' +
+      '.sorce-success { text-align: center; padding: 20px; }\n' +
+      '.sorce-success h3 { color: #059669; font-size: 20px; margin: 12px 0 8px; }\n' +
 
       /* Replaced form styling — fits into the original form's container */
       '.sorce-replaced-form { max-width: 520px; padding: 24px; background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }\n' +
@@ -241,6 +257,183 @@
   function hideChatTyping() {
     var el = document.getElementById('sorce-typing');
     if (el) el.remove();
+  }
+
+  // ── Booking Modal ────────────────────────────────────────
+  // Opens when hijacked "Book Now" / "Book Online" buttons are clicked.
+  var bookingModalOpen = false;
+
+  function formatTime(time24) {
+    var parts = time24.split(':');
+    var h = parseInt(parts[0]);
+    var m = parts[1];
+    var ampm = h >= 12 ? 'PM' : 'AM';
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return h + ':' + m + ' ' + ampm;
+  }
+
+  function getTomorrowDate() {
+    var d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  function openBookingModal() {
+    if (bookingModalOpen) return;
+    bookingModalOpen = true;
+
+    var tc = config.themeColor || '#d97706';
+    var overlay = document.createElement('div');
+    overlay.className = 'sorce-modal-overlay';
+    overlay.id = 'sorce-booking-overlay';
+    overlay.innerHTML =
+      '<div class="sorce-modal" id="sorce-booking-modal">' +
+      '<h2>' + escapeHtml(config.bookingButtonText || 'Book Online') + '</h2>' +
+      '<p>Select a service, date, and time to book your appointment.</p>' +
+      '<div id="sorce-booking-form">' +
+        '<div class="sorce-form-group"><label>Service</label><select id="sorce-book-service"><option value="">Loading services...</option></select></div>' +
+        '<div class="sorce-form-group"><label>Date</label><input type="date" id="sorce-book-date" min="' + getTomorrowDate() + '"></div>' +
+        '<div class="sorce-form-group" id="sorce-slots-container" style="display:none"><label>Available Times</label><div class="sorce-slots-grid" id="sorce-slots-grid"></div></div>' +
+        '<div class="sorce-form-group"><label>Your Name</label><input type="text" id="sorce-book-name" placeholder="John Smith"></div>' +
+        '<div class="sorce-form-group"><label>Email</label><input type="email" id="sorce-book-email" placeholder="john@example.com"></div>' +
+        '<div class="sorce-form-group"><label>Phone</label><input type="tel" id="sorce-book-phone" placeholder="(555) 123-4567"></div>' +
+        '<div class="sorce-form-group"><label>Notes (optional)</label><textarea id="sorce-book-notes" rows="2" placeholder="Any special requests..."></textarea></div>' +
+        '<button class="sorce-btn-primary" id="sorce-book-submit" disabled>Confirm Booking</button>' +
+        '<button class="sorce-btn-secondary" id="sorce-book-cancel">Cancel</button>' +
+      '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    // Load services
+    fetch(API_BASE + '/api/embed/services/' + SITE_KEY)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var sel = document.getElementById('sorce-book-service');
+        sel.innerHTML = '<option value="">Choose a service...</option>';
+        (data.services || []).forEach(function(s) {
+          var opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.name + (s.price ? ' - $' + s.price : '');
+          sel.appendChild(opt);
+        });
+      });
+
+    var selectedSlot = null;
+
+    document.getElementById('sorce-book-date').addEventListener('change', function() {
+      var date = this.value;
+      var serviceId = document.getElementById('sorce-book-service').value;
+      if (!date) return;
+      selectedSlot = null;
+      loadSlots(date, serviceId);
+    });
+
+    document.getElementById('sorce-book-service').addEventListener('change', function() {
+      var date = document.getElementById('sorce-book-date').value;
+      selectedSlot = null;
+      if (date) loadSlots(date, this.value);
+    });
+
+    function loadSlots(date, serviceId) {
+      var url = API_BASE + '/api/embed/availability/' + SITE_KEY + '?date=' + date;
+      if (serviceId) url += '&serviceId=' + serviceId;
+
+      fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var container = document.getElementById('sorce-slots-container');
+          var grid = document.getElementById('sorce-slots-grid');
+
+          if (data.closed || !data.slots || data.slots.length === 0) {
+            container.style.display = 'block';
+            grid.innerHTML = '<p style="grid-column:1/-1;color:#6b7280;font-size:14px;">No availability on this date. Try another day.</p>';
+            return;
+          }
+
+          container.style.display = 'block';
+          grid.innerHTML = '';
+          data.slots.forEach(function(slot) {
+            var btn = document.createElement('button');
+            btn.className = 'sorce-slot';
+            btn.textContent = formatTime(slot.time);
+            btn.onclick = function() {
+              grid.querySelectorAll('.sorce-slot').forEach(function(b) { b.classList.remove('selected'); });
+              btn.classList.add('selected');
+              selectedSlot = slot.time;
+              updateSubmitButton();
+            };
+            grid.appendChild(btn);
+          });
+        });
+    }
+
+    function updateSubmitButton() {
+      var btn = document.getElementById('sorce-book-submit');
+      var hasRequired = selectedSlot &&
+        document.getElementById('sorce-book-service').value &&
+        document.getElementById('sorce-book-date').value &&
+        document.getElementById('sorce-book-name').value.trim() &&
+        document.getElementById('sorce-book-email').value.trim();
+      btn.disabled = !hasRequired;
+    }
+
+    ['sorce-book-name', 'sorce-book-email', 'sorce-book-phone'].forEach(function(id) {
+      document.getElementById(id).addEventListener('input', updateSubmitButton);
+    });
+
+    document.getElementById('sorce-book-submit').addEventListener('click', function() {
+      var btn = this;
+      btn.disabled = true;
+      btn.textContent = 'Booking...';
+
+      fetch(API_BASE + '/api/embed/book/' + SITE_KEY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceId: parseInt(document.getElementById('sorce-book-service').value),
+          date: document.getElementById('sorce-book-date').value,
+          startTime: selectedSlot,
+          customerName: document.getElementById('sorce-book-name').value.trim(),
+          customerEmail: document.getElementById('sorce-book-email').value.trim(),
+          customerPhone: document.getElementById('sorce-book-phone').value.trim(),
+          notes: document.getElementById('sorce-book-notes').value.trim()
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          document.getElementById('sorce-booking-modal').innerHTML =
+            '<div class="sorce-success">' +
+            '<div style="font-size:48px">&#10003;</div>' +
+            '<h3>Booking Confirmed!</h3>' +
+            '<p style="color:#6b7280">Booking #' + escapeHtml(data.bookingNumber) + '</p>' +
+            '<p style="color:#6b7280;margin-top:8px">' + escapeHtml(data.message) + '</p>' +
+            '<button class="sorce-btn-secondary" style="margin-top:20px" onclick="document.getElementById(\'sorce-booking-overlay\').remove()">Close</button>' +
+            '</div>';
+        } else {
+          btn.textContent = 'Confirm Booking';
+          btn.disabled = false;
+          alert(data.error || 'Booking failed. Please try again.');
+        }
+      })
+      .catch(function() {
+        btn.textContent = 'Confirm Booking';
+        btn.disabled = false;
+        alert('Something went wrong. Please try again.');
+      });
+    });
+
+    document.getElementById('sorce-book-cancel').addEventListener('click', closeBookingModal);
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) closeBookingModal();
+    });
+  }
+
+  function closeBookingModal() {
+    var overlay = document.getElementById('sorce-booking-overlay');
+    if (overlay) overlay.remove();
+    bookingModalOpen = false;
   }
 
   // ── Lead Form ──────────────────────────────────────────
@@ -440,8 +633,7 @@
         element.addEventListener('click', function(e) {
           e.preventDefault();
           e.stopPropagation();
-          var bookingUrl = 'https://sorceintegrations.com/book/' + config.userId;
-          window.open(bookingUrl, '_blank');
+          openBookingModal();
         });
         element.style.cursor = 'pointer';
       })(el);
@@ -595,20 +787,31 @@
   function startDOMObserver() {
     if (typeof MutationObserver === 'undefined') return;
     var debounceTimer = null;
+    var isProcessing = false;
     var observer = new MutationObserver(function(mutations) {
-      // Quick-check: only act if nodes were added
+      // Ignore mutations we caused ourselves
+      if (isProcessing) return;
+
+      // Only act if nodes were added outside our own containers
       var dominated = false;
       for (var i = 0; i < mutations.length; i++) {
-        if (mutations[i].addedNodes.length > 0) { dominated = true; break; }
+        if (mutations[i].addedNodes.length > 0) {
+          var target = mutations[i].target;
+          if (target.closest && (target.closest('[data-sorce-form]') || target.closest('.sorce-replaced-form') || target.closest('#sorce-embed-container') || target.closest('.sorce-modal-overlay'))) continue;
+          dominated = true;
+          break;
+        }
       }
       if (!dominated) return;
 
       // Debounce to avoid thrashing during hydration
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(function() {
+        isProcessing = true;
         if (config.leadFormEnabled) scanAndReplaceForms();
         if (config.bookingEnabled) hijackBookingButtons();
-      }, 300);
+        isProcessing = false;
+      }, 500);
     });
     observer.observe(document.body, { childList: true, subtree: true });
   }
