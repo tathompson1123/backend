@@ -127,10 +127,10 @@ router.post('/status', express.urlencoded({ extended: false }), async (req, res)
     let leadId;
     if (leadResult.rows.length === 0) {
       const newLead = await pool.query(
-        `INSERT INTO leads (user_id, phone, source, status, sms_consent, created_at)
-         VALUES ($1, $2, 'missed_call', 'new', true, NOW())
+        `INSERT INTO leads (user_id, name, phone, source, status, sms_consent, created_at)
+         VALUES ($1, $2, $3, 'missed_call', 'new', true, NOW())
          RETURNING id, name, email`,
-        [user.id, From]
+        [user.id, From, From]
       );
       leadId = newLead.rows[0].id;
       console.log(`📝 New lead ${leadId} from missed call ${From}`);

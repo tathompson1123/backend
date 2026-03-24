@@ -47,10 +47,10 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     let leadId;
     if (leadResult.rows.length === 0) {
       const newLead = await pool.query(
-        `INSERT INTO leads (user_id, phone, source, status, created_at) 
-         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) 
+        `INSERT INTO leads (user_id, name, phone, source, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
          RETURNING id, name, email`,
-        [user.id, From, 'sms_inbound', 'new']
+        [user.id, From, From, 'sms_inbound', 'new']
       );
       leadId = newLead.rows[0].id;
       leadResult = newLead;
