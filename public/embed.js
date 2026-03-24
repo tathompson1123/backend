@@ -42,6 +42,7 @@
           scanBookingButtons();
           startDOMObserver();
         }
+        if (config.leadFormEnabled) injectLeadForm();
       })
       .catch(function(e) { console.warn('SORCE Embed: Failed to load config', e.message); });
   }
@@ -585,29 +586,13 @@
   function injectLeadForm() {
     var replaced = scanAndReplaceForms();
 
-    if (replaced > 0) {
-      leadFormFabCreated = true;
-      return;
-    }
+    if (replaced > 0) return;
 
     // Retry — Wix/SPA frameworks hydrate forms after initial load
     var retries = [1000, 3000, 6000, 10000];
     var retryIdx = 0;
     function retryReplace() {
-      if (retryIdx >= retries.length) {
-        // All retries exhausted — show FAB fallback so they still get a lead form
-        if (!leadFormFabCreated) {
-          leadFormFabCreated = true;
-          var container = getOrCreateContainer();
-          var formConfig = resolveFormConfig();
-          var fab = document.createElement('button');
-          fab.className = 'sorce-fab sorce-fab-lead';
-          fab.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg><span class="sorce-fab-label">' + escapeHtml(formConfig.title) + '</span>';
-          fab.onclick = openLeadForm;
-          container.appendChild(fab);
-        }
-        return;
-      }
+      if (retryIdx >= retries.length) return;
       setTimeout(function() {
         var found = scanAndReplaceForms();
         if (found > 0) {
