@@ -58,15 +58,51 @@ function renderSectionHtml(section, theme) {
       }
       return css.length ? `<style>${css.join('')}</style>` : '';
     })();
+    // Per-section font override (fontOverride: { headingFont, bodyFont, fontStyle, fontWeight })
+    const fontOverride = (() => {
+      const fo = section.fontOverride;
+      if (!fo || !Object.keys(fo).length) return '';
+      const sp = `section-${sectionId}`;
+      const css = [];
+      if (fo.headingFont) {
+        css.push(`.${sp} h1,.${sp} h2,.${sp} h3,.${sp}-heading{font-family:'${fo.headingFont}',serif!important}`);
+      }
+      if (fo.bodyFont) {
+        css.push(`.${sp} p,.${sp}-text,.${sp}-body,.${sp}-subtitle{font-family:'${fo.bodyFont}',sans-serif!important}`);
+      }
+      if (fo.fontStyle) {
+        css.push(`.${sp} h1,.${sp} h2,.${sp} h3,.${sp}-heading{font-style:${fo.fontStyle}!important}`);
+      }
+      if (fo.fontWeight) {
+        css.push(`.${sp} h1,.${sp} h2,.${sp} h3,.${sp}-heading{font-weight:${fo.fontWeight}!important}`);
+      }
+      if (fo.fontSize) {
+        css.push(`.${sp} h2,.${sp}-heading{font-size:${fo.fontSize}!important}`);
+      }
+      return css.length ? `<style>${css.join('')}</style>` : '';
+    })();
     // Wrap in id-tagged div so anchor links (#services, etc.) resolve
-    return `<div id="${sectionId}">${html}${bgOverride}${colorsOverride}</div>`;
+    return `<div id="${sectionId}">${html}${bgOverride}${colorsOverride}${fontOverride}</div>`;
   } catch (err) {
     console.error(`❌ RENDERER: Error rendering ${section.template}:`, err);
     return `<!-- Error rendering: ${section.template} -->`;
   }
 }
 
-function buildPageHtml(sectionsHtml, theme, meta) {
+function collectFontOverrides(sections) {
+  const fonts = new Set();
+  for (const s of (sections || [])) {
+    const fo = s.fontOverride;
+    if (!fo) continue;
+    if (fo.headingFont) fonts.add(fo.headingFont);
+    if (fo.bodyFont) fonts.add(fo.bodyFont);
+  }
+  if (!fonts.size) return '';
+  const families = [...fonts].map(f => `family=${f.replace(/ /g, '+')}:ital,wght@0,400;0,700;1,400;1,700`).join('&');
+  return `\n  <link href="https://fonts.googleapis.com/css2?${families}&display=swap" rel="stylesheet">`;
+}
+
+function buildPageHtml(sectionsHtml, theme, meta, extraFontImports = '') {
   // Resolve /booking links → #book-online so the injected booking widget handles them
   if (meta.userId) {
     sectionsHtml = sectionsHtml.replace(/href="\/booking"/g, 'href="#book-online"');
@@ -81,7 +117,7 @@ function buildPageHtml(sectionsHtml, theme, meta) {
   <meta name="description" content="${escapeHtml(meta.description || '')}">
   ${meta.userId ? `<meta name="user-id" content="${meta.userId}">` : ''}
   ${meta.userId ? `<script>window.__SORCE_USER_ID__='${meta.userId}';window.__SORCE_APP_URL__='${process.env.VITE_APP_URL || 'https://www.sorceintegrations.com'}';window.__SORCE_API_URL__='${process.env.VITE_API_URL || process.env.BACKEND_URL || 'https://backend-production-ab50.up.railway.app'}';</script>` : ''}
-  <link href="${theme.fontImport || 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'}" rel="stylesheet">
+  <link href="${theme.fontImport || 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'}" rel="stylesheet">${extraFontImports}
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -204,7 +240,8 @@ function renderPage(pageSchema) {
     })
     .join('\n\n');
 
-  return buildPageHtml(sectionsHtml, theme, meta);
+  const extraFonts = collectFontOverrides(pageSchema.sections);
+  return buildPageHtml(sectionsHtml, theme, meta, extraFonts);
 }
 
 // ── Multi-page renderer ───────────────────────────────────────────────
@@ -249,7 +286,9 @@ function renderMultiPage(pageSchema) {
       htmlParts.push(renderSectionHtml(pageSchema.footer, theme));
     }
 
-    result[filename] = buildPageHtml(htmlParts.join('\n\n'), theme, pageMeta);
+    const allSections = [pageSchema.nav, ...(page.sections || []), pageSchema.footer].filter(Boolean);
+    const extraFonts = collectFontOverrides(allSections);
+    result[filename] = buildPageHtml(htmlParts.join('\n\n'), theme, pageMeta, extraFonts);
     console.log(`✅ RENDERER: ${filename} rendered, ${result[filename].length} chars`);
   }
 
