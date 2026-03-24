@@ -330,25 +330,12 @@ IMPORTANT RULES:
                 `📋 Booking #${bookingResult.bookingNumber}\n\n` +
                 `I've sent a confirmation to ${customerEmail}. Looking forward to seeing you!`;
         
-        // Also create a lead with "booked" status
-        const leadExists = await pool.query(
-          'SELECT id FROM leads WHERE user_id = $1 AND email = $2',
+        // If they were previously a lead, update status to booked
+        await pool.query(
+          `UPDATE leads SET status = 'booked', updated_at = CURRENT_TIMESTAMP
+           WHERE user_id = $1 AND email = $2 AND status != 'booked'`,
           [userId, customerEmail]
         );
-        
-        if (leadExists.rows.length === 0) {
-          await pool.query(
-            `INSERT INTO leads (user_id, name, email, phone, source, status, created_at)
-             VALUES ($1, $2, $3, $4, 'ai_chat_agent', 'booked', CURRENT_TIMESTAMP)`,
-            [userId, customerName, customerEmail, customerPhone]
-          );
-        } else {
-          // Update existing lead to "booked"
-          await pool.query(
-            `UPDATE leads SET status = 'booked', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-            [leadExists.rows[0].id]
-          );
-        }
       } else {
         reply = reply.replace(/BOOKING_REQUEST\|[^\n]+\n?/, '');
         reply = `I'm sorry, but ${bookingResult.error}. Would you like to try a different time?`;
