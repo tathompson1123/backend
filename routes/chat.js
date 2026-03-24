@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const Anthropic = require('@anthropic-ai/sdk');
+const { sendBookingEmails } = require('../utils/bookingEmail');
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
@@ -131,6 +132,20 @@ async function createBookingFromChat(userId, bookingData) {
       VALUES ($1, $2, $3, $4, $5, 1, $6)`,
       [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
     );
+
+    // Send booking confirmation emails (non-blocking)
+    sendBookingEmails({
+      userId,
+      bookingNumber,
+      customerName,
+      customerEmail,
+      customerPhone,
+      serviceName: service.name,
+      bookingDate,
+      startTime,
+      endTime,
+      price: service.price,
+    }).catch(err => console.error('Chat booking email error:', err.message));
 
     return {
       success: true,
