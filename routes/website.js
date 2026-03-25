@@ -561,11 +561,26 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
     const userId = req.user.userId;
     let { html_content, pages } = req.body;
 
+    // Ensure userId meta tag + global var exist in all pages before publishing
+    function ensureUserId(html) {
+      if (!html) return html;
+      if (!html.includes('__SORCE_USER_ID__')) {
+        html = html.replace('</head>', `  <script>window.__SORCE_USER_ID__='${userId}';window.__SORCE_API_URL__='${process.env.BACKEND_URL || 'https://backend-production-ab50.up.railway.app'}';</script>\n</head>`);
+      }
+      if (!html.includes('meta name="user-id"')) {
+        html = html.replace('</head>', `  <meta name="user-id" content="${userId}">\n</head>`);
+      }
+      return html;
+    }
+
+    html_content = ensureUserId(html_content);
+
     // Make HTML mobile responsive before publishing
     html_content = makeMobileResponsive(html_content);
-    
+
     if (pages) {
       Object.keys(pages).forEach(pageName => {
+        pages[pageName] = ensureUserId(pages[pageName]);
         pages[pageName] = makeMobileResponsive(pages[pageName]);
       });
     }
