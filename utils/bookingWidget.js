@@ -137,7 +137,7 @@ function generateBookingWidgetCode(userId, theme = {}) {
   overlay.addEventListener('click',function(e){if(e.target===overlay)close()});
 
   document.addEventListener('click',function(e){
-    var a=e.target.closest('a[href="#book-online"],a[href="/booking"]');
+    var a=e.target.closest('a[href="#book-online"],a[href="/booking"],a[href="#contact"]');
     if(a){e.preventDefault();open()}
   });
 

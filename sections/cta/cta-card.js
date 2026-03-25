@@ -20,7 +20,7 @@ module.exports = {
     headline:  { type: 'text', label: 'Headline',         default: 'Ready for a Transformation?' },
     subtitle:  { type: 'text', label: 'Subtitle',         default: 'Book your appointment today.' },
     ctaText:   { type: 'text', label: 'Primary CTA',      default: 'Book Now' },
-    ctaLink:   { type: 'url',  label: 'Primary CTA Link', default: '#contact' },
+    ctaLink:   { type: 'url',  label: 'Primary CTA Link', default: '#book-online' },
     ctaText2:  { type: 'text', label: 'Secondary CTA',    default: 'View Gallery' },
     ctaLink2:  { type: 'url',  label: 'Secondary CTA Link', default: '#gallery' },
   },
@@ -45,7 +45,7 @@ module.exports = {
         <h2 class="${s}-headline">${content.headline || 'Ready for a Transformation?'}</h2>
         <p class="${s}-subtitle">${content.subtitle || ''}</p>
         <div class="${s}-buttons">
-          <a href="${content.ctaLink || '#contact'}" class="${s}-btn-primary">${content.ctaText || 'Book Now'}</a>
+          <a href="${content.ctaLink || '#book-online'}" class="${s}-btn-primary">${content.ctaText || 'Book Now'}</a>
           <a href="${content.ctaLink2 || '#gallery'}" class="${s}-btn-secondary">${content.ctaText2 || 'View Gallery'}</a>
         </div>
       </div>

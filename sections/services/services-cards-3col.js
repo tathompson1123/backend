@@ -20,7 +20,7 @@ module.exports = {
     title: { type: 'text', label: 'Section Title', default: 'Our Services' },
     subtitle: { type: 'textarea', label: 'Section Subtitle', default: '' },
     ctaText: { type: 'text', label: 'CTA Button Text', default: 'View All Services' },
-    ctaLink: { type: 'url', label: 'CTA Button Link', default: '#contact' },
+    ctaLink: { type: 'url', label: 'CTA Button Link', default: '#book-online' },
     services: {
       type: 'array',
       label: 'Services',
@@ -48,7 +48,7 @@ module.exports = {
         <div class="${s}-card-content">
           <h3 class="${s}-card-title">${service.name || 'Service'}</h3>
           <p class="${s}-card-desc">${service.description || 'Description of this service.'}</p>
-          <a href="${service.link || '#contact'}" class="${s}-card-link">
+          <a href="${service.link || '#book-online'}" class="${s}-card-link">
             Learn More
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -73,7 +73,7 @@ module.exports = {
     
     ${content.ctaText ? `
     <div class="${s}-cta">
-      <a href="${content.ctaLink || '#contact'}" class="${s}-cta-btn">${content.ctaText}</a>
+      <a href="${content.ctaLink || '#book-online'}" class="${s}-cta-btn">${content.ctaText}</a>
     </div>
     ` : ''}
   </div>

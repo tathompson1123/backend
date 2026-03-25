@@ -23,7 +23,7 @@ module.exports = {
     body:        { type: 'text', label: 'Body Text',     default: '' },
     checkpoints: { type: 'array', label: 'Checkpoints',  itemSchema: { type: 'text' } },
     ctaText:     { type: 'text', label: 'CTA Button',    default: 'Book Now' },
-    ctaLink:     { type: 'url',  label: 'CTA Link',      default: '#contact' },
+    ctaLink:     { type: 'url',  label: 'CTA Link',      default: '#book-online' },
   },
 
   render(content, theme, sectionId = 'splitcta') {
@@ -51,7 +51,7 @@ module.exports = {
       <div class="${s}-checkpoints">
         ${checksHtml}
       </div>
-      ${content.ctaText !== '' ? `<a href="${content.ctaLink || '#contact'}" class="${s}-cta">${content.ctaText || 'Book Now'}</a>` : ''}
+      ${content.ctaText !== '' ? `<a href="${content.ctaLink || '#book-online'}" class="${s}-cta">${content.ctaText || 'Book Now'}</a>` : ''}
     </div>`;
 
     return `

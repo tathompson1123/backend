@@ -55,7 +55,7 @@ module.exports = {
           <div class="${s}-card-body">
             <div class="${s}-price">${svc.price || ''}</div>
             <ul class="${s}-features">${featuresHtml}</ul>
-            <a href="#contact" class="${s}-cta">Book Now</a>
+            <a href="#book-online" class="${s}-cta">Book Now</a>
           </div>
         </div>`;
     }).join('');

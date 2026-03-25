@@ -31,7 +31,7 @@ module.exports = {
     <h2 class="${s}-headline">${content.headline || 'Ready to Get Started?'}</h2>
     <p class="${s}-subtitle">${content.subtitle || 'Take the first step today.'}</p>
     <div class="${s}-buttons">
-      <a href="${content.ctaLink || '#contact'}" class="${s}-btn-primary">${content.ctaText || 'Get Started'}</a>
+      <a href="${content.ctaLink || '#book-online'}" class="${s}-btn-primary">${content.ctaText || 'Get Started'}</a>
       ${content.ctaText2 ? `<a href="${content.ctaLink2 || '#'}" class="${s}-btn-secondary">${content.ctaText2}</a>` : ''}
     </div>
     ${features.length > 0 ? `<div class="${s}-features">${featuresHtml}</div>` : ''}
