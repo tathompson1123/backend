@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const Anthropic = require('@anthropic-ai/sdk');
+const { authenticateToken } = require('../config/middleware');
 const { sendBookingEmails } = require('../utils/bookingEmail');
+const { getBusinessDateTime } = require('../utils/zipToTimezone');
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
@@ -30,8 +32,25 @@ router.post('/start', async (req, res) => {
 // Helper function to create booking from chat
 async function createBookingFromChat(userId, bookingData) {
   try {
-    const { serviceId, bookingDate, startTime, customerName, customerEmail, customerPhone } = bookingData;
-    
+    const { serviceId, bookingDate, startTime, customerName, customerEmail } = bookingData;
+    // Truncate phone to 50 chars and strip non-phone characters
+    const customerPhone = (bookingData.customerPhone || '').replace(/[^\d+\-() .ext]/gi, '').substring(0, 50);
+
+    // Validate business hours
+    const bookingDateObj = new Date(bookingDate + 'T12:00:00');
+    const bookingDayOfWeek = bookingDateObj.getDay();
+    const hoursCheck = await pool.query(
+      'SELECT is_open, open_time, close_time FROM business_hours WHERE user_id = $1 AND day_of_week = $2',
+      [userId, bookingDayOfWeek]
+    );
+    if (hoursCheck.rows.length === 0 || !hoursCheck.rows[0].is_open) {
+      return { success: false, error: 'we are closed on that day' };
+    }
+    const bizHours = hoursCheck.rows[0];
+    if (startTime < bizHours.open_time || startTime >= bizHours.close_time) {
+      return { success: false, error: 'that time is outside our business hours' };
+    }
+
     // Get service details
     const serviceResult = await pool.query(
       'SELECT duration_hours, price, name FROM services WHERE id = $1 AND user_id = $2',
@@ -95,8 +114,8 @@ async function createBookingFromChat(userId, bookingData) {
     let customerId;
     if (customerResult.rows.length === 0) {
       customerResult = await pool.query(
-        `INSERT INTO customers (user_id, name, email, phone, created_at)
-         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+        `INSERT INTO customers (user_id, name, email, phone, total_jobs, lifetime_value, created_at)
+         VALUES ($1, $2, $3, $4, 0, 0, CURRENT_TIMESTAMP)
          RETURNING id`,
         [userId, customerName, customerEmail, customerPhone]
       );
@@ -104,7 +123,14 @@ async function createBookingFromChat(userId, bookingData) {
       console.log(`✅ Chat booking: created NEW customer ${customerId} (${customerName}, ${customerEmail})`);
     } else {
       customerId = customerResult.rows[0].id;
-      console.log(`✅ Chat booking: found EXISTING customer ${customerId}`);
+      // Update name, phone, email on existing customer
+      await pool.query(
+        `UPDATE customers SET name = $1, phone = COALESCE(NULLIF($2, ''), phone),
+         email = COALESCE(NULLIF($3, ''), email), updated_at = CURRENT_TIMESTAMP
+         WHERE id = $4`,
+        [customerName, customerPhone, customerEmail, customerId]
+      );
+      console.log(`✅ Chat booking: found & updated EXISTING customer ${customerId}`);
     }
 
     // Create booking
@@ -133,6 +159,16 @@ async function createBookingFromChat(userId, bookingData) {
       )
       VALUES ($1, $2, $3, $4, $5, 1, $6)`,
       [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
+    );
+
+    // Update customer with service info
+    await pool.query(
+      `UPDATE customers SET last_service = $1, last_service_date = $2,
+       total_jobs = COALESCE(total_jobs, 0) + 1,
+       lifetime_value = COALESCE(lifetime_value, 0) + COALESCE($3, 0),
+       updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [service.name, bookingDate, service.price || 0, customerId]
     );
 
     console.log(`✅ Chat booking created: #${bookingNumber} customer=${customerId} employee=${employeeId}`);
@@ -190,7 +226,7 @@ router.post('/message', async (req, res) => {
     // Get user's business info
     const userInfoResult = await pool.query(
       `SELECT u.business_name, u.phone, u.email,
-              bi.address, bi.city, bi.state
+              bi.address, bi.city, bi.state, bi.zip_code
        FROM users u
        LEFT JOIN business_information bi ON u.id = bi.user_id
        WHERE u.id = $1`,
@@ -223,6 +259,9 @@ router.post('/message', async (req, res) => {
       .filter(h => h.is_open)
       .map(h => `${daysMap[h.day_of_week]}: ${h.open_time} - ${h.close_time}`)
       .join('\n');
+
+    // Get timezone-aware date from business location
+    const bizDateTime = getBusinessDateTime(userInfo.state, userInfo.zip_code);
 
     const systemPrompt = `You are ${agentConfig.agentName || 'Kurt'}, a ${agentConfig.personality || 'friendly'} assistant for ${userInfo.business_name || 'our business'} helping customers book services.
 
@@ -278,9 +317,11 @@ IMPORTANT RULES:
 - Only ask for ONE piece of information per message
 - Don't skip stages - follow the order
 - Use natural, conversational language
-- Convert dates to YYYY-MM-DD format (today is ${new Date().toISOString().split('T')[0]})
+- NEVER parrot back or repeat what the customer just said. Don't restate their words, situation, or feelings back to them — it sounds robotic. Instead, respond naturally and move the conversation forward. For example, if they say "a mouse got in my car and I'm grossed out", do NOT say "Having a mouse in your car would definitely make anyone feel grossed out." Just acknowledge briefly ("Oh no, we can definitely help with that!") and move to your recommendation.
+- Convert dates to YYYY-MM-DD format. Today is ${bizDateTime.fullDate} (${bizDateTime.isoDate}), current time is ${bizDateTime.currentTime}. Use this to calculate relative dates like "Tuesday", "tomorrow", "next week", etc. Make sure the day of the week matches correctly.
 - Convert times to 24-hour format (2pm = 14:00, 9am = 09:00)
 - Only send BOOKING_REQUEST when you have ALL 6 pieces of information
+- For customerName in BOOKING_REQUEST, use ONLY the name the customer explicitly stated (e.g., if they said "I'm Kathy" or "My name is Kathy", use "Kathy"). NEVER use random words from the conversation as the name. If unclear, ask them to confirm their name before booking.
 - Don't mention "BOOKING_REQUEST" to the customer - it's internal
 - If they're just asking questions, answer them and don't force the booking flow`;
 
@@ -407,6 +448,58 @@ IMPORTANT RULES:
   } catch (error) {
     console.error('Error processing message:', error.message);
     res.status(500).json({ error: 'Failed to process message' });
+  }
+});
+
+// List all conversations for the authenticated user (dashboard)
+router.get('/conversations', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const conversations = await pool.query(
+      `SELECT cc.id, cc.source, cc.created_at, cc.updated_at,
+              (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = cc.id) AS message_count,
+              (SELECT cm.content FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'user' ORDER BY cm.created_at ASC LIMIT 1) AS first_message,
+              CASE
+                WHEN EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'assistant' AND (cm.content ILIKE '%booking #%' OR cm.content ILIKE '%you''re all set%')) THEN 'booked'
+                WHEN (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'user') <= 1 THEN 'no_response'
+                ELSE 'no_booking'
+              END AS outcome
+       FROM chat_conversations cc
+       WHERE cc.user_id = $1
+         AND (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'user') > 0
+       ORDER BY cc.updated_at DESC`,
+      [userId]
+    );
+    res.json({ conversations: conversations.rows });
+  } catch (error) {
+    console.error('Error fetching conversations:', error.message);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+// Get messages for a specific conversation (dashboard)
+router.get('/conversations/:id/messages', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    // Verify conversation belongs to this user
+    const conv = await pool.query(
+      'SELECT id FROM chat_conversations WHERE id = $1 AND user_id = $2',
+      [req.params.id, userId]
+    );
+    if (conv.rows.length === 0) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    const messages = await pool.query(
+      `SELECT role, content, created_at
+       FROM chat_messages
+       WHERE conversation_id = $1
+       ORDER BY created_at ASC`,
+      [req.params.id]
+    );
+    res.json({ messages: messages.rows });
+  } catch (error) {
+    console.error('Error fetching messages:', error.message);
+    res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
 

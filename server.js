@@ -76,6 +76,7 @@ const smsRoutes = require('./routes/sms');
 const smsTelnyxRoutes = require('./routes/sms-telnyx');
 const marketResearchRoutes = require('./routes/market-research');
 const chatRoutes = require('./routes/chat');
+const rewardsRoutes = require('./routes/rewards');
 const templateRoutes = require('./routes/templates');
 const userRoutes = require('./routes/user');
 const reviewConfigRoutes = require('./routes/review-config');
@@ -166,6 +167,7 @@ app.use('/api/webhooks', embedCors, webhookRoutes);
 // Email marketing campaigns
 const emailCampaignRoutes = require('./routes/email-campaigns');
 app.use('/api/email-campaigns', emailCampaignRoutes);
+app.use('/api/rewards', rewardsRoutes);
 
 app.get('/api/groups', (req, res) => {
   res.json({ success: true, groups: [] });
@@ -914,6 +916,30 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.log('✅ Missed calls table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify missed_calls table:', e.message);
+  }
+
+  // Rewards config table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rewards_config (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        enabled BOOLEAN DEFAULT false,
+        bookings_required INTEGER DEFAULT 5,
+        reward_description TEXT DEFAULT '',
+        coupon_after_booking BOOLEAN DEFAULT false,
+        coupon_description TEXT DEFAULT '',
+        coupon_frequency VARCHAR(20) DEFAULT 'every',
+        sms_timing VARCHAR(20) DEFAULT 'after_completed',
+        sms_delay_hours INTEGER DEFAULT 1,
+        sms_template TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Rewards config table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify rewards_config table:', e.message);
   }
 })();
 

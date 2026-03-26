@@ -17,8 +17,8 @@ router.get('/', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
 
     const result = await pool.query(
-      `SELECT * FROM leads 
-       WHERE user_id = $1 
+      `SELECT * FROM leads
+       WHERE user_id = $1 AND status != 'booked'
        ORDER BY created_at DESC`,
       [userId]
     );
@@ -257,9 +257,8 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 });
 
 // ============================================
-// POST - Send manual SMS to lead (SendBlue)
+// POST - Send manual SMS to lead (Twilio)
 // ============================================
-// Around line 250 - Update send-sms endpoint
 router.post('/:leadId/send-sms', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {
     const { leadId } = req.params;

@@ -443,4 +443,30 @@ router.put('/:id/notes', authenticateToken, async (req, res) => {
   }
 });
 
+// DELETE - Delete a booking
+router.delete('/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    // Delete booking items first
+    await pool.query('DELETE FROM booking_items WHERE booking_id = $1', [id]);
+
+    const result = await pool.query(
+      'DELETE FROM bookings WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    console.log(`✅ Booking deleted: #${result.rows[0].booking_number}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting booking:', error.message);
+    res.status(500).json({ error: 'Failed to delete booking' });
+  }
+});
+
 module.exports = router;
