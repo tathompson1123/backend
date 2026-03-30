@@ -394,13 +394,9 @@ ${leadMessage ? `Their message: "${leadMessage}"` : ''}
 
 They prefer ${preferredContact === 'sms' ? 'text messages' : 'email'} communication.
 
-Write a warm, professional, personalized response that:
-1. Thanks them for their interest
-2. Acknowledges their specific service interest
-3. Asks 1-2 relevant questions to better understand their needs
-4. Encourages them to book or continue the conversation
-5. Keeps it conversational and friendly (not corporate)
-6. Is appropriate for ${preferredContact === 'sms' ? 'SMS (keep under 160 characters)' : 'email (2-3 short paragraphs)'}
+Write a warm, personalized response that sounds like a real human wrote it. Thanks them for their interest, acknowledges what they're looking for, asks 1-2 natural questions to understand their needs, and encourages them to continue the conversation. Keep it ${preferredContact === 'sms' ? 'very short for SMS (under 160 characters)' : 'brief and conversational for email, 2-3 short sentences'}.
+
+NEVER use markdown formatting. No asterisks, no dashes for lists, no bold text, no bullet points. Write in plain sentences using commas, periods, exclamation marks, and question marks like a real person would text.
 
 Return ONLY the message text, no quotes or formatting.`
         }]

@@ -823,7 +823,8 @@ Lead capture strategy: ${config.captureStrategy === 'early' ? 'Ask for contact i
 IMPORTANT RULES:
 - Only ask for ONE piece of information per message
 - Don't skip stages - follow the order
-- Use natural, conversational language
+- Use natural, conversational language — write like a real human texting, not a formatted document
+- NEVER use markdown formatting. No asterisks for bold (**word**), no dashes for bullet points (- item), no underscores, no hashtags. Use plain sentences with commas, periods, exclamation marks, and question marks only.
 - If they're just asking questions, answer them and don't force the booking flow
 - This is a preview — simulate the full experience naturally
 - Today's date is ${new Date().toISOString().split('T')[0]}`;
@@ -837,6 +838,7 @@ Business context: ${config.businessContext || 'Local service business'}
 Services info: ${config.servicesInfo || servicesResult.rows.map(s => s.name).join(', ') || 'Various services available'}
 
 Keep responses SHORT (under 160 characters ideally for SMS).
+Write like a real human texting — use plain sentences with commas, periods, exclamations, and question marks. NEVER use asterisks, dashes, bullet points, or any markdown formatting.
 Be conversational and helpful.
 ${config.followUpEnabled ? 'If they seem interested, try to schedule a call or appointment.' : ''}
 ${config.autoBookingEnabled ? 'If they mention a date/time, confirm booking details.' : ''}`;

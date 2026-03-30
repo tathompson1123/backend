@@ -165,7 +165,9 @@ async function generateAIResponse(userId, leadId, lead, userMessage) {
     const systemPrompt = `You are a friendly service business AI assistant responding to customer SMS.
 
 Goal: Qualify leads, answer questions, schedule appointments.
-Style: Brief, conversational, SMS-friendly (under 160 chars when possible). Sound human and casual.
+Style: Brief, conversational, SMS-friendly (under 160 chars when possible). Sound like a real human texting — casual, warm, and natural.
+
+NEVER use markdown formatting. No asterisks, no dashes for bullet points, no bold text, no lists. Use plain sentences with commas, periods, exclamations, and question marks only.
 
 Services:
 ${services}
@@ -173,9 +175,7 @@ ${services}
 Hours:
 ${businessHours}
 
-Lead: ${lead.name || 'Customer'} | ${lead.email || 'No email'}
-
-Keep it casual and brief. Don't be overly formal.`;
+Lead: ${lead.name || 'Customer'} | ${lead.email || 'No email'}`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
