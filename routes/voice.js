@@ -13,37 +13,17 @@ const BACKEND_URL = process.env.BACKEND_URL
 router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
   const hangupXml = '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>';
   try {
-    const { From, To, CallSid, ForwardedFrom } = req.body;
-    console.log(`📞 Forwarded missed call: ${From} → ${To} (ForwardedFrom: ${ForwardedFrom}, CallSid: ${CallSid})`);
+    const { From, To, CallSid } = req.body;
+    console.log(`📞 Incoming call: ${From} → ${To} (CallSid: ${CallSid})`);
 
-    // Match ForwardedFrom (the business line that forwarded the call) against
-    // the business phone number stored in each user's missed call agent config
-    const last10 = (p) => (p || '').replace(/\D/g, '').slice(-10);
-    const businessDigits = last10(ForwardedFrom);
-
-    let userResult;
-    if (businessDigits) {
-      userResult = await pool.query(`
-        SELECT u.id, u.business_name
-        FROM users u
-        JOIN agent_configs ac ON ac.user_id = u.id
-        WHERE ac.agent_type = 'missed_call'
-          AND ac.enabled = true
-          AND RIGHT(REGEXP_REPLACE(ac.config->>'forwardingNumber', '[^0-9]', '', 'g'), 10) = $1
-        LIMIT 1
-      `, [businessDigits]);
-    }
-
-    // Fallback: look up by SMS Agent Number (handles direct test calls)
-    if (!userResult || userResult.rows.length === 0) {
-      userResult = await pool.query(
-        'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
-        [To]
-      );
-    }
+    // Look up user by their SMS Agent Number (the number listed on Google Business / website)
+    const userResult = await pool.query(
+      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
+      [To]
+    );
 
     if (userResult.rows.length === 0) {
-      console.log(`⚠️ No user found for ForwardedFrom=${ForwardedFrom} To=${To}`);
+      console.log(`⚠️ No user found for ${To}`);
       res.type('text/xml');
       return res.send(hangupXml);
     }
@@ -230,8 +210,6 @@ router.get('/config', authenticateToken, async (req, res) => {
         config: {
           enabled: false,
           smsEnabled: true,
-          forwardingNumber: '',
-          ringTimeout: 20,
           delayMin: 30,
           delayMax: 60,
           training: {
@@ -263,7 +241,7 @@ router.post('/config', authenticateToken, async (req, res) => {
     const { config, smsTemplate } = req.body;
 
     // Whitelist config fields
-    const allowedFields = ['enabled', 'smsEnabled', 'forwardingNumber', 'ringTimeout', 'delayMin', 'delayMax', 'training'];
+    const allowedFields = ['enabled', 'smsEnabled', 'delayMin', 'delayMax', 'training'];
     const safeConfig = {};
     for (const key of allowedFields) {
       if (config[key] !== undefined) safeConfig[key] = config[key];
@@ -290,11 +268,7 @@ router.post('/config', authenticateToken, async (req, res) => {
 router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { forwardingNumber, ringTimeout, smsTemplate, training } = req.body;
-
-    if (!forwardingNumber) {
-      return res.status(400).json({ error: 'Forwarding phone number is required' });
-    }
+    const { smsTemplate, training } = req.body;
 
     // Get user's phone numbers
     const userResult = await pool.query(
@@ -316,11 +290,8 @@ router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) =
     const config = {
       enabled: true,
       smsEnabled: true,
-      forwardingNumber,
-      ringTimeout: ringTimeout || 20,
       delayMin: req.body.delayMin || 30,
       delayMax: req.body.delayMax || 60,
-      callForwardingActive: hasTwilio,
       training: training || {
         responseTone: 'friendly',
         agentName: '',
