@@ -16,7 +16,7 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     const { From, To, CallSid } = req.body;
     console.log(`📞 Incoming call: ${From} → ${To} (CallSid: ${CallSid})`);
 
-    // Look up user by their SMS Agent Number (the number listed on Google Business / website)
+    // Look up user by their SMS Agent Number
     const userResult = await pool.query(
       'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
       [To]
@@ -30,12 +30,11 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
 
     const user = userResult.rows[0];
     const configResult = await pool.query(
-      'SELECT config, sms_template FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
       [user.id, 'missed_call']
     );
 
     const config = configResult.rows[0]?.config;
-    const smsTemplate = configResult.rows[0]?.sms_template;
 
     if (!config?.enabled) {
       console.log(`⚠️ Missed call agent not enabled for user ${user.id}`);
@@ -43,49 +42,27 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
       return res.send(hangupXml);
     }
 
-    console.log(`📵 Missed call from ${From} — creating lead and scheduling text-back`);
-
-    // Find or create lead
-    let leadResult = await pool.query(
-      'SELECT id FROM leads WHERE phone = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
-      [From, user.id]
-    );
-
-    let leadId;
-    if (leadResult.rows.length === 0) {
-      const newLead = await pool.query(
-        `INSERT INTO leads (user_id, name, phone, source, status, sms_consent, created_at)
-         VALUES ($1, $2, $3, 'missed_call', 'new', true, NOW()) RETURNING id`,
-        [user.id, From, From]
-      );
-      leadId = newLead.rows[0].id;
-      console.log(`📝 New lead ${leadId} from missed call ${From}`);
-    } else {
-      leadId = leadResult.rows[0].id;
+    const ringToNumber = config?.ringToNumber;
+    if (!ringToNumber) {
+      // No ring-to number configured — hang up and treat as missed immediately
+      console.log(`⚠️ No ringToNumber set for user ${user.id}, hanging up`);
+      res.type('text/xml');
+      return res.send(hangupXml);
     }
 
-    // Log the missed call
-    await pool.query(
-      `INSERT INTO missed_calls (user_id, caller_phone, called_number, call_sid, call_status, lead_id, created_at)
-       VALUES ($1, $2, $3, $4, 'no-answer', $5, NOW())`,
-      [user.id, From, To, CallSid, leadId]
-    );
+    // Ring through to the business owner's phone.
+    // The /status callback fires when the call ends and handles missed vs. answered.
+    const ringTimeout = config?.ringTimeout || 20;
+    const statusUrl = `${BACKEND_URL}/api/voice/status`;
+    console.log(`📲 Ringing ${ringToNumber} for user ${user.id} (timeout: ${ringTimeout}s)`);
 
-    // Schedule text-back SMS
-    if (config?.smsEnabled && smsTemplate) {
-      const minDelay = config.delayMin || 30;
-      const maxDelay = config.delayMax || 60;
-      const delaySeconds = minDelay + Math.floor(Math.random() * (maxDelay - minDelay));
-      await pool.query(
-        `UPDATE leads SET status = 'sms_pending', sms_scheduled_at = NOW() + ($1 * INTERVAL '1 second') WHERE id = $2`,
-        [delaySeconds, leadId]
-      );
-      console.log(`⏰ Text-back scheduled for lead ${leadId} in ${delaySeconds}s`);
-    }
-
-    // Hang up silently — caller's voicemail on their carrier handles the rest
     res.type('text/xml');
-    res.send(hangupXml);
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial action="${statusUrl}" timeout="${ringTimeout}" answerOnBridge="true">
+    <Number>${ringToNumber}</Number>
+  </Dial>
+</Response>`);
   } catch (err) {
     console.error('❌ Voice webhook error:', err.message);
     res.type('text/xml');
@@ -210,6 +187,8 @@ router.get('/config', authenticateToken, async (req, res) => {
         config: {
           enabled: false,
           smsEnabled: true,
+          ringToNumber: '',
+          ringTimeout: 20,
           delayMin: 30,
           delayMax: 60,
           training: {
@@ -241,7 +220,7 @@ router.post('/config', authenticateToken, async (req, res) => {
     const { config, smsTemplate } = req.body;
 
     // Whitelist config fields
-    const allowedFields = ['enabled', 'smsEnabled', 'delayMin', 'delayMax', 'training'];
+    const allowedFields = ['enabled', 'smsEnabled', 'ringToNumber', 'ringTimeout', 'delayMin', 'delayMax', 'training'];
     const safeConfig = {};
     for (const key of allowedFields) {
       if (config[key] !== undefined) safeConfig[key] = config[key];
@@ -268,7 +247,11 @@ router.post('/config', authenticateToken, async (req, res) => {
 router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { smsTemplate, training } = req.body;
+    const { ringToNumber, ringTimeout, smsTemplate, training } = req.body;
+
+    if (!ringToNumber) {
+      return res.status(400).json({ error: 'Your phone number (where calls ring to) is required.' });
+    }
 
     // Get user's phone numbers
     const userResult = await pool.query(
@@ -290,6 +273,8 @@ router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) =
     const config = {
       enabled: true,
       smsEnabled: true,
+      ringToNumber,
+      ringTimeout: ringTimeout || 20,
       delayMin: req.body.delayMin || 30,
       delayMax: req.body.delayMax || 60,
       training: training || {
@@ -427,6 +412,26 @@ router.get('/status', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error checking voice status:', err.message);
     res.status(500).json({ error: 'Failed to check status' });
+  }
+});
+
+// ============================================
+// POST /undeploy — Disable missed call agent (protected)
+// ============================================
+router.post('/undeploy', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    await pool.query(
+      `UPDATE agent_configs
+       SET config = jsonb_set(config, '{enabled}', 'false'::jsonb), enabled = false, updated_at = NOW()
+       WHERE user_id = $1 AND agent_type = 'missed_call'`,
+      [userId]
+    );
+    console.log(`✅ Missed call agent disabled for user ${userId}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error undeploying voice agent:', err.message);
+    res.status(500).json({ error: 'Failed to disable agent' });
   }
 });
 
