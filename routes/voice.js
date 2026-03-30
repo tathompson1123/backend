@@ -11,24 +11,41 @@ const BACKEND_URL = process.env.BACKEND_URL
 // POST /webhook — Twilio voice webhook (public, returns TwiML)
 // ============================================
 router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
+  const hangupXml = '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>';
   try {
-    const { From, To, CallSid } = req.body;
-    console.log(`📞 Incoming call: ${From} → ${To} (CallSid: ${CallSid})`);
+    const { From, To, CallSid, ForwardedFrom } = req.body;
+    console.log(`📞 Forwarded missed call: ${From} → ${To} (ForwardedFrom: ${ForwardedFrom}, CallSid: ${CallSid})`);
 
-    // Find user by their Twilio or Telnyx phone number
-    const userResult = await pool.query(
-      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
-      [To]
-    );
+    // Primary lookup: match ForwardedFrom (the business line) against the
+    // "Local Business Phone Number" the user configured in the missed call agent
+    const last10 = (p) => (p || '').replace(/\D/g, '').slice(-10);
+    const businessDigits = last10(ForwardedFrom);
+
+    let userResult;
+    if (businessDigits) {
+      userResult = await pool.query(`
+        SELECT u.id, u.business_name
+        FROM users u
+        JOIN agent_configs ac ON ac.user_id = u.id
+        WHERE ac.agent_type = 'missed_call'
+          AND ac.enabled = true
+          AND RIGHT(REGEXP_REPLACE(ac.config->>'forwardingNumber', '[^0-9]', '', 'g'), 10) = $1
+        LIMIT 1
+      `, [businessDigits]);
+    }
+
+    // Fallback: look up by the SMS Agent Number (To) in case ForwardedFrom is absent
+    if (!userResult || userResult.rows.length === 0) {
+      userResult = await pool.query(
+        'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
+        [To]
+      );
+    }
 
     if (userResult.rows.length === 0) {
-      console.log(`⚠️ No user found for voice number ${To}`);
+      console.log(`⚠️ No user found for ForwardedFrom=${ForwardedFrom} To=${To}`);
       res.type('text/xml');
-      return res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">Sorry, this number is not currently active.</Say>
-  <Hangup/>
-</Response>`);
+      return res.send(hangupXml);
     }
 
     const user = userResult.rows[0];
@@ -45,11 +62,7 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     if (!config?.enabled) {
       console.log(`⚠️ Missed call agent not enabled for user ${user.id}`);
       res.type('text/xml');
-      return res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">Sorry, we're unable to take your call right now. Please try again later.</Say>
-  <Hangup/>
-</Response>`);
+      return res.send(hangupXml);
     }
 
     // This call was forwarded from the business line because it was missed — handle it directly
