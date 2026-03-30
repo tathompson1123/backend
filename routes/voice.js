@@ -430,4 +430,28 @@ router.get('/status', authenticateToken, async (req, res) => {
   }
 });
 
+// ============================================
+// POST /fix-webhook — Set voice webhook on existing number (protected)
+// Fixes numbers purchased before voice webhook was added at purchase time
+// ============================================
+router.post('/fix-webhook', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const userResult = await pool.query(
+      'SELECT twilio_phone_number, twilio_phone_sid FROM users WHERE id = $1',
+      [userId]
+    );
+    const user = userResult.rows[0];
+    if (!user?.twilio_phone_sid) {
+      return res.status(400).json({ error: 'No Twilio number found for this account' });
+    }
+    const voiceWebhookUrl = `${BACKEND_URL}/api/voice/webhook`;
+    await setVoiceWebhook(user.twilio_phone_sid, voiceWebhookUrl);
+    res.json({ success: true, number: user.twilio_phone_number, webhookUrl: voiceWebhookUrl });
+  } catch (err) {
+    console.error('Error fixing voice webhook:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

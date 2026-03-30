@@ -61,12 +61,14 @@ async function purchasePhoneNumber({ zipCode, areaCode, userId }) {
     const selectedNumber = availableNumbers[0].phoneNumber;
 
     // 5. Purchase the number
-    const webhookUrl = `${process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app'}/api/sms/webhook`;
+    const baseUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
     const purchasedNumber = await twilioClient.incomingPhoneNumbers.create({
       phoneNumber: selectedNumber,
       friendlyName: `SORCE-User-${userId}`,
-      smsUrl: webhookUrl,
-      smsMethod: 'POST'
+      smsUrl: `${baseUrl}/api/sms/webhook`,
+      smsMethod: 'POST',
+      voiceUrl: `${baseUrl}/api/voice/webhook`,
+      voiceMethod: 'POST'
     });
 
     console.log(`✅ Purchased number: ${selectedNumber} (zip: ${zipCode})`);
