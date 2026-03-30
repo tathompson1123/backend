@@ -13,108 +13,52 @@ const BACKEND_URL = process.env.BACKEND_URL
 router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
   const hangupXml = '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>';
   try {
-    const { From, To, CallSid, ForwardedFrom } = req.body;
-    console.log(`📞 Forwarded missed call: ${From} → ${To} (ForwardedFrom: ${ForwardedFrom}, CallSid: ${CallSid})`);
+    const { From, To, CallSid } = req.body;
+    console.log(`📞 Incoming call: ${From} → ${To} (CallSid: ${CallSid})`);
 
-    // Primary lookup: match ForwardedFrom (the business line) against the
-    // "Local Business Phone Number" the user configured in the missed call agent
-    const last10 = (p) => (p || '').replace(/\D/g, '').slice(-10);
-    const businessDigits = last10(ForwardedFrom);
-
-    let userResult;
-    if (businessDigits) {
-      userResult = await pool.query(`
-        SELECT u.id, u.business_name
-        FROM users u
-        JOIN agent_configs ac ON ac.user_id = u.id
-        WHERE ac.agent_type = 'missed_call'
-          AND ac.enabled = true
-          AND RIGHT(REGEXP_REPLACE(ac.config->>'forwardingNumber', '[^0-9]', '', 'g'), 10) = $1
-        LIMIT 1
-      `, [businessDigits]);
-    }
-
-    // Fallback: look up by the SMS Agent Number (To) in case ForwardedFrom is absent
-    if (!userResult || userResult.rows.length === 0) {
-      userResult = await pool.query(
-        'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
-        [To]
-      );
-    }
+    // Look up user by their SMS Agent Number
+    const userResult = await pool.query(
+      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
+      [To]
+    );
 
     if (userResult.rows.length === 0) {
-      console.log(`⚠️ No user found for ForwardedFrom=${ForwardedFrom} To=${To}`);
+      console.log(`⚠️ No user found for SMS agent number ${To}`);
       res.type('text/xml');
       return res.send(hangupXml);
     }
 
     const user = userResult.rows[0];
 
-    // Get missed_call agent config
     const configResult = await pool.query(
-      'SELECT config, sms_template FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
       [user.id, 'missed_call']
     );
 
     const config = configResult.rows[0]?.config;
-    const smsTemplate = configResult.rows[0]?.sms_template;
 
-    if (!config?.enabled) {
-      console.log(`⚠️ Missed call agent not enabled for user ${user.id}`);
+    if (!config?.enabled || !config?.forwardingNumber) {
+      console.log(`⚠️ Missed call agent not configured for user ${user.id}`);
       res.type('text/xml');
       return res.send(hangupXml);
     }
 
-    // This call was forwarded from the business line because it was missed — handle it directly
-    console.log(`📵 Missed call forwarded from business line: ${From}`);
+    const ringTimeout = config.ringTimeout || 20;
+    const actionUrl = `${BACKEND_URL}/api/voice/status`;
+    console.log(`📲 Ringing ${config.forwardingNumber} (timeout: ${ringTimeout}s)`);
 
-    // Find or create lead from caller phone
-    let leadResult = await pool.query(
-      'SELECT id FROM leads WHERE phone = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
-      [From, user.id]
-    );
-
-    let leadId;
-    if (leadResult.rows.length === 0) {
-      const newLead = await pool.query(
-        `INSERT INTO leads (user_id, name, phone, source, status, sms_consent, created_at)
-         VALUES ($1, $2, $3, 'missed_call', 'new', true, NOW())
-         RETURNING id`,
-        [user.id, From, From]
-      );
-      leadId = newLead.rows[0].id;
-      console.log(`📝 New lead ${leadId} from missed call ${From}`);
-    } else {
-      leadId = leadResult.rows[0].id;
-    }
-
-    // Log the missed call
-    await pool.query(
-      `INSERT INTO missed_calls (user_id, caller_phone, called_number, call_sid, call_status, lead_id, created_at)
-       VALUES ($1, $2, $3, $4, 'no-answer', $5, NOW())`,
-      [user.id, From, To, CallSid, leadId]
-    );
-
-    // Schedule text-back SMS
-    if (config?.smsEnabled && smsTemplate) {
-      const minDelay = config.delayMin || 30;
-      const maxDelay = config.delayMax || 60;
-      const delaySeconds = minDelay + Math.floor(Math.random() * (maxDelay - minDelay));
-      await pool.query(
-        `UPDATE leads SET status = 'sms_pending', sms_scheduled_at = NOW() + ($1 * INTERVAL '1 second') WHERE id = $2`,
-        [delaySeconds, leadId]
-      );
-      console.log(`⏰ Text-back scheduled for lead ${leadId} in ${delaySeconds}s`);
-    }
-
-    // Hang up silently — the business line's voicemail handles the caller,
-    // the SMS text-back is already scheduled above
+    // Ring the user's answering phone — status callback handles missed call logic
     res.type('text/xml');
-    res.send('<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial timeout="${ringTimeout}" action="${actionUrl}" method="POST">
+    <Number>${config.forwardingNumber}</Number>
+  </Dial>
+</Response>`);
   } catch (err) {
     console.error('❌ Voice webhook error:', err.message);
     res.type('text/xml');
-    res.send('<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>');
+    res.send(hangupXml);
   }
 });
 
