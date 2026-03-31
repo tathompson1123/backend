@@ -270,12 +270,13 @@ function buildOrganicSchemaFromContent(content, { businessName, phone, phoneClea
             floatBadge: hero.floatBadge || '10+',
             floatBadgeLabel: hero.floatBadgeLabel || 'Years Experience',
           }},
-          { id: 'estimate', template: 'lead-magnet-teaser-landscaping', content: {
-            badge: 'AI Design Preview',
-            headline: hero.leadMagnetHeadline || 'See Your Dream Yard Before We Break Ground',
-            subheadline: hero.leadMagnetSubheadline || 'Enter your address, pick your features, and get an AI-generated design plus instant cost estimate.',
-            ctaText: hero.leadMagnetCtaText || 'Design My Yard',
-          }},
+          // LEAD MAGNET DISABLED
+          // { id: 'estimate', template: 'lead-magnet-teaser-landscaping', content: {
+          //   badge: 'AI Design Preview',
+          //   headline: hero.leadMagnetHeadline || 'See Your Dream Yard Before We Break Ground',
+          //   subheadline: hero.leadMagnetSubheadline || 'Enter your address, pick your features, and get an AI-generated design plus instant cost estimate.',
+          //   ctaText: hero.leadMagnetCtaText || 'Design My Yard',
+          // }},
           { id: 'importance', template: 'importance-split', content: {
             badge: importance.badge || 'Why It Matters',
             headline: importance.headline || 'Why Your Outdoor Space Matters',
@@ -371,9 +372,10 @@ Return this exact JSON with real, compelling content for this specific business:
     "subtitle": "2-3 sentence value proposition specific to this business",
     "floatBadge": "10+",
     "floatBadgeLabel": "Years Experience",
-    "leadMagnetHeadline": "See Your Dream Yard Before We Break Ground",
-    "leadMagnetSubheadline": "Enter your address, pick your features, and get an AI-generated design plus instant cost estimate.",
-    "leadMagnetCtaText": "Design My Yard"
+    // LEAD MAGNET DISABLED
+    // "leadMagnetHeadline": "See Your Dream Yard Before We Break Ground",
+    // "leadMagnetSubheadline": "Enter your address, pick your features, and get an AI-generated design plus instant cost estimate.",
+    // "leadMagnetCtaText": "Design My Yard"
   },
   "importance": {
     "badge": "Why It Matters",
@@ -522,16 +524,17 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "locationText": "Serving ${areaText || 'Your Area'}"
           }
         },
-        {
-          "id": "estimate",
-          "template": "lead-magnet-teaser-auto",
-          "content": {
-            "badge": "Free Instant Quote",
-            "headline": "See Exactly What Your Detail Will Cost",
-            "subheadline": "Click the areas of your vehicle you want detailed — get an itemized price breakdown in seconds.",
-            "ctaText": "Build My Custom Quote"
-          }
-        },
+        // LEAD MAGNET DISABLED
+        // {
+        //   "id": "estimate",
+        //   "template": "lead-magnet-teaser-auto",
+        //   "content": {
+        //     "badge": "Free Instant Quote",
+        //     "headline": "See Exactly What Your Detail Will Cost",
+        //     "subheadline": "Click the areas of your vehicle you want detailed — get an itemized price breakdown in seconds.",
+        //     "ctaText": "Build My Custom Quote"
+        //   }
+        // },
         {
           "id": "reviews",
           "template": "review-marquee",
@@ -920,16 +923,17 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "backgroundImage": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1920"
           }
         },
-        {
-          "id": "estimate",
-          "template": "lead-magnet-teaser-renovation",
-          "content": {
-            "badge": "Instant Project Estimate",
-            "headline": "Get a Ballpark Before You Commit to Anything",
-            "subheadline": "Answer a few quick questions about your project and get an honest cost range — no sales pressure.",
-            "ctaText": "Estimate My Project"
-          }
-        },
+        // LEAD MAGNET DISABLED
+        // {
+        //   "id": "estimate",
+        //   "template": "lead-magnet-teaser-renovation",
+        //   "content": {
+        //     "badge": "Instant Project Estimate",
+        //     "headline": "Get a Ballpark Before You Commit to Anything",
+        //     "subheadline": "Answer a few quick questions about your project and get an honest cost range — no sales pressure.",
+        //     "ctaText": "Estimate My Project"
+        //   }
+        // },
         {
           "id": "importance",
           "template": "importance-split",
@@ -1179,15 +1183,16 @@ function buildPhotographyMultiPagePrompt({ businessInfo, businessName, phone, ph
             "overlayOpacity": "0.12"
           }
         },
-        {
-          "id": "estimate",
-          "template": "lead-magnet-photography",
-          "content": {
-            "headline": "Find Your Perfect Package",
-            "subheadline": "Answer 4 quick questions and discover which package fits your vision.",
-            "ctaText": "Find My Package"
-          }
-        },
+        // LEAD MAGNET DISABLED
+        // {
+        //   "id": "estimate",
+        //   "template": "lead-magnet-photography",
+        //   "content": {
+        //     "headline": "Find Your Perfect Package",
+        //     "subheadline": "Answer 4 quick questions and discover which package fits your vision.",
+        //     "ctaText": "Find My Package"
+        //   }
+        // },
         {
           "id": "gallery-home",
           "template": "gallery-masonry-full-width",
@@ -1790,16 +1795,17 @@ Generate a JSON object with this EXACT structure. Fill in compelling, profession
             "locationText": "Serving ${locationSnippet}"
           }
         },
-        {
-          "id": "estimate",
-          "template": "lead-magnet-teaser-cleaning",
-          "content": {
-            "badge": "Home Health Analyzer",
-            "headline": "What's Hiding in Your Carpet?",
-            "subheadline": "Drag the slider to see how much builds up over time — then claim your exclusive discount.",
-            "ctaText": "Check My Carpet Health"
-          }
-        },
+        // LEAD MAGNET DISABLED
+        // {
+        //   "id": "estimate",
+        //   "template": "lead-magnet-teaser-cleaning",
+        //   "content": {
+        //     "badge": "Home Health Analyzer",
+        //     "headline": "What's Hiding in Your Carpet?",
+        //     "subheadline": "Drag the slider to see how much builds up over time — then claim your exclusive discount.",
+        //     "ctaText": "Check My Carpet Health"
+        //   }
+        // },
         {
           "id": "services",
           "template": "services-carousel",

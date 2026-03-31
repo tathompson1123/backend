@@ -63,19 +63,19 @@ const sections = {
   // Footer
   'footer-4col-dark': require('./footer/footer-4col-dark'),
 
-  // Lead Magnets
-  'lead-magnet-landscaping': require('./lead-magnets/lead-magnet-landscaping'),
-  'lead-magnet-auto-wrap':   require('./lead-magnets/lead-magnet-auto-wrap'),
-  'lead-magnet-cleaning':    require('./lead-magnets/lead-magnet-cleaning'),
-  'lead-magnet-renovation':  require('./lead-magnets/lead-magnet-renovation'),
-  'lead-magnet-photography': require('./lead-magnets/lead-magnet-photography'),
-  'lead-magnet-slider-auto':     require('./lead-magnets/lead-magnet-slider-auto'),
-  'lead-magnet-slider-cleaning': require('./lead-magnets/lead-magnet-slider-cleaning'),
+  // Lead Magnets — DISABLED
+  // 'lead-magnet-landscaping': require('./lead-magnets/lead-magnet-landscaping'),
+  // 'lead-magnet-auto-wrap':   require('./lead-magnets/lead-magnet-auto-wrap'),
+  // 'lead-magnet-cleaning':    require('./lead-magnets/lead-magnet-cleaning'),
+  // 'lead-magnet-renovation':  require('./lead-magnets/lead-magnet-renovation'),
+  // 'lead-magnet-photography': require('./lead-magnets/lead-magnet-photography'),
+  // 'lead-magnet-slider-auto':     require('./lead-magnets/lead-magnet-slider-auto'),
+  // 'lead-magnet-slider-cleaning': require('./lead-magnets/lead-magnet-slider-cleaning'),
   // Teaser sections — CTA blocks that open interactive lead magnet pages in a modal
-  'lead-magnet-teaser-auto':        require('./lead-magnets/lead-magnet-teaser-auto'),
-  'lead-magnet-teaser-landscaping': require('./lead-magnets/lead-magnet-teaser-landscaping'),
-  'lead-magnet-teaser-cleaning':    require('./lead-magnets/lead-magnet-teaser-cleaning'),
-  'lead-magnet-teaser-renovation':  require('./lead-magnets/lead-magnet-teaser-renovation'),
+  // 'lead-magnet-teaser-auto':        require('./lead-magnets/lead-magnet-teaser-auto'),
+  // 'lead-magnet-teaser-landscaping': require('./lead-magnets/lead-magnet-teaser-landscaping'),
+  // 'lead-magnet-teaser-cleaning':    require('./lead-magnets/lead-magnet-teaser-cleaning'),
+  // 'lead-magnet-teaser-renovation':  require('./lead-magnets/lead-magnet-teaser-renovation'),
 
   // Custom / Freeform
   'custom-row': require('./custom/custom-row'),

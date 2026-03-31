@@ -122,10 +122,11 @@ function computeAudit(profile) {
     improvements.push({ title: 'Business Hours', currentStatus: 'Incomplete or missing', recommendation: 'Set complete business hours including special/holiday hours', priority: 'high' });
   }
 
+  // Description cannot be reliably verified via the Places API (editorialSummary is Google's text, not the owner's)
+  // We count it toward the score only if Google's editorial text exists as a proxy signal
   if (profile.description) {
-    good.push({ title: 'Description', value: `${profile.description.length} chars`, note: 'Helps customers understand your business' });
-  } else {
-    improvements.push({ title: 'Business Description', currentStatus: 'Not set', recommendation: 'Write a compelling 750-character description with relevant keywords describing your services and area', priority: 'high' });
+    good.push({ title: 'Description (Google Summary)', value: `${profile.description.length} chars`, note: 'Google has a summary for your business — verify your owner-written description is set in your GBP dashboard' });
+    completenessPoints++;
   }
 
   scores.completeness = Math.round((completenessPoints / completenessMax) * 100);
@@ -135,14 +136,16 @@ function computeAudit(profile) {
   const contentMax = 3;
 
   const photoCount = profile.total_photos || 0;
+  // Places API returns max 10 photos — if we see 10, actual count is likely higher
+  const photoNote = photoCount >= 10 ? `${photoCount}+ photos (API limit reached — you likely have more)` : `${photoCount} photos`;
   if (photoCount >= 10) {
-    good.push({ title: 'Photos', value: `${photoCount} photos`, note: 'Good photo count — keep adding regularly' });
+    good.push({ title: 'Photos', value: photoNote, note: 'You have 10+ photos visible — keep adding regularly (actual count may be higher than shown)' });
     contentPoints += 2;
   } else if (photoCount >= 3) {
-    improvements.push({ title: 'Photos', currentStatus: `${photoCount} photos`, recommendation: `Upload ${10 - photoCount} more high-quality photos of your business, team, and services (target: 10+)`, priority: 'high' });
+    improvements.push({ title: 'Photos', currentStatus: photoNote, recommendation: `Upload more high-quality photos of your business, team, and services (target: 10+)`, priority: 'high' });
     contentPoints += 1;
   } else {
-    improvements.push({ title: 'Photos', currentStatus: photoCount === 0 ? 'No photos' : `Only ${photoCount} photo(s)`, recommendation: 'Upload at least 10 high-quality photos of your business, team, products, and services', priority: 'critical' });
+    improvements.push({ title: 'Photos', currentStatus: photoCount === 0 ? 'No photos visible' : `Only ${photoCount} photo(s)`, recommendation: 'Upload at least 10 high-quality photos of your business, team, products, and services', priority: 'critical' });
   }
 
   if (profile.website && profile.has_website_utm) {
@@ -212,6 +215,7 @@ function computeAudit(profile) {
   scores.engagement = Math.round((engagementPoints / engagementMax) * 100);
 
   // Items we can't check via API — add as action plan suggestions
+  improvements.push({ title: 'Business Description', currentStatus: 'Verify in GBP dashboard — the Places API cannot read owner-written descriptions', recommendation: 'Write a compelling 750-character description in your Google Business Profile dashboard. Include your top services, service area, and what makes you different. Use relevant keywords naturally.', priority: 'high' });
   improvements.push({ title: 'Google Business Posts', currentStatus: 'Cannot verify via API', recommendation: 'Post at least 2-4 times per month with images and calls-to-action (Call Now, Learn More, Order Online)', priority: 'medium' });
   improvements.push({ title: 'Q&A Section', currentStatus: 'Cannot verify via API', recommendation: 'Pre-populate Q&A with 5-10 common customer questions and answer them yourself', priority: 'medium' });
   improvements.push({ title: 'Products / Services', currentStatus: 'Cannot verify via API', recommendation: 'Add all products/services with photos, descriptions, categories, and pricing', priority: 'medium' });
@@ -311,7 +315,7 @@ function getWhyItMatters(title) {
     'Website': 'Your website drives conversions and gives Google more signals about your business relevance.',
     'UTM Tracking': 'Without UTM tracking you can\'t measure how much traffic and conversions come from your GBP listing.',
     'Business Hours': 'Incomplete hours make customers unsure if you\'re open. Google also uses hours for ranking during searches.',
-    'Business Description': 'A keyword-rich description helps with relevance and tells potential customers what sets you apart.',
+    'Business Description': 'A keyword-rich description helps with relevance and tells potential customers what sets you apart. Note: this must be verified in your GBP dashboard — the Google Places API cannot read owner-written descriptions.',
     'Photos': 'Listings with more photos get 42% more requests for directions and 35% more clicks to websites.',
     'Review Count': 'More reviews = stronger ranking signal. Businesses with 20+ reviews significantly outperform those with fewer.',
     'Star Rating': 'Star rating influences click-through rates. Even position #3 can get more clicks than #1 with a better rating.',
@@ -367,7 +371,7 @@ function extractProfile(place, googleUrl) {
     description: place.editorialSummary?.text || '',
     hours: hours || null,
     hours_complete: hoursComplete,
-    total_photos: place.photos?.length || 0,
+    total_photos: place.photos?.length || 0, // Note: Places API caps at 10 photos returned; actual count may be higher
     total_reviews: place.userRatingCount || 0,
     average_rating: place.rating || 0,
     review_response_rate: responseRate,

@@ -133,6 +133,90 @@ router.put('/:id/addons', authenticateToken, async (req, res) => {
   }
 });
 
+// GET - Fetch variants for a service
+router.get('/:id/variants', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    // Verify service belongs to user
+    const svc = await pool.query('SELECT id FROM services WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (svc.rows.length === 0) return res.status(404).json({ error: 'Service not found' });
+    const result = await pool.query(
+      'SELECT * FROM service_variants WHERE service_id = $1 ORDER BY sort_order, id',
+      [id]
+    );
+    res.json({ variants: result.rows });
+  } catch (error) {
+    console.error('Error fetching variants:', error.message);
+    res.status(500).json({ error: 'Failed to fetch variants' });
+  }
+});
+
+// POST - Create a variant for a service
+router.post('/:id/variants', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { name, price, durationHours, sortOrder } = req.body;
+    if (!name || price === undefined || price === null || price === '') {
+      return res.status(400).json({ error: 'name and price are required' });
+    }
+    const svc = await pool.query('SELECT id FROM services WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (svc.rows.length === 0) return res.status(404).json({ error: 'Service not found' });
+    const result = await pool.query(
+      'INSERT INTO service_variants (service_id, name, price, duration_hours, sort_order) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [id, name, price, durationHours || null, sortOrder || 0]
+    );
+    res.json({ variant: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating variant:', error.message);
+    res.status(500).json({ error: 'Failed to create variant' });
+  }
+});
+
+// PUT - Update a variant
+router.put('/variants/:variantId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { variantId } = req.params;
+    const { name, price, durationHours, sortOrder } = req.body;
+    // Verify ownership via service
+    const check = await pool.query(
+      'SELECT sv.id FROM service_variants sv JOIN services s ON s.id = sv.service_id WHERE sv.id = $1 AND s.user_id = $2',
+      [variantId, userId]
+    );
+    if (check.rows.length === 0) return res.status(404).json({ error: 'Variant not found' });
+    const result = await pool.query(
+      `UPDATE service_variants SET name = COALESCE($1, name), price = COALESCE($2, price),
+       duration_hours = $3, sort_order = COALESCE($4, sort_order)
+       WHERE id = $5 RETURNING *`,
+      [name, price, durationHours !== undefined ? (durationHours || null) : null, sortOrder, variantId]
+    );
+    res.json({ variant: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating variant:', error.message);
+    res.status(500).json({ error: 'Failed to update variant' });
+  }
+});
+
+// DELETE - Delete a variant
+router.delete('/variants/:variantId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { variantId } = req.params;
+    const check = await pool.query(
+      'SELECT sv.id FROM service_variants sv JOIN services s ON s.id = sv.service_id WHERE sv.id = $1 AND s.user_id = $2',
+      [variantId, userId]
+    );
+    if (check.rows.length === 0) return res.status(404).json({ error: 'Variant not found' });
+    await pool.query('DELETE FROM service_variants WHERE id = $1', [variantId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting variant:', error.message);
+    res.status(500).json({ error: 'Failed to delete variant' });
+  }
+});
+
 // Helper: Scrape page with Puppeteer (JS-rendered sites)
 async function scrapeWithPuppeteer(url) {
   const puppeteer = require('puppeteer-core');

@@ -14,7 +14,7 @@ router.get('/services', async (req, res) => {
     // Get all active services with category info
     const result = await pool.query(
       `SELECT s.id, s.name, s.description, s.price, s.duration_hours, s.image_url, s.buffer_minutes, s.is_addon, s.sort_order, s.category_id
-       FROM services s WHERE s.user_id = $1 AND s.active = true ORDER BY s.sort_order, s.name`,
+       FROM services s WHERE s.user_id = $1 AND s.active = true ORDER BY s.sort_order ASC NULLS LAST, s.name`,
       [businessId]
     );
 
@@ -40,15 +40,34 @@ router.get('/services', async (req, res) => {
       addonMap[row.main_service_id].push(row.addon_service_id);
     }
 
+    // Get variants for all services
+    const variantResult = await pool.query(
+      `SELECT sv.* FROM service_variants sv
+       JOIN services s ON s.id = sv.service_id
+       WHERE s.user_id = $1 ORDER BY sv.service_id, sv.sort_order, sv.id`,
+      [businessId]
+    );
+    const variantMap = {};
+    for (const v of variantResult.rows) {
+      if (!variantMap[v.service_id]) variantMap[v.service_id] = [];
+      variantMap[v.service_id].push(v);
+    }
+
+    // Attach variants to each service
+    const servicesWithVariants = result.rows.map(s => ({
+      ...s,
+      variants: variantMap[s.id] || []
+    }));
+
     // Group services by category
     const categories = catResult.rows.map(cat => ({
       ...cat,
-      services: result.rows.filter(s => s.category_id === cat.id && !s.is_addon)
+      services: servicesWithVariants.filter(s => s.category_id === cat.id && !s.is_addon)
     }));
-    const uncategorized = result.rows.filter(s => !s.category_id && !s.is_addon);
+    const uncategorized = servicesWithVariants.filter(s => !s.category_id && !s.is_addon);
 
     res.json({
-      services: result.rows, // flat list for backward compatibility
+      services: servicesWithVariants,
       categories,
       uncategorized,
       addonMap
@@ -206,7 +225,7 @@ router.get('/business-info', async (req, res) => {
 // GET /api/public/availability?businessId=...&serviceIds=...&date=...
 router.get('/availability', async (req, res) => {
   try {
-    const { businessId, serviceIds, date } = req.query;
+    const { businessId, serviceIds, date, variantId } = req.query;
     if (!businessId || !date) return res.status(400).json({ error: 'businessId and date required' });
 
     const dateObj = new Date(date + 'T12:00:00');
@@ -231,13 +250,28 @@ router.get('/availability', async (req, res) => {
       const ids = serviceIds.split(',').filter(Boolean);
       if (ids.length > 0) {
         const serviceResult = await pool.query(
-          'SELECT duration_hours, buffer_minutes FROM services WHERE id = ANY($1) AND user_id = $2',
+          'SELECT id, duration_hours, buffer_minutes FROM services WHERE id = ANY($1) AND user_id = $2',
           [ids.map(Number), businessId]
         );
-        durationMinutes = serviceResult.rows.reduce(
-          (sum, s) => sum + Math.round((s.duration_hours || 1) * 60), 0
-        );
-        // Use the max buffer from all selected services
+        // If a variantId is provided, look up its duration and override the main service's duration
+        let variantDurationMinutes = null;
+        if (variantId) {
+          const vResult = await pool.query(
+            'SELECT duration_hours, service_id FROM service_variants WHERE id = $1',
+            [Number(variantId)]
+          );
+          if (vResult.rows.length > 0 && vResult.rows[0].duration_hours) {
+            variantDurationMinutes = Math.round(parseFloat(vResult.rows[0].duration_hours) * 60);
+          }
+        }
+        durationMinutes = serviceResult.rows.reduce((sum, s) => {
+          // For the main service (first ID), use variant duration if available
+          const isMainService = variantId && s.id === ids.map(Number)[0];
+          const mins = isMainService && variantDurationMinutes !== null
+            ? variantDurationMinutes
+            : Math.round((s.duration_hours || 1) * 60);
+          return sum + mins;
+        }, 0);
         bufferMinutes = serviceResult.rows.reduce(
           (max, s) => Math.max(max, s.buffer_minutes || 0), 0
         );
@@ -348,7 +382,7 @@ function minutesToTime(m) { return `${String(Math.floor(m / 60)).padStart(2, '0'
 router.post('/bookings/create', async (req, res) => {
   try {
     const {
-      businessId, serviceId, additionalServiceIds = [],
+      businessId, serviceId, variantId, additionalServiceIds = [],
       bookingDate, startTime, customerInfo, customerNotes,
       assignmentType, employeeId, groupId
     } = req.body;
@@ -368,10 +402,23 @@ router.post('/bookings/create', async (req, res) => {
       return res.status(404).json({ error: 'Service not found' });
     }
 
-    const totalPrice = servicesResult.rows.reduce((sum, s) => sum + parseFloat(s.price || 0), 0);
-    const totalDurationMinutes = servicesResult.rows.reduce(
-      (sum, s) => sum + Math.round((s.duration_hours || 1) * 60), 0
-    );
+    // Resolve variant price/duration for the main service
+    let variantRow = null;
+    if (variantId) {
+      const vRes = await pool.query('SELECT * FROM service_variants WHERE id = $1', [Number(variantId)]);
+      if (vRes.rows.length > 0) variantRow = vRes.rows[0];
+    }
+
+    const totalPrice = servicesResult.rows.reduce((sum, s) => {
+      if (s.id === Number(serviceId) && variantRow) return sum + parseFloat(variantRow.price || 0);
+      return sum + parseFloat(s.price || 0);
+    }, 0);
+    const totalDurationMinutes = servicesResult.rows.reduce((sum, s) => {
+      if (s.id === Number(serviceId) && variantRow && variantRow.duration_hours) {
+        return sum + Math.round(parseFloat(variantRow.duration_hours) * 60);
+      }
+      return sum + Math.round((s.duration_hours || 1) * 60);
+    }, 0);
 
     // Validate business hours for the booking date
     const bookingDateObj = new Date(bookingDate + 'T12:00:00');
@@ -438,11 +485,16 @@ router.post('/bookings/create', async (req, res) => {
 
     // Create booking items for each service
     for (const service of servicesResult.rows) {
-      const svcPrice = parseFloat(service.price || 0);
-      const svcDuration = service.duration_hours || 1;
+      const isMain = service.id === Number(serviceId);
+      const svcPrice = isMain && variantRow ? parseFloat(variantRow.price || 0) : parseFloat(service.price || 0);
+      const svcDuration = isMain && variantRow && variantRow.duration_hours
+        ? parseFloat(variantRow.duration_hours)
+        : (service.duration_hours || 1);
+      const vId = isMain && variantRow ? variantRow.id : null;
+      const vName = isMain && variantRow ? variantRow.name : null;
       await pool.query(
-        'INSERT INTO booking_items (booking_id, service_id, service_name, service_price, service_duration, quantity, subtotal) VALUES ($1, $2, $3, $4, $5, 1, $6)',
-        [bookingResult.rows[0].id, service.id, service.name, svcPrice, svcDuration, svcPrice]
+        'INSERT INTO booking_items (booking_id, service_id, service_name, service_price, service_duration, quantity, subtotal, variant_id, variant_name) VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8)',
+        [bookingResult.rows[0].id, service.id, service.name, svcPrice, svcDuration, svcPrice, vId, vName]
       );
     }
 

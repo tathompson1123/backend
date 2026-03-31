@@ -1001,6 +1001,10 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     const textColor = website.text_color || '#1f2937';
     
     let pages = website.pages || {};
+    // Parse pages if stored as JSON string (text column)
+    if (pages && typeof pages === 'string') {
+      try { pages = JSON.parse(pages); } catch (e) { pages = {}; }
+    }
 
     // Get REAL API URL
     const apiUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
@@ -1009,10 +1013,13 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 
     console.log('🔧 Using API URL:', apiUrl);
 
-    // Helper function to check if page has a contact form
+    // Helper function to check if page has a contact/lead capture form
+    // Returns false for pages that clearly aren't contact pages (booking, newsletter-only, etc.)
 function hasContactForm(html) {
-  // Look for ANY form element
-  return /<form[^>]*>/i.test(html);
+  if (!/<form[^>]*>/i.test(html)) return false;
+  // Check if this looks like a contact/quote/inquiry page
+  const contactKeywords = /contact|get in touch|request a quote|send us|reach us|inquiry|inquire|message us|free estimate|book a|schedule a/i;
+  return contactKeywords.test(html);
 }
 
 function fixContactFormHTML(html, pageName) {
@@ -1027,21 +1034,49 @@ function fixContactFormHTML(html, pageName) {
     html = html.replace(/<meta name="user-id" content="[^"]*"/, `<meta name="user-id" content="${userId}"`);
   }
 
-  // Find ANY form - try multiple patterns
-  let formMatch = html.match(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/i);
-  
-  if (!formMatch) {
-    // Try to find any form with "contact" in the id
-    formMatch = html.match(/<form[^>]*id=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/i);
+  // Patterns that indicate a form is NOT a contact/inquiry form — skip these
+  const NON_CONTACT_SIGNALS = /gift.?card|purchase|buy.now|add.to.cart|checkout|payment|credit.card|card.number|promo.code|coupon|discount.code|stripe|paypal|subscribe|newsletter|sign.up|register|login|log.in|password|username|search/i;
+
+  // Helper: find all <form>...</form> blocks in html
+  function findAllForms(h) {
+    const forms = [];
+    const re = /<form[^>]*>[\s\S]*?<\/form>/gi;
+    let m;
+    while ((m = re.exec(h)) !== null) forms.push(m[0]);
+    return forms;
   }
-  
-  if (!formMatch) {
-    // Try to find any form element at all
-    formMatch = html.match(/<form[^>]*>[\s\S]*?<\/form>/i);
+
+  // Find the best candidate: prefer explicit contact-form id, else find an inquiry-like form
+  let formMatch = null;
+
+  // Priority 1: explicit id="contact-form"
+  const explicitMatch = html.match(/<form[^>]*id=["']contact-form["'][^>]*>[\s\S]*?<\/form>/i);
+  if (explicitMatch && !NON_CONTACT_SIGNALS.test(explicitMatch[0])) {
+    formMatch = explicitMatch;
   }
-  
+
+  // Priority 2: form with "contact" in the id
   if (!formMatch) {
-    console.log(`⚠️ Could not find any form element in ${pageName}`);
+    const contactIdMatch = html.match(/<form[^>]*id=["'][^"']*contact[^"']*["'][^>]*>[\s\S]*?<\/form>/i);
+    if (contactIdMatch && !NON_CONTACT_SIGNALS.test(contactIdMatch[0])) {
+      formMatch = contactIdMatch;
+    }
+  }
+
+  // Priority 3: first form that has inquiry-like fields (name + phone/email + message) and no purchase signals
+  if (!formMatch) {
+    const allForms = findAllForms(html);
+    const inquirySignals = /name=["']?(name|full.?name|email|phone|message|service|subject)/i;
+    for (const f of allForms) {
+      if (!NON_CONTACT_SIGNALS.test(f) && inquirySignals.test(f)) {
+        formMatch = [f];
+        break;
+      }
+    }
+  }
+
+  if (!formMatch) {
+    console.log(`⚠️ No contact/inquiry form found in ${pageName} (skipping — may be a purchase/gift card form)`);
     return html;
   }
 
