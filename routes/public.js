@@ -307,14 +307,28 @@ router.get('/availability', async (req, res) => {
     );
     const existingBookings = bookingsResult.rows;
 
-    // Generate available 30-min slots
+    // Check for fixed booking time slots
+    const fixedSlotsResult = await pool.query(
+      'SELECT slot_time FROM booking_time_slots WHERE user_id = $1 AND active = true ORDER BY slot_time',
+      [businessId]
+    );
+    const fixedSlotMinutes = fixedSlotsResult.rows.map(r => {
+      const [h, m] = r.slot_time.slice(0, 5).split(':').map(Number);
+      return h * 60 + m;
+    });
+
+    // Generate available slots — fixed list if configured, else every 30 minutes
     const slots = [];
     const [openH, openM] = hours.open_time.split(':').map(Number);
     const [closeH, closeM] = hours.close_time.split(':').map(Number);
     const openMinutes = openH * 60 + openM;
     const closeMinutes = closeH * 60 + closeM;
 
-    for (let m = openMinutes; m + durationMinutes <= closeMinutes; m += 30) {
+    const minutesToCheck = fixedSlotMinutes.length > 0
+      ? fixedSlotMinutes.filter(m => m >= openMinutes && m + durationMinutes <= closeMinutes)
+      : (() => { const arr = []; for (let m = openMinutes; m + durationMinutes <= closeMinutes; m += 30) arr.push(m); return arr; })();
+
+    for (const m of minutesToCheck) {
       const hh = String(Math.floor(m / 60)).padStart(2, '0');
       const mm = String(m % 60).padStart(2, '0');
       const slotStart = `${hh}:${mm}`;

@@ -145,6 +145,9 @@ app.use('/api/upload', uploadRoutes);
 const bookingReminderRoutes = require('./routes/booking-reminders');
 app.use('/api/booking-reminders', bookingReminderRoutes);
 
+const bookingTimesRoutes = require('./routes/booking-times');
+app.use('/api/booking-times', bookingTimesRoutes);
+
 // Embed system — public JS bundle + API routes (open CORS for any origin)
 const path = require('path');
 // Shared CORS middleware for embed-facing routes (called from external sites)
@@ -282,6 +285,31 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.log('✅ review_configs.send_trigger column verified');
   } catch (e) {
     console.warn('⚠️ Could not add send_trigger column:', e.message);
+  }
+
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS booking_time_slots (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      slot_time TIME NOT NULL,
+      label VARCHAR(100),
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(user_id, slot_time)
+    )`);
+    console.log('✅ booking_time_slots table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not create booking_time_slots table:', e.message);
+  }
+
+  try {
+    // Allow booking deletion without FK violation from sms_messages
+    await pool.query(`ALTER TABLE sms_messages DROP CONSTRAINT IF EXISTS sms_messages_booking_id_fkey`);
+    await pool.query(`ALTER TABLE sms_messages ADD CONSTRAINT sms_messages_booking_id_fkey
+      FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE SET NULL`);
+    console.log('✅ sms_messages.booking_id FK updated to ON DELETE SET NULL');
+  } catch (e) {
+    console.warn('⚠️ Could not update sms_messages FK:', e.message);
   }
 
   try {
@@ -1216,7 +1244,7 @@ cron.schedule('*/5 * * * *', async () => {
        WHERE rc.send_trigger = 'service_duration'
          AND rc.auto_send_enabled = true
          AND b.status NOT IN ('cancelled')
-         AND b.start_time + (COALESCE(bi.service_duration, 1) * INTERVAL '1 hour') <= NOW()
+         AND (b.booking_date::timestamp + b.start_time::interval + COALESCE(bi.service_duration, 1) * INTERVAL '1 hour') <= NOW()
          AND b.customer_id IS NOT NULL
          AND NOT EXISTS (
            SELECT 1 FROM review_requests rr

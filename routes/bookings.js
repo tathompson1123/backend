@@ -451,8 +451,9 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     const { id } = req.params;
 
-    // Delete booking items first
+    // Null out FK references before deleting
     await pool.query('DELETE FROM booking_items WHERE booking_id = $1', [id]);
+    await pool.query('UPDATE sms_messages SET booking_id = NULL WHERE booking_id = $1', [id]);
 
     const result = await pool.query(
       'DELETE FROM bookings WHERE id = $1 AND user_id = $2 RETURNING *',
