@@ -579,7 +579,14 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
     html_content = makeMobileResponsive(html_content);
 
     if (pages) {
+      // Remove gift card pages before publishing
+      const GIFT_CARD_RE = /gift.?card|giftcard/i;
       Object.keys(pages).forEach(pageName => {
+        if (GIFT_CARD_RE.test(pageName)) {
+          console.log(`🗑️ Removing gift card page from publish: ${pageName}`);
+          delete pages[pageName];
+          return;
+        }
         pages[pageName] = ensureUserId(pages[pageName]);
         pages[pageName] = makeMobileResponsive(pages[pageName]);
       });
@@ -1018,7 +1025,7 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 function hasContactForm(html) {
   if (!/<form[^>]*>/i.test(html)) return false;
   // Check if this looks like a contact/quote/inquiry page
-  const contactKeywords = /contact|get in touch|request a quote|send us|reach us|inquiry|inquire|message us|free estimate|book a|schedule a/i;
+  const contactKeywords = /contact|get in touch|request a quote|send us|reach us|inquiry|inquire|message us|free estimate|book a|schedule a|let.?s talk|drop us|reach out|get a quote|get.?your.?free|connect with|talk to us|start your|tell us about/i;
   return contactKeywords.test(html);
 }
 
@@ -1066,7 +1073,7 @@ function fixContactFormHTML(html, pageName) {
   // Priority 3: first form that has inquiry-like fields (name + phone/email + message) and no purchase signals
   if (!formMatch) {
     const allForms = findAllForms(html);
-    const inquirySignals = /name=["']?(name|full.?name|email|phone|message|service|subject)/i;
+    const inquirySignals = /name=["']?(name|full.?name|fullname|first.?name|last.?name|your.?name|customer.?name|contact.?name|email|phone|tel|message|service|subject|inquiry|question)/i;
     for (const f of allForms) {
       if (!NON_CONTACT_SIGNALS.test(f) && inquirySignals.test(f)) {
         formMatch = [f];
@@ -1173,11 +1180,11 @@ function fixContactFormHTML(html, pageName) {
         throw new Error('User ID not configured');
       }
       
-      const name = formData.get('name') || formData.get('full_name') || formData.get('fullname') || '';
-      const email = formData.get('email') || formData.get('email_address') || '';
-      const phone = formData.get('phone') || formData.get('phone_number') || formData.get('tel') || '';
-      const service = formData.get('service') || formData.get('service_interested_in') || formData.get('vehicle_make_model') || formData.get('service_type') || '';
-      const message = formData.get('message') || formData.get('additional_details') || formData.get('comments') || '';
+      const name = formData.get('name') || formData.get('full_name') || formData.get('fullname') || formData.get('full-name') || formData.get('first_name') || formData.get('customer_name') || formData.get('your_name') || '';
+      const email = formData.get('email') || formData.get('email_address') || formData.get('your_email') || formData.get('contact_email') || '';
+      const phone = formData.get('phone') || formData.get('phone_number') || formData.get('tel') || formData.get('telephone') || formData.get('mobile') || formData.get('contact_phone') || '';
+      const service = formData.get('service') || formData.get('service_interested_in') || formData.get('vehicle_make_model') || formData.get('service_type') || formData.get('services') || formData.get('project_type') || '';
+      const message = formData.get('message') || formData.get('additional_details') || formData.get('comments') || formData.get('details') || formData.get('description') || formData.get('notes') || '';
       
       const response = await fetch('${apiUrl}/api/leads/public/' + userId, {
         method: 'POST',
@@ -1239,11 +1246,19 @@ function fixContactFormHTML(html, pageName) {
     let updatedHtmlContent = website.html_content;
 
     // Fix contact forms in ALL pages
+    const GIFT_CARD_PAGE_RE = /gift.?card|giftcard/i;
     if (pages && Object.keys(pages).length > 0) {
       Object.keys(pages).forEach(pageKey => {
+        // Remove gift card pages entirely
+        if (GIFT_CARD_PAGE_RE.test(pageKey)) {
+          console.log(`🗑️ Removing gift card page: ${pageKey}`);
+          delete updatedPages[pageKey];
+          pagesFixed.push(`${pageKey} (removed)`);
+          return;
+        }
         const originalHTML = pages[pageKey];
         const fixedHTML = fixContactFormHTML(originalHTML, pageKey);
-        
+
         if (fixedHTML !== originalHTML) {
           updatedPages[pageKey] = fixedHTML;
           pagesFixed.push(pageKey);
