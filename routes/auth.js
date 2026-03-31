@@ -41,7 +41,7 @@ const result = await pool.query(
 );
 
     const user = result.rows[0];
-    const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '30d' });
 
     console.log('✅ New user signed up (no plan, onboarding pending):', email);
 
@@ -92,7 +92,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '30d' });
 
     console.log('✅ User logged in:', email);
 

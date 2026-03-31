@@ -134,7 +134,7 @@ router.post('/sync-square', authenticateToken, async (req, res) => {
       [userId]
     );
     if (connResult.rows.length === 0) {
-      return res.status(400).json({ error: 'Square not connected' });
+      return res.json({ success: true, synced: 0, skipped: 'Square not connected' });
     }
     const synced = await syncSquarePayments(userId, connResult.rows[0].square_access_token, pool);
     res.json({ success: true, synced });

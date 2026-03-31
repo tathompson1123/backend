@@ -784,6 +784,7 @@ ${businessHours || 'Monday-Friday: 9:00 AM - 5:00 PM'}
 
 Contact: ${userInfo.phone || 'N/A'}
 Email: ${userInfo.email || 'N/A'}
+Address: ${[userInfo.address, userInfo.city, userInfo.state].filter(Boolean).join(', ') || 'N/A'}
 
 CONVERSATION FLOW - Follow these stages in order:
 

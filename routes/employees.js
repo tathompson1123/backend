@@ -218,16 +218,16 @@ router.post('/:id/invite', async (req, res) => {
       return res.status(400).json({ error: 'Employee must have an email address to receive an invite' });
     }
 
-    // Generate secure invite token (72-hour expiry)
+    // Generate secure invite token (7-day expiry)
     const inviteToken = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    // Upsert employee credentials
+    // Upsert employee credentials — also reset invite_accepted_at so re-invites work
     await pool.query(
       `INSERT INTO employee_credentials (employee_id, email, invite_token, invite_token_expires)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (employee_id)
-       DO UPDATE SET invite_token = $3, invite_token_expires = $4, updated_at = NOW()`,
+       DO UPDATE SET invite_token = $3, invite_token_expires = $4, invite_accepted_at = NULL, updated_at = NOW()`,
       [id, employee.email.toLowerCase(), inviteToken, expiresAt]
     );
 
@@ -262,7 +262,7 @@ router.post('/:id/invite', async (req, res) => {
             <div style="text-align: center; margin: 30px 0;">
               <a href="${inviteUrl}" style="background-color: #d97706; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Accept Invite</a>
             </div>
-            <p style="color: #666; font-size: 14px;">This invite expires in 72 hours.</p>
+            <p style="color: #666; font-size: 14px;">This invite expires in 7 days.</p>
             <p style="color: #666; font-size: 12px;">If you didn't expect this invite, you can safely ignore this email.</p>
           </div>
         `

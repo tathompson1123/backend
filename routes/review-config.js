@@ -20,7 +20,8 @@ router.get('/', authenticateToken, async (req, res) => {
           incentive: "$10 off your next service",
           incentive_enabled: true,
           auto_send_enabled: true,
-          send_delay: 24
+          send_delay: 24,
+          send_trigger: 'booking_completed'
         }
       });
     }
@@ -35,12 +36,13 @@ router.get('/', authenticateToken, async (req, res) => {
 // POST - Save review configuration
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay } = req.body;
+    const { messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay, sendTrigger } = req.body;
+    const trigger = sendTrigger === 'service_duration' ? 'service_duration' : 'booking_completed';
 
     // Upsert - insert or update on conflict
     await pool.query(
-      `INSERT INTO review_configs (user_id, message_template, incentive, incentive_enabled, auto_send_enabled, send_delay, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+      `INSERT INTO review_configs (user_id, message_template, incentive, incentive_enabled, auto_send_enabled, send_delay, send_trigger, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
        ON CONFLICT (user_id)
        DO UPDATE SET
          message_template = $2,
@@ -48,8 +50,9 @@ router.post('/', authenticateToken, async (req, res) => {
          incentive_enabled = $4,
          auto_send_enabled = $5,
          send_delay = $6,
+         send_trigger = $7,
          updated_at = CURRENT_TIMESTAMP`,
-      [req.user.userId, messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay]
+      [req.user.userId, messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay, trigger]
     );
 
     console.log(`✅ Review config saved for user ${req.user.userId}`);

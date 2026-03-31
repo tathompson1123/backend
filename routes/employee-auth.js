@@ -10,8 +10,9 @@ const { authenticateEmployee } = require('../config/employee-middleware');
 router.post('/accept-invite', async (req, res) => {
   try {
     const { token, password } = req.body;
+    const cleanToken = (token || '').trim();
 
-    if (!token || !password) {
+    if (!cleanToken || !password) {
       return res.status(400).json({ error: 'Token and password are required' });
     }
 
@@ -26,7 +27,7 @@ router.post('/accept-invite', async (req, res) => {
        JOIN employees e ON e.id = ec.employee_id
        JOIN users u ON u.id = e.user_id
        WHERE ec.invite_token = $1 AND ec.invite_token_expires > NOW()`,
-      [token]
+      [cleanToken]
     );
 
     if (credResult.rows.length === 0) {

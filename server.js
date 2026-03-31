@@ -111,6 +111,9 @@ app.use('/api/voice', voiceRoutes);
 const gbpAnalyzerRoutes = require('./routes/gbp-analyzer');
 app.use('/api/gbp-analyzer', gbpAnalyzerRoutes);
 
+const seoAuditRoutes = require('./routes/seo-audit');
+app.use('/api/seo-audit', seoAuditRoutes);
+
 const businessHoursRoutes = require('./routes/business-hours');
 app.use('/api/business-hours', businessHoursRoutes);
 
@@ -138,6 +141,9 @@ app.use('/api/status-templates', statusTemplateRoutes);
 
 const uploadRoutes = require('./routes/upload');
 app.use('/api/upload', uploadRoutes);
+
+const bookingReminderRoutes = require('./routes/booking-reminders');
+app.use('/api/booking-reminders', bookingReminderRoutes);
 
 // Embed system — public JS bundle + API routes (open CORS for any origin)
 const path = require('path');
@@ -225,9 +231,57 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     )`);
     await pool.query("ALTER TABLE invoice_items_catalog ADD COLUMN IF NOT EXISTS taxable BOOLEAN DEFAULT false");
     await pool.query("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS taxable BOOLEAN DEFAULT true");
+    // Service variants
+    await pool.query(`CREATE TABLE IF NOT EXISTS service_variants (
+      id SERIAL PRIMARY KEY,
+      service_id INTEGER REFERENCES services(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      price DECIMAL(10,2) NOT NULL,
+      duration_hours NUMERIC,
+      sort_order INTEGER DEFAULT 0
+    )`);
+    await pool.query('ALTER TABLE booking_items ADD COLUMN IF NOT EXISTS variant_id INTEGER');
+    await pool.query('ALTER TABLE booking_items ADD COLUMN IF NOT EXISTS variant_name VARCHAR(255)');
+    // Booking reminder settings
+    await pool.query(`CREATE TABLE IF NOT EXISTS booking_reminder_settings (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      hours_before INTEGER NOT NULL,
+      label VARCHAR(100),
+      enabled BOOLEAN DEFAULT true,
+      custom_message TEXT
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS booking_reminders_sent (
+      id SERIAL PRIMARY KEY,
+      booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+      hours_before INTEGER NOT NULL,
+      sent_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(booking_id, hours_before)
+    )`);
     console.log('✅ SMS scheduling columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify sms_scheduled_at column:', e.message);
+  }
+
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS seo_audits (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      url TEXT NOT NULL,
+      audit JSONB NOT NULL,
+      plan JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`);
+    console.log('✅ SEO audits table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify seo_audits table:', e.message);
+  }
+
+  try {
+    await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS send_trigger VARCHAR(30) DEFAULT 'booking_completed'`);
+    console.log('✅ review_configs.send_trigger column verified');
+  } catch (e) {
+    console.warn('⚠️ Could not add send_trigger column:', e.message);
   }
 
   try {
@@ -1146,6 +1200,56 @@ cron.schedule('*/60 * * * * *', async () => {
   }
 });
 
+// ── Service-duration review trigger cron ─────────────────
+// Runs every 5 minutes. For users with send_trigger='service_duration',
+// creates review requests for bookings whose service end time has passed.
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    const eligible = await pool.query(
+      `SELECT DISTINCT ON (b.id)
+              b.id AS booking_id, b.user_id, b.customer_id, b.start_time,
+              bi.service_duration,
+              rc.send_delay, rc.incentive_enabled
+       FROM bookings b
+       JOIN booking_items bi ON bi.booking_id = b.id
+       JOIN review_configs rc ON rc.user_id = b.user_id
+       WHERE rc.send_trigger = 'service_duration'
+         AND rc.auto_send_enabled = true
+         AND b.status NOT IN ('cancelled')
+         AND b.start_time + (COALESCE(bi.service_duration, 1) * INTERVAL '1 hour') <= NOW()
+         AND b.customer_id IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM review_requests rr
+           WHERE rr.customer_id = b.customer_id
+             AND rr.user_id = b.user_id
+             AND rr.created_at > NOW() - INTERVAL '24 hours'
+         )
+       ORDER BY b.id, bi.id`
+    );
+
+    for (const row of eligible.rows) {
+      try {
+        const delayHours = row.send_delay || 0;
+        const scheduledTime = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+        const incentiveCode = row.incentive_enabled
+          ? `REV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+          : null;
+        await pool.query(
+          `INSERT INTO review_requests (user_id, customer_id, status, scheduled_send_time, incentive_code, created_at)
+           VALUES ($1, $2, 'pending', $3, $4, NOW())
+           ON CONFLICT DO NOTHING`,
+          [row.user_id, row.customer_id, scheduledTime, incentiveCode]
+        );
+        console.log(`✅ [service_duration] Review request queued for booking ${row.booking_id}`);
+      } catch (rowErr) {
+        console.warn(`⚠️ [service_duration] Could not queue review for booking ${row.booking_id}:`, rowErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('❌ Service-duration review cron error:', err.message || err);
+  }
+});
+
 // ── Email campaign cron job ──────────────────────────────
 // Runs every hour. Checks if any user has a campaign scheduled for this day+hour.
 const { generateCampaign, sendCampaign } = require('./routes/email-campaigns');
@@ -1234,6 +1338,104 @@ cron.schedule('*/10 * * * *', async () => {
     }
   } catch (err) {
     console.error('Square auto-sync cron error:', err.message);
+  }
+});
+
+// ── Booking reminder email cron — runs every 15 minutes ──────────────────────
+cron.schedule('*/15 * * * *', async () => {
+  try {
+    const { sendBookingEmails } = require('./utils/bookingEmail');
+    const sgMail = require('@sendgrid/mail');
+    if (!process.env.SENDGRID_API_KEY) return;
+
+    // Find all enabled reminder settings
+    const settingsResult = await pool.query(
+      'SELECT * FROM booking_reminder_settings WHERE enabled = true'
+    );
+    if (settingsResult.rows.length === 0) return;
+
+    for (const setting of settingsResult.rows) {
+      const { user_id, hours_before, custom_message } = setting;
+      // Find bookings that fall in this reminder window (within 15 min tolerance)
+      const windowMins = 15;
+      const result = await pool.query(
+        `SELECT b.id, b.booking_number, b.booking_date, b.start_time, b.end_time,
+                b.customer_name, b.customer_email, b.total_amount,
+                u.business_name, u.email as owner_email
+         FROM bookings b
+         JOIN users u ON u.id = b.user_id
+         WHERE b.user_id = $1
+           AND b.status NOT IN ('cancelled', 'completed', 'no_show')
+           AND b.customer_email IS NOT NULL AND b.customer_email != ''
+           AND (b.booking_date::timestamp + b.start_time::interval - NOW()) BETWEEN
+               INTERVAL '1 minute' * ($2 * 60 - $3) AND INTERVAL '1 minute' * ($2 * 60 + $3)
+           AND NOT EXISTS (
+             SELECT 1 FROM booking_reminders_sent brs
+             WHERE brs.booking_id = b.id AND brs.hours_before = $2
+           )`,
+        [user_id, hours_before, windowMins]
+      );
+
+      for (const booking of result.rows) {
+        try {
+          // Fetch service names
+          const itemsResult = await pool.query(
+            'SELECT service_name FROM booking_items WHERE booking_id = $1',
+            [booking.id]
+          );
+          const serviceName = itemsResult.rows.map(r => r.service_name).join(', ') || 'your service';
+
+          const formatDate = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+          const formatTime = (t) => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`; };
+
+          const reminderLabel = hours_before >= 48 ? `${hours_before / 24} days` : `${hours_before} hours`;
+          const bodyText = custom_message
+            ? custom_message
+              .replace('{{customerName}}', booking.customer_name)
+              .replace('{{businessName}}', booking.business_name || '')
+              .replace('{{serviceName}}', serviceName)
+              .replace('{{date}}', formatDate(booking.booking_date))
+              .replace('{{time}}', formatTime(booking.start_time))
+            : `This is a reminder that your appointment for <strong>${serviceName}</strong> is coming up in <strong>${reminderLabel}</strong>.`;
+
+          await sgMail.send({
+            to: booking.customer_email,
+            from: { name: booking.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
+            replyTo: booking.owner_email ? { email: booking.owner_email } : undefined,
+            subject: `Reminder: ${serviceName} on ${formatDate(booking.booking_date)}`,
+            html: `
+              <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+                <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
+                  <h1 style="color:#fff;margin:0;font-size:1.5rem;">Appointment Reminder</h1>
+                </div>
+                <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+                  <p style="font-size:1rem;margin-top:0;">Hi ${booking.customer_name},</p>
+                  <p>${bodyText}</p>
+                  <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
+                    <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:40%;">Service</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${serviceName}</td></tr>
+                    <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${formatDate(booking.booking_date)}</td></tr>
+                    <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${formatTime(booking.start_time)}</td></tr>
+                    ${booking.total_amount ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Total</td><td style="padding:10px 12px;">$${parseFloat(booking.total_amount).toFixed(2)}</td></tr>` : ''}
+                  </table>
+                  <p style="color:#6b7280;font-size:0.9rem;">If you need to reschedule, please contact us directly.</p>
+                  <p style="color:#6b7280;font-size:0.9rem;margin:0;">${booking.business_name || ''}</p>
+                </div>
+              </div>`
+          });
+
+          // Record as sent
+          await pool.query(
+            'INSERT INTO booking_reminders_sent (booking_id, hours_before) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [booking.id, hours_before]
+          );
+          console.log(`📧 Reminder sent: booking ${booking.booking_number} (${reminderLabel} before)`);
+        } catch (emailErr) {
+          console.error(`❌ Reminder email error for booking ${booking.id}:`, emailErr.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('❌ Booking reminder cron error:', err.message);
   }
 });
 

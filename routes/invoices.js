@@ -76,7 +76,7 @@ router.post('/sync-square', authenticateToken, async (req, res) => {
       [userId]
     );
     if (connResult.rows.length === 0) {
-      return res.status(400).json({ error: 'Square not connected' });
+      return res.json({ success: true, synced: 0, skipped: 'Square not connected' });
     }
     const conn = connResult.rows[0];
     const synced = await syncSquareInvoices(userId, conn.square_access_token, conn.square_location_id, pool);
@@ -487,6 +487,9 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
     }
     const conn = connResult.rows[0];
 
+    const ownerResult = await pool.query('SELECT email, business_name FROM users WHERE id = $1', [userId]);
+    const ownerEmail = ownerResult.rows[0]?.email || null;
+
     const client = new Client({
       bearerAuthCredentials: { accessToken: conn.square_access_token },
       environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
@@ -554,6 +557,26 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
           }))
         : [{ name: invoice.notes || 'Service', quantity: '1', basePriceMoney: { amount: BigInt(amountCents), currency: 'USD' } }];
 
+      // Append tax as a line item if the invoice has tax (tax is stored at invoice level, not as a line item)
+      const taxAmountCents = Math.round(parseFloat(invoice.tax_amount || 0) * 100);
+      if (taxAmountCents > 0) {
+        lineItems.push({
+          name: 'Sales Tax',
+          quantity: '1',
+          basePriceMoney: { amount: BigInt(taxAmountCents), currency: 'USD' },
+        });
+      }
+
+      // Append discount as a negative line item if applicable
+      const discountAmountCents = Math.round(parseFloat(invoice.discount_amount || 0) * 100);
+      if (discountAmountCents > 0) {
+        lineItems.push({
+          name: 'Discount',
+          quantity: '1',
+          basePriceMoney: { amount: BigInt(-discountAmountCents), currency: 'USD' },
+        });
+      }
+
       const { result: orderResult } = await client.ordersApi.createOrder({
         order: { locationId: conn.square_location_id, customerId, lineItems },
         idempotencyKey: randomUUID(),
@@ -582,7 +605,10 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
           },
           delivery_method: 'EMAIL',
           title: `Invoice for ${invoice.customer_name || invoice.customer_email}`,
-          ...(invoice.notes?.trim() ? { description: invoice.notes.trim().slice(0, 500) } : {}),
+          description: [
+            invoice.notes?.trim() || null,
+            ownerEmail ? `If you have questions about this invoice, reply to ${ownerEmail}.` : null,
+          ].filter(Boolean).join('\n\n').slice(0, 500),
         },
       };
 
