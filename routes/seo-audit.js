@@ -209,16 +209,36 @@ router.post('/plan', authenticateToken, async (req, res) => {
     return res.status(500).json({ error: 'Failed to verify plan' });
   }
 
-  const { audit } = req.body;
+  const { audit, platform } = req.body;
   if (!audit || !audit.categories) {
     return res.status(400).json({ error: 'Audit data is required' });
   }
 
+  const PLATFORM_LABELS = {
+    wordpress:   'WordPress',
+    wix:         'Wix',
+    squarespace: 'Squarespace',
+    shopify:     'Shopify',
+    webflow:     'Webflow',
+    godaddy:     'GoDaddy Website Builder',
+    weebly:      'Weebly',
+    framer:      'Framer',
+    sorce:       'SORCE (custom website builder)',
+    bigcommerce: 'BigCommerce',
+    custom:      'Custom / Developer-built website',
+    other:       'Other website platform',
+  };
+  const platformLabel = PLATFORM_LABELS[platform] || platform || 'their website platform';
+
   const systemPrompt = `You are an expert SEO consultant creating detailed implementation plans for small local service businesses.
 You write clear, specific, step-by-step instructions that a non-technical business owner or their web developer can follow.
+Every instruction must reference exact menu names, settings panels, button labels, and navigation paths for the specific platform the user is on.
 You always respond with ONLY valid JSON — no markdown, no explanation, no code blocks.`;
 
   const userMessage = `Based on this SEO audit, create a detailed step-by-step SEO optimization plan.
+
+WEBSITE PLATFORM: ${platformLabel}
+CRITICAL: Every single instruction must be written specifically for ${platformLabel}. Use exact menu paths, panel names, field labels, and button names as they appear in ${platformLabel}. Do NOT give generic instructions — if someone is on ${platformLabel}, tell them exactly where to click and what to type.
 
 AUDIT SUMMARY:
 URL: ${audit.url}
@@ -239,6 +259,7 @@ Return ONLY a valid JSON object with this exact structure:
   "title": "SEO Optimization Plan for [business/url]",
   "overview": "2-3 sentence summary of the plan and expected impact",
   "estimatedTimeTotal": "e.g. 2-4 weeks",
+  "platform": "${platformLabel}",
   "phases": [
     {
       "phase": 1,
@@ -253,7 +274,7 @@ Return ONLY a valid JSON object with this exact structure:
           "priority": "critical|high|medium|low",
           "timeEstimate": "e.g. 30 minutes",
           "instructions": [
-            "Exact instruction 1 — be very specific",
+            "Exact instruction 1 written for ${platformLabel} — include exact menu path e.g. 'Go to Settings > SEO > Meta Tags'",
             "Exact instruction 2",
             "Exact instruction 3"
           ],
@@ -265,8 +286,9 @@ Return ONLY a valid JSON object with this exact structure:
 }
 
 Create 3 phases ordered by priority (critical fixes first, then high impact, then polish).
-Each phase should have 2-4 steps. Each step should have 3-4 specific instructions. Keep instructions concise but actionable.
-Be specific — include exact HTML tags, character limits, schema types, etc. Do NOT pad with generic advice.`;
+Each phase should have 2-4 steps. Each step should have 3-4 specific instructions.
+All instructions must name the exact location in ${platformLabel} — never say "go to your settings", always say the full path for ${platformLabel}.
+Do NOT pad with generic advice.`;
 
   try {
     const message = await anthropic.messages.create({
