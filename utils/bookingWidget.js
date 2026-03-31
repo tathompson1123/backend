@@ -111,6 +111,9 @@ function generateBookingWidgetCode(userId, theme = {}) {
     selDate:'',
     selTime:'',
     slots:[],
+    taxRate:0,
+    subtotal:0,
+    taxAmount:0,
     loading:false,
     error:null,
     success:false,
@@ -153,6 +156,7 @@ function generateBookingWidgetCode(userId, theme = {}) {
       state.categories=res[0].categories||[];
       state.uncategorized=res[0].uncategorized||[];
       state.addonMap=res[0].addonMap||{};
+      state.taxRate=parseFloat(res[0].taxRate||0);
       state.hours=res[1].businessHours||[];
       state.biz=res[2].business||null;
       state.config=res[3].config||null;
@@ -188,7 +192,10 @@ function generateBookingWidgetCode(userId, theme = {}) {
     var t=0;
     if(state.selService)t+=parseFloat(state.selService.price)||0;
     state.selAddons.forEach(function(a){t+=parseFloat(a.price)||0});
-    state.totalPrice=t;
+    state.subtotal=t;
+    var taxAmt=state.taxRate>0?Math.round(t*state.taxRate*100)/100:0;
+    state.taxAmount=taxAmt;
+    state.totalPrice=t+taxAmt;
   }
 
   function getAllServiceIds(){
@@ -204,7 +211,16 @@ function generateBookingWidgetCode(userId, theme = {}) {
     var ids=getAllServiceIds().join(',');
     fetch(API+'/api/public/availability?businessId='+UID+'&serviceIds='+ids+'&date='+state.selDate)
       .then(function(r){return r.json()})
-      .then(function(d){state.slots=d.slots||[];state.loading=false;render()})
+      .then(function(d){
+        var slots=d.slots||[];
+        var todayStr=new Date().toISOString().slice(0,10);
+        if(state.selDate===todayStr){
+          var now=new Date();
+          var nowMins=now.getHours()*60+now.getMinutes();
+          slots=slots.filter(function(s){var p=s.time.split(':');return parseInt(p[0])*60+parseInt(p[1])>nowMins;});
+        }
+        state.slots=slots;state.loading=false;render();
+      })
       .catch(function(){state.loading=false;state.error='Failed to load available times';render()});
   }
 
@@ -482,7 +498,11 @@ function generateBookingWidgetCode(userId, theme = {}) {
       });
       calcTotal();
       h+='<div class="sbk-total-bar">';
-      h+='<div><span style="font-size:13px;color:#6b7280">Total</span><br><span style="font-size:20px;font-weight:700;color:#111">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      if(state.taxAmount>0){
+        h+='<div><span style="font-size:12px;color:#6b7280">Subtotal $'+state.subtotal.toFixed(2)+' + Tax $'+state.taxAmount.toFixed(2)+'</span><br><span style="font-size:20px;font-weight:700;color:#111">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      }else{
+        h+='<div><span style="font-size:13px;color:#6b7280">Total</span><br><span style="font-size:20px;font-weight:700;color:#111">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      }
       h+='<button class="sbk-btn" style="width:auto;padding:14px 32px;margin:0" data-gonext="datetime">Continue &rarr;</button>';
       h+='</div>';
 
@@ -527,6 +547,7 @@ function generateBookingWidgetCode(userId, theme = {}) {
       }
       h+='<div class="sbk-summary-row"><span>Date</span><span>'+fmtDate(state.selDate)+'</span></div>';
       h+='<div class="sbk-summary-row"><span>Time</span><span>'+state.selTime+'</span></div>';
+      if(state.taxAmount>0){h+='<div class="sbk-summary-row"><span style="color:#6b7280">Tax ('+Math.round(state.taxRate*100)+'%)</span><span>$'+state.taxAmount.toFixed(2)+'</span></div>';}
       h+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
       h+='</div>';
       var cfields=getContactFields();

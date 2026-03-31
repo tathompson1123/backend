@@ -128,7 +128,13 @@ router.post('/create', authenticateToken, async (req, res) => {
     }
 
     const service = serviceResult.rows[0];
-    
+
+    // Fetch user's sales tax rate
+    const taxResult = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
+    const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
+    const taxAmount = Math.round(parseFloat(service.price) * taxRate * 100) / 100;
+    const totalWithTax = parseFloat(service.price) + taxAmount;
+
     const [startHour, startMin] = startTime.split(':').map(Number);
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = startMinutes + (service.duration_hours * 60);
@@ -189,7 +195,7 @@ router.post('/create', authenticateToken, async (req, res) => {
       RETURNING *`,
       [
         userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
-        service.price, service.price, customerInfo.name, customerInfo.email,
+        service.price, totalWithTax, customerInfo.name, customerInfo.email,
         customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null
       ]
     );

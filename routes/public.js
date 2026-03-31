@@ -40,6 +40,13 @@ router.get('/services', async (req, res) => {
       addonMap[row.main_service_id].push(row.addon_service_id);
     }
 
+    // Get the business's sales tax rate
+    const taxResult = await pool.query(
+      'SELECT default_tax_rate FROM users WHERE id = $1',
+      [businessId]
+    );
+    const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
+
     // Get variants for all services
     const variantResult = await pool.query(
       `SELECT sv.* FROM service_variants sv
@@ -70,7 +77,8 @@ router.get('/services', async (req, res) => {
       services: servicesWithVariants,
       categories,
       uncategorized,
-      addonMap
+      addonMap,
+      taxRate
     });
   } catch (error) {
     console.error('Public services error:', error.message);
@@ -427,6 +435,12 @@ router.post('/bookings/create', async (req, res) => {
       if (s.id === Number(serviceId) && variantRow) return sum + parseFloat(variantRow.price || 0);
       return sum + parseFloat(s.price || 0);
     }, 0);
+
+    // Apply sales tax from user's default rate
+    const bizTaxResult = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [businessId]);
+    const bizTaxRate = parseFloat(bizTaxResult.rows[0]?.default_tax_rate || 0);
+    const bizTaxAmount = Math.round(totalPrice * bizTaxRate * 100) / 100;
+    const totalWithTax = totalPrice + bizTaxAmount;
     const totalDurationMinutes = servicesResult.rows.reduce((sum, s) => {
       if (s.id === Number(serviceId) && variantRow && variantRow.duration_hours) {
         return sum + Math.round(parseFloat(variantRow.duration_hours) * 60);
@@ -493,7 +507,7 @@ router.post('/bookings/create', async (req, res) => {
         customerInfo.name, customerInfo.email, customerInfo.phone || '',
         customerNotes || '',
         assignmentType === 'employee' ? employeeId : null,
-        totalPrice, totalPrice
+        totalPrice, totalWithTax
       ]
     );
 
