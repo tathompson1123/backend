@@ -579,14 +579,7 @@ router.post('/publish', authenticateToken, requirePlan('basic'), async (req, res
     html_content = makeMobileResponsive(html_content);
 
     if (pages) {
-      // Remove gift card pages before publishing
-      const GIFT_CARD_RE = /gift.?card|giftcard/i;
       Object.keys(pages).forEach(pageName => {
-        if (GIFT_CARD_RE.test(pageName)) {
-          console.log(`🗑️ Removing gift card page from publish: ${pageName}`);
-          delete pages[pageName];
-          return;
-        }
         pages[pageName] = ensureUserId(pages[pageName]);
         pages[pageName] = makeMobileResponsive(pages[pageName]);
       });
@@ -1031,6 +1024,8 @@ function hasContactForm(html) {
 
 function fixContactFormHTML(html, pageName) {
   if (!hasContactForm(html)) return html;
+  // Never process gift card pages — they have purchase forms, not contact forms
+  if (/gift.?card|giftcard/i.test(pageName)) return html;
 
   console.log(`🔧 Fixing contact form in ${pageName}`);
 
@@ -1136,12 +1131,16 @@ function fixContactFormHTML(html, pageName) {
   const submissionScript = `
 <script>
 (function() {
-  const form = document.getElementById('contact-form');
+  const form = document.getElementById('contact-form') ||
+    document.querySelector('form[id*="contact"]') ||
+    document.querySelector('form[id*="quote"]') ||
+    document.querySelector('form[id*="inquiry"]') ||
+    document.querySelector('form');
   if (!form) {
     console.error('Contact form not found!');
     return;
   }
-  
+
   // Remove any existing event listeners
   const newForm = form.cloneNode(true);
   form.parentNode.replaceChild(newForm, form);
@@ -1151,7 +1150,10 @@ function fixContactFormHTML(html, pageName) {
     
     const formData = new FormData(e.target);
     const button = e.target.querySelector('button[type="submit"]') || e.target.querySelector('.submit-button') || e.target.querySelector('button');
-    const statusEl = document.getElementById('form-status');
+    const statusEl = document.getElementById('form-status') ||
+      newForm.querySelector('[id*="status"]') ||
+      newForm.querySelector('.form-status') ||
+      newForm.querySelector('.status');
     
     const smsConsent = formData.get('sms_consent') === 'on';
     if (!smsConsent) {
@@ -1245,15 +1247,12 @@ function fixContactFormHTML(html, pageName) {
     let updatedPages = { ...pages };
     let updatedHtmlContent = website.html_content;
 
-    // Fix contact forms in ALL pages
-    const GIFT_CARD_PAGE_RE = /gift.?card|giftcard/i;
+    // Fix contact forms in ALL pages (skip gift card and purchase pages)
+    const SKIP_PAGE_RE = /gift.?card|giftcard/i;
     if (pages && Object.keys(pages).length > 0) {
       Object.keys(pages).forEach(pageKey => {
-        // Remove gift card pages entirely
-        if (GIFT_CARD_PAGE_RE.test(pageKey)) {
-          console.log(`🗑️ Removing gift card page: ${pageKey}`);
-          delete updatedPages[pageKey];
-          pagesFixed.push(`${pageKey} (removed)`);
+        if (SKIP_PAGE_RE.test(pageKey)) {
+          console.log(`⏭️ Skipping gift card page: ${pageKey}`);
           return;
         }
         const originalHTML = pages[pageKey];
