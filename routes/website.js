@@ -1387,41 +1387,6 @@ function fixContactFormHTML(html, pageName) {
     res.status(500).json({ error: 'Failed to fix contact form' });
   }
 });
- 
-// POST - Toggle publish status
-router.post('/publish', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    
-    // Fetch fresh data from database instead of using request body
-    const websiteResult = await pool.query(
-      'SELECT html_content, pages FROM websites WHERE user_id = $1',
-      [userId]
-    );
-    
-    if (websiteResult.rows.length === 0) {
-      return res.status(404).json({ error: 'No website found' });
-    }
-    
-    let { html_content, pages } = websiteResult.rows[0];
-    
-    // Make HTML mobile responsive before publishing
-    html_content = makeMobileResponsive(html_content);
-    
-    if (pages) {
-      Object.keys(pages).forEach(pageName => {
-        pages[pageName] = makeMobileResponsive(pages[pageName]);
-      });
-    }
-    res.json({ 
-      success: true,
-      website: result.rows[0] 
-    });
-  } catch (error) {
-    console.error('Error toggling publish:', error.message);
-    res.status(500).json({ error: 'Failed to toggle publish' });
-  }
-});
 
 // POST - AI Website Generation (Schema-based)
 router.post('/generate', authenticateToken, async (req, res) => {

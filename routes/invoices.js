@@ -887,8 +887,11 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 
 router.put('/settings', authenticateToken, async (req, res) => {
   try {
-    const { defaultTaxRate } = req.body; // e.g. 9.8 → stored as 0.098
-    await pool.query('UPDATE users SET default_tax_rate = $1 WHERE id = $2', [defaultTaxRate / 100, req.user.userId]);
+    const rate = parseFloat(req.body.defaultTaxRate); // e.g. 9.8 → stored as 0.098
+    if (isNaN(rate) || rate < 0 || rate > 100) {
+      return res.status(400).json({ error: 'Invalid tax rate' });
+    }
+    await pool.query('UPDATE users SET default_tax_rate = $1 WHERE id = $2', [rate / 100, req.user.userId]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

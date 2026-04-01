@@ -72,15 +72,22 @@ router.post('/', async (req, res) => {
 
     const employee = result.rows[0];
 
-    if (serviceIds && serviceIds.length > 0) {
-      for (const serviceId of serviceIds) {
-        await pool.query(
-          `INSERT INTO service_employees (service_id, employee_id)
-           VALUES ($1, $2)
-           ON CONFLICT (service_id, employee_id) DO NOTHING`,
-          [serviceId, employee.id]
-        );
-      }
+    // Auto-assign all active services for this business.
+    // If the caller passed a specific serviceIds list, use that instead.
+    const servicesToAssign = (serviceIds && serviceIds.length > 0)
+      ? serviceIds
+      : (await pool.query(
+          'SELECT id FROM services WHERE user_id = $1 AND active = true',
+          [userId]
+        )).rows.map(r => r.id);
+
+    for (const serviceId of servicesToAssign) {
+      await pool.query(
+        `INSERT INTO service_employees (service_id, employee_id)
+         VALUES ($1, $2)
+         ON CONFLICT (service_id, employee_id) DO NOTHING`,
+        [serviceId, employee.id]
+      );
     }
 
     res.json({ employee });

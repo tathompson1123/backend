@@ -39,7 +39,12 @@ function formatTime(timeStr) {
  * @param {string} opts.bookingDate  - "YYYY-MM-DD"
  * @param {string} opts.startTime    - "HH:MM"
  * @param {string} opts.endTime      - "HH:MM"
- * @param {number} opts.price
+ * @param {number} opts.subtotal     - price before tax
+ * @param {number} opts.taxRate      - decimal (e.g. 0.098)
+ * @param {number} opts.taxAmount    - dollar amount of tax
+ * @param {number} opts.total        - subtotal + tax
+ * @param {number} opts.price        - legacy: used if subtotal/total not provided
+ * @param {string} opts.location     - service location address (optional)
  * @param {string} opts.notes
  */
 async function sendBookingEmails(opts) {
@@ -51,19 +56,32 @@ async function sendBookingEmails(opts) {
   try {
     // Get business info
     const userResult = await pool.query(
-      'SELECT business_name, email FROM users WHERE id = $1',
+      `SELECT u.business_name, u.email,
+              NULLIF(TRIM(CONCAT_WS(', ', NULLIF(bi.address,''), NULLIF(bi.city,''), NULLIF(bi.state,''))), '') AS business_address
+       FROM users u
+       LEFT JOIN business_information bi ON bi.user_id = u.id
+       WHERE u.id = $1`,
       [opts.userId]
     );
     if (userResult.rows.length === 0) return;
 
-    const { business_name: businessName, email: ownerEmail } = userResult.rows[0];
+    const { business_name: businessName, email: ownerEmail, business_address: businessAddress } = userResult.rows[0];
+
+    // Use provided location, or fall back to the business address
+    const location = opts.location || businessAddress;
     const fromEmail = 'noreply@sorceintegrations.com';
 
     const formattedDate = formatDate(opts.bookingDate);
     const formattedStart = formatTime(opts.startTime);
     const formattedEnd = opts.endTime ? formatTime(opts.endTime) : null;
     const timeDisplay = formattedEnd ? `${formattedStart} – ${formattedEnd}` : formattedStart;
-    const priceDisplay = opts.price ? `$${parseFloat(opts.price).toFixed(2)}` : null;
+
+    // Prefer subtotal/total breakdown; fall back to legacy price field
+    const subtotal = opts.subtotal != null ? parseFloat(opts.subtotal) : parseFloat(opts.price || 0);
+    const taxAmount = opts.taxAmount != null ? parseFloat(opts.taxAmount) : 0;
+    const total = opts.total != null ? parseFloat(opts.total) : subtotal;
+    const hasTax = taxAmount > 0;
+    const taxPct = opts.taxRate ? (opts.taxRate * 100).toFixed(2).replace(/\.?0+$/, '') : null;
 
     const detailsHtml = `
       <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
@@ -71,7 +89,10 @@ async function sendBookingEmails(opts) {
         <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${opts.serviceName}</td></tr>
         <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${formattedDate}</td></tr>
         <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${timeDisplay}</td></tr>
-        ${priceDisplay ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Total</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${priceDisplay}</td></tr>` : ''}
+        ${location ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Place</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${location}</td></tr>` : ''}
+        ${hasTax ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Subtotal</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">$${subtotal.toFixed(2)}</td></tr>` : ''}
+        ${hasTax ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Tax${taxPct ? ` (${taxPct}%)` : ''}</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">$${taxAmount.toFixed(2)}</td></tr>` : ''}
+        ${total > 0 ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Total</td><td style="padding:10px 12px;border-bottom:1px solid #eee;font-weight:700;">$${total.toFixed(2)}</td></tr>` : ''}
         ${opts.notes ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Notes</td><td style="padding:10px 12px;">${opts.notes}</td></tr>` : ''}
       </table>`;
 

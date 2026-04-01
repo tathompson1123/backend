@@ -190,6 +190,7 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
 // ── Startup: ensure required tables/columns exist ────────
 (async () => {
   try {
+    await pool.query('ALTER TABLE bookings ALTER COLUMN employee_id DROP NOT NULL');
     await pool.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS sms_scheduled_at TIMESTAMP');
     await pool.query("CREATE INDEX IF NOT EXISTS idx_leads_sms_pending ON leads(sms_scheduled_at) WHERE status = 'sms_pending'");
     await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS telnyx_phone_number VARCHAR(20)');
@@ -1023,6 +1024,32 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
   } catch (e) {
     console.warn('⚠️ Could not verify rewards_config table:', e.message);
   }
+
+  // Service location fields
+  try {
+    await pool.query("ALTER TABLE services ADD COLUMN IF NOT EXISTS location_type VARCHAR(20) DEFAULT 'business_address'");
+    await pool.query('ALTER TABLE services ADD COLUMN IF NOT EXISTS custom_address TEXT');
+    console.log('✅ Service location columns verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify service location columns:', e.message);
+  }
+
+  // Booking customer address (for mobile/on-site services)
+  try {
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_address TEXT');
+    console.log('✅ Booking customer_address column verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify booking customer_address column:', e.message);
+  }
+
+  // Lead follow-up and priority fields
+  try {
+    await pool.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS follow_up_date DATE');
+    await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS priority VARCHAR(10) DEFAULT 'normal'");
+    console.log('✅ Lead follow_up_date and priority columns verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify lead follow-up columns:', e.message);
+  }
 })();
 
 // ── SMS processing cron job ──────────────────────────────
@@ -1053,15 +1080,35 @@ async function sendSMSAuto(to, message, userId) {
 
 cron.schedule('*/30 * * * * *', async () => {
   try {
-    const pending = await pool.query(
-      `SELECT l.*, u.twilio_phone_number, u.telnyx_phone_number, u.business_name
-       FROM leads l
-       JOIN users u ON u.id = l.user_id
-       WHERE l.status = 'sms_pending'
-         AND l.sms_scheduled_at IS NOT NULL
-         AND l.sms_scheduled_at <= NOW()
-         AND (u.twilio_phone_number IS NOT NULL OR u.telnyx_phone_number IS NOT NULL)`
-    );
+    // Recover any leads stuck in 'sms_sending' from a previous crashed run
+    await pool.query(`
+      UPDATE leads SET status = 'sms_pending'
+      WHERE status = 'sms_sending'
+        AND sms_scheduled_at < NOW() - INTERVAL '10 minutes'
+    `);
+
+    // Atomically claim leads by flipping them to 'sms_sending' before processing.
+    // If two server instances run simultaneously (e.g. during a Railway deploy),
+    // each UPDATE targets different rows and no lead is double-sent.
+    const pending = await pool.query(`
+      WITH claimed AS (
+        UPDATE leads SET status = 'sms_sending'
+        WHERE id IN (
+          SELECT l.id
+          FROM leads l
+          JOIN users u ON u.id = l.user_id
+          WHERE l.status = 'sms_pending'
+            AND l.sms_scheduled_at IS NOT NULL
+            AND l.sms_scheduled_at <= NOW()
+            AND (u.twilio_phone_number IS NOT NULL OR u.telnyx_phone_number IS NOT NULL)
+          LIMIT 50
+        )
+        RETURNING *
+      )
+      SELECT c.*, u.twilio_phone_number, u.telnyx_phone_number, u.business_name
+      FROM claimed c
+      JOIN users u ON u.id = c.user_id
+    `);
 
     for (const lead of pending.rows) {
       try {
@@ -1466,6 +1513,11 @@ cron.schedule('*/15 * * * *', async () => {
     console.error('❌ Booking reminder cron error:', err.message);
   }
 });
+
+// ── Chat learning agent cron — runs every 4 hours ────────────────────────────
+// Scans recent conversations for errors & frustration, auto-improves agent prompts.
+const { runChatLearningAgent } = require('./utils/chatLearningAgent');
+cron.schedule('0 */4 * * *', () => runChatLearningAgent());
 
 // Start server
 app.listen(PORT, () => {

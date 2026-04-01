@@ -1006,7 +1006,66 @@
 
   // ── Form Detection ────────────────────────────────────
 
+  // Returns true if this page/element should never have its form replaced —
+  // checkout flows, cart pages, login/account pages, or gift card pages on any platform.
+  function isGiftCardContext(el) {
+    var url = window.location.href.toLowerCase();
+    var title = document.title.toLowerCase();
+
+    // ── Checkout / cart / payment pages (all platforms) ──────────────────────
+    if (/\/(checkout|cart|bag|order-confirm|payment|pay\b|billing|shipping)(\/?$|\/)/.test(url)) return true;
+    // Squarespace commerce checkout
+    if (/\/commerce\/checkout/.test(url)) return true;
+    // Shopify
+    if (/\.myshopify\.com.*\/(cart|checkout)/.test(url)) return true;
+    // WooCommerce
+    if (/\/(wp\/?)?checkout\/?$/.test(url)) return true;
+    // BigCommerce
+    if (/\/checkout\//.test(url)) return true;
+
+    // ── Login / account / signup pages ───────────────────────────────────────
+    if (/\/(login|log-in|sign-in|signin|signup|sign-up|register|account|my-account|password)(\/|$|\?)/.test(url)) return true;
+
+    // ── Gift card page patterns ───────────────────────────────────────────────
+    if (/gift[_-]?card|giftcard|gift.certificate/i.test(url)) return true;
+    if (/gift card|gift certificate|e-?gift/i.test(title)) return true;
+
+    // Check page headings for gift card mentions
+    var headings = document.querySelectorAll('h1, h2');
+    for (var hi = 0; hi < headings.length; hi++) {
+      if (/gift card|gift certificate|e-?gift/i.test(headings[hi].textContent)) return true;
+    }
+
+    // Check the element's immediate section context
+    if (el) {
+      var nearby = (el.closest('section, article, main, [data-mesh-id], [data-block-type], .sqs-block') || el);
+      if (/gift card|gift certificate|e-?gift/i.test((nearby.textContent || '').slice(0, 500))) return true;
+    }
+
+    return false;
+  }
+
+  var INPUT_SELECTOR = [
+    // Standard HTML inputs
+    'input[type="text"]', 'input[type="email"]', 'input[type="tel"]',
+    'input[type="number"]', 'input:not([type])',
+    'textarea',
+    // ARIA / accessible inputs (Wix, Webflow)
+    '[role="textbox"]', '[contenteditable="true"]',
+    // Squarespace
+    '.field-element',
+    // Webflow
+    '.w-input',
+    // Contact Form 7
+    '.wpcf7-form-control:not([type="submit"]):not([type="checkbox"]):not([type="radio"])',
+    // Gravity Forms
+    '.gfield input[type="text"], .gfield input[type="email"], .gfield input[type="tel"], .gfield textarea',
+    // Elementor
+    '.elementor-field-type-text input, .elementor-field-type-email input, .elementor-field-type-tel input, .elementor-field-type-textarea textarea'
+  ].join(', ');
+
   function isContactForm(form) {
+    if (isGiftCardContext(form)) return false;
     // Skip forms inside nav, header (search bars, login forms)
     var ancestor = form;
     while (ancestor) {
@@ -1017,14 +1076,15 @@
       ancestor = ancestor.parentElement;
     }
     // Must have at least 2 input/textarea fields
-    var inputs = form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type]), textarea, [role="textbox"]');
+    var inputs = form.querySelectorAll(INPUT_SELECTOR);
     return inputs.length >= 2;
   }
 
   // Wix/Squarespace often don't use <form> — detect form-like containers
   function isFormLikeContainer(el) {
     if (el.tagName === 'FORM') return false; // already handled
-    var inputs = el.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type]), textarea, [role="textbox"]');
+    if (isGiftCardContext(el)) return false;
+    var inputs = el.querySelectorAll(INPUT_SELECTOR);
     if (inputs.length < 2) return false;
     var submitBtn = el.querySelector('button[type="submit"], input[type="submit"], button');
     if (!submitBtn) return false;
@@ -1101,8 +1161,46 @@
       if (replaceFormElement(allForms[i])) replaced++;
     }
 
-    // Wix/SPA form-like containers (no <form> tag)
-    var divs = document.querySelectorAll('[data-mesh-id], [class*="form"], [class*="contact"], [id*="form"], [id*="contact"]');
+    // Platform-specific form containers (no <form> tag, or form tag with platform wrapper needed)
+    var divs = document.querySelectorAll(
+      // ── Wix ──────────────────────────────────────────────────────────────────
+      '[data-mesh-id], [data-hook*="form"], [data-hook*="contact"], ' +
+
+      // ── Squarespace ──────────────────────────────────────────────────────────
+      // data-block-type="9" = form block; .sqs-block-form = SS form wrapper
+      '[data-block-type="9"], .sqs-block-form, .form-wrapper, ' +
+
+      // ── WordPress: Contact Form 7, Gravity Forms, WPForms, Ninja Forms ───────
+      '[class*="wpcf7"], [class*="gform_wrapper"], ' +
+      '[class*="wpforms-form"], [class*="wpforms-container"], ' +
+      '[class*="nf-form-cont"], [class*="ninja-forms"], ' +
+      '[class*="frm_form"], ' +                          // Formidable Forms
+      '[class*="mc4wp"], [class*="mailchimp"], ' +        // Mailchimp for WordPress
+
+      // ── WordPress page builders ───────────────────────────────────────────────
+      '[class*="elementor-form"], [class*="elementor-widget-form"], ' +
+      '[class*="et_pb_contact"], ' +                     // Divi
+      '[class*="fl-form"], ' +                           // Beaver Builder
+      '[class*="vc_contact_form"], ' +                   // WPBakery
+
+      // ── Webflow ───────────────────────────────────────────────────────────────
+      '.w-form, [class*="w-form"], ' +
+
+      // ── Weebly / Square Online ────────────────────────────────────────────────
+      '[class*="wsite-form"], [class*="sqsp-form"], ' +
+
+      // ── GoDaddy / Showit / Jimdo ──────────────────────────────────────────────
+      '[class*="cc-form"], [class*="formBlock"], ' +
+
+      // ── Shopify (contact page template) ──────────────────────────────────────
+      '.contact__form, [action*="/contact"][method], ' +
+
+      // ── Generic patterns (catch-all for any other builder) ────────────────────
+      '[class*="form"], [class*="Form"], ' +
+      '[class*="contact"], [class*="Contact"], ' +
+      '[id*="form"], [id*="contact"], ' +
+      '[aria-label*="form" i], [aria-label*="contact" i]'
+    );
     for (var j = 0; j < divs.length; j++) {
       if (isSorceOwned(divs[j])) continue;
       if (divs[j].getAttribute('data-sorce-replaced')) continue;
@@ -1116,18 +1214,19 @@
 
   function injectLeadForm() {
     var replaced = scanAndReplaceForms();
-
     if (replaced > 0) return;
 
-    // Retry — Wix/SPA frameworks hydrate forms after initial load
-    var retries = [1000, 3000, 6000, 10000];
+    // Retry — Wix lazy-loads form components after scroll or after framework hydration.
+    // Extended timing covers slow Wix sites.
+    var retries = [500, 1500, 3000, 6000, 10000, 15000, 20000];
     var retryIdx = 0;
+    var retryDone = false;
     function retryReplace() {
-      if (retryIdx >= retries.length) return;
+      if (retryDone || retryIdx >= retries.length) return;
       setTimeout(function() {
         var found = scanAndReplaceForms();
         if (found > 0) {
-          leadFormFabCreated = true;
+          retryDone = true;
         } else {
           retryIdx++;
           retryReplace();
@@ -1135,6 +1234,27 @@
       }, retries[retryIdx]);
     }
     retryReplace();
+
+    // MutationObserver fallback — catches Wix forms that render on scroll or after
+    // SPA navigation even after all retries have fired.
+    if (typeof MutationObserver !== 'undefined') {
+      var formObserverDebounce = null;
+      var formObserver = new MutationObserver(function(mutations) {
+        var relevant = false;
+        for (var i = 0; i < mutations.length; i++) {
+          var t = mutations[i].target;
+          if (t.closest && (t.closest('[data-sorce-form]') || t.closest('.sorce-replaced-form') || t.closest('#sorce-embed-container'))) continue;
+          if (mutations[i].addedNodes.length > 0) { relevant = true; break; }
+        }
+        if (!relevant) return;
+        clearTimeout(formObserverDebounce);
+        formObserverDebounce = setTimeout(function() {
+          var found = scanAndReplaceForms();
+          if (found > 0 && !retryDone) retryDone = true;
+        }, 600);
+      });
+      formObserver.observe(document.body, { childList: true, subtree: true });
+    }
   }
 
   // ── Booking Button Hijack ───────────────────────────────
@@ -1337,6 +1457,7 @@
       debounceTimer = setTimeout(function() {
         isProcessing = true;
         if (config.bookingEnabled) hijackBookingButtons();
+        if (config.leadFormEnabled) scanAndReplaceForms();
         isProcessing = false;
       }, 500);
     });

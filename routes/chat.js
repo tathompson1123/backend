@@ -4,6 +4,154 @@ const { pool } = require('../config/database');
 const Anthropic = require('@anthropic-ai/sdk');
 const { authenticateToken } = require('../config/middleware');
 const { sendBookingEmails } = require('../utils/bookingEmail');
+const sgMail = require('@sendgrid/mail');
+if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+function formatSlotTime(slot) {
+  const [h, m] = slot.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+// Returns up to 3 upcoming dates (within 14 days) that have at least one open slot
+async function getAvailableDaysNearDate(userId, serviceId, bookingDate, durationHours) {
+  const available = [];
+  const base = new Date(bookingDate + 'T12:00:00');
+  for (let offset = 1; offset <= 14 && available.length < 3; offset++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + offset);
+    const dateStr = d.toISOString().slice(0, 10);
+    const slots = await getAvailableSlotsForDate(userId, serviceId, dateStr, durationHours);
+    if (slots.length > 0) {
+      const label = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+      available.push({ date: dateStr, label, slots });
+    }
+  }
+  return available;
+}
+
+// Returns an array of "HH:MM" strings that are open for a given date/service
+async function getAvailableSlotsForDate(userId, serviceId, bookingDate, durationHours) {
+  const dateObj = new Date(bookingDate + 'T12:00:00');
+  const dayOfWeek = dateObj.getDay();
+
+  const hoursRow = await pool.query(
+    'SELECT open_time, close_time, is_open FROM business_hours WHERE user_id = $1 AND day_of_week = $2',
+    [userId, dayOfWeek]
+  );
+  if (!hoursRow.rows[0]?.is_open) return [];
+
+  const { open_time, close_time } = hoursRow.rows[0];
+  const [closeH, closeM] = close_time.split(':').map(Number);
+  const closeMinutes = closeH * 60 + closeM;
+  const durationMinutes = Math.ceil(durationHours * 60);
+
+  // Use configured time slots if available, otherwise generate hourly from business hours
+  let candidateSlots = [];
+  const configuredSlots = await pool.query(
+    'SELECT slot_time FROM booking_time_slots WHERE user_id = $1 AND active = true ORDER BY slot_time',
+    [userId]
+  );
+
+  if (configuredSlots.rows.length > 0) {
+    candidateSlots = configuredSlots.rows
+      .map(r => r.slot_time.slice(0, 5))
+      .filter(t => t >= open_time && t < close_time);
+  } else {
+    const [openH, openM] = open_time.split(':').map(Number);
+    for (let h = openH; h < closeH; h++) {
+      candidateSlots.push(`${String(h).padStart(2, '0')}:${String(openM).padStart(2, '0')}`);
+    }
+  }
+
+  // Drop slots where the service wouldn't finish before closing
+  candidateSlots = candidateSlots.filter(t => {
+    const [h, m] = t.split(':').map(Number);
+    return (h * 60 + m + durationMinutes) <= closeMinutes;
+  });
+
+  // If no employees configured, all candidate slots are available
+  const empCount = parseInt(
+    (await pool.query('SELECT COUNT(*) AS count FROM employees WHERE user_id = $1 AND active = true', [userId])).rows[0].count
+  );
+  if (empCount === 0) return candidateSlots;
+
+  // Check each slot for employee availability
+  const available = [];
+  for (const slot of candidateSlots) {
+    const [h, m] = slot.split(':').map(Number);
+    const endMin = h * 60 + m + durationMinutes;
+    const endTime = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+
+    const emp = await pool.query(
+      `SELECT e.id FROM employees e
+       LEFT JOIN service_employees se ON e.id = se.employee_id
+       WHERE e.user_id = $1 AND e.active = true
+       AND (se.service_id = $2 OR NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id))
+       AND NOT EXISTS (
+         SELECT 1 FROM bookings b
+         WHERE b.employee_id = e.id AND b.booking_date = $3
+         AND b.status NOT IN ('cancelled', 'no_show')
+         AND (
+           (b.start_time <= $4 AND b.end_time > $4) OR
+           (b.start_time < $5 AND b.end_time >= $5) OR
+           (b.start_time >= $4 AND b.end_time <= $5)
+         )
+       )
+       LIMIT 1`,
+      [userId, serviceId, bookingDate, slot, endTime]
+    );
+    if (emp.rows.length > 0) available.push(slot);
+  }
+  return available;
+}
+
+async function sendAttentionEmail({ userId, customerName, customerPhone, conversationId }) {
+  if (!process.env.SENDGRID_API_KEY) return;
+  try {
+    const userResult = await pool.query(
+      'SELECT business_name, email FROM users WHERE id = $1',
+      [userId]
+    );
+    if (!userResult.rows[0]?.email) return;
+    const { business_name: businessName, email: ownerEmail } = userResult.rows[0];
+
+    await sgMail.send({
+      to: ownerEmail,
+      from: { name: 'SORCE Chat Alerts', email: 'noreply@sorceintegrations.com' },
+      subject: `Action needed: ${customerName} wants a call back`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+          <div style="background:#dc2626;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
+            <h1 style="color:#fff;margin:0;font-size:1.4rem;">Customer Needs Attention</h1>
+          </div>
+          <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+            <p style="font-size:1rem;margin-top:0;">
+              A customer on your website chat asked to be called back or had a question your chat agent couldn't fully answer.
+              Reach out to them as soon as possible.
+            </p>
+            <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
+              <tr>
+                <td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:35%;">Name</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #eee;">${customerName}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Phone</td>
+                <td style="padding:10px 12px;">${customerPhone}</td>
+              </tr>
+            </table>
+            <p style="color:#6b7280;font-size:0.85rem;margin:0;">
+              Business: ${businessName || 'Your business'} &nbsp;|&nbsp; Conversation #${conversationId}
+            </p>
+          </div>
+        </div>`,
+    });
+    console.log(`📧 Attention email sent for user ${userId} — customer: ${customerName}`);
+  } catch (err) {
+    console.error('📧 Attention email error:', err.message);
+  }
+}
 const { getBusinessDateTime } = require('../utils/zipToTimezone');
 
 const anthropic = new Anthropic({
@@ -51,11 +199,21 @@ async function createBookingFromChat(userId, bookingData) {
       return { success: false, error: 'that time is outside our business hours' };
     }
 
-    // Get service details
-    const serviceResult = await pool.query(
-      'SELECT duration_hours, price, name FROM services WHERE id = $1 AND user_id = $2',
-      [serviceId, userId]
-    );
+    // Get service details, tax rate, and business address in parallel
+    const [serviceResult, taxResult] = await Promise.all([
+      pool.query(
+        'SELECT duration_hours, price, name, location_type, custom_address FROM services WHERE id = $1 AND user_id = $2',
+        [serviceId, userId]
+      ),
+      pool.query(
+        `SELECT u.default_tax_rate,
+                NULLIF(TRIM(CONCAT_WS(', ', NULLIF(bi.address,''), NULLIF(bi.city,''), NULLIF(bi.state,''))), '') AS business_address
+         FROM users u
+         LEFT JOIN business_information bi ON bi.user_id = u.id
+         WHERE u.id = $1`,
+        [userId]
+      ),
+    ]);
 
     if (serviceResult.rows.length === 0) {
       throw new Error('Service not found');
@@ -71,35 +229,51 @@ async function createBookingFromChat(userId, bookingData) {
     const endMin = endMinutes % 60;
     const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
 
-    // Find available employee
-    const availableEmpResult = await pool.query(
-      `SELECT e.id, e.name
-       FROM employees e
-       LEFT JOIN service_employees se ON e.id = se.employee_id
-       WHERE e.user_id = $1 
-       AND e.active = true
-       AND (se.service_id = $2 OR NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id))
-       AND NOT EXISTS (
-         SELECT 1 FROM bookings b
-         WHERE b.employee_id = e.id
-         AND b.booking_date = $3
-         AND b.status NOT IN ('cancelled', 'no_show')
-         AND (
-           (b.start_time <= $4 AND b.end_time > $4) OR
-           (b.start_time < $5 AND b.end_time >= $5) OR
-           (b.start_time >= $4 AND b.end_time <= $5)
-         )
-       )
-       LIMIT 1`,
-      [userId, serviceId, bookingDate, startTime, endTime]
+    // Find available employee — if no employees are configured at all, allow the booking
+    // to go through unassigned (owner assigns staff later in the dashboard)
+    const empCountResult = await pool.query(
+      'SELECT COUNT(*) AS count FROM employees WHERE user_id = $1 AND active = true',
+      [userId]
     );
+    const hasEmployees = parseInt(empCountResult.rows[0].count) > 0;
 
-    if (availableEmpResult.rows.length === 0) {
-      return { success: false, error: 'No employees available for this time slot' };
+    let employeeId = null;
+    let employeeName = 'our team';
+
+    if (hasEmployees) {
+      const availableEmpResult = await pool.query(
+        `SELECT e.id, e.name
+         FROM employees e
+         LEFT JOIN service_employees se ON e.id = se.employee_id
+         WHERE e.user_id = $1
+         AND e.active = true
+         AND (se.service_id = $2 OR NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id))
+         AND NOT EXISTS (
+           SELECT 1 FROM bookings b
+           WHERE b.employee_id = e.id
+           AND b.booking_date = $3
+           AND b.status NOT IN ('cancelled', 'no_show')
+           AND (
+             (b.start_time <= $4 AND b.end_time > $4) OR
+             (b.start_time < $5 AND b.end_time >= $5) OR
+             (b.start_time >= $4 AND b.end_time <= $5)
+           )
+         )
+         LIMIT 1`,
+        [userId, serviceId, bookingDate, startTime, endTime]
+      );
+
+      if (availableEmpResult.rows.length === 0) {
+        const openSlots = await getAvailableSlotsForDate(userId, serviceId, bookingDate, service.duration_hours);
+        const nearbyDays = openSlots.length === 0
+          ? await getAvailableDaysNearDate(userId, serviceId, bookingDate, service.duration_hours)
+          : [];
+        return { success: false, error: 'slot_taken', availableSlots: openSlots, nearbyDays };
+      }
+
+      employeeId = availableEmpResult.rows[0].id;
+      employeeName = availableEmpResult.rows[0].name;
     }
-
-    const employeeId = availableEmpResult.rows[0].id;
-    const employeeName = availableEmpResult.rows[0].name;
 
     // Generate booking number
     const bookingNumberResult = await pool.query('SELECT generate_booking_number() as number');
@@ -133,19 +307,33 @@ async function createBookingFromChat(userId, bookingData) {
       console.log(`✅ Chat booking: found & updated EXISTING customer ${customerId}`);
     }
 
-    // Create booking
+    // Create booking with tax calculation
+    const servicePrice = parseFloat(service.price) || 0;
+    const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate) || 0;
+    const taxAmount = Math.round(servicePrice * taxRate * 100) / 100;
+    const totalAmount = Math.round((servicePrice + taxAmount) * 100) / 100;
+
+    // Determine location for the booking
+    const locationType = service.location_type || 'business_address';
+    const businessAddress = taxResult.rows[0]?.business_address || null;
+    const locationDisplay = locationType === 'custom_address'
+      ? (service.custom_address || businessAddress)
+      : locationType === 'customer_address'
+        ? (bookingData.customerAddress || null)
+        : businessAddress;
+
     const bookingResult = await pool.query(
       `INSERT INTO bookings (
         user_id, customer_id, booking_number, booking_date, start_time, end_time,
-        subtotal, total_amount, customer_name, customer_email, 
-        customer_phone, status, employee_id, source
+        subtotal, tax_rate, tax_amount, total_amount, customer_name, customer_email,
+        customer_phone, status, employee_id, source, customer_address
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *`,
       [
         userId, customerId, bookingNumber, bookingDate, startTime, endTime,
-        service.price, service.price, customerName, customerEmail,
-        customerPhone, 'confirmed', employeeId, 'ai_chat_agent'
+        servicePrice, taxRate, taxAmount, totalAmount, customerName, customerEmail,
+        customerPhone, 'confirmed', employeeId, 'ai_chat_agent', locationDisplay
       ]
     );
 
@@ -158,7 +346,7 @@ async function createBookingFromChat(userId, bookingData) {
         service_price, quantity, subtotal
       )
       VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-      [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
+      [booking.id, serviceId, service.name, service.duration_hours, servicePrice, servicePrice]
     );
 
     // Update customer with service info
@@ -168,7 +356,7 @@ async function createBookingFromChat(userId, bookingData) {
        lifetime_value = COALESCE(lifetime_value, 0) + COALESCE($3, 0),
        updated_at = CURRENT_TIMESTAMP
        WHERE id = $4`,
-      [service.name, bookingDate, service.price || 0, customerId]
+      [service.name, bookingDate, servicePrice, customerId]
     );
 
     console.log(`✅ Chat booking created: #${bookingNumber} customer=${customerId} employee=${employeeId}`);
@@ -184,7 +372,11 @@ async function createBookingFromChat(userId, bookingData) {
       bookingDate,
       startTime,
       endTime,
-      price: service.price,
+      subtotal: servicePrice,
+      taxRate,
+      taxAmount,
+      total: totalAmount,
+      location: locationDisplay,
     }).then(() => {
       console.log(`📧 Chat booking email sent successfully for ${bookingNumber}`);
     }).catch(err => console.error('📧 Chat booking email FAILED:', err.message, err.response?.body));
@@ -264,6 +456,7 @@ router.post('/message', async (req, res) => {
     const bizDateTime = getBusinessDateTime(userInfo.state, userInfo.zip_code);
 
     const systemPrompt = `You are ${agentConfig.agentName || 'Kurt'}, a ${agentConfig.personality || 'friendly'} assistant for ${userInfo.business_name || 'our business'} helping customers book services.
+${agentConfig.learnedInstructions ? `\nLearned improvements (apply these):\n${agentConfig.learnedInstructions}\n` : ''}
 
 Response style: Be ${agentConfig.responseLength || 'concise'} in your responses.
 ${agentConfig.customInstructions ? `\nSpecial instructions: ${agentConfig.customInstructions}` : ''}
@@ -303,6 +496,11 @@ STAGE 4 - CONFIRM AND BOOK:
 Once you have ALL information (service, date, time, name, email, phone), respond with:
 BOOKING_REQUEST|serviceId|YYYY-MM-DD|HH:MM|customerName|customerEmail|customerPhone
 
+RESCHEDULING — if the customer already booked and then asks to change their date or time:
+- Confirm the new date/time with them, then send a new BOOKING_REQUEST with ALL 6 fields updated (reuse their name/email/phone from earlier in the conversation)
+- Do NOT say "let me get this booked" as if it's new — acknowledge the change: "Got it, switching you to [new date]!"
+- The system will automatically cancel their previous booking when the new one goes through
+
 OBJECTION HANDLING:
 - When a customer expresses hesitation about price, timing, or need, acknowledge their concern first
 - Use social proof: mention satisfaction rates and experience
@@ -310,9 +508,24 @@ OBJECTION HANDLING:
 ${agentConfig.objectionServices ? `- You may offer these complimentary add-ons to close hesitant customers: ${agentConfig.objectionServices}` : '- If appropriate, offer to include a small bonus service to sweeten the deal'}
 ${agentConfig.objectionNotes ? `- Additional objection handling notes: ${agentConfig.objectionNotes}` : ''}
 - Never be pushy — be understanding and helpful while gently addressing concerns
-- If they still decline, leave the door open: "No problem at all! We're here whenever you're ready."
+- If they still decline, NEVER just say goodbye. Always ask for their phone number first: "No worries at all! Can I grab your number so we can reach out if anything changes?" Then once you have it, emit ATTENTION_REQUEST.
 
 Lead capture strategy: ${agentConfig.captureStrategy === 'early' ? 'Ask for contact info within the first 2-3 messages' : agentConfig.captureStrategy === 'booking' ? 'Only ask for contact info when booking' : 'Ask naturally when relevant'}
+
+REPEATED BOOKING FAILURES — ESCALATE AFTER 3 FAILED ATTEMPTS:
+- If the same booking error appears 3 or more times in a row (any time slot rejected), stop asking for different times. The issue is likely a calendar conflict that a human needs to resolve.
+- Instead say something like: "It looks like our online calendar is having trouble locking in a time right now. Let me have our manager call you to get this sorted out. What's the best number to reach you?"
+- Then collect their name and phone number and emit ATTENTION_REQUEST.
+
+EXIT INTENT — CAPTURE BEFORE THEY LEAVE:
+- If a customer signals they're about to disengage (e.g., "I'll call you", "I'll call shortly", "I'll just give you guys a call", "I'll reach out", "I'll call later", "I'll stop by", "never mind", "forget it", "I'll figure it out"), do NOT say goodbye. Instead say something like: "Of course! What's your name and best number so our manager can reach out to you directly?"
+- If you encounter a question you genuinely cannot answer (pricing edge cases, very specific availability, complex situations), do NOT tell them to call us. Instead say: "Great question — let me have our manager follow up with you directly. What's your name and best phone number?"
+- NEVER give out the business phone number and tell them to call. Always flip it: ask for THEIR number so we call THEM.
+- Once you have their name AND phone number in either of these situations, respond with:
+ATTENTION_REQUEST|customerName|customerPhone
+followed immediately on the next line by a friendly closing message like: "Perfect, [name]! Our manager will be reaching out to you shortly."
+- Only send ATTENTION_REQUEST once per conversation. Do not send it if a BOOKING_REQUEST was already completed.
+- Don't mention "ATTENTION_REQUEST" to the customer — it's internal.
 
 IMPORTANT RULES:
 - Only ask for ONE piece of information per message
@@ -325,7 +538,8 @@ IMPORTANT RULES:
 - Only send BOOKING_REQUEST when you have ALL 6 pieces of information
 - For customerName in BOOKING_REQUEST, use ONLY the name the customer explicitly stated (e.g., if they said "I'm Kathy" or "My name is Kathy", use "Kathy"). NEVER use random words from the conversation as the name. If unclear, ask them to confirm their name before booking.
 - Don't mention "BOOKING_REQUEST" to the customer - it's internal
-- If they're just asking questions, answer them and don't force the booking flow`;
+- If they're just asking questions, answer them and don't force the booking flow
+- NEVER end a conversation without collecting the customer's phone number. Before any closing message (goodbye, thanks for chatting, etc.) — if you don't already have their phone number from earlier in the conversation — ask for it: "Before you go, what's the best number to reach you?" Then emit ATTENTION_REQUEST once you have their name and number.`;
 
     // Call Claude API
     const response = await anthropic.messages.create({
@@ -346,6 +560,30 @@ IMPORTANT RULES:
     if (bookingMatch) {
       const [_, serviceId, bookingDate, startTime, customerName, customerEmail, customerPhone] = bookingMatch;
       console.log(`🤖 Chat BOOKING_REQUEST: service=${serviceId} date=${bookingDate} time=${startTime} name=${customerName} email=${customerEmail} phone=${customerPhone}`);
+
+      // Cancel any existing booking from this conversation (reschedule case)
+      const prevAssistantMsgs = await pool.query(
+        `SELECT content FROM chat_messages
+         WHERE conversation_id = $1 AND role = 'assistant'
+         ORDER BY created_at DESC`,
+        [conversationId]
+      );
+      for (const { content } of prevAssistantMsgs.rows) {
+        const prevNumMatch = content.match(/Booking #(\S+)/);
+        if (prevNumMatch) {
+          const prevNum = prevNumMatch[1];
+          const cancelled = await pool.query(
+            `UPDATE bookings SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+             WHERE booking_number = $1 AND user_id = $2 AND status = 'confirmed'
+             RETURNING id`,
+            [prevNum, userId]
+          );
+          if (cancelled.rowCount > 0) {
+            console.log(`🔄 Chat reschedule: cancelled booking #${prevNum} → new date ${bookingDate}`);
+          }
+          break;
+        }
+      }
 
       // Create the booking
       const bookingResult = await createBookingFromChat(userId, {
@@ -390,8 +628,55 @@ IMPORTANT RULES:
         );
       } else {
         reply = reply.replace(/BOOKING_REQUEST\|[^\n]+\n?/, '');
-        reply = `I'm sorry, but ${bookingResult.error}. Would you like to try a different time?`;
+        if (bookingResult.error === 'slot_taken') {
+          if (bookingResult.availableSlots && bookingResult.availableSlots.length > 0) {
+            const slotList = bookingResult.availableSlots.map(formatSlotTime).join(', ');
+            reply = `That time is already taken. Here are the open times for that day: ${slotList}. Which one works for you?`;
+          } else if (bookingResult.nearbyDays && bookingResult.nearbyDays.length > 0) {
+            const dayLines = bookingResult.nearbyDays
+              .map(d => `${d.label}: ${d.slots.slice(0, 3).map(formatSlotTime).join(', ')}`)
+              .join(' | ');
+            reply = `We're fully booked that day. Here are the next available days: ${dayLines}. Which works for you?`;
+          } else {
+            reply = `Unfortunately we're fully booked for the next couple weeks. Please call us directly to arrange a time.`;
+          }
+        } else {
+          reply = `I'm sorry, but ${bookingResult.error}. Would you like to try a different time?`;
+        }
       }
+    }
+
+    // Check if AI captured a customer who needs a callback
+    const attentionMatch = reply.match(/ATTENTION_REQUEST\|([^|\n]+)\|([^\n]+)/);
+    if (attentionMatch && !bookingMatch) {
+      const attentionName = attentionMatch[1].trim();
+      const attentionPhone = attentionMatch[2].trim();
+      console.log(`📞 ATTENTION_REQUEST: name=${attentionName} phone=${attentionPhone}`);
+
+      // Remove the internal tag from the reply
+      reply = reply.replace(/ATTENTION_REQUEST\|[^\n]+\n?/, '').trim();
+
+      // Save lead
+      const leadCheck = await pool.query(
+        'SELECT id FROM leads WHERE user_id = $1 AND phone = $2',
+        [userId, attentionPhone]
+      );
+      if (leadCheck.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO leads (user_id, name, phone, source, status, created_at)
+           VALUES ($1, $2, $3, 'ai_chat_agent', 'needs_callback', CURRENT_TIMESTAMP)`,
+          [userId, attentionName, attentionPhone]
+        );
+      } else {
+        await pool.query(
+          `UPDATE leads SET name = $1, status = 'needs_callback', updated_at = CURRENT_TIMESTAMP
+           WHERE user_id = $2 AND phone = $3`,
+          [attentionName, userId, attentionPhone]
+        );
+      }
+
+      // Email the business owner
+      sendAttentionEmail({ userId, customerName: attentionName, customerPhone: attentionPhone, conversationId });
     }
 
     // Save assistant response (cleaned)
