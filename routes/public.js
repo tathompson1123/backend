@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { sendBookingEmails } = require('../utils/bookingEmail');
+const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
 
 // All routes are public (no auth). businessId = user_id.
 
@@ -388,6 +389,34 @@ router.get('/availability', async (req, res) => {
           slots.push({ time: slotStart, endTime: slotEnd, displayTime: `${h12}:${mm} ${ampm}`, available: freeCount });
         }
       }
+    }
+
+    // Filter out past time slots when booking date is today (business-local timezone)
+    try {
+      const bizLocResult = await pool.query(
+        'SELECT state, zip_code FROM business_information WHERE user_id = $1',
+        [businessId]
+      );
+      const { state, zip_code } = bizLocResult.rows[0] || {};
+      const bizTz = getTimezoneForBusiness(state, zip_code);
+      const now = new Date();
+      const bizToday = now.toLocaleDateString('en-CA', { timeZone: bizTz }); // YYYY-MM-DD
+
+      if (date === bizToday) {
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: bizTz, hour: 'numeric', minute: 'numeric', hour12: false
+        }).formatToParts(now);
+        const nowH = parseInt(parts.find(p => p.type === 'hour').value);
+        const nowM = parseInt(parts.find(p => p.type === 'minute').value);
+        const cutoff = nowH * 60 + nowM + 30; // 30-min booking lead time
+        slots.splice(0, slots.length, ...slots.filter(s => {
+          const [sh, sm] = s.time.split(':').map(Number);
+          return (sh * 60 + sm) >= cutoff;
+        }));
+      }
+    } catch (e) {
+      // Non-critical — skip filter on error rather than breaking availability
+      console.warn('Past-slot filter error:', e.message);
     }
 
     res.json({ slots, closed: false });
