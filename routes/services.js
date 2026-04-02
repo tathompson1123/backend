@@ -26,7 +26,7 @@ router.post('/', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     const { name, description, durationHours, price, categoryId, imageUrl, bufferMinutes, sortOrder, isAddon, locationType, customAddress } = req.body;
 
-    if (!name || !durationHours || (price === undefined || price === null || price === '')) {
+    if (!name || durationHours === undefined || durationHours === null || durationHours === '' || (price === undefined || price === null || price === '')) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
