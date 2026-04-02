@@ -391,7 +391,7 @@ async function createBookingFromChat(userId, bookingData) {
 
   } catch (error) {
     console.error('❌ Error creating booking from chat:', error.message, error.stack);
-    return { success: false, error: error.message };
+    return { success: false, error: 'internal_error' };
   }
 }
 
@@ -539,20 +539,95 @@ IMPORTANT RULES:
 - For customerName in BOOKING_REQUEST, use ONLY the name the customer explicitly stated (e.g., if they said "I'm Kathy" or "My name is Kathy", use "Kathy"). NEVER use random words from the conversation as the name. If unclear, ask them to confirm their name before booking.
 - Don't mention "BOOKING_REQUEST" to the customer - it's internal
 - If they're just asking questions, answer them and don't force the booking flow
-- NEVER end a conversation without collecting the customer's phone number. Before any closing message (goodbye, thanks for chatting, etc.) — if you don't already have their phone number from earlier in the conversation — ask for it: "Before you go, what's the best number to reach you?" Then emit ATTENTION_REQUEST once you have their name and number.`;
+- NEVER end a conversation without collecting the customer's phone number. Before any closing message (goodbye, thanks for chatting, etc.) — if you don't already have their phone number from earlier in the conversation — ask for it: "Before you go, what's the best number to reach you?" Then emit ATTENTION_REQUEST once you have their name and number.
 
-    // Call Claude API
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: historyResult.rows.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }))
-    });
+REAL-TIME AVAILABILITY:
+- You have access to a check_availability tool that queries the live booking calendar.
+- Use it whenever a customer asks what times are available, or before confirming a specific date/time.
+- Always offer specific open slots from the tool result — never ask the customer to guess.
+- If a date has no open slots, immediately check nearby dates and offer those instead.`;
 
-    let reply = response.content[0].text;
+    // Tool definition for real-time availability checking
+    const tools = [
+      {
+        name: 'check_availability',
+        description: 'Check available booking time slots for a specific service on a specific date. Use this when a customer asks about availability or wants to book a specific date/time.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            service_id: {
+              type: 'number',
+              description: 'The ID of the service to check availability for'
+            },
+            date: {
+              type: 'string',
+              description: 'The date to check in YYYY-MM-DD format'
+            }
+          },
+          required: ['service_id', 'date']
+        }
+      }
+    ];
+
+    // Agentic loop — handles tool use before producing a final text reply
+    let loopMessages = historyResult.rows.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
+    let reply = '';
+    let iterations = 0;
+    const MAX_ITERATIONS = 5;
+
+    while (iterations++ < MAX_ITERATIONS) {
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        system: systemPrompt,
+        tools,
+        messages: loopMessages
+      });
+
+      if (response.stop_reason === 'tool_use') {
+        // Append assistant message with tool_use blocks
+        loopMessages = [...loopMessages, { role: 'assistant', content: response.content }];
+
+        // Execute each tool call
+        const toolResults = [];
+        for (const block of response.content) {
+          if (block.type !== 'tool_use') continue;
+
+          let toolOutput;
+          if (block.name === 'check_availability') {
+            const { service_id, date } = block.input;
+            const service = servicesResult.rows.find(s => s.id === service_id);
+            if (!service) {
+              toolOutput = { error: 'Service not found' };
+            } else {
+              const slots = await getAvailableSlotsForDate(userId, service_id, date, service.duration_hours);
+              if (slots.length === 0) {
+                toolOutput = { available: false, message: 'No open slots on this date' };
+              } else {
+                toolOutput = { available: true, slots: slots.map(formatSlotTime) };
+              }
+            }
+          } else {
+            toolOutput = { error: 'Unknown tool' };
+          }
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: block.id,
+            content: JSON.stringify(toolOutput)
+          });
+        }
+
+        loopMessages = [...loopMessages, { role: 'user', content: toolResults }];
+      } else {
+        // Final text response
+        reply = response.content.find(b => b.type === 'text')?.text || '';
+        break;
+      }
+    }
 
     // Check if AI wants to create a booking
     const bookingMatch = reply.match(/BOOKING_REQUEST\|(\d+)\|([\d-]+)\|([\d:]+)\|([^|]+)\|([^|]+)\|([^|]+)/);
@@ -640,6 +715,8 @@ IMPORTANT RULES:
           } else {
             reply = `Unfortunately we're fully booked for the next couple weeks. Please call us directly to arrange a time.`;
           }
+        } else if (bookingResult.error === 'internal_error') {
+          reply = `Sorry, something went wrong on our end while booking that time. Would you like to try a different time?`;
         } else {
           reply = `I'm sorry, but ${bookingResult.error}. Would you like to try a different time?`;
         }

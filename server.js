@@ -1050,6 +1050,17 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
   } catch (e) {
     console.warn('⚠️ Could not verify lead follow-up columns:', e.message);
   }
+
+  // Tax and pricing columns on bookings (added for sales tax support)
+  try {
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS subtotal DECIMAL(10,2) DEFAULT 0');
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_rate DECIMAL(5,4) DEFAULT 0');
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_amount DECIMAL(10,2) DEFAULT 0');
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS total_amount DECIMAL(10,2) DEFAULT 0');
+    console.log('✅ Bookings tax/pricing columns verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify bookings tax columns:', e.message);
+  }
 })();
 
 // ── SMS processing cron job ──────────────────────────────
