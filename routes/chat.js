@@ -777,17 +777,18 @@ REAL-TIME AVAILABILITY:
           [conversationId]
         );
         
-        const possibleName = nameResult.rows.find(r => 
-          r.content.toLowerCase().includes('my name is') ||
-          r.content.toLowerCase().includes("i'm ") ||
-          r.content.toLowerCase().match(/\b(name|called)\s+(is\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
-        );
+        const possibleName = nameResult.rows.find(r => {
+          const lc = r.content.toLowerCase();
+          return lc.includes('my name is') || lc.includes("i'm ") || lc.includes("i am ") ||
+                 lc.includes('this is ') || /\b(name|called)\s+(is\s+)?\w/i.test(r.content);
+        });
 
         let name = 'Website Visitor';
         if (possibleName) {
-          const nameMatch = possibleName.content.match(/(?:my name is|i'm|this is|name is|called)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
+          const nameMatch = possibleName.content.match(/(?:my name is|i(?:'m| am)|this is|name is|called)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
           if (nameMatch) {
-            name = nameMatch[1];
+            // Capitalize first letter of each word
+            name = nameMatch[1].trim().replace(/\b\w/g, c => c.toUpperCase());
           }
         }
 
@@ -803,6 +804,12 @@ REAL-TIME AVAILABILITY:
             `INSERT INTO leads (user_id, name, email, phone, source, status, created_at)
              VALUES ($1, $2, $3, $4, 'ai_chat_agent', 'new', CURRENT_TIMESTAMP)`,
             [userId, name, emailMatch?.[0], phoneMatch?.[0]]
+          );
+        } else if (name !== 'Website Visitor') {
+          // Update name if we now have a real name (replacing a placeholder)
+          await pool.query(
+            `UPDATE leads SET name = $1 WHERE id = $2 AND name = 'Website Visitor'`,
+            [name, leadExists.rows[0].id]
           );
         }
       }
