@@ -1350,11 +1350,12 @@
       var def = FIELD_DEFAULTS[fid] || { label: fid, placeholder: '', type: 'text', required: false };
       var flabel = (typeof f === 'object' && f.label) ? f.label : def.label;
       var fplaceholder = (typeof f === 'object' && f.placeholder) ? f.placeholder : def.placeholder;
-      var frequired = def.required;
+      var frequired = (typeof f === 'object' && f.required !== undefined) ? f.required : def.required;
+      var reqAttrs = frequired ? ' required data-required="true"' : '';
       if (fid === 'message') {
-        html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">' + escapeHtml(flabel) + '</label><textarea data-sorce-field="message" rows="3" placeholder="' + escapeHtml(fplaceholder) + '" style="' + inputStyle + 'resize:vertical;"' + (frequired ? ' required' : '') + '></textarea></div>';
+        html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">' + escapeHtml(flabel) + (frequired ? ' <span style="color:#ef4444">*</span>' : '') + '</label><textarea data-sorce-field="message" rows="3" placeholder="' + escapeHtml(fplaceholder) + '" style="' + inputStyle + 'resize:vertical;"' + reqAttrs + '></textarea></div>';
       } else {
-        html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">' + escapeHtml(flabel) + '</label><input type="' + def.type + '" data-sorce-field="' + fid + '" placeholder="' + escapeHtml(fplaceholder) + '" style="' + inputStyle + '"' + (frequired ? ' required' : '') + '></div>';
+        html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">' + escapeHtml(flabel) + (frequired ? ' <span style="color:#ef4444">*</span>' : '') + '</label><input type="' + def.type + '" data-sorce-field="' + fid + '" placeholder="' + escapeHtml(fplaceholder) + '" style="' + inputStyle + '"' + reqAttrs + '></div>';
       }
     }
 
@@ -1374,8 +1375,13 @@
     var message = (container.querySelector('[data-sorce-field="message"]') || {}).value || '';
     var smsConsent = (container.querySelector('[data-sorce-field="sms"]') || {}).checked || false;
 
-    if (!name.trim() || !email.trim()) {
-      alert('Please provide your name and email.');
+    var requiredEls = container.querySelectorAll('[data-sorce-field][data-required="true"]');
+    var missingRequired = false;
+    for (var ri = 0; ri < requiredEls.length; ri++) {
+      if (!requiredEls[ri].value.trim()) { missingRequired = true; break; }
+    }
+    if (missingRequired || !name.trim() || !email.trim()) {
+      alert('Please fill in all required fields.');
       return;
     }
 
