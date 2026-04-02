@@ -74,7 +74,7 @@ module.exports = {
         </div>
         <div class="${s}-consent">
           <input type="checkbox" id="${s}-sms" name="sms_consent" required>
-          <label for="${s}-sms">I agree to receive text messages from ${content.businessName || 'this business'}. Message and data rates may apply. Reply STOP to opt out.</label>
+          <label for="${s}-sms">I consent to receive text messages from ${content.businessName || 'our team'} about services I'm interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</label>
         </div>
         <button type="submit" class="${s}-submit">${content.submitText || 'Send Message'}</button>
         <div id="${s}-status" class="${s}-status"></div>

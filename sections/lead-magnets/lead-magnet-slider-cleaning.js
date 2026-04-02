@@ -31,6 +31,7 @@ module.exports = {
     const subheadline = content.subheadline || 'Dust mites, bacteria, and allergens multiply every day. Move the slider to see the contamination.';
     const ctaText     = content.ctaText     || 'Check My Carpet';
     const submitText  = content.submitText  || 'Get My Free Assessment';
+    const businessName = content.businessName || 'our team';
     const image       = content.image       || 'https://images.unsplash.com/photo-1558618047-f18c8def4765?w=800&q=80';
 
     const servicesList = (content.services || 'Deep Carpet Clean, Stain Removal, Pet Odor Treatment, Upholstery Cleaning, Move-Out Clean')
@@ -650,7 +651,7 @@ module.exports = {
 
             <label class="${s}-consent">
               <input type="checkbox" name="sms_consent" id="${s}-sms" required>
-              I consent to receive text messages about my carpet cleaning services. Message &amp; data rates may apply. Text STOP to opt out.
+              I consent to receive text messages from ${businessName} about services I'm interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.
             </label>
 
             <p class="${s}-error" id="${s}-error"></p>

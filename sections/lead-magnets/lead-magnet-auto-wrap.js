@@ -38,6 +38,7 @@ module.exports = {
     const steps = (content.steps && content.steps.length > 0) ? content.steps : defaultSteps;
     const contactTitle = content.contactTitle || 'Almost done!';
     const contactSubtitle = content.contactSubtitle || 'Where should we send your personalized estimate?';
+    const businessName = content.businessName || 'our team';
 
     const stepsHtml = steps.map((step, i) => {
       const answerKey = `ans${i}`;
@@ -266,7 +267,7 @@ module.exports = {
                 <label class="${s}-label">Phone Number (Optional)</label>
                 <input type="tel" id="${s}-phone" class="${s}-input" placeholder="(555) 123-4567">
               </div>
-              <label class="${s}-consent-label"><input type="checkbox" id="${s}-sms-consent" required /> I consent to receive text messages about my wrap estimate. Message &amp; data rates may apply. Text STOP to opt out.</label>
+              <label class="${s}-consent-label"><input type="checkbox" id="${s}-sms-consent" required /> I consent to receive text messages from ${businessName} about services I'm interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</label>
               <button type="submit" class="${s}-btn" id="${s}-submit-btn">Get My Estimate</button>
               <p class="${s}-fineprint">No spam. We'll only contact you about your vehicle wrap design.</p>
             </form>

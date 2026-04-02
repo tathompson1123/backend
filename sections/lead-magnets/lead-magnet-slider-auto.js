@@ -21,6 +21,7 @@ module.exports = {
     const sub = content.subheadline || 'Pollen, grime, and UV rays attack your clear coat every day. Move the slider to see the damage.';
     const ctaText = content.ctaText || 'Analyze My Paint';
     const submitText = content.submitText || 'Get My Free Assessment';
+    const businessName = content.businessName || 'our team';
     const image = content.image || 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?w=1200&auto=format&fit=crop&q=80';
 
     const services = (content.services || 'Full Detail, Paint Correction, Ceramic Coating, Interior Detail, Engine Bay Clean').split(',').map(sv => sv.trim()).filter(Boolean);
@@ -627,7 +628,7 @@ module.exports = {
 
               <label class="${s}-consent">
                 <input type="checkbox" id="${s}-sms" name="sms_consent" required>
-                I consent to receive text messages about services I'm interested in. Message &amp; data rates may apply. Text STOP to opt out.
+                I consent to receive text messages from ${businessName} about services I'm interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.
               </label>
 
               <p class="${s}-error" id="${s}-error"></p>

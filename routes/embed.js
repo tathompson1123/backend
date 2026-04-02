@@ -6,7 +6,7 @@ const { sendBookingEmails } = require('../utils/bookingEmail');
 
 // ─── Helper: Look up user by site key ───────────────────
 async function getUserBySiteKey(siteKey) {
-  const result = await pool.query('SELECT id FROM users WHERE site_key = $1', [siteKey]);
+  const result = await pool.query('SELECT id, business_name FROM users WHERE site_key = $1', [siteKey]);
   return result.rows[0] || null;
 }
 
@@ -41,7 +41,8 @@ router.get('/config/:siteKey', async (req, res) => {
       formRules: config.form_rules || [],
       themeColor: config.theme_color,
       position: config.position,
-      userId: user.id
+      userId: user.id,
+      businessName: user.business_name || ''
     };
 
     // If chat enabled, include agent config

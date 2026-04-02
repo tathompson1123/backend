@@ -46,6 +46,7 @@ module.exports = {
     const ctaText       = content.ctaText       || 'Get My Free Quote';
     const contactTitle  = content.contactTitle  || 'Almost done!';
     const contactSub    = content.contactSubtitle || 'Where should we send your quote?';
+    const businessName  = content.businessName  || 'our team';
 
     const defaultSteps = [
       { question: 'What type of cleaning do you need?', choices: ['Carpet Cleaning', 'House Cleaning', 'Deep Clean', 'Commercial / Office'] },
@@ -93,7 +94,7 @@ module.exports = {
         <input class="${s}-input" type="text"  name="name"  placeholder="Your Name"  required />
         <input class="${s}-input" type="email" name="email" placeholder="Email Address" required />
         <input class="${s}-input" type="tel"   name="phone" placeholder="Phone Number (optional)" />
-        <label class="${s}-consent"><input type="checkbox" name="sms_consent" required /> I consent to receive text messages about my quote. Message &amp; data rates may apply. Text STOP to opt out.</label>
+        <label class="${s}-consent"><input type="checkbox" name="sms_consent" required /> I consent to receive text messages from ${businessName} about services I'm interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</label>
         <button class="${s}-btn" type="submit">${ctaText}</button>
         <p class="${s}-fine">No spam. We'll only contact you about your quote.</p>
       </form>

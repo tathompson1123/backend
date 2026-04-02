@@ -22,6 +22,7 @@ module.exports = {
     const sub      = content.subheadline || 'Enter your address, pick your features, and get an AI-generated design plus instant cost estimate.';
     const ctaText  = content.ctaText     || 'Design My Yard';
     const features = Array.isArray(content.features) ? content.features : ['Stone Patio', 'Mature Trees', 'Outdoor Lighting', 'Irrigation'];
+    const businessName = content.businessName || 'our team';
 
     const featurePills = features.map(f =>
       `<span class="${s}-pill">${f}</span>`
@@ -117,7 +118,7 @@ module.exports = {
       <label class="${s}-lbl">Features You're Interested In</label>
       <div class="${s}-feats">${featureCheckboxes}</div>
       <button class="${s}-submit" id="${s}-submit">${ctaText}</button>
-      <p class="${s}-consent">By submitting, you agree to receive communications about your project. We respect your privacy.</p>
+      <p class="${s}-consent">I consent to receive text messages from ${businessName} about services I'm interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</p>
     </div>
     <div id="${s}-success" class="${s}-ok" style="display:none">
       <div class="${s}-ok-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>

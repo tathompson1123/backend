@@ -283,7 +283,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
 
   try {
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS send_trigger VARCHAR(30) DEFAULT 'booking_completed'`);
-    console.log('✅ review_configs.send_trigger column verified');
+    await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS send_delay INTEGER DEFAULT 24`);
+    console.log('✅ review_configs.send_trigger and send_delay columns verified');
   } catch (e) {
     console.warn('⚠️ Could not add send_trigger column:', e.message);
   }
@@ -1213,7 +1214,7 @@ cron.schedule('*/60 * * * * *', async () => {
       `SELECT rr.id, rr.user_id, rr.customer_id, rr.incentive_code,
               c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email,
               c.last_service AS service_name,
-              u.business_name, u.telnyx_phone_number, u.twilio_phone_number,
+              u.business_name, u.telnyx_phone_number, u.twilio_phone_number, u.google_review_link,
               rc.message_template, rc.incentive, rc.incentive_enabled
        FROM review_requests rr
        JOIN users u ON u.id = rr.user_id
@@ -1256,8 +1257,13 @@ cron.schedule('*/60 * * * * *', async () => {
           .replace(/\{business\}/g, req.business_name || 'us')
           .replace(/\{service\}/g, req.service_name || 'our service');
 
-        if (req.incentive_enabled && req.incentive_code) {
-          message += ` Use code ${req.incentive_code} for ${req.incentive || '$10 off your next service'}!`;
+        if (req.incentive_enabled && req.incentive) {
+          if (!/[.!?]$/.test(message.trimEnd())) message = message.trimEnd() + '.';
+          message += ` ${req.incentive}`;
+        }
+        if (req.google_review_link) {
+          if (!/[.!?]$/.test(message.trimEnd())) message = message.trimEnd() + '.';
+          message += ` Leave your review here: ${req.google_review_link}`;
         }
 
         // Format phone number for sending
@@ -1315,7 +1321,7 @@ cron.schedule('*/5 * * * *', async () => {
 
     for (const row of eligible.rows) {
       try {
-        const delayHours = row.send_delay || 0;
+        const delayHours = row.send_delay ?? 24;
         const scheduledTime = new Date(Date.now() + delayHours * 60 * 60 * 1000);
         const incentiveCode = row.incentive_enabled
           ? `REV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`

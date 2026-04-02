@@ -22,6 +22,7 @@ module.exports = {
     const sub      = content.subheadline || 'Tell us about your project and get an honest cost range — no sales pressure.';
     const ctaText  = content.ctaText     || 'Estimate My Project';
     const features = Array.isArray(content.features) ? content.features : ['Kitchen Remodel', 'Bathroom', 'Flooring', 'Full Home'];
+    const businessName = content.businessName || 'our team';
 
     const featurePills = features.map(f =>
       `<span class="${s}-pill">${f}</span>`
@@ -102,7 +103,7 @@ module.exports = {
       <label class="${s}-lbl">Describe Your Project</label>
       <textarea class="${s}-input" id="${s}-desc" rows="3" placeholder="Tell us about the scope, timeline, and any specifics..." style="resize:vertical"></textarea>
       <button class="${s}-submit" id="${s}-submit">${ctaText}</button>
-      <p class="${s}-consent">By submitting, you agree to receive communications about your project estimate.</p>
+      <p class="${s}-consent">I consent to receive text messages from ${businessName} about services I'm interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</p>
     </div>
     <div id="${s}-success" class="${s}-ok" style="display:none">
       <div class="${s}-ok-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>

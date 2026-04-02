@@ -325,7 +325,7 @@ function renderFormWidget(widget) {
 <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 24px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
   <input type="checkbox" id="sms-consent" name="sms_consent" required style="width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
   <label for="sms-consent" style="font-size: 14px; line-height: 1.5; color: #4b5563; cursor: pointer;">
-    I agree to receive text messages at the number provided. Message and data rates may apply. Reply STOP to opt out.
+    I consent to receive text messages from ${escapeHtml(content.businessName || 'our team')} about services I&apos;m interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.
   </label>
 </div>`;
 

@@ -1326,7 +1326,8 @@
     if (fields.indexOf('service') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Service Interested In</label><input type="text" data-sorce-field="service" placeholder="What service are you looking for?" style="' + inputStyle + '"></div>';
     if (fields.indexOf('message') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Message</label><textarea data-sorce-field="message" rows="3" placeholder="Tell us about what you need..." style="' + inputStyle + 'resize:vertical;"></textarea></div>';
 
-    html += '<div style="' + groupStyle + 'display:flex;align-items:flex-start;gap:8px"><input type="checkbox" data-sorce-field="sms" style="margin-top:3px;width:auto;"><label style="font-size:12px;color:#6b7280;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">I consent to receiving SMS messages about my inquiry</label></div>';
+    var bizName = (config && config.businessName) ? config.businessName : 'our team';
+    html += '<div style="' + groupStyle + 'display:flex;align-items:flex-start;gap:8px"><input type="checkbox" data-sorce-field="sms" required style="margin-top:3px;width:auto;"><label style="font-size:12px;color:#6b7280;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">I consent to receive text messages from ' + escapeHtml(bizName) + ' about services I\'m interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</label></div>';
     html += '<button type="submit" data-sorce-submit style="width:100%;padding:12px;background:' + tc + ';color:white;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:15px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;transition:opacity 0.2s;">' + escapeHtml(submitText) + '</button>';
 
     return html;

@@ -382,7 +382,7 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
       // Only create review here if trigger is 'booking_completed' (the other trigger uses its own cron)
       if (autoSend && trigger === 'booking_completed' && (booking.customer_email || booking.customer_phone)) {
         // Calculate scheduled send time (SMS goes out based on send_delay hours, default 2)
-        const delayHours = config ? (config.send_delay || 2) : 2;
+        const delayHours = config ? (config.send_delay ?? 2) : 2;
         const scheduledTime = new Date(Date.now() + delayHours * 60 * 60 * 1000);
 
         // Generate incentive code if incentives are enabled

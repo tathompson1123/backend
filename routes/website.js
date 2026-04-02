@@ -985,7 +985,7 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
 
     // Get website with pages AND colors
     const websiteResult = await pool.query(
-      'SELECT html_content, pages, vercel_url, vercel_deployment_id, primary_color, accent_color, text_color FROM websites WHERE user_id = $1',
+      'SELECT html_content, pages, vercel_url, vercel_deployment_id, primary_color, accent_color, text_color, business_name FROM websites WHERE user_id = $1',
       [userId]
     );
 
@@ -999,6 +999,7 @@ router.post('/fix-contact-form', authenticateToken, async (req, res) => {
     const primaryColor = website.primary_color || '#667eea';
     const accentColor = website.accent_color || '#764ba2';
     const textColor = website.text_color || '#1f2937';
+    const businessName = website.business_name || '';
     
     let pages = website.pages || {};
     // Parse pages if stored as JSON string (text column)
@@ -1103,7 +1104,7 @@ function fixContactFormHTML(html, pageName) {
   <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
     <input type="checkbox" id="sms-consent" name="sms_consent" required style="width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
     <label for="sms-consent" style="font-size: 14px; line-height: 1.5; color: ${textColor}; cursor: pointer;">
-      I agree to receive text messages at the number provided. Message and data rates may apply. Reply STOP to opt out.
+      I consent to receive text messages from ${businessName || 'our team'} about services I&apos;m interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.
     </label>
   </div>
   `;
