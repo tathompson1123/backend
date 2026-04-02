@@ -48,9 +48,9 @@
         if (config.chatEnabled) injectChatWidget();
         if (config.bookingEnabled) {
           scanBookingButtons();
-          startDOMObserver();
         }
         if (config.leadFormEnabled) injectLeadForm();
+        if (config.bookingEnabled || config.leadFormEnabled) startDOMObserver();
       })
       .catch(function(e) { console.warn('SORCE Embed: Failed to load config', e.message); });
   }
@@ -1213,30 +1213,27 @@
   }
 
   function injectLeadForm() {
-    var replaced = scanAndReplaceForms();
-    if (replaced > 0) return;
+    // Always do an immediate scan first, but do NOT bail out early even if forms
+    // are found — Wix SPA navigation will re-render the page and restore original
+    // forms, so we need the MutationObserver running persistently regardless.
+    scanAndReplaceForms();
 
     // Retry — Wix lazy-loads form components after scroll or after framework hydration.
     // Extended timing covers slow Wix sites.
     var retries = [500, 1500, 3000, 6000, 10000, 15000, 20000];
     var retryIdx = 0;
-    var retryDone = false;
     function retryReplace() {
-      if (retryDone || retryIdx >= retries.length) return;
+      if (retryIdx >= retries.length) return;
       setTimeout(function() {
-        var found = scanAndReplaceForms();
-        if (found > 0) {
-          retryDone = true;
-        } else {
-          retryIdx++;
-          retryReplace();
-        }
+        scanAndReplaceForms();
+        retryIdx++;
+        retryReplace();
       }, retries[retryIdx]);
     }
     retryReplace();
 
-    // MutationObserver fallback — catches Wix forms that render on scroll or after
-    // SPA navigation even after all retries have fired.
+    // MutationObserver — catches Wix forms that render on scroll, after SPA navigation,
+    // or whenever Wix's framework re-hydrates and restores the original form.
     if (typeof MutationObserver !== 'undefined') {
       var formObserverDebounce = null;
       var formObserver = new MutationObserver(function(mutations) {
@@ -1249,8 +1246,7 @@
         if (!relevant) return;
         clearTimeout(formObserverDebounce);
         formObserverDebounce = setTimeout(function() {
-          var found = scanAndReplaceForms();
-          if (found > 0 && !retryDone) retryDone = true;
+          scanAndReplaceForms();
         }, 600);
       });
       formObserver.observe(document.body, { childList: true, subtree: true });
