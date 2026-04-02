@@ -870,6 +870,7 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     // Backfill new columns
     await pool.query("ALTER TABLE embed_configs ADD COLUMN IF NOT EXISTS submit_button_text VARCHAR(100) DEFAULT 'Submit'");
     await pool.query("ALTER TABLE embed_configs ADD COLUMN IF NOT EXISTS form_rules JSONB DEFAULT '[]'");
+    await pool.query("ALTER TABLE embed_configs ADD COLUMN IF NOT EXISTS lead_form_description TEXT DEFAULT ''");
 
     console.log('✅ Embed system tables verified');
   } catch (e) {

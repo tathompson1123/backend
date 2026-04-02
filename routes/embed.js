@@ -36,6 +36,7 @@ router.get('/config/:siteKey', async (req, res) => {
       leadFormEnabled: config.lead_form_enabled,
       leadFormTitle: config.lead_form_title,
       leadFormFields: config.lead_form_fields,
+      leadFormDescription: config.lead_form_description || '',
       bookingButtonText: config.booking_button_text,
       submitButtonText: config.submit_button_text || 'Submit',
       formRules: config.form_rules || [],
@@ -330,18 +331,18 @@ router.put('/settings', authenticateToken, async (req, res) => {
   try {
     const {
       chatEnabled, bookingEnabled, bookingStyle, leadFormEnabled,
-      leadFormTitle, leadFormFields, bookingButtonText, submitButtonText,
+      leadFormTitle, leadFormFields, leadFormDescription, bookingButtonText, submitButtonText,
       formRules, themeColor, position
     } = req.body;
 
     const result = await pool.query(
       `INSERT INTO embed_configs (user_id, chat_enabled, booking_enabled, booking_style, lead_form_enabled,
-        lead_form_title, lead_form_fields, booking_button_text, submit_button_text, form_rules, theme_color, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        lead_form_title, lead_form_fields, lead_form_description, booking_button_text, submit_button_text, form_rules, theme_color, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        ON CONFLICT (user_id) DO UPDATE SET
         chat_enabled = $2, booking_enabled = $3, booking_style = $4, lead_form_enabled = $5,
-        lead_form_title = $6, lead_form_fields = $7, booking_button_text = $8,
-        submit_button_text = $9, form_rules = $10, theme_color = $11, position = $12, updated_at = NOW()
+        lead_form_title = $6, lead_form_fields = $7, lead_form_description = $8, booking_button_text = $9,
+        submit_button_text = $10, form_rules = $11, theme_color = $12, position = $13, updated_at = NOW()
        RETURNING *`,
       [
         req.user.userId,
@@ -351,6 +352,7 @@ router.put('/settings', authenticateToken, async (req, res) => {
         leadFormEnabled ?? false,
         leadFormTitle || 'Get a Free Quote',
         JSON.stringify(leadFormFields || ['name', 'email', 'phone', 'message']),
+        leadFormDescription || '',
         bookingButtonText || 'Book Online',
         submitButtonText || 'Submit',
         JSON.stringify(formRules || []),

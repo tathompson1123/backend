@@ -1212,20 +1212,37 @@
     return replaced;
   }
 
+  function createLeadFormFab() {
+    if (leadFormFabCreated) return;
+    leadFormFabCreated = true;
+    var container = getOrCreateContainer();
+    var fab = document.createElement('button');
+    fab.className = 'sorce-fab sorce-fab-lead';
+    fab.title = 'Get a Quote';
+    fab.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span class="sorce-fab-label">Get a Quote</span>';
+    fab.onclick = openLeadForm;
+    container.insertBefore(fab, container.firstChild);
+  }
+
   function injectLeadForm() {
     // Always do an immediate scan first, but do NOT bail out early even if forms
     // are found — Wix SPA navigation will re-render the page and restore original
     // forms, so we need the MutationObserver running persistently regardless.
-    scanAndReplaceForms();
+    var everReplaced = scanAndReplaceForms() > 0;
 
     // Retry — Wix lazy-loads form components after scroll or after framework hydration.
     // Extended timing covers slow Wix sites.
     var retries = [500, 1500, 3000, 6000, 10000, 15000, 20000];
     var retryIdx = 0;
     function retryReplace() {
-      if (retryIdx >= retries.length) return;
+      if (retryIdx >= retries.length) {
+        // All retries exhausted — if we never replaced an inline form, show FAB fallback
+        if (!everReplaced) createLeadFormFab();
+        return;
+      }
       setTimeout(function() {
-        scanAndReplaceForms();
+        var found = scanAndReplaceForms();
+        if (found > 0) everReplaced = true;
         retryIdx++;
         retryReplace();
       }, retries[retryIdx]);
@@ -1306,21 +1323,40 @@
     }
   }
 
+  // Default labels/placeholders used when not customized
+  var FIELD_DEFAULTS = {
+    name:    { label: 'Name',               placeholder: 'Your name',                     type: 'text',     required: true },
+    email:   { label: 'Email',              placeholder: 'your@email.com',                type: 'email',    required: true },
+    phone:   { label: 'Phone',              placeholder: '(555) 123-4567',                type: 'tel',      required: false },
+    service: { label: 'Service Interested In', placeholder: 'What service are you looking for?', type: 'text', required: false },
+    message: { label: 'Message',            placeholder: 'Tell us about what you need...', type: 'textarea', required: false }
+  };
+
   function buildLeadFormHTML(fields, tc, submitText, title) {
     var formTitle = title || config.leadFormTitle || 'Get a Free Quote';
+    var desc = config.leadFormDescription || "Fill out the form and we'll get back to you shortly.";
     var html = '<h3 style="margin:0 0 4px;font-size:20px;font-weight:700;color:#1f2937;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">' +
       escapeHtml(formTitle) + '</h3>' +
-      '<p style="margin:0 0 16px;color:#6b7280;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">Fill out the form and we\'ll get back to you shortly.</p>';
+      '<p style="margin:0 0 16px;color:#6b7280;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">' + escapeHtml(desc) + '</p>';
 
     var inputStyle = 'width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;color:#1f2937;background:white;';
     var labelStyle = 'display:block;margin-bottom:6px;font-size:14px;font-weight:500;color:#374151;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;';
     var groupStyle = 'margin-bottom:14px;';
 
-    if (fields.indexOf('name') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Name</label><input type="text" data-sorce-field="name" placeholder="Your name" required style="' + inputStyle + '"></div>';
-    if (fields.indexOf('email') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Email</label><input type="email" data-sorce-field="email" placeholder="your@email.com" required style="' + inputStyle + '"></div>';
-    if (fields.indexOf('phone') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Phone</label><input type="tel" data-sorce-field="phone" placeholder="(555) 123-4567" style="' + inputStyle + '"></div>';
-    if (fields.indexOf('service') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Service Interested In</label><input type="text" data-sorce-field="service" placeholder="What service are you looking for?" style="' + inputStyle + '"></div>';
-    if (fields.indexOf('message') !== -1) html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">Message</label><textarea data-sorce-field="message" rows="3" placeholder="Tell us about what you need..." style="' + inputStyle + 'resize:vertical;"></textarea></div>';
+    // fields may be an array of strings ['name','email'] or objects [{id:'name',label:'Name',...}]
+    for (var fi = 0; fi < fields.length; fi++) {
+      var f = fields[fi];
+      var fid = (typeof f === 'string') ? f : f.id;
+      var def = FIELD_DEFAULTS[fid] || { label: fid, placeholder: '', type: 'text', required: false };
+      var flabel = (typeof f === 'object' && f.label) ? f.label : def.label;
+      var fplaceholder = (typeof f === 'object' && f.placeholder) ? f.placeholder : def.placeholder;
+      var frequired = def.required;
+      if (fid === 'message') {
+        html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">' + escapeHtml(flabel) + '</label><textarea data-sorce-field="message" rows="3" placeholder="' + escapeHtml(fplaceholder) + '" style="' + inputStyle + 'resize:vertical;"' + (frequired ? ' required' : '') + '></textarea></div>';
+      } else {
+        html += '<div style="' + groupStyle + '"><label style="' + labelStyle + '">' + escapeHtml(flabel) + '</label><input type="' + def.type + '" data-sorce-field="' + fid + '" placeholder="' + escapeHtml(fplaceholder) + '" style="' + inputStyle + '"' + (frequired ? ' required' : '') + '></div>';
+      }
+    }
 
     var bizName = (config && config.businessName) ? config.businessName : 'our team';
     html += '<div style="' + groupStyle + 'display:flex;align-items:flex-start;gap:8px"><input type="checkbox" data-sorce-field="sms" required style="margin-top:3px;width:auto;"><label style="font-size:12px;color:#6b7280;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">I consent to receive text messages from ' + escapeHtml(bizName) + ' about services I\'m interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</label></div>';
