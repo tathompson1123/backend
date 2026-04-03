@@ -30,11 +30,16 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Name is required' });
     }
 
+    // Coerce empty/invalid dates to null so PostgreSQL doesn't throw
+    const safeDate = last_service_date && /^\d{4}-\d{2}-\d{2}/.test(last_service_date)
+      ? last_service_date
+      : null;
+
     const result = await pool.query(
       `INSERT INTO customers (user_id, name, email, phone, last_service, last_service_date, left_review, notes, total_jobs, lifetime_value, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, CURRENT_TIMESTAMP)
        RETURNING *`,
-      [userId, name, email, phone, last_service, last_service_date, left_review || 'N', notes]
+      [userId, name, email || null, phone || null, last_service || null, safeDate, left_review || 'N', notes || null]
     );
 
     console.log(`✅ Customer created: ${name}`);
