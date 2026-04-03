@@ -182,7 +182,12 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
   try {
     const { serviceId, bookingDate, startTime, customerName, customerEmail } = bookingData;
     // Truncate phone to 50 chars and strip non-phone characters
-    const customerPhone = (bookingData.customerPhone || '').replace(/[^\d+\-() .ext]/gi, '').substring(0, 50);
+    const rawPhoneInput = bookingData.customerPhone || '';
+    const phoneDigitsOnly = rawPhoneInput.replace(/\D/g, '');
+    const normalizedPhone = phoneDigitsOnly.startsWith('1') && phoneDigitsOnly.length === 11
+      ? phoneDigitsOnly.slice(1)
+      : phoneDigitsOnly.slice(0, 10);
+    const customerPhone = normalizedPhone.length >= 7 ? normalizedPhone : rawPhoneInput.replace(/[^\d+\-() .ext]/gi, '').substring(0, 20);
 
     // Validate business hours
     const bookingDateObj = new Date(bookingDate + 'T12:00:00');
@@ -499,6 +504,8 @@ STAGE 4 - CONFIRM AND BOOK:
 Once you have ALL information (service, date, time, name, email, phone), respond with:
 BOOKING_REQUEST|serviceId|YYYY-MM-DD|HH:MM|customerName|customerEmail|customerPhone
 
+- customerPhone must be ONLY the digits the customer gave you for their phone number — nothing else. Example: 3606230128. Never include dates, booking numbers, or other digits.
+
 RESCHEDULING — if the customer already booked and then asks to change their date or time:
 - Confirm the new date/time with them, then send a new BOOKING_REQUEST with ALL 6 fields updated (reuse their name/email/phone from earlier in the conversation)
 - Do NOT say "let me get this booked" as if it's new — acknowledge the change: "Got it, switching you to [new date]!"
@@ -656,7 +663,10 @@ REAL-TIME AVAILABILITY:
 
     if (bookingMatch) {
       const [_, serviceId, bookingDate, startTime, customerName, customerEmail, rawPhone] = bookingMatch;
-      const customerPhone = rawPhone.replace(/[^\d+\-().]/g, '').trim();
+      // Extract first valid 10-digit US phone number from whatever the AI provided
+      const digitsOnly = rawPhone.replace(/\D/g, '');
+      const phoneDigits = digitsOnly.startsWith('1') && digitsOnly.length === 11 ? digitsOnly.slice(1) : digitsOnly.slice(0, 10);
+      const customerPhone = phoneDigits.length >= 7 ? phoneDigits : rawPhone.trim().substring(0, 20);
       console.log(`🤖 Chat BOOKING_REQUEST: service=${serviceId} date=${bookingDate} time=${startTime} name=${customerName} email=${customerEmail} phone=${customerPhone}`);
 
       // Cancel any existing booking from this conversation (reschedule case)
