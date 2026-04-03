@@ -174,7 +174,7 @@ router.get('/booking-widget-config', async (req, res) => {
     const [configResult, stripeResult] = await Promise.all([
       pool.query('SELECT config FROM booking_widget_configs WHERE user_id = $1', [businessId]),
       pool.query(
-        "SELECT stripe_account_id, stripe_public_key FROM payment_connections WHERE user_id = $1 AND processor = 'stripe' AND is_active = true LIMIT 1",
+        "SELECT stripe_account_id FROM payment_connections WHERE user_id = $1 AND processor = 'stripe' AND is_active = true LIMIT 1",
         [businessId]
       )
     ]);
