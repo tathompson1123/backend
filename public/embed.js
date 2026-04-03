@@ -583,6 +583,7 @@
     // Reset Stripe setup state when leaving contact step so it re-inits on return
     if (bkState.step === 'contact' && s !== 'contact') {
       bkState.stripeSetupStarted = false;
+      bkState.stripeSetupFailed = false;
       bkState.clientSecret = null;
       bkState.stripeReady = false;
     }
@@ -650,10 +651,10 @@
         bkRender();
         bkInitStripe();
       } else {
-        bkState.error = d.error || 'Failed to initialize payment';
+        bkState.stripeSetupFailed = true;
         bkState.loading = false; bkRender();
       }
-    }).catch(function() { bkState.loading = false; bkState.error = 'Failed to set up payment'; bkRender(); });
+    }).catch(function() { bkState.stripeSetupFailed = true; bkState.loading = false; bkRender(); });
   }
 
   function bkConfirmPayment() {
@@ -858,7 +859,7 @@
           h += '<input class="sbk-input" data-field="' + f.key + '" type="' + (f.type || 'text') + '" value="' + bkEsc(bkState.cust[f.key] || '') + '" placeholder="' + bkEsc(f.label) + '...">';
         }
       });
-      if (contactPMode === 'card_on_file') {
+      if (contactPMode === 'card_on_file' && !bkState.stripeSetupFailed) {
         h += '<label class="sbk-label" style="margin-top:12px">Card Details</label>';
         if (bkState.loading) {
           h += '<div class="sbk-loading" style="padding:16px 0"><div class="sbk-spin"></div>Setting up payment...</div>';
@@ -912,8 +913,8 @@
     bkBindEvents();
 
     // Auto-init Stripe inline for card_on_file contact step
-    if (bkState.step === 'contact' && bkGetPaymentMode() === 'card_on_file' && bkNeedsPayment()) {
-      if (!bkState.stripeSetupStarted) {
+    if (bkState.step === 'contact' && bkGetPaymentMode() === 'card_on_file') {
+      if (!bkState.stripeSetupStarted && !bkState.stripeSetupFailed) {
         bkState.stripeSetupStarted = true;
         bkSetupPayment();
       } else if (bkState.clientSecret && !bkState.stripeReady) {
