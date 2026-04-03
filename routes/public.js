@@ -648,7 +648,7 @@ router.get('/card-on-file/:token', async (req, res) => {
     const { token } = req.params;
     const result = await pool.query(
       `SELECT t.*, b.booking_number, b.booking_date, b.start_time, b.card_on_file_status,
-              bi.name AS service_name, u.business_name
+              bi.service_name, u.business_name
        FROM card_on_file_tokens t
        JOIN bookings b ON b.id = t.booking_id
        LEFT JOIN booking_items bi ON bi.booking_id = b.id

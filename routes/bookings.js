@@ -229,6 +229,10 @@ router.post('/create', authenticateToken, async (req, res) => {
       startTime,
       endTime,
       price: service.price,
+      subtotal: parseFloat(service.price),
+      taxRate,
+      taxAmount,
+      total: totalWithTax,
       notes: customerNotes,
     }).catch(() => {});
 

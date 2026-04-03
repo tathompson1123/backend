@@ -469,7 +469,11 @@
     var t = 0;
     if (bkState.selService) t += parseFloat(bkState.selService.price) || 0;
     bkState.selAddons.forEach(function(a) { t += parseFloat(a.price) || 0; });
-    bkState.totalPrice = t;
+    bkState.subtotal = t;
+    var taxRate = (bkState.biz && parseFloat(bkState.biz.tax_rate)) || 0;
+    bkState.taxRate = taxRate;
+    bkState.taxAmount = taxRate > 0 ? Math.round(t * taxRate * 100) / 100 : 0;
+    bkState.totalPrice = t + bkState.taxAmount;
   }
 
   function bkGetAllServiceIds() {
@@ -570,7 +574,7 @@
     if (bkState.selService && bkGetAddonsForService(bkState.selService.id).length > 0) steps.push('addons');
     steps.push('datetime');
     steps.push('contact');
-    if (bkNeedsPayment()) steps.push('payment');
+    if (bkNeedsPayment() && bkGetPaymentMode() !== 'card_on_file') steps.push('payment');
     steps.push('confirmation');
     return steps;
   }
@@ -845,7 +849,18 @@
           h += '<input class="sbk-input" data-field="' + f.key + '" type="' + (f.type || 'text') + '" value="' + bkEsc(bkState.cust[f.key] || '') + '" placeholder="' + bkEsc(f.label) + '...">';
         }
       });
-      if (bkNeedsPayment()) {
+      if (contactPMode === 'card_on_file') {
+        h += '<label class="sbk-label" style="margin-top:12px">Card Details</label>';
+        if (bkState.loading) {
+          h += '<div class="sbk-loading" style="padding:16px 0"><div class="sbk-spin"></div>Setting up payment...</div>';
+        } else if (bkState.clientSecret) {
+          h += '<div class="sbk-stripe-card" style="border:1px solid #d1d5db;border-radius:8px;padding:12px;margin-bottom:4px"></div>';
+        } else {
+          h += '<div class="sbk-loading" style="padding:16px 0"><div class="sbk-spin"></div>Setting up payment...</div>';
+        }
+        h += '<button class="sbk-btn" id="sbk-submit-cof"' + (bkState.loading || !bkState.stripeReady ? ' disabled' : '') + '>' + (bkState.loading ? '<span class="sbk-spin" style="width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>Processing...' : 'Confirm Booking') + '</button>';
+        h += '<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Your card will not be charged today — saved securely via Stripe</p>';
+      } else if (bkNeedsPayment()) {
         h += '<button class="sbk-btn" id="sbk-to-payment"' + (bkState.loading ? ' disabled' : '') + '>Continue to Payment &rarr;</button>';
       } else {
         h += '<button class="sbk-btn" id="sbk-submit"' + (bkState.loading ? ' disabled' : '') + '>' + (bkState.loading ? '<span class="sbk-spin" style="width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>Confirming...' : 'Confirm Booking') + '</button>';
@@ -886,6 +901,15 @@
 
     bkContent.innerHTML = h;
     bkBindEvents();
+
+    // Auto-init Stripe inline for card_on_file contact step
+    if (bkState.step === 'contact' && bkGetPaymentMode() === 'card_on_file') {
+      if (!bkState.clientSecret && !bkState.loading) {
+        bkSetupPayment();
+      } else if (bkState.clientSecret && !bkState.stripeReady) {
+        bkInitStripe();
+      }
+    }
   }
 
   function bkBindEvents() {
@@ -977,6 +1001,16 @@
     // Submit button (no payment)
     var submitEl = document.getElementById('sbk-submit');
     if (submitEl) submitEl.onclick = bkSubmit;
+
+    // Inline card-on-file confirm button
+    var cofSubmitEl = document.getElementById('sbk-submit-cof');
+    if (cofSubmitEl) cofSubmitEl.onclick = function() {
+      var c = bkState.cust;
+      var missing = bkGetContactFields().filter(function(f) { return f.required && !c[f.key]; });
+      if (missing.length) { bkState.error = 'Please fill in all required fields'; bkRender(); return; }
+      if (!bkState.stripeReady) { bkState.error = 'Card details not ready yet'; bkRender(); return; }
+      bkConfirmPayment();
+    };
 
     // To payment button
     var toPayEl = document.getElementById('sbk-to-payment');
