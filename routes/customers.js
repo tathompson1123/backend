@@ -24,7 +24,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { name, email, phone, last_service, last_service_date, left_review, notes } = req.body;
+    const { name, email, phone, last_service, last_service_date, notes } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
@@ -36,10 +36,10 @@ router.post('/', authenticateToken, async (req, res) => {
       : null;
 
     const result = await pool.query(
-      `INSERT INTO customers (user_id, name, email, phone, last_service, last_service_date, left_review, notes, total_jobs, lifetime_value, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, CURRENT_TIMESTAMP)
+      `INSERT INTO customers (user_id, name, email, phone, last_service, last_service_date, notes, total_jobs, lifetime_value, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 0, CURRENT_TIMESTAMP)
        RETURNING *`,
-      [userId, name, email || null, phone || null, last_service || null, safeDate, left_review || 'N', notes || null]
+      [userId, name, email || null, phone || null, last_service || null, safeDate, notes || null]
     );
 
     console.log(`✅ Customer created: ${name}`);
