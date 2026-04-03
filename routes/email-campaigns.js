@@ -4,6 +4,10 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const Anthropic = require('@anthropic-ai/sdk');
 const sgMail = require('@sendgrid/mail');
+const jwt = require('jsonwebtoken');
+
+const UNSUB_SECRET = process.env.JWT_SECRET || process.env.UNSUB_SECRET || 'sorce-unsubscribe-secret';
+const FRONTEND_URL = process.env.FRONTEND_URL || process.env.VITE_APP_URL || 'https://app.sorceintegrations.com';
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -43,7 +47,7 @@ function emailBlocksToHtml(blocks) {
       case 'signoff':
         return `  <div style="padding:0 28px 24px"><p style="margin:0;font-size:14px;color:#6b7280">${esc(c.text||'')}</p></div>`;
       case 'footer':
-        return `  <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 28px;text-align:center"><p style="margin:0 0 8px;font-size:12px;color:#6b7280">${esc(c.text||'')}</p><a href="#" style="font-size:12px;color:#6b7280;text-decoration:underline">${esc(c.unsubscribeText||'Unsubscribe')}</a></div>`;
+        return `  <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 28px;text-align:center"><p style="margin:0 0 8px;font-size:12px;color:#6b7280">${esc(c.text||'')}</p><a href="#unsubscribe" style="font-size:12px;color:#6b7280;text-decoration:underline">${esc(c.unsubscribeText||'Unsubscribe')}</a></div>`;
       default: return '';
     }
   }).join('\n');
@@ -191,9 +195,11 @@ Rules:
 }
 
 async function sendCampaign(userId, config, campaignId) {
-  // Get all customers with emails
+  // Get all customers with emails who haven't unsubscribed
   const customersResult = await pool.query(
-    'SELECT name, email FROM customers WHERE user_id = $1 AND email IS NOT NULL AND email != \'\'',
+    `SELECT name, email FROM customers
+     WHERE user_id = $1 AND email IS NOT NULL AND email != ''
+     AND (email_unsubscribed IS NULL OR email_unsubscribed = FALSE)`,
     [userId]
   );
 
@@ -211,15 +217,29 @@ async function sendCampaign(userId, config, campaignId) {
   const fromName = config.from_name || 'Your Business';
   const ownerReplyEmail = config.from_email;
 
-  const messages = customersResult.rows.map(customer => ({
-    to: customer.email,
-    from: { name: fromName, email: 'noreply@sorceintegrations.com' },
-    replyTo: ownerReplyEmail ? { name: fromName, email: ownerReplyEmail } : undefined,
-    subject: c.subject,
-    text: c.body_text,
-    html: c.body_html,
-    trackingSettings: { clickTracking: { enable: true }, openTracking: { enable: true } },
-  }));
+  const messages = customersResult.rows.map(customer => {
+    // Generate a signed unsubscribe token for this recipient
+    const unsubToken = jwt.sign(
+      { email: customer.email, userId, type: 'unsubscribe' },
+      UNSUB_SECRET,
+      { expiresIn: '365d' }
+    );
+    const unsubUrl = `${FRONTEND_URL}/unsubscribe?token=${unsubToken}`;
+
+    // Inject unsubscribe URL into the email HTML (replace placeholder or append)
+    const htmlWithUnsub = (c.body_html || '').replace(/href="#unsubscribe"/g, `href="${unsubUrl}"`)
+      .replace(/{{UNSUBSCRIBE_URL}}/g, unsubUrl);
+
+    return {
+      to: customer.email,
+      from: { name: fromName, email: 'noreply@sorceintegrations.com' },
+      replyTo: ownerReplyEmail ? { name: fromName, email: ownerReplyEmail } : undefined,
+      subject: c.subject,
+      text: c.body_text,
+      html: htmlWithUnsub,
+      trackingSettings: { clickTracking: { enable: true }, openTracking: { enable: true } },
+    };
+  });
 
   // SendGrid allows up to 1000 per batch
   let sent = 0;
@@ -250,6 +270,9 @@ pool.query(`
 
 pool.query(`ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS blocks JSONB`)
   .catch(e => console.error('email_campaigns blocks column migration error:', e.message));
+
+pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS email_unsubscribed BOOLEAN DEFAULT FALSE`)
+  .catch(e => console.error('customers email_unsubscribed column migration error:', e.message));
 
 // ── Routes ──────────────────────────────────────────────
 
@@ -531,6 +554,36 @@ router.delete('/presets/:id', authenticateToken, async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/email-campaigns/unsubscribe?token=...  (public — no auth required)
+router.get('/unsubscribe', async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+
+    let payload;
+    try {
+      payload = jwt.verify(token, UNSUB_SECRET);
+    } catch {
+      return res.status(400).json({ error: 'Invalid or expired unsubscribe link' });
+    }
+
+    if (payload.type !== 'unsubscribe' || !payload.email || !payload.userId) {
+      return res.status(400).json({ error: 'Invalid token type' });
+    }
+
+    await pool.query(
+      `UPDATE customers SET email_unsubscribed = TRUE
+       WHERE LOWER(email) = LOWER($1) AND user_id = $2`,
+      [payload.email, payload.userId]
+    );
+
+    res.json({ success: true, email: payload.email });
+  } catch (e) {
+    console.error('Unsubscribe error:', e.message);
+    res.status(500).json({ error: 'Failed to process unsubscribe' });
   }
 });
 
