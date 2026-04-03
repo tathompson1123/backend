@@ -576,6 +576,28 @@ router.post('/:id/send-card-link', authenticateToken, async (req, res) => {
       });
     }
 
+    // Notify business owner that the link was sent
+    if (process.env.SENDGRID_API_KEY && booking.owner_email) {
+      const dateStr = booking.booking_date
+        ? new Date(booking.booking_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+        : '';
+      sgMail.send({
+        to: booking.owner_email,
+        from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
+        subject: `Card on file link sent to ${booking.customer_name}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+            <div style="background:#d97706;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
+              <h2 style="color:#fff;margin:0;font-size:1.25rem;">Card on File Link Sent</h2>
+            </div>
+            <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+              <p style="margin-top:0;">A secure card-on-file link has been sent to <strong>${booking.customer_name}</strong> (${booking.customer_email})${dateStr ? ` for their ${dateStr} appointment` : ''}.</p>
+              <p style="color:#6b7280;font-size:0.9rem;">Booking #${booking.booking_number} will be automatically confirmed once they save their card. The link expires in 48 hours.</p>
+            </div>
+          </div>`,
+      }).catch(e => console.error('Owner card link notification error:', e.message));
+    }
+
     console.log(`📧 Card on file link sent for booking #${booking.booking_number} to ${booking.customer_email}`);
     res.json({ success: true, message: 'Card link sent to customer email' });
   } catch (error) {

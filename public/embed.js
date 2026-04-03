@@ -579,7 +579,15 @@
     return steps;
   }
 
-  function bkGoStep(s) { bkState.step = s; bkState.error = null; bkRender(); }
+  function bkGoStep(s) {
+    // Reset Stripe setup state when leaving contact step so it re-inits on return
+    if (bkState.step === 'contact' && s !== 'contact') {
+      bkState.stripeSetupStarted = false;
+      bkState.clientSecret = null;
+      bkState.stripeReady = false;
+    }
+    bkState.step = s; bkState.error = null; bkRender();
+  }
 
   function bkGetPrevStep() {
     var steps = bkGetStepList();
@@ -903,8 +911,9 @@
     bkBindEvents();
 
     // Auto-init Stripe inline for card_on_file contact step
-    if (bkState.step === 'contact' && bkGetPaymentMode() === 'card_on_file') {
-      if (!bkState.clientSecret && !bkState.loading) {
+    if (bkState.step === 'contact' && bkGetPaymentMode() === 'card_on_file' && bkNeedsPayment()) {
+      if (!bkState.stripeSetupStarted) {
+        bkState.stripeSetupStarted = true;
         bkSetupPayment();
       } else if (bkState.clientSecret && !bkState.stripeReady) {
         bkInitStripe();

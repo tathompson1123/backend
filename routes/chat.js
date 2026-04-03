@@ -745,6 +745,27 @@ REAL-TIME AVAILABILITY:
             }).catch(e => console.error('Card on file email error:', e.message));
           }
 
+          // Notify business owner that the card link was sent (non-blocking)
+          if (process.env.SENDGRID_API_KEY && owner.email) {
+            const sgMail2 = require('@sendgrid/mail');
+            sgMail2.setApiKey(process.env.SENDGRID_API_KEY);
+            sgMail2.send({
+              to: owner.email,
+              from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
+              subject: `Card on file link sent to ${customerName.trim()}`,
+              html: `
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+                  <div style="background:#d97706;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
+                    <h2 style="color:#fff;margin:0;font-size:1.25rem;">Card on File Link Sent</h2>
+                  </div>
+                  <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+                    <p style="margin-top:0;">Your chat agent sent a secure card-on-file link to <strong>${customerName.trim()}</strong> (${customerEmail.trim()}) for their ${formattedDate} at ${formattedTime} appointment.</p>
+                    <p style="color:#6b7280;font-size:0.9rem;">The booking will be automatically confirmed once they save their card. The link expires in 48 hours.</p>
+                  </div>
+                </div>`,
+            }).catch(e => console.error('Owner card link notification error:', e.message));
+          }
+
           reply = `Almost done, ${customerName}! I just sent a secure link to ${customerEmail.trim()} to save a card on file for our cancellation policy. We won't charge it — it's just required to hold your spot. Once that's done, your booking for ${formattedDate} at ${formattedTime} will be fully confirmed!`;
         } else {
           // Full confirmation — no card required

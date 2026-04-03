@@ -740,6 +740,35 @@ router.post('/card-on-file/:token/save', async (req, res) => {
       [token]
     );
 
+    // Notify business owner that the customer saved their card (non-blocking)
+    if (process.env.SENDGRID_API_KEY) {
+      pool.query('SELECT email, business_name FROM users WHERE id = $1', [row.user_id]).then(ownerRes => {
+        const owner = ownerRes.rows[0];
+        if (!owner || !owner.email) return;
+        const sgMail = require('@sendgrid/mail');
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        const dateStr = row.booking_date
+          ? new Date(row.booking_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+          : '';
+        sgMail.send({
+          to: owner.email,
+          from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
+          subject: `Card saved — ${row.customer_name}'s booking is confirmed`,
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+              <div style="background:#16a34a;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
+                <h2 style="color:#fff;margin:0;font-size:1.25rem;">Card on File Saved ✓</h2>
+              </div>
+              <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+                <p style="margin-top:0;"><strong>${row.customer_name}</strong> has saved a ${cardBrand} card ending in ${lastFour} for their booking${dateStr ? ` on ${dateStr}` : ''}.</p>
+                <p style="color:#16a34a;font-weight:600;">Their booking (#${row.booking_number}) is now confirmed.</p>
+                <p style="color:#6b7280;font-size:0.9rem;">You can view the booking details in your SORCE dashboard.</p>
+              </div>
+            </div>`,
+        }).catch(e => console.error('Owner card saved notification error:', e.message));
+      }).catch(() => {});
+    }
+
     console.log(`✅ Card on file saved for booking ${row.booking_id}: ${cardBrand} ****${lastFour}`);
     res.json({ success: true, cardBrand, lastFour });
   } catch (err) {
