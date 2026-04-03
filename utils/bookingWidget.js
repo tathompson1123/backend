@@ -430,8 +430,14 @@ function generateBookingWidgetCode(userId, theme = {}) {
         });
       }
       ch+='<div class="sbk-summary-row"><span>Date</span><span>'+fmtDate(state.selDate)+'</span></div>';
-      ch+='<div class="sbk-summary-row"><span>Time</span><span>'+state.selTime+'</span></div>';
-      ch+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      ch+='<div class="sbk-summary-row"><span>Time</span><span>'+(function(){var p=state.selTime.split(':');var h=parseInt(p[0]);var m=p[1];return(h%12||12)+':'+m+' '+(h>=12?'PM':'AM');})()+'</span></div>';
+      if(state.taxAmount>0){
+        ch+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="color:#6b7280">Subtotal</span><span>$'+state.subtotal.toFixed(2)+'</span></div>';
+        ch+='<div class="sbk-summary-row"><span style="color:#6b7280">Tax ('+(state.taxRate*100).toFixed(2).replace(/\.?0+$/,'')+'%)</span><span>$'+state.taxAmount.toFixed(2)+'</span></div>';
+        ch+='<div class="sbk-summary-row" style="padding-top:6px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      }else{
+        ch+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      }
       ch+='</div>';
       ch+='<p style="font-size:14px;color:#6b7280">A confirmation email has been sent to '+esc(state.cust.email)+'</p>';
       ch+='<button class="sbk-btn" onclick="document.getElementById(\\'sorce-booking-overlay\\').classList.remove(\\'open\\');document.body.style.overflow=\\'\\'">Done</button>';
@@ -546,9 +552,14 @@ function generateBookingWidgetCode(userId, theme = {}) {
         });
       }
       h+='<div class="sbk-summary-row"><span>Date</span><span>'+fmtDate(state.selDate)+'</span></div>';
-      h+='<div class="sbk-summary-row"><span>Time</span><span>'+state.selTime+'</span></div>';
-      if(state.taxAmount>0){h+='<div class="sbk-summary-row"><span style="color:#6b7280">Tax ('+Math.round(state.taxRate*100)+'%)</span><span>$'+state.taxAmount.toFixed(2)+'</span></div>';}
-      h+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      h+='<div class="sbk-summary-row"><span>Time</span><span>'+(function(){var p=state.selTime.split(':');var h=parseInt(p[0]);var m=p[1];return(h%12||12)+':'+m+' '+(h>=12?'PM':'AM');})()+'</span></div>';
+      if(state.taxAmount>0){
+        h+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="color:#6b7280">Subtotal</span><span>$'+state.subtotal.toFixed(2)+'</span></div>';
+        h+='<div class="sbk-summary-row"><span style="color:#6b7280">Tax ('+(state.taxRate*100).toFixed(2).replace(/\.?0+$/,'')+'%)</span><span>$'+state.taxAmount.toFixed(2)+'</span></div>';
+        h+='<div class="sbk-summary-row" style="padding-top:6px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      }else{
+        h+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
+      }
       h+='</div>';
       var cfields=getContactFields();
       cfields.forEach(function(f){
