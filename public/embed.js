@@ -608,9 +608,9 @@
     if (c.address) custInfo.address = c.address;
     fetch(API_BASE + '/api/public/bookings/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessId: config.userId, serviceId: bkState.selService.id, additionalServiceIds: addonIds, bookingDate: bkState.selDate, startTime: bkState.selTime, customerInfo: custInfo, customerNotes: c.notes || '', assignmentType: 'any' })
+      body: JSON.stringify({ businessId: config.userId, serviceId: bkState.selService.id, additionalServiceIds: addonIds, bookingDate: bkState.selDate, startTime: bkState.selTime, customerInfo: custInfo, customerNotes: c.notes || '', assignmentType: 'any', paymentMode: bkGetPaymentMode() })
     }).then(function(r) { return r.json(); }).then(function(d) {
-      if (d.success) { bkState.success = true; bkState.bookingNum = d.bookingNumber; bkState.step = 'confirmation'; } else { bkState.error = d.error || 'Booking failed'; }
+      if (d.success) { bkState.success = true; bkState.bookingNum = d.bookingNumber; bkState.cardOnFilePending = bkGetPaymentMode() === 'card_on_file'; bkState.step = 'confirmation'; } else { bkState.error = d.error || 'Booking failed'; }
       bkState.loading = false; bkRender();
     }).catch(function() { bkState.loading = false; bkState.error = 'Failed to submit booking'; bkRender(); });
   }
@@ -711,8 +711,8 @@
       ch += '<div class="sbk-success">';
       ch += '<div style="width:60px;height:60px;border-radius:50%;background:#d1fae5;display:flex;align-items:center;justify-content:center;margin:0 auto">';
       ch += '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>';
-      ch += '<h3>Booking Confirmed!</h3>';
-      ch += '<p style="color:#6b7280;margin:0 0 16px">Confirmation #' + bkState.bookingNum + '</p>';
+      ch += '<h3>' + (bkState.cardOnFilePending ? 'Almost There!' : 'Booking Confirmed!') + '</h3>';
+      ch += '<p style="color:#6b7280;margin:0 0 16px">' + (bkState.cardOnFilePending ? 'Check your email for a secure link to save your card and confirm your booking.' : 'Confirmation #' + bkState.bookingNum) + '</p>';
       ch += '<div class="sbk-summary">';
       ch += '<div class="sbk-summary-row"><span>Service</span><span>' + bkEsc(bkState.selService.name) + '</span></div>';
       if (bkState.selAddons.length) {
@@ -859,18 +859,7 @@
           h += '<input class="sbk-input" data-field="' + f.key + '" type="' + (f.type || 'text') + '" value="' + bkEsc(bkState.cust[f.key] || '') + '" placeholder="' + bkEsc(f.label) + '...">';
         }
       });
-      if (contactPMode === 'card_on_file' && !bkState.stripeSetupFailed) {
-        h += '<label class="sbk-label" style="margin-top:12px">Card Details</label>';
-        if (bkState.loading) {
-          h += '<div class="sbk-loading" style="padding:16px 0"><div class="sbk-spin"></div>Setting up payment...</div>';
-        } else if (bkState.clientSecret) {
-          h += '<div class="sbk-stripe-card" style="border:1px solid #d1d5db;border-radius:8px;padding:12px;margin-bottom:4px"></div>';
-        } else {
-          h += '<div class="sbk-loading" style="padding:16px 0"><div class="sbk-spin"></div>Setting up payment...</div>';
-        }
-        h += '<button class="sbk-btn" id="sbk-submit-cof"' + (bkState.loading || !bkState.stripeReady ? ' disabled' : '') + '>' + (bkState.loading ? '<span class="sbk-spin" style="width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>Processing...' : 'Confirm Booking') + '</button>';
-        h += '<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Your card will not be charged today — saved securely via Stripe</p>';
-      } else if (bkNeedsPayment()) {
+      if (bkNeedsPayment() && contactPMode !== 'card_on_file') {
         h += '<button class="sbk-btn" id="sbk-to-payment"' + (bkState.loading ? ' disabled' : '') + '>Continue to Payment &rarr;</button>';
       } else {
         h += '<button class="sbk-btn" id="sbk-submit"' + (bkState.loading ? ' disabled' : '') + '>' + (bkState.loading ? '<span class="sbk-spin" style="width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>Confirming...' : 'Confirm Booking') + '</button>';
@@ -912,15 +901,6 @@
     bkContent.innerHTML = h;
     bkBindEvents();
 
-    // Auto-init Stripe inline for card_on_file contact step
-    if (bkState.step === 'contact' && bkGetPaymentMode() === 'card_on_file') {
-      if (!bkState.stripeSetupStarted && !bkState.stripeSetupFailed) {
-        bkState.stripeSetupStarted = true;
-        bkSetupPayment();
-      } else if (bkState.clientSecret && !bkState.stripeReady) {
-        bkInitStripe();
-      }
-    }
   }
 
   function bkBindEvents() {
@@ -1012,16 +992,6 @@
     // Submit button (no payment)
     var submitEl = document.getElementById('sbk-submit');
     if (submitEl) submitEl.onclick = bkSubmit;
-
-    // Inline card-on-file confirm button
-    var cofSubmitEl = document.getElementById('sbk-submit-cof');
-    if (cofSubmitEl) cofSubmitEl.onclick = function() {
-      var c = bkState.cust;
-      var missing = bkGetContactFields().filter(function(f) { return f.required && !c[f.key]; });
-      if (missing.length) { bkState.error = 'Please fill in all required fields'; bkRender(); return; }
-      if (!bkState.stripeReady) { bkState.error = 'Card details not ready yet'; bkRender(); return; }
-      bkConfirmPayment();
-    };
 
     // To payment button
     var toPayEl = document.getElementById('sbk-to-payment');

@@ -462,7 +462,7 @@ router.post('/bookings/create', async (req, res) => {
     const {
       businessId, serviceId, variantId, additionalServiceIds = [],
       bookingDate, startTime, customerInfo, customerNotes,
-      assignmentType, employeeId, groupId
+      assignmentType, employeeId, groupId, paymentMode
     } = req.body;
 
     if (!businessId || !serviceId || !bookingDate || !startTime || !customerInfo?.name || !customerInfo?.email) {
@@ -552,18 +552,21 @@ router.post('/bookings/create', async (req, res) => {
     const bookingNumber = 'BK-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 3).toUpperCase();
 
     // Create booking
+    const isCardOnFile = paymentMode === 'card_on_file';
     const bookingResult = await pool.query(
       `INSERT INTO bookings (user_id, customer_id, booking_number, booking_date, start_time, end_time,
         customer_name, customer_email, customer_phone, customer_notes,
-        employee_id, subtotal, total_amount, status, source)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'confirmed', 'website')
+        employee_id, subtotal, total_amount, tax_rate, tax_amount, status, card_on_file_status, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'website')
        RETURNING id, booking_number`,
       [
         businessId, customerId, bookingNumber, bookingDate, startTime, endTime,
         customerInfo.name, customerInfo.email, customerInfo.phone || '',
         customerNotes || '',
         assignmentType === 'employee' ? employeeId : null,
-        totalPrice, totalWithTax
+        totalPrice, totalWithTax, bizTaxRate, bizTaxAmount,
+        isCardOnFile ? 'pending' : 'confirmed',
+        isCardOnFile ? 'pending' : null,
       ]
     );
 
@@ -582,6 +585,68 @@ router.post('/bookings/create', async (req, res) => {
       );
     }
 
+    // Card on file: generate secure token and email customer
+    if (isCardOnFile && customerInfo.email) {
+      const tokenResult = await pool.query(
+        `INSERT INTO card_on_file_tokens (booking_id, user_id, customer_email, customer_name)
+         VALUES ($1, $2, $3, $4) RETURNING token`,
+        [bookingResult.rows[0].id, businessId, customerInfo.email, customerInfo.name]
+      );
+      const cardToken = tokenResult.rows[0].token;
+      const frontendUrl = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
+      const cardLink = `${frontendUrl}/card-on-file/${cardToken}`;
+
+      if (process.env.SENDGRID_API_KEY) {
+        const sgMail = require('@sendgrid/mail');
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        const ownerResult = await pool.query('SELECT business_name, email FROM users WHERE id = $1', [businessId]);
+        const owner = ownerResult.rows[0] || {};
+        const dateStr = new Date(bookingDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        const [h, m] = startTime.split(':').map(Number);
+        const timeStr = `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
+        // Email to customer
+        sgMail.send({
+          to: customerInfo.email,
+          from: { name: owner.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
+          replyTo: owner.email ? { email: owner.email } : undefined,
+          subject: `One last step to confirm your appointment — ${owner.business_name || 'Us'}`,
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+              <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
+                <h1 style="color:#fff;margin:0;font-size:1.5rem;">Almost Confirmed!</h1>
+              </div>
+              <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+                <p style="font-size:1rem;margin-top:0;">Hi ${customerInfo.name},</p>
+                <p>Your appointment with <strong>${owner.business_name || 'us'}</strong> on ${dateStr} at ${timeStr} is almost confirmed!</p>
+                <p>We just need a card on file to complete your booking. <strong>We will not charge your card</strong> — it is only kept on file in case of a no-show per our cancellation policy.</p>
+                <div style="text-align:center;margin:2rem 0;">
+                  <a href="${cardLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:600;">Securely Save Card on File</a>
+                </div>
+                <p style="color:#6b7280;font-size:0.85rem;">This link expires in 48 hours.</p>
+              </div>
+            </div>`,
+        }).catch(e => console.error('Card on file email error:', e.message));
+        // Notify owner
+        if (owner.email) {
+          sgMail.send({
+            to: owner.email,
+            from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
+            subject: `Card on file link sent to ${customerInfo.name}`,
+            html: `
+              <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+                <div style="background:#d97706;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
+                  <h2 style="color:#fff;margin:0;font-size:1.25rem;">Card on File Link Sent</h2>
+                </div>
+                <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+                  <p style="margin-top:0;">A secure card-on-file link was sent to <strong>${customerInfo.name}</strong> (${customerInfo.email}) for their ${dateStr} at ${timeStr} appointment.</p>
+                  <p style="color:#6b7280;font-size:0.9rem;">Booking #${bookingNumber} will be confirmed once they save their card. The link expires in 48 hours.</p>
+                </div>
+              </div>`,
+          }).catch(e => console.error('Owner card link notification error:', e.message));
+        }
+      }
+    }
+
     // Also create a lead record
     await pool.query(
       `INSERT INTO leads (user_id, name, email, phone, service, source, status, sms_consent)
@@ -592,20 +657,22 @@ router.post('/bookings/create', async (req, res) => {
 
     console.log(`📅 Public booking created: ${bookingNumber} for user ${businessId}`);
 
-    // Send booking confirmation emails (non-blocking)
-    sendBookingEmails({
-      userId: businessId,
-      bookingNumber,
-      customerName: customerInfo.name,
-      customerEmail: customerInfo.email,
-      customerPhone: customerInfo.phone || '',
-      serviceName: servicesResult.rows.map(s => s.name).join(', '),
-      bookingDate,
-      startTime,
-      endTime,
-      price: totalPrice,
-      notes: customerNotes || '',
-    }).catch(() => {});
+    // Send booking confirmation emails (non-blocking) — skip for card_on_file (not yet confirmed)
+    if (!isCardOnFile) {
+      sendBookingEmails({
+        userId: businessId,
+        bookingNumber,
+        customerName: customerInfo.name,
+        customerEmail: customerInfo.email,
+        customerPhone: customerInfo.phone || '',
+        serviceName: servicesResult.rows.map(s => s.name).join(', '),
+        bookingDate,
+        startTime,
+        endTime,
+        price: totalPrice,
+        notes: customerNotes || '',
+      }).catch(() => {});
+    }
 
     res.json({
       success: true,
