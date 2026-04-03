@@ -1064,12 +1064,19 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify bookings tax columns:', e.message);
   }
 
-  // Card on file (Square)
+  // Card on file (Square + Stripe + Clover)
   try {
     await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS square_customer_id TEXT');
     await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS square_card_id TEXT');
     await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS square_card_brand TEXT');
     await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS square_card_last_four TEXT');
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT');
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS stripe_payment_method_id TEXT');
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS clover_customer_id TEXT');
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS clover_card_id TEXT');
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_processor TEXT');
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_brand TEXT');
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_last_four TEXT');
     await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS card_on_file_status TEXT DEFAULT 'not_required'`);
     await pool.query(`CREATE TABLE IF NOT EXISTS card_on_file_tokens (
       id SERIAL PRIMARY KEY,
