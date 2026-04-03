@@ -551,6 +551,8 @@ function generateBookingWidgetCode(userId, theme = {}) {
           h+='<div class="sbk-summary-row"><span style="color:#6b7280">+ '+esc(a.name)+'</span><span>$'+parseFloat(a.price).toFixed(2)+'</span></div>';
         });
       }
+      var bizLoc=[state.biz&&state.biz.address,state.biz&&state.biz.city,state.biz&&state.biz.state].filter(Boolean).join(', ');
+      if(bizLoc)h+='<div class="sbk-summary-row"><span>Location</span><span style="text-align:right;max-width:60%">'+esc(bizLoc)+'</span></div>';
       h+='<div class="sbk-summary-row"><span>Date</span><span>'+fmtDate(state.selDate)+'</span></div>';
       h+='<div class="sbk-summary-row"><span>Time</span><span>'+(function(){var p=state.selTime.split(':');var h=parseInt(p[0]);var m=p[1];return(h%12||12)+':'+m+' '+(h>=12?'PM':'AM');})()+'</span></div>';
       if(state.taxAmount>0){
