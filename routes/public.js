@@ -170,7 +170,15 @@ router.get('/booking-widget-config', async (req, res) => {
   try {
     const { businessId } = req.query;
     if (!businessId) return res.status(400).json({ error: 'businessId required' });
-    const result = await pool.query('SELECT config FROM booking_widget_configs WHERE user_id = $1', [businessId]);
+
+    const [configResult, stripeResult] = await Promise.all([
+      pool.query('SELECT config FROM booking_widget_configs WHERE user_id = $1', [businessId]),
+      pool.query(
+        "SELECT stripe_account_id, stripe_public_key FROM payment_connections WHERE user_id = $1 AND processor = 'stripe' AND is_active = true LIMIT 1",
+        [businessId]
+      )
+    ]);
+
     const defaultConfig = {
       steps: {
         categories: { title: 'Our Services', subtitle: 'Choose a category' },
@@ -183,7 +191,18 @@ router.get('/booking-widget-config', async (req, res) => {
       },
       requirePayment: false, depositPercent: null, showPrices: true, showDurations: true, accentColor: null
     };
-    res.json({ config: result.rows.length > 0 ? { ...defaultConfig, ...result.rows[0].config } : defaultConfig });
+
+    const savedConfig = configResult.rows.length > 0 ? configResult.rows[0].config : {};
+    const stripeRow = stripeResult.rows[0];
+    const config = {
+      ...defaultConfig,
+      ...savedConfig,
+      paymentConnected: !!stripeRow,
+      stripePublicKey: stripeRow ? (process.env.STRIPE_PUBLIC_KEY || null) : null,
+      stripeAccountId: stripeRow?.stripe_account_id || null,
+    };
+
+    res.json({ config });
   } catch (error) {
     console.error('Public widget config error:', error.message);
     res.json({ config: {} });

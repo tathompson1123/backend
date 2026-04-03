@@ -626,7 +626,8 @@
   function bkInitStripe() {
     if (!bkState.config || !bkState.config.stripePublicKey) return;
     bkLoadStripeJs(function() {
-      bkState.stripeInstance = window.Stripe(bkState.config.stripePublicKey);
+      var stripeOpts = bkState.config.stripeAccountId ? { stripeAccount: bkState.config.stripeAccountId } : {};
+      bkState.stripeInstance = window.Stripe(bkState.config.stripePublicKey, stripeOpts);
       var elements = bkState.stripeInstance.elements();
       bkState.cardElement = elements.create('card', { style: { base: { fontSize: '16px', color: '#374151', '::placeholder': { color: '#9ca3af' } } } });
       var el = document.querySelector('.sbk-stripe-card');
