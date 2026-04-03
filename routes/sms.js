@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { sendSMS } = require('../utils/twilio');
+const { authenticateToken } = require('../config/middleware');
+const twilio = require('twilio');
 
 // Twilio webhook for incoming SMS
 router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
@@ -202,5 +204,34 @@ Lead: ${lead.name || 'Customer'} | ${lead.email || 'No email'}`;
     return null;
   }
 }
+
+// POST /api/sms/fix-webhook — re-register Twilio SMS webhook for the user's number
+router.post('/fix-webhook', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const userResult = await pool.query(
+      'SELECT twilio_phone_number, twilio_phone_sid FROM users WHERE id = $1',
+      [userId]
+    );
+    const user = userResult.rows[0];
+    if (!user?.twilio_phone_sid) {
+      return res.status(400).json({ error: 'No Twilio phone number assigned to your account' });
+    }
+    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+      return res.status(500).json({ error: 'Twilio credentials not configured' });
+    }
+    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    const baseUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
+    await client.incomingPhoneNumbers(user.twilio_phone_sid).update({
+      smsUrl: `${baseUrl}/api/sms/webhook`,
+      smsMethod: 'POST',
+    });
+    console.log(`✅ Webhook re-synced for ${user.twilio_phone_number} (${user.twilio_phone_sid})`);
+    res.json({ success: true, number: user.twilio_phone_number, webhookUrl: `${baseUrl}/api/sms/webhook` });
+  } catch (error) {
+    console.error('Error fixing webhook:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 module.exports = router;
