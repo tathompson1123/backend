@@ -423,7 +423,8 @@ router.post('/test-send', authenticateToken, async (req, res) => {
 
     await sgMail.send({
       to: config.from_email,
-      from: { name: config.from_name || 'Campaign Test', email: config.from_email },
+      from: { name: config.from_name || 'Campaign Test', email: 'noreply@sorceintegrations.com' },
+      replyTo: { name: config.from_name || '', email: config.from_email },
       subject: `[TEST] ${emailSubject}`,
       text: emailText,
       html: emailHtml,
