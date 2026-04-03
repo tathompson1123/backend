@@ -478,6 +478,27 @@ router.put('/:id/notes', authenticateToken, async (req, res) => {
   }
 });
 
+// PATCH - Update booking status only
+router.patch('/:id/status', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { status } = req.body;
+    const allowed = ['pending', 'confirmed', 'confirmed_card_on_file', 'completed', 'cancelled', 'no_show'];
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    const result = await pool.query(
+      `UPDATE bookings SET status = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND user_id = $3 RETURNING *`,
+      [status, id, userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+    res.json({ success: true, booking: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating booking status:', error.message);
+    res.status(500).json({ error: 'Failed to update status' });
+  }
+});
+
 // DELETE - Delete a booking
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
