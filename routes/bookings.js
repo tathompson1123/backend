@@ -68,6 +68,7 @@ router.get('/', authenticateToken, async (req, res) => {
       SELECT b.*, 
         json_agg(
           json_build_object(
+            'service_id', bi.service_id,
             'service_name', bi.service_name,
             'duration', bi.service_duration,
             'price', bi.service_price,
