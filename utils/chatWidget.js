@@ -246,19 +246,19 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
     right: 12px;
   }
   .chat-bubble {
-    padding: 6px 12px 6px 6px;
-    border-radius: 24px;
+    padding: 0;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    justify-content: center;
+  }
+  .chat-bubble-info {
+    display: none;
   }
   .chat-bubble-avatar {
-    width: 32px;
-    height: 32px;
-    font-size: 13px;
-  }
-  .chat-bubble-name {
-    font-size: 13px;
-  }
-  .chat-bubble-status {
-    font-size: 11px;
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
   }
   .chat-window {
     width: calc(100vw - 24px);

@@ -192,7 +192,7 @@
       '.sbk-svc-img{width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:14px}\n' +
       '.sbk-addon-row{display:flex;align-items:center;padding:12px 0;border-bottom:1px solid #f3f4f6}\n' +
       '.sbk-addon-row:last-child{border-bottom:none}\n' +
-      '.sbk-addon-check{width:20px;height:20px;accent-color:' + tc + ';cursor:pointer;flex-shrink:0;margin-right:12px}\n' +
+      '.sbk-addon-check{width:22px;height:22px;min-width:22px;accent-color:' + tc + ';cursor:pointer;flex-shrink:0;margin-right:12px}\n' +
       '.sbk-total-bar{position:sticky;bottom:0;background:#fff;border-top:2px solid #f3f4f6;padding:14px 0 0;margin-top:12px;display:flex;justify-content:space-between;align-items:center}\n' +
       '.sbk-steps-indicator{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:18px;padding-top:4px}\n' +
       '.sbk-steps-indicator .sbk-dot{width:8px;height:8px;border-radius:50%;background:#e5e7eb;transition:background .2s}\n' +
@@ -1360,7 +1360,7 @@
     }
 
     var bizName = (config && config.businessName) ? config.businessName : 'our team';
-    html += '<div style="' + groupStyle + 'display:flex;align-items:flex-start;gap:8px"><input type="checkbox" data-sorce-field="sms" required style="margin-top:3px;width:auto;"><label style="font-size:12px;color:#6b7280;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">I consent to receive text messages from ' + escapeHtml(bizName) + ' about services I\'m interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</label></div>';
+    html += '<div style="' + groupStyle + 'display:flex;align-items:flex-start;gap:10px"><input type="checkbox" data-sorce-field="sms" required style="margin-top:2px;width:20px;height:20px;min-width:20px;flex-shrink:0;cursor:pointer;accent-color:' + tc + ';"><label style="font-size:12px;color:#6b7280;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">I consent to receive text messages from ' + escapeHtml(bizName) + ' about services I\'m interested in. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</label></div>';
     html += '<button type="submit" data-sorce-submit style="width:100%;padding:12px;background:' + tc + ';color:white;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:15px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;transition:opacity 0.2s;">' + escapeHtml(submitText) + '</button>';
 
     return html;

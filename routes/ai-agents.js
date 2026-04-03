@@ -893,7 +893,7 @@ router.post('/assistant', authenticateToken, async (req, res) => {
       pool.query('SELECT business_name, email FROM users WHERE id = $1', [userId]),
       pool.query('SELECT phone, email, address, city, state, zip_code, service_area_type, service_zip_codes, service_radius FROM business_information WHERE user_id = $1', [userId]),
       pool.query('SELECT name, description, price FROM services WHERE user_id = $1 LIMIT 20', [userId]),
-      pool.query('SELECT day_of_week, start_time, end_time, is_closed FROM business_hours WHERE user_id = $1 ORDER BY day_of_week', [userId])
+      pool.query('SELECT day_of_week, open_time, close_time, is_open FROM business_hours WHERE user_id = $1 ORDER BY day_of_week', [userId])
     ]);
     const businessName = userResult.rows[0]?.business_name || '';
     const accountEmail = userResult.rows[0]?.email || '';
@@ -910,7 +910,7 @@ router.post('/assistant', authenticateToken, async (req, res) => {
       bizInfo.service_area_type === 'radius' && bizInfo.service_radius ? `Service area: ${bizInfo.service_radius} mile radius` : null,
       bizInfo.service_area_type === 'zipcodes' && bizInfo.service_zip_codes?.length ? `Service zip codes: ${bizInfo.service_zip_codes.join(', ')}` : null,
       services.length > 0 ? `Services: ${services.map(s => `${s.name}${s.price ? ` ($${s.price})` : ''}`).join(', ')}` : null,
-      hours.length > 0 ? `Business hours: ${hours.filter(h => !h.is_closed).map(h => `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][h.day_of_week]} ${h.start_time}-${h.end_time}`).join(', ')}` : null,
+      hours.length > 0 ? `Business hours: ${hours.filter(h => h.is_open).map(h => `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][h.day_of_week]} ${h.open_time}-${h.close_time}`).join(', ')}` : null,
     ].filter(Boolean);
 
     const hasBusinessInfo = businessName || bizInfo.phone || services.length > 0;
