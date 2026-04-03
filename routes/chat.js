@@ -534,6 +534,8 @@ IMPORTANT RULES:
 - NEVER use markdown formatting. No asterisks for bold (**word**), no dashes for bullet points (- item), no underscores, no hashtags. Use plain sentences with commas, periods, exclamation marks, and question marks only.
 - NEVER parrot back or repeat what the customer just said. Don't restate their words, situation, or feelings back to them — it sounds robotic. Instead, respond naturally and move the conversation forward. For example, if they say "a mouse got in my car and I'm grossed out", do NOT say "Having a mouse in your car would definitely make anyone feel grossed out." Just acknowledge briefly ("Oh no, we can definitely help with that!") and move to your recommendation.
 - Convert dates to YYYY-MM-DD format. Today is ${bizDateTime.fullDate} (${bizDateTime.isoDate}), current time is ${bizDateTime.currentTime}. Use this to calculate relative dates like "Tuesday", "tomorrow", "next week", etc. Make sure the day of the week matches correctly.
+- If a customer gives both a day name AND a date number that don't match (e.g. "Tuesday the 7th" but the 7th is a Monday), gently correct them. For example: "Just to clarify — the 7th is actually a Monday, and Tuesday is the 8th. Which one works for you?" Then wait for their answer before proceeding.
+- CRITICAL: Before sending a BOOKING_REQUEST, verify the YYYY-MM-DD date you are using actually falls on the day of the week you verbally confirmed. If you told the customer "Tuesday the 7th", the date in BOOKING_REQUEST must be the 7th, not the 8th. Double-check your date math before submitting.
 - Convert times to 24-hour format (2pm = 14:00, 9am = 09:00)
 - Only send BOOKING_REQUEST when you have ALL 6 pieces of information
 - For customerName in BOOKING_REQUEST, use ONLY the name the customer explicitly stated (e.g., if they said "I'm Kathy" or "My name is Kathy", use "Kathy"). NEVER use random words from the conversation as the name. If unclear, ask them to confirm their name before booking.
@@ -633,7 +635,8 @@ REAL-TIME AVAILABILITY:
     const bookingMatch = reply.match(/BOOKING_REQUEST\|(\d+)\|([\d-]+)\|([\d:]+)\|([^|]+)\|([^|]+)\|([^|]+)/);
 
     if (bookingMatch) {
-      const [_, serviceId, bookingDate, startTime, customerName, customerEmail, customerPhone] = bookingMatch;
+      const [_, serviceId, bookingDate, startTime, customerName, customerEmail, rawPhone] = bookingMatch;
+      const customerPhone = rawPhone.replace(/[^\d+\-().]/g, '').trim();
       console.log(`🤖 Chat BOOKING_REQUEST: service=${serviceId} date=${bookingDate} time=${startTime} name=${customerName} email=${customerEmail} phone=${customerPhone}`);
 
       // Cancel any existing booking from this conversation (reschedule case)

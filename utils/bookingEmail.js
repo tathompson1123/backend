@@ -26,7 +26,7 @@ function formatTime(timeStr) {
 }
 
 /**
- * Send booking confirmation emails — customer confirmation + owner notification.
+ * Send booking confirmation or updated emails — customer email + owner notification.
  * Non-blocking: errors are logged but don't throw.
  *
  * @param {object} opts
@@ -46,6 +46,7 @@ function formatTime(timeStr) {
  * @param {number} opts.price        - legacy: used if subtotal/total not provided
  * @param {string} opts.location     - service location address (optional)
  * @param {string} opts.notes
+ * @param {string} opts.type         - 'confirmation' (default) or 'updated'
  */
 async function sendBookingEmails(opts) {
   if (!process.env.SENDGRID_API_KEY) {
@@ -96,23 +97,29 @@ async function sendBookingEmails(opts) {
         ${opts.notes ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Notes</td><td style="padding:10px 12px;">${opts.notes}</td></tr>` : ''}
       </table>`;
 
+    const isUpdated = opts.type === 'updated';
     const emails = [];
 
-    // ── Customer confirmation ──────────────────────────────────
+    // ── Customer email ─────────────────────────────────────────
     if (opts.customerEmail) {
       emails.push({
         to: opts.customerEmail,
         from: { name: businessName || 'Your Service Provider', email: fromEmail },
         replyTo: ownerEmail ? { name: businessName || '', email: ownerEmail } : undefined,
-        subject: `Booking Confirmed — ${opts.serviceName} on ${formattedDate}`,
+        subject: isUpdated
+          ? `Booking Updated — ${opts.serviceName} on ${formattedDate}`
+          : `Booking Confirmed — ${opts.serviceName} on ${formattedDate}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-            <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-              <h1 style="color:#fff;margin:0;font-size:1.5rem;">Booking Confirmed!</h1>
+            <div style="background:${isUpdated ? '#d97706' : '#1d4ed8'};padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
+              <h1 style="color:#fff;margin:0;font-size:1.5rem;">${isUpdated ? 'Booking Updated' : 'Booking Confirmed!'}</h1>
             </div>
             <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
               <p style="font-size:1rem;margin-top:0;">Hi ${opts.customerName},</p>
-              <p>Your booking with <strong>${businessName || 'us'}</strong> is confirmed. Here are your details:</p>
+              <p>${isUpdated
+                ? `Your booking with <strong>${businessName || 'us'}</strong> has been updated. Here are your new details:`
+                : `Your booking with <strong>${businessName || 'us'}</strong> is confirmed. Here are your details:`
+              }</p>
               ${detailsHtml}
               <p style="color:#6b7280;font-size:0.9rem;margin-top:2rem;">
                 If you need to reschedule or have questions, please contact us directly.<br>
@@ -131,11 +138,13 @@ async function sendBookingEmails(opts) {
         to: ownerEmail,
         from: { name: 'SORCE Bookings', email: fromEmail },
         replyTo: ownerEmail ? { email: ownerEmail } : undefined,
-        subject: `New Booking: ${opts.serviceName} — ${opts.customerName}`,
+        subject: isUpdated
+          ? `Booking Updated: ${opts.serviceName} — ${opts.customerName}`
+          : `New Booking: ${opts.serviceName} — ${opts.customerName}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-            <div style="background:#16a34a;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-              <h1 style="color:#fff;margin:0;font-size:1.5rem;">New Booking Received</h1>
+            <div style="background:${isUpdated ? '#d97706' : '#16a34a'};padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
+              <h1 style="color:#fff;margin:0;font-size:1.5rem;">${isUpdated ? 'Booking Updated' : 'New Booking Received'}</h1>
             </div>
             <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
               <p style="font-size:1rem;margin-top:0;"><strong>Customer:</strong> ${customerDetails}</p>

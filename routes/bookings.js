@@ -256,7 +256,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const { serviceId, bookingDate, startTime, customerInfo, notes, employeeId, groupId, status } = req.body;
+    const { serviceId, bookingDate, startTime, customerInfo, notes, employeeId, groupId, status, sendEmail } = req.body;
 
     const serviceResult = await pool.query(
       'SELECT duration_hours, price, name FROM services WHERE id = $1',
@@ -335,7 +335,27 @@ router.put('/:id', authenticateToken, async (req, res) => {
       [serviceId, service.name, service.duration_hours, service.price, service.price, id]
     );
 
-    res.json({ 
+    if (sendEmail && booking.customer_email) {
+      sendBookingEmails({
+        userId,
+        bookingNumber: booking.booking_number,
+        customerName: booking.customer_name,
+        customerEmail: booking.customer_email,
+        customerPhone: booking.customer_phone,
+        serviceName: service.name,
+        bookingDate,
+        startTime,
+        endTime,
+        subtotal: parseFloat(booking.subtotal),
+        taxRate: parseFloat(booking.tax_rate),
+        taxAmount: parseFloat(booking.tax_amount),
+        total: parseFloat(booking.total_amount),
+        notes,
+        type: 'updated',
+      }).catch(() => {});
+    }
+
+    res.json({
       success: true,
       booking: bookingResult.rows[0],
       message: 'Booking updated successfully'
