@@ -809,6 +809,7 @@
       if (prev) h += '<button class="sbk-btn-back" data-goback>&larr; Back</button>';
       h += '<h3 class="sbk-title">Your Information</h3>';
       bkCalcTotal();
+      var contactPMode = bkGetPaymentMode();
       h += '<div class="sbk-summary">';
       h += '<div class="sbk-summary-row"><span>Service</span><span>' + bkEsc(bkState.selService.name) + '</span></div>';
       if (bkState.selAddons.length) {
@@ -816,10 +817,24 @@
           h += '<div class="sbk-summary-row"><span style="color:#6b7280">+ ' + bkEsc(a.name) + '</span><span>$' + parseFloat(a.price).toFixed(2) + '</span></div>';
         });
       }
+      var contactBizLoc = [bkState.biz && bkState.biz.address, bkState.biz && bkState.biz.city, bkState.biz && bkState.biz.state].filter(Boolean).join(', ');
+      if (contactBizLoc) h += '<div class="sbk-summary-row"><span>Location</span><span style="text-align:right;max-width:60%">' + bkEsc(contactBizLoc) + '</span></div>';
       h += '<div class="sbk-summary-row"><span>Date</span><span>' + bkFmtDate(bkState.selDate) + '</span></div>';
-      h += '<div class="sbk-summary-row"><span>Time</span><span>' + bkState.selTime + '</span></div>';
-      h += '<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$' + bkState.totalPrice.toFixed(2) + '</span></div>';
+      h += '<div class="sbk-summary-row"><span>Time</span><span>' + (function() { var p = bkState.selTime.split(':'); var hr = parseInt(p[0]); var mn = p[1]; return (hr % 12 || 12) + ':' + mn + ' ' + (hr >= 12 ? 'PM' : 'AM'); })() + '</span></div>';
+      if (bkState.taxAmount > 0) {
+        h += '<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="color:#6b7280">Subtotal</span><span>$' + bkState.subtotal.toFixed(2) + '</span></div>';
+        h += '<div class="sbk-summary-row"><span style="color:#6b7280">Tax (' + (bkState.taxRate * 100).toFixed(2).replace(/\.?0+$/, '') + '%)</span><span>$' + bkState.taxAmount.toFixed(2) + '</span></div>';
+        h += '<div class="sbk-summary-row" style="padding-top:6px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$' + bkState.totalPrice.toFixed(2) + '</span></div>';
+      } else {
+        h += '<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$' + bkState.totalPrice.toFixed(2) + '</span></div>';
+      }
+      if (contactPMode === 'card_on_file') {
+        h += '<div class="sbk-summary-row" style="padding-top:6px;border-top:1px solid #e5e7eb;margin-top:4px"><span style="font-weight:700;color:#059669">Due Today</span><span style="font-weight:700;color:#059669;font-size:18px">$0.00</span></div>';
+      }
       h += '</div>';
+      if (contactPMode === 'card_on_file') {
+        h += '<div style="display:flex;align-items:flex-start;gap:8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:#1e40af"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><span>A card on file is required to confirm your booking. <strong>Your card will not be charged today.</strong></span></div>';
+      }
       var cfields = bkGetContactFields();
       cfields.forEach(function(f) {
         var reqMark = f.required ? '<span class="sbk-req">*</span>' : '';

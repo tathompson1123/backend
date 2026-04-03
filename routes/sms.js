@@ -2,8 +2,29 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { sendSMS } = require('../utils/twilio');
-const { authenticateToken } = require('../config/middleware');
 const twilio = require('twilio');
+
+// Auto-heal Twilio webhook URL for a phone number (non-blocking, fire-and-forget)
+function selfHealWebhook(phoneSid, phoneNumber) {
+  if (!phoneSid || !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) return;
+  setImmediate(async () => {
+    try {
+      const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      const baseUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
+      const expectedUrl = `${baseUrl}/api/sms/webhook`;
+      const numberInfo = await client.incomingPhoneNumbers(phoneSid).fetch();
+      if (numberInfo.smsUrl !== expectedUrl) {
+        await client.incomingPhoneNumbers(phoneSid).update({
+          smsUrl: expectedUrl,
+          smsMethod: 'POST'
+        });
+        console.log(`🔧 Auto-repaired webhook for ${phoneNumber}: "${numberInfo.smsUrl}" → "${expectedUrl}"`);
+      }
+    } catch (err) {
+      console.error('Webhook self-heal error:', err.message);
+    }
+  });
+}
 
 // Twilio webhook for incoming SMS
 router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
@@ -11,6 +32,18 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     const { From, To, Body, MessageSid } = req.body;
 
     console.log(`📨 SMS: ${From} → ${To}: "${Body}"`);
+
+    // Deduplication: Twilio may retry webhooks — skip if already processed
+    if (MessageSid) {
+      const dupCheck = await pool.query(
+        'SELECT id FROM sms_messages WHERE twilio_message_sid = $1 LIMIT 1',
+        [MessageSid]
+      );
+      if (dupCheck.rows.length > 0) {
+        console.log(`⚠️ Duplicate webhook for ${MessageSid} — skipping`);
+        return res.status(200).send('<Response></Response>');
+      }
+    }
 
     // Find user by their Twilio phone number
     const userResult = await pool.query(
@@ -40,6 +73,9 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
       }
     }
 
+    // Self-heal webhook URL in background (no-op if already correct)
+    selfHealWebhook(user.twilio_phone_sid, To);
+
     // Find or create lead
     let leadResult = await pool.query(
       'SELECT id, name, email FROM leads WHERE phone = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
@@ -63,8 +99,8 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
 
     // Store incoming message
     await pool.query(
-      `INSERT INTO sms_messages 
-       (lead_id, user_id, direction, from_number, message, twilio_message_sid, created_at) 
+      `INSERT INTO sms_messages
+       (lead_id, user_id, direction, from_number, message, twilio_message_sid, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
       [leadId, user.id, 'incoming', From, Body, MessageSid]
     );
@@ -85,31 +121,31 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     if (agentEnabled) {
       // Generate AI response first to calculate typing delay
       const aiResponse = await generateAIResponse(user.id, leadId, leadResult.rows[0], Body);
-      
+
       if (aiResponse) {
         // Calculate human-like delay
         // Base delay: 30-90 seconds (reading and thinking time)
         const baseDelay = 30000 + Math.random() * 60000; // 30-90 seconds
-        
+
         // Typing delay: 50-80ms per character (simulates 40-60 WPM typing)
         const typingDelay = aiResponse.length * (50 + Math.random() * 30);
-        
+
         const totalDelay = baseDelay + typingDelay;
-        
+
         console.log(`⏰ AI will respond in ${Math.round(totalDelay / 1000)} seconds (reading: ${Math.round(baseDelay / 1000)}s + typing: ${Math.round(typingDelay / 1000)}s)`);
-        
+
         // Schedule the response
         setTimeout(async () => {
           try {
             await sendSMS(From, aiResponse, user.id);
-            
+
             await pool.query(
-              `INSERT INTO sms_messages 
-               (lead_id, user_id, direction, to_number, message, created_at) 
+              `INSERT INTO sms_messages
+               (lead_id, user_id, direction, to_number, message, created_at)
                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
               [leadId, user.id, 'outgoing', From, aiResponse]
             );
-            
+
             console.log(`🤖 AI replied to ${From} after ${Math.round(totalDelay / 1000)}s delay`);
           } catch (error) {
             console.error('Error sending delayed AI response:', error.message);
@@ -130,23 +166,23 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
 async function generateAIResponse(userId, leadId, lead, userMessage) {
   try {
     const historyResult = await pool.query(
-      `SELECT direction, message FROM sms_messages 
+      `SELECT direction, message FROM sms_messages
        WHERE lead_id = $1 ORDER BY created_at ASC LIMIT 10`,
       [leadId]
     );
 
     const servicesResult = await pool.query(
-      `SELECT name, price, duration_hours, description 
+      `SELECT name, price, duration_hours, description
        FROM services WHERE user_id = $1 AND active = true`,
       [userId]
     );
 
-    const services = servicesResult.rows.map(s => 
+    const services = servicesResult.rows.map(s =>
       `${s.name} - $${s.price} - ${s.duration_hours}hrs${s.description ? ': ' + s.description : ''}`
     ).join('\n') || 'General services';
 
     const hoursResult = await pool.query(
-      `SELECT day_of_week, is_open, open_time, close_time 
+      `SELECT day_of_week, is_open, open_time, close_time
        FROM business_hours WHERE user_id = $1 ORDER BY day_of_week`,
       [userId]
     );
@@ -204,34 +240,5 @@ Lead: ${lead.name || 'Customer'} | ${lead.email || 'No email'}`;
     return null;
   }
 }
-
-// POST /api/sms/fix-webhook — re-register Twilio SMS webhook for the user's number
-router.post('/fix-webhook', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const userResult = await pool.query(
-      'SELECT twilio_phone_number, twilio_phone_sid FROM users WHERE id = $1',
-      [userId]
-    );
-    const user = userResult.rows[0];
-    if (!user?.twilio_phone_sid) {
-      return res.status(400).json({ error: 'No Twilio phone number assigned to your account' });
-    }
-    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-      return res.status(500).json({ error: 'Twilio credentials not configured' });
-    }
-    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    const baseUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
-    await client.incomingPhoneNumbers(user.twilio_phone_sid).update({
-      smsUrl: `${baseUrl}/api/sms/webhook`,
-      smsMethod: 'POST',
-    });
-    console.log(`✅ Webhook re-synced for ${user.twilio_phone_number} (${user.twilio_phone_sid})`);
-    res.json({ success: true, number: user.twilio_phone_number, webhookUrl: `${baseUrl}/api/sms/webhook` });
-  } catch (error) {
-    console.error('Error fixing webhook:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 module.exports = router;

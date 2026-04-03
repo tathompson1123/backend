@@ -555,6 +555,7 @@ function generateBookingWidgetCode(userId, theme = {}) {
       if(bizLoc)h+='<div class="sbk-summary-row"><span>Location</span><span style="text-align:right;max-width:60%">'+esc(bizLoc)+'</span></div>';
       h+='<div class="sbk-summary-row"><span>Date</span><span>'+fmtDate(state.selDate)+'</span></div>';
       h+='<div class="sbk-summary-row"><span>Time</span><span>'+(function(){var p=state.selTime.split(':');var h=parseInt(p[0]);var m=p[1];return(h%12||12)+':'+m+' '+(h>=12?'PM':'AM');})()+'</span></div>';
+      var cPMode=getPaymentMode();
       if(state.taxAmount>0){
         h+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="color:#6b7280">Subtotal</span><span>$'+state.subtotal.toFixed(2)+'</span></div>';
         h+='<div class="sbk-summary-row"><span style="color:#6b7280">Tax ('+(state.taxRate*100).toFixed(2).replace(/\.?0+$/,'')+'%)</span><span>$'+state.taxAmount.toFixed(2)+'</span></div>';
@@ -562,7 +563,16 @@ function generateBookingWidgetCode(userId, theme = {}) {
       }else{
         h+='<div class="sbk-summary-row" style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:4px"><span style="font-weight:700">Total</span><span class="sbk-price" style="font-size:18px">$'+state.totalPrice.toFixed(2)+'</span></div>';
       }
+      if(cPMode==='card_on_file'){
+        h+='<div class="sbk-summary-row" style="padding-top:6px"><span style="font-weight:700;color:#16a34a">Due Today</span><span style="font-weight:700;color:#16a34a">$0.00</span></div>';
+      }
       h+='</div>';
+      if(cPMode==='card_on_file'){
+        h+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px">';
+        h+='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" style="flex-shrink:0;margin-top:1px"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>';
+        h+='<div><p style="margin:0;font-size:13px;font-weight:600;color:#1d4ed8">Card on file required</p><p style="margin:4px 0 0;font-size:12px;color:#3b82f6">Your card will be saved securely. You won\'t be charged until your appointment.</p></div>';
+        h+='</div>';
+      }
       var cfields=getContactFields();
       cfields.forEach(function(f){
         var reqMark=f.required?'<span class="sbk-req">*</span>':'';
