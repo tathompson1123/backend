@@ -141,9 +141,41 @@ router.post('/public/:userId', async (req, res) => {
     console.log(`✅ Public lead created: ${name} for user ${userId} (SMS consent: true)`);
 
     // Trigger Lead Form Agent
-    triggerLeadFormAgent(userId, newLead).catch(err => 
+    triggerLeadFormAgent(userId, newLead).catch(err =>
       console.error('Error triggering lead form agent:', err.message)
     );
+
+    // Notify business owner (non-blocking)
+    if (process.env.SENDGRID_API_KEY) {
+      pool.query('SELECT email, business_name FROM users WHERE id = $1', [userId])
+        .then(ownerRes => {
+          const owner = ownerRes.rows[0];
+          if (!owner?.email) return;
+          return sgMail.send({
+            to: owner.email,
+            from: { name: 'SORCE', email: 'noreply@sorceintegrations.com' },
+            subject: `New lead: ${name}`,
+            html: `
+              <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+                <div style="background:#1d4ed8;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
+                  <h1 style="color:#fff;margin:0;font-size:1.25rem;">New Lead Submitted</h1>
+                </div>
+                <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+                  <p style="margin-top:0;">A new lead just came in from your website${owner.business_name ? ` for <strong>${owner.business_name}</strong>` : ''}.</p>
+                  <table style="width:100%;border-collapse:collapse;margin:1rem 0;">
+                    <tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;width:120px;border-radius:4px 0 0 0;">Name</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${name}</td></tr>
+                    <tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Phone</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${phone}</td></tr>
+                    <tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Email</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${email || '—'}</td></tr>
+                    ${service ? `<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${service}</td></tr>` : ''}
+                    ${message ? `<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;vertical-align:top;">Message</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${message}</td></tr>` : ''}
+                  </table>
+                  <p style="color:#6b7280;font-size:0.85rem;margin:0;">Submitted via lead form on your website.</p>
+                </div>
+              </div>`,
+          });
+        })
+        .catch(err => console.error('Error sending lead notification email:', err.message));
+    }
 
     res.json({
       success: true,
