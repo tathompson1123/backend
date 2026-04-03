@@ -4,6 +4,8 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { sendPushToEmployee } = require('../utils/pushNotifications');
 const { sendBookingEmails } = require('../utils/bookingEmail');
+const sgMail = require('@sendgrid/mail');
+if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // Helper: Update customer from booking
 async function updateCustomerFromBooking(booking, userId) {
@@ -495,6 +497,86 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error deleting booking:', error.message);
     res.status(500).json({ error: 'Failed to delete booking' });
+  }
+});
+
+// POST /:id/send-card-link — generate a secure card-on-file link and email it to the customer
+router.post('/:id/send-card-link', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    const bookingResult = await pool.query(
+      `SELECT b.*, bi.service_name, u.business_name, u.email AS owner_email
+       FROM bookings b
+       LEFT JOIN booking_items bi ON bi.booking_id = b.id
+       LEFT JOIN users u ON u.id = b.user_id
+       WHERE b.id = $1 AND b.user_id = $2`,
+      [id, userId]
+    );
+    if (bookingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    const booking = bookingResult.rows[0];
+
+    if (!booking.customer_email) {
+      return res.status(400).json({ error: 'Customer has no email address on file' });
+    }
+
+    // Create token
+    const tokenResult = await pool.query(
+      `INSERT INTO card_on_file_tokens (booking_id, user_id, customer_email, customer_name)
+       VALUES ($1, $2, $3, $4)
+       RETURNING token`,
+      [id, userId, booking.customer_email, booking.customer_name]
+    );
+    const token = tokenResult.rows[0].token;
+
+    // Mark booking as pending card
+    await pool.query(
+      `UPDATE bookings SET card_on_file_status = 'pending', updated_at = NOW() WHERE id = $1`,
+      [id]
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
+    const cardLink = `${frontendUrl}/card-on-file/${token}`;
+
+    // Send email
+    if (process.env.SENDGRID_API_KEY && booking.customer_email) {
+      const dateStr = booking.booking_date
+        ? new Date(booking.booking_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+        : '';
+      await sgMail.send({
+        to: booking.customer_email,
+        from: { name: booking.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
+        replyTo: booking.owner_email ? { email: booking.owner_email } : undefined,
+        subject: `One last step to confirm your appointment — ${booking.business_name || 'Us'}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+            <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
+              <h1 style="color:#fff;margin:0;font-size:1.5rem;">Almost Confirmed!</h1>
+            </div>
+            <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+              <p style="font-size:1rem;margin-top:0;">Hi ${booking.customer_name},</p>
+              <p>Your appointment with <strong>${booking.business_name || 'us'}</strong>${dateStr ? ` on ${dateStr}` : ''} is almost confirmed!</p>
+              <p>We just need a card on file to complete your booking. <strong>We will not charge your card</strong> — it is only kept on file in case of a no-show per our cancellation policy.</p>
+              <div style="text-align:center;margin:2rem 0;">
+                <a href="${cardLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:600;">
+                  Securely Save Card on File
+                </a>
+              </div>
+              <p style="color:#6b7280;font-size:0.85rem;">This link expires in 48 hours. If you have any questions, please contact us directly.</p>
+              <p style="color:#6b7280;font-size:0.85rem;margin:0;">${booking.business_name || ''}</p>
+            </div>
+          </div>`,
+      });
+    }
+
+    console.log(`📧 Card on file link sent for booking #${booking.booking_number} to ${booking.customer_email}`);
+    res.json({ success: true, message: 'Card link sent to customer email' });
+  } catch (error) {
+    console.error('Error sending card link:', error.message);
+    res.status(500).json({ error: 'Failed to send card link' });
   }
 });
 

@@ -1063,6 +1063,29 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
   } catch (e) {
     console.warn('⚠️ Could not verify bookings tax columns:', e.message);
   }
+
+  // Card on file (Square)
+  try {
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS square_customer_id TEXT');
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS square_card_id TEXT');
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS square_card_brand TEXT');
+    await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS square_card_last_four TEXT');
+    await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS card_on_file_status TEXT DEFAULT 'not_required'`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS card_on_file_tokens (
+      id SERIAL PRIMARY KEY,
+      token UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+      booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      customer_email TEXT,
+      customer_name TEXT,
+      expires_at TIMESTAMP DEFAULT NOW() + INTERVAL '48 hours',
+      used_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`);
+    console.log('✅ Card on file tables/columns verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify card on file schema:', e.message);
+  }
 })();
 
 // ── SMS processing cron job ──────────────────────────────

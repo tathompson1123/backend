@@ -120,7 +120,7 @@ router.post('/website/config', authenticateToken, async (req, res) => {
       'agentName', 'greetingMessage', 'autoOpenDelay',
       'personality', 'responseLength', 'captureStrategy',
       'customInstructions', 'enableBooking', 'enableLeadCapture',
-      'objectionServices', 'objectionNotes'
+      'objectionServices', 'objectionNotes', 'requireCardOnFile'
     ];
 
     const incoming = {};
@@ -132,6 +132,7 @@ router.post('/website/config', authenticateToken, async (req, res) => {
     // Allow explicit false/empty string (only filter null/undefined)
     if (req.body.enableBooking === false) incoming.enableBooking = false;
     if (req.body.enableLeadCapture === false) incoming.enableLeadCapture = false;
+    if (req.body.requireCardOnFile === false) incoming.requireCardOnFile = false;
     if (req.body.customInstructions === '') incoming.customInstructions = '';
 
     const config = { ...existingConfig, ...incoming, enabled: true };

@@ -178,7 +178,7 @@ router.post('/start', async (req, res) => {
 });
 
 // Helper function to create booking from chat
-async function createBookingFromChat(userId, bookingData) {
+async function createBookingFromChat(userId, bookingData, { skipConfirmationEmail = false } = {}) {
   try {
     const { serviceId, bookingDate, startTime, customerName, customerEmail } = bookingData;
     // Truncate phone to 50 chars and strip non-phone characters
@@ -361,7 +361,10 @@ async function createBookingFromChat(userId, bookingData) {
 
     console.log(`✅ Chat booking created: #${bookingNumber} customer=${customerId} employee=${employeeId}`);
 
-    // Send booking confirmation emails (non-blocking)
+    // Send booking confirmation emails (non-blocking) — skipped when card on file is required
+    if (skipConfirmationEmail) return {
+      success: true, booking, bookingId: booking.id, employeeName, serviceName: service.name, bookingNumber
+    };
     sendBookingEmails({
       userId,
       bookingNumber,
@@ -384,6 +387,7 @@ async function createBookingFromChat(userId, bookingData) {
     return {
       success: true,
       booking,
+      bookingId: booking.id,
       employeeName,
       serviceName: service.name,
       bookingNumber
@@ -671,33 +675,87 @@ REAL-TIME AVAILABILITY:
         customerName: customerName.trim(),
         customerEmail: customerEmail.trim(),
         customerPhone: customerPhone.trim()
-      });
+      }, { skipConfirmationEmail: !!(agentConfig.requireCardOnFile && customerEmail.trim()) });
 
       console.log(`🤖 Chat booking result: success=${bookingResult.success}${bookingResult.error ? ' error=' + bookingResult.error : ''}`);
 
       if (bookingResult.success) {
         // Remove the BOOKING_REQUEST line from reply
         reply = reply.replace(/BOOKING_REQUEST\|[^\n]+\n?/, '');
-        
+
         // Format the date nicely
         const dateObj = new Date(bookingDate + 'T00:00:00');
         const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-        
+
         // Format the time nicely (convert 14:00 to 2:00 PM)
         const [hours, mins] = startTime.split(':');
         const hour = parseInt(hours);
         const ampm = hour >= 12 ? 'PM' : 'AM';
         const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
         const formattedTime = `${displayHour}:${mins} ${ampm}`;
-        
-        // Add confirmation message
-        reply = `Perfect! You're all set, ${customerName}! 🎉\n\n` +
-                `📅 ${formattedDate} at ${formattedTime}\n` +
-                `🔧 ${bookingResult.serviceName}\n` +
-                `👤 ${bookingResult.employeeName} will take great care of you\n` +
-                `📋 Booking #${bookingResult.bookingNumber}\n\n` +
-                `I've sent a confirmation to ${customerEmail}. Looking forward to seeing you!`;
-        
+
+        // Card on file required?
+        if (agentConfig.requireCardOnFile && customerEmail.trim()) {
+          // Hold booking as pending_card
+          await pool.query(
+            `UPDATE bookings SET card_on_file_status = 'pending', status = 'pending', updated_at = NOW()
+             WHERE id = $1`,
+            [bookingResult.bookingId]
+          );
+
+          // Generate secure token
+          const tokenResult = await pool.query(
+            `INSERT INTO card_on_file_tokens (booking_id, user_id, customer_email, customer_name)
+             VALUES ($1, $2, $3, $4) RETURNING token`,
+            [bookingResult.bookingId, userId, customerEmail.trim(), customerName.trim()]
+          );
+          const cardToken = tokenResult.rows[0].token;
+          const frontendUrl = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
+          const cardLink = `${frontendUrl}/card-on-file/${cardToken}`;
+
+          // Send card-on-file email (non-blocking)
+          if (process.env.SENDGRID_API_KEY) {
+            const sgMail = require('@sendgrid/mail');
+            sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+            const ownerResult = await pool.query('SELECT business_name, email FROM users WHERE id = $1', [userId]);
+            const owner = ownerResult.rows[0] || {};
+            sgMail.send({
+              to: customerEmail.trim(),
+              from: { name: owner.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
+              replyTo: owner.email ? { email: owner.email } : undefined,
+              subject: `One last step to confirm your appointment — ${owner.business_name || 'Us'}`,
+              html: `
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+                  <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
+                    <h1 style="color:#fff;margin:0;font-size:1.5rem;">Almost Confirmed!</h1>
+                  </div>
+                  <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+                    <p style="font-size:1rem;margin-top:0;">Hi ${customerName.trim()},</p>
+                    <p>Your appointment with <strong>${owner.business_name || 'us'}</strong> on ${formattedDate} at ${formattedTime} is almost confirmed!</p>
+                    <p>We just need a card on file to complete your booking. <strong>We will not charge your card</strong> — it is only kept on file in case of a no-show per our cancellation policy.</p>
+                    <div style="text-align:center;margin:2rem 0;">
+                      <a href="${cardLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:600;">
+                        Securely Save Card on File
+                      </a>
+                    </div>
+                    <p style="color:#6b7280;font-size:0.85rem;">This link expires in 48 hours.</p>
+                    <p style="color:#6b7280;font-size:0.85rem;margin:0;">${owner.business_name || ''}</p>
+                  </div>
+                </div>`,
+            }).catch(e => console.error('Card on file email error:', e.message));
+          }
+
+          reply = `Almost done, ${customerName}! I just sent a secure link to ${customerEmail.trim()} to save a card on file for our cancellation policy. We won't charge it — it's just required to hold your spot. Once that's done, your booking for ${formattedDate} at ${formattedTime} will be fully confirmed!`;
+        } else {
+          // Full confirmation — no card required
+          reply = `Perfect! You're all set, ${customerName}! 🎉\n\n` +
+                  `📅 ${formattedDate} at ${formattedTime}\n` +
+                  `🔧 ${bookingResult.serviceName}\n` +
+                  `👤 ${bookingResult.employeeName} will take great care of you\n` +
+                  `📋 Booking #${bookingResult.bookingNumber}\n\n` +
+                  `I've sent a confirmation to ${customerEmail}. Looking forward to seeing you!`;
+        }
+
         // If they were previously a lead, update status to booked
         await pool.query(
           `UPDATE leads SET status = 'booked', updated_at = CURRENT_TIMESTAMP
@@ -736,11 +794,12 @@ REAL-TIME AVAILABILITY:
       // Remove the internal tag from the reply
       reply = reply.replace(/ATTENTION_REQUEST\|[^\n]+\n?/, '').trim();
 
-      // Save lead
+      // Save lead — track whether it already existed as needs_callback to avoid duplicate emails
       const leadCheck = await pool.query(
-        'SELECT id FROM leads WHERE user_id = $1 AND phone = $2',
+        'SELECT id, status FROM leads WHERE user_id = $1 AND phone = $2',
         [userId, attentionPhone]
       );
+      const alreadyNeedsCallback = leadCheck.rows.length > 0 && leadCheck.rows[0].status === 'needs_callback';
       if (leadCheck.rows.length === 0) {
         await pool.query(
           `INSERT INTO leads (user_id, name, phone, source, status, created_at)
@@ -755,8 +814,10 @@ REAL-TIME AVAILABILITY:
         );
       }
 
-      // Email the business owner
-      sendAttentionEmail({ userId, customerName: attentionName, customerPhone: attentionPhone, conversationId });
+      // Email the business owner — only if this is a fresh needs_callback, not a repeat trigger
+      if (!alreadyNeedsCallback) {
+        sendAttentionEmail({ userId, customerName: attentionName, customerPhone: attentionPhone, conversationId });
+      }
     }
 
     // Save assistant response (cleaned)

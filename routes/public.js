@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { sendBookingEmails } = require('../utils/bookingEmail');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
+const { getSquareClient, findOrCreateSquareCustomer, saveCardOnFile } = require('../utils/squareCardOnFile');
 
 // All routes are public (no auth). businessId = user_id.
 
@@ -206,8 +207,14 @@ router.get('/business-info', async (req, res) => {
       [businessId]
     );
 
+    const taxResult = await pool.query(
+      'SELECT default_tax_rate FROM users WHERE id = $1',
+      [businessId]
+    );
+
     const website = result.rows[0] || {};
     const info = bizInfo.rows[0] || {};
+    const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
     const websiteUrl = website.custom_domain
       ? `https://${website.custom_domain.replace(/^https?:?\/?\/?\/?/i, '')}`
       : website.vercel_url
@@ -223,6 +230,7 @@ router.get('/business-info', async (req, res) => {
         city: info.city || '',
         state: info.state || '',
         website_url: websiteUrl,
+        tax_rate: taxRate,
       }
     });
   } catch (error) {
@@ -628,6 +636,115 @@ router.post('/bookings/payment-setup', async (req, res) => {
   } catch (error) {
     console.error('Payment setup error:', error.message);
     res.status(500).json({ error: 'Failed to set up payment' });
+  }
+});
+
+// ── Card on file (Square) ─────────────────────────────────────────────────────
+
+// GET /api/public/card-on-file/:token
+// Returns page data needed to render the card form
+router.get('/card-on-file/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const result = await pool.query(
+      `SELECT t.*, b.booking_number, b.booking_date, b.start_time, b.card_on_file_status,
+              bi.name AS service_name, u.business_name
+       FROM card_on_file_tokens t
+       JOIN bookings b ON b.id = t.booking_id
+       LEFT JOIN booking_items bi ON bi.booking_id = b.id
+       LEFT JOIN users u ON u.id = t.user_id
+       WHERE t.token = $1 AND t.expires_at > NOW()
+       LIMIT 1`,
+      [token]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'This link has expired or is invalid.' });
+    }
+    const row = result.rows[0];
+    if (row.used_at) {
+      return res.status(410).json({ error: 'Card already saved — you are all set!' });
+    }
+    if (row.card_on_file_status === 'saved') {
+      return res.status(410).json({ error: 'Card already saved — you are all set!' });
+    }
+    res.json({
+      squareAppId: process.env.SQUARE_APPLICATION_ID,
+      squareEnvironment: process.env.SQUARE_ENVIRONMENT || 'production',
+      businessName: row.business_name,
+      customerName: row.customer_name,
+      serviceName: row.service_name,
+      bookingDate: row.booking_date,
+      bookingNumber: row.booking_number,
+    });
+  } catch (err) {
+    console.error('Card on file token lookup error:', err.message);
+    res.status(500).json({ error: 'Something went wrong.' });
+  }
+});
+
+// POST /api/public/card-on-file/:token/save
+// Called by the frontend after Square SDK tokenizes the card
+router.post('/card-on-file/:token/save', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { sourceId } = req.body;
+    if (!sourceId) return res.status(400).json({ error: 'sourceId required' });
+
+    const result = await pool.query(
+      `SELECT t.*, b.customer_id, b.customer_name, b.customer_email, b.customer_phone
+       FROM card_on_file_tokens t
+       JOIN bookings b ON b.id = t.booking_id
+       WHERE t.token = $1 AND t.expires_at > NOW() AND t.used_at IS NULL`,
+      [token]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'This link has expired or already been used.' });
+    }
+    const row = result.rows[0];
+
+    // Get Square client for this business
+    const { client, locationId } = await getSquareClient(row.user_id);
+
+    // Find or create Square Customer
+    const squareCustomerId = await findOrCreateSquareCustomer(client, {
+      name: row.customer_name,
+      email: row.customer_email,
+      phone: row.customer_phone,
+    });
+
+    // Save the card
+    const { cardId, cardBrand, lastFour } = await saveCardOnFile(client, {
+      sourceId,
+      squareCustomerId,
+      locationId,
+    });
+
+    // Persist to DB
+    if (row.customer_id) {
+      await pool.query(
+        `UPDATE customers SET square_customer_id = $1, square_card_id = $2,
+         square_card_brand = $3, square_card_last_four = $4, updated_at = NOW()
+         WHERE id = $5`,
+        [squareCustomerId, cardId, cardBrand, lastFour, row.customer_id]
+      );
+    }
+
+    await pool.query(
+      `UPDATE bookings SET card_on_file_status = 'saved', status = 'confirmed', updated_at = NOW()
+       WHERE id = $1`,
+      [row.booking_id]
+    );
+
+    await pool.query(
+      `UPDATE card_on_file_tokens SET used_at = NOW() WHERE token = $1`,
+      [token]
+    );
+
+    console.log(`✅ Card on file saved for booking ${row.booking_id}: ${cardBrand} ****${lastFour}`);
+    res.json({ success: true, cardBrand, lastFour });
+  } catch (err) {
+    console.error('Card on file save error:', err.message);
+    res.status(500).json({ error: 'Failed to save card. Please try again.' });
   }
 });
 
