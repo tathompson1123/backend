@@ -1240,4 +1240,172 @@ router.put('/community/:id/pin', async (req, res) => {
   }
 });
 
+// GET /api/employee/services
+router.get('/services', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const result = await pool.query(
+      'SELECT id, name, price, duration_hours, description FROM services WHERE user_id = $1 AND active = true AND is_addon = false ORDER BY name',
+      [userId]
+    );
+    res.json({ services: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/employee/bookings - Create a new booking
+router.post('/bookings', async (req, res) => {
+  try {
+    const { userId, employeeId } = req.employee;
+    const { customerName, customerEmail, customerPhone, customerAddress, customerNotes,
+            serviceId, bookingDate, startTime, endTime, notes, assignedEmployeeId } = req.body;
+
+    if (!customerName || !serviceId || !bookingDate || !startTime || !endTime) {
+      return res.status(400).json({ error: 'customerName, serviceId, bookingDate, startTime, endTime required' });
+    }
+
+    const serviceRes = await pool.query(
+      'SELECT id, name, price, duration_hours FROM services WHERE id = $1 AND user_id = $2',
+      [serviceId, userId]
+    );
+    if (serviceRes.rows.length === 0) return res.status(404).json({ error: 'Service not found' });
+    const service = serviceRes.rows[0];
+
+    const assignTo = assignedEmployeeId || employeeId;
+
+    const result = await pool.query(
+      `INSERT INTO bookings (user_id, employee_id, customer_name, customer_email, customer_phone,
+        customer_address, customer_notes, booking_date, start_time, end_time, status, total_amount, job_notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'confirmed',$11,$12)
+       RETURNING *`,
+      [userId, assignTo, customerName, customerEmail||null, customerPhone||null,
+       customerAddress||null, customerNotes||null, bookingDate, startTime, endTime,
+       parseFloat(service.price), notes||null]
+    );
+    const booking = result.rows[0];
+
+    await pool.query(
+      `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity)
+       VALUES ($1,$2,$3,$4,$5,1)`,
+      [booking.id, service.id, service.name, service.duration_hours, service.price]
+    );
+
+    res.json({ success: true, booking });
+  } catch (error) {
+    console.error('Error creating booking:', error.message);
+    res.status(500).json({ error: 'Failed to create booking' });
+  }
+});
+
+// Middleware to check admin
+async function requireAdmin(req, res, next) {
+  try {
+    const { employeeId } = req.employee;
+    const r = await pool.query('SELECT is_admin FROM employees WHERE id = $1', [employeeId]);
+    if (!r.rows[0]?.is_admin) return res.status(403).json({ error: 'Admin access required' });
+    next();
+  } catch (e) { res.status(500).json({ error: 'Auth check failed' }); }
+}
+
+// GET /api/employee/admin/appointments
+router.get('/admin/appointments', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { status, date } = req.query;
+    let filter = 'WHERE b.user_id = $1';
+    const params = [userId];
+    if (status) { filter += ` AND b.status = $${params.length+1}`; params.push(status); }
+    if (date) { filter += ` AND b.booking_date = $${params.length+1}`; params.push(date); }
+    else { filter += ` AND b.booking_date >= CURRENT_DATE - INTERVAL '1 day'`; }
+
+    const result = await pool.query(
+      `SELECT b.*, e.name as employee_name, e.color as employee_color,
+        json_agg(json_build_object('service_name', bi.service_name, 'price', bi.service_price)) as items
+       FROM bookings b
+       LEFT JOIN employees e ON e.id = b.employee_id
+       LEFT JOIN booking_items bi ON bi.booking_id = b.id
+       ${filter}
+         AND b.status != 'cancelled'
+       GROUP BY b.id, e.name, e.color
+       ORDER BY b.booking_date, b.start_time`,
+      params
+    );
+    res.json({ appointments: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/leads
+router.get('/admin/leads', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const result = await pool.query(
+      `SELECT id, name, email, phone, status, source, service, created_at, notes
+       FROM leads WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`,
+      [userId]
+    );
+    res.json({ leads: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/revenue
+router.get('/admin/revenue', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const [invoiceRes, statsRes] = await Promise.all([
+      pool.query(
+        `SELECT i.*, b.customer_name, b.booking_date, b.start_time
+         FROM invoices i
+         LEFT JOIN bookings b ON b.id = i.booking_id
+         WHERE i.user_id = $1 ORDER BY i.created_at DESC LIMIT 50`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE payment_status = 'paid') as paid_count,
+           COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid'), 0) as total_revenue,
+           COALESCE(SUM(total_amount) FILTER (WHERE payment_status != 'paid' AND status != 'cancelled'), 0) as outstanding,
+           COUNT(*) FILTER (WHERE booking_date = CURRENT_DATE AND status != 'cancelled') as today_jobs
+         FROM bookings WHERE user_id = $1`,
+        [userId]
+      )
+    ]);
+    res.json({ invoices: invoiceRes.rows, stats: statsRes.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/messages
+router.get('/admin/messages', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const result = await pool.query(
+      `SELECT bm.*, b.customer_name, b.customer_phone, b.booking_date
+       FROM booking_messages bm
+       JOIN bookings b ON b.id = bm.booking_id
+       WHERE b.user_id = $1
+       ORDER BY bm.created_at DESC LIMIT 100`,
+      [userId]
+    );
+    res.json({ messages: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/conversations
+router.get('/admin/conversations', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const result = await pool.query(
+      `SELECT b.id as booking_id, b.customer_name, b.customer_phone, b.booking_date,
+         b.status, COUNT(bm.id) as message_count,
+         MAX(bm.created_at) as last_message_at,
+         (SELECT body FROM booking_messages WHERE booking_id = b.id ORDER BY created_at DESC LIMIT 1) as last_message
+       FROM bookings b
+       LEFT JOIN booking_messages bm ON bm.booking_id = b.id
+       WHERE b.user_id = $1 AND bm.id IS NOT NULL
+       GROUP BY b.id
+       ORDER BY last_message_at DESC LIMIT 50`,
+      [userId]
+    );
+    res.json({ conversations: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

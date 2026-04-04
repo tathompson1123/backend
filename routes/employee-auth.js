@@ -134,7 +134,7 @@ router.post('/login', async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT ec.*, e.name as employee_name, e.user_id, e.color, e.active,
+      `SELECT ec.*, e.name as employee_name, e.user_id, e.color, e.active, e.is_admin,
               u.business_name, u.plan
        FROM employee_credentials ec
        JOIN employees e ON e.id = ec.employee_id
@@ -184,7 +184,8 @@ router.post('/login', async (req, res) => {
         email: cred.email,
         color: cred.color,
         businessName: cred.business_name,
-        plan: cred.plan
+        plan: cred.plan,
+        isAdmin: cred.is_admin || false
       }
     });
   } catch (error) {
@@ -197,7 +198,7 @@ router.post('/login', async (req, res) => {
 router.get('/verify', authenticateEmployee, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT e.id, e.name, e.email, e.color, e.active, u.business_name, u.plan
+      `SELECT e.id, e.name, e.email, e.color, e.active, e.is_admin, u.business_name, u.plan
        FROM employees e
        JOIN users u ON u.id = e.user_id
        WHERE e.id = $1`,
@@ -221,7 +222,8 @@ router.get('/verify', authenticateEmployee, async (req, res) => {
         email: emp.email,
         color: emp.color,
         businessName: emp.business_name,
-        plan: emp.plan
+        plan: emp.plan,
+        isAdmin: emp.is_admin || false
       }
     });
   } catch (error) {

@@ -494,6 +494,14 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify employee_messages table:', e.message);
   }
 
+  // Add is_admin to employees
+  try {
+    await pool.query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false");
+    console.log('✅ Employee is_admin column verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify is_admin column:', e.message);
+  }
+
   // Add work_hours and work_days columns to employees
   try {
     await pool.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_hours JSONB DEFAULT '{"startTime":"09:00","endTime":"17:00"}'`);
