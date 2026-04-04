@@ -329,13 +329,29 @@ router.get('/availability', async (req, res) => {
     // Total block = service duration + buffer (buffer prevents back-to-back bookings)
     const totalBlock = durationMinutes + bufferMinutes;
 
-    // Get employees who can perform these services (if service_employees table exists)
+    // Get employees who can perform the selected service
+    // - Employees with no service assignments can do any service
+    // - Employees with assignments can only do their assigned services
     let employees = [];
     try {
-      const empResult = await pool.query(
-        'SELECT DISTINCT e.id FROM employees e WHERE e.user_id = $1 AND e.active = true',
-        [businessId]
-      );
+      const ids = serviceIds ? serviceIds.split(',').filter(Boolean).map(Number) : [];
+      let empResult;
+      if (ids.length > 0) {
+        empResult = await pool.query(
+          `SELECT DISTINCT e.id FROM employees e
+           WHERE e.user_id = $1 AND e.active = true
+           AND (
+             NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id)
+             OR EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id AND service_id = ANY($2))
+           )`,
+          [businessId, ids]
+        );
+      } else {
+        empResult = await pool.query(
+          'SELECT DISTINCT e.id FROM employees e WHERE e.user_id = $1 AND e.active = true',
+          [businessId]
+        );
+      }
       employees = empResult.rows.map(e => e.id);
     } catch (e) { /* no employees table or no employees */ }
 
