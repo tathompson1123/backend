@@ -401,31 +401,19 @@ router.get('/availability', async (req, res) => {
           slots.push({ time: slotStart, endTime: slotEnd, displayTime: `${h12}:${mm} ${ampm}` });
         }
       } else {
-        // Multi-employee: count how many employees are free for this slot
-        let freeCount = 0;
-        for (const empId of employees) {
-          const empBookings = existingBookings.filter(b => b.assigned_employee_id === empId);
-          const hasConflict = empBookings.some(b => {
-            const bStart = b.start_time.slice(0, 5);
-            const bEndM = timeToMinutes(b.end_time.slice(0, 5)) + (b.booking_buffer || 0);
-            const bBlockEnd = minutesToTime(bEndM);
-            return slotStart < bBlockEnd && slotBlockEnd > bStart;
-          });
-          if (!hasConflict) freeCount++;
-        }
-        // Unassigned bookings consume capacity — subtract each one
-        const unassignedConflictCount = existingBookings.filter(b => !b.assigned_employee_id).filter(b => {
+        // Multi-employee: count total conflicting bookings vs capacity
+        // Each booking (assigned or not) consumes 1 worker slot
+        const totalConflicts = existingBookings.filter(b => {
           const bStart = b.start_time.slice(0, 5);
           const bEndM = timeToMinutes(b.end_time.slice(0, 5)) + (b.booking_buffer || 0);
           const bBlockEnd = minutesToTime(bEndM);
           return slotStart < bBlockEnd && slotBlockEnd > bStart;
         }).length;
-        freeCount = Math.max(freeCount - unassignedConflictCount, 0);
 
-        if (freeCount > 0) {
+        if (totalConflicts < capacity) {
           const h12 = ((Math.floor(m / 60) % 12) || 12);
           const ampm = Math.floor(m / 60) < 12 ? 'AM' : 'PM';
-          slots.push({ time: slotStart, endTime: slotEnd, displayTime: `${h12}:${mm} ${ampm}`, available: freeCount });
+          slots.push({ time: slotStart, endTime: slotEnd, displayTime: `${h12}:${mm} ${ampm}`, available: capacity - totalConflicts });
         }
       }
     }
