@@ -200,6 +200,8 @@
       '.sbk-steps-indicator .sbk-dot.done{background:' + tc + ';opacity:.4}\n' +
       '.sbk-stripe-card{border:2px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:12px;transition:border .15s}\n' +
       '.sbk-stripe-card.StripeElement--focus{border-color:' + tc + '}\n' +
+      '.sbk-cof-card{border:2px solid #e5e7eb;border-radius:8px;padding:14px;min-height:46px;transition:border .15s;background:#fff}\n' +
+      '.sbk-cof-status{font-size:12px;color:#9ca3af;text-align:center;padding:4px 0 8px}\n' +
       '.sbk-svc-card-inner{display:flex;align-items:center}\n' +
       '.sbk-svc-card-info{flex:1;min-width:0}\n' +
 
@@ -378,7 +380,19 @@
       cardElement: null,
       clientSecret: '',
       calMonth: new Date().getMonth(),
-      calYear: new Date().getFullYear()
+      calYear: new Date().getFullYear(),
+      stripeSetupStarted: false,
+      stripeSetupFailed: false,
+      cofCardStarted: false,
+      cofCardReady: false,
+      cofSquareCard: null,
+      cofSquarePayments: null,
+      cofStripeInst: null,
+      cofStripeEl: null,
+      cofCloverInst: null,
+      cofCloverCardNum: null,
+      cofCloverCardExp: null,
+      cofCloverCardCvv: null
     };
   }
 
@@ -580,12 +594,20 @@
   }
 
   function bkGoStep(s) {
-    // Reset Stripe setup state when leaving contact step so it re-inits on return
+    // Reset payment state when leaving contact step so it re-inits on return
     if (bkState.step === 'contact' && s !== 'contact') {
       bkState.stripeSetupStarted = false;
       bkState.stripeSetupFailed = false;
       bkState.clientSecret = null;
       bkState.stripeReady = false;
+      bkState.cofCardStarted = false;
+      bkState.cofCardReady = false;
+      bkState.cofSquareCard = null;
+      bkState.cofSquarePayments = null;
+      bkState.cofStripeEl = null;
+      bkState.cofStripeInst = null;
+      bkState.cofCloverInst = null;
+      bkState.cofCloverCardNum = null;
     }
     bkState.step = s; bkState.error = null; bkRender();
   }
@@ -666,6 +688,211 @@
     confirmFn.then(function(result) {
       if (result.error) { bkState.error = result.error.message; bkState.loading = false; bkRender(); }
       else { bkSubmit(); }
+    });
+  }
+
+  // ── Card-on-File Inline ──────────────────────────────────────────────────────
+
+  function bkUpdateCofStatus(state, msg) {
+    var el = document.getElementById('sbk-cof-status');
+    if (!el) return;
+    if (state === 'ready') {
+      el.style.display = 'none';
+    } else if (state === 'error') {
+      el.style.color = '#dc2626';
+      el.textContent = msg || 'Card form error';
+      el.style.display = '';
+    } else {
+      el.style.color = '#9ca3af';
+      el.textContent = msg || 'Loading...';
+      el.style.display = '';
+    }
+  }
+
+  function bkMountCofCard() {
+    if (!bkState.config || bkState.config.paymentMode !== 'card_on_file') return;
+    var proc = bkState.config.paymentProcessor;
+    if (!proc) { bkUpdateCofStatus('error', 'No payment processor configured'); return; }
+
+    if (bkState.cofCardStarted) {
+      // Re-mount to newly rebuilt DOM after a re-render
+      if (proc === 'square' && bkState.cofSquareCard) {
+        bkState.cofSquareCard.attach('#sbk-cof-card').then(function() {
+          bkState.cofCardReady = true; bkUpdateCofStatus('ready');
+        }).catch(function() { bkUpdateCofStatus('loading', 'Loading card form...'); });
+      } else if (proc === 'stripe' && bkState.cofStripeEl) {
+        bkState.cofStripeEl.mount('#sbk-cof-card');
+        bkState.cofCardReady = true; bkUpdateCofStatus('ready');
+      } else if (proc === 'clover' && bkState.cofCloverInst) {
+        bkState.cofCardStarted = false; bkInitCloverCof();
+      }
+      return;
+    }
+
+    bkState.cofCardStarted = true;
+    if (proc === 'square') bkInitSquareCof();
+    else if (proc === 'stripe') bkInitStripeCof();
+    else if (proc === 'clover') bkInitCloverCof();
+    else bkUpdateCofStatus('error', 'Payment processor not supported');
+  }
+
+  function bkInitSquareCof() {
+    var cfg = bkState.config;
+    if (!cfg.squareAppId || !cfg.squareLocationId) { bkUpdateCofStatus('error', 'Payment not configured'); return; }
+    var src = cfg.squareEnvironment === 'production'
+      ? 'https://web.squarecdn.com/v1/square.js'
+      : 'https://sandbox.web.squarecdn.com/v1/square.js';
+    function doInit() {
+      window.Square.payments(cfg.squareAppId, cfg.squareLocationId).then(function(payments) {
+        bkState.cofSquarePayments = payments;
+        return payments.card();
+      }).then(function(card) {
+        bkState.cofSquareCard = card;
+        if (!document.getElementById('sbk-cof-card')) return;
+        return card.attach('#sbk-cof-card');
+      }).then(function() {
+        bkState.cofCardReady = true; bkUpdateCofStatus('ready');
+      }).catch(function(e) {
+        bkState.cofCardStarted = false;
+        bkUpdateCofStatus('error', 'Failed to load card form');
+        console.error('Square COF init:', e);
+      });
+    }
+    if (window.Square) { doInit(); return; }
+    var s = document.createElement('script');
+    s.src = src; s.onload = doInit;
+    s.onerror = function() { bkUpdateCofStatus('error', 'Failed to load payment system'); };
+    document.head.appendChild(s);
+  }
+
+  function bkInitStripeCof() {
+    var cfg = bkState.config;
+    if (!cfg.stripePublicKey) { bkUpdateCofStatus('error', 'Payment not configured'); return; }
+    function doInit() {
+      var opts = cfg.stripeAccountId ? { stripeAccount: cfg.stripeAccountId } : {};
+      var stripe = window.Stripe(cfg.stripePublicKey, opts);
+      bkState.cofStripeInst = stripe;
+      var cardEl = stripe.elements().create('card', {
+        style: { base: { fontSize: '16px', color: '#374151', '::placeholder': { color: '#9ca3af' } } }
+      });
+      bkState.cofStripeEl = cardEl;
+      if (!document.getElementById('sbk-cof-card')) return;
+      cardEl.mount('#sbk-cof-card');
+      bkState.cofCardReady = true; bkUpdateCofStatus('ready');
+    }
+    if (window.Stripe) { doInit(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://js.stripe.com/v3/'; s.onload = doInit;
+    s.onerror = function() { bkUpdateCofStatus('error', 'Failed to load payment system'); };
+    document.head.appendChild(s);
+  }
+
+  function bkInitCloverCof() {
+    var cfg = bkState.config;
+    if (!cfg.cloverPublicKey) { bkUpdateCofStatus('error', 'Payment not configured'); return; }
+    var src = cfg.cloverEnvironment === 'production'
+      ? 'https://checkout.clover.com/sdk.js'
+      : 'https://checkout.sandbox.dev.clover.com/sdk.js';
+    function doInit() {
+      try {
+        var clover = new window.Clover(cfg.cloverPublicKey);
+        bkState.cofCloverInst = clover;
+        var elements = clover.elements();
+        var cardNum = elements.create('CARD_NUMBER', { style: { base: { fontSize: '15px', color: '#374151' } } });
+        var cardExp = elements.create('CARD_DATE', { style: { base: { fontSize: '15px', color: '#374151' } } });
+        var cardCvv = elements.create('CARD_CVV', { style: { base: { fontSize: '15px', color: '#374151' } } });
+        bkState.cofCloverCardNum = cardNum;
+        bkState.cofCloverCardExp = cardExp;
+        bkState.cofCloverCardCvv = cardCvv;
+        var container = document.getElementById('sbk-cof-card');
+        if (!container) return;
+        container.innerHTML =
+          '<div id="sbk-cof-cnum" style="border:1px solid #e5e7eb;border-radius:6px;padding:10px;margin-bottom:8px"></div>' +
+          '<div style="display:flex;gap:8px">' +
+          '<div id="sbk-cof-cexp" style="border:1px solid #e5e7eb;border-radius:6px;padding:10px;flex:1"></div>' +
+          '<div id="sbk-cof-ccvv" style="border:1px solid #e5e7eb;border-radius:6px;padding:10px;flex:1"></div>' +
+          '</div>';
+        cardNum.mount('#sbk-cof-cnum');
+        cardExp.mount('#sbk-cof-cexp');
+        cardCvv.mount('#sbk-cof-ccvv');
+        bkState.cofCardReady = true; bkUpdateCofStatus('ready');
+      } catch (e) {
+        bkState.cofCardStarted = false;
+        bkUpdateCofStatus('error', 'Failed to initialize card form');
+        console.error('Clover COF init:', e);
+      }
+    }
+    if (window.Clover) { doInit(); return; }
+    var s = document.createElement('script');
+    s.src = src; s.onload = doInit;
+    s.onerror = function() { bkUpdateCofStatus('error', 'Failed to load payment system'); };
+    document.head.appendChild(s);
+  }
+
+  function bkTokenizeCof(cb) {
+    var proc = bkState.config ? bkState.config.paymentProcessor : null;
+    if (proc === 'square' && bkState.cofSquareCard) {
+      bkState.cofSquareCard.tokenize().then(function(r) {
+        if (r.status === 'OK') { cb(null, r.token); }
+        else { cb(new Error((r.errors && r.errors[0] && r.errors[0].message) || 'Card error')); }
+      }).catch(function(e) { cb(e); });
+    } else if (proc === 'stripe' && bkState.cofStripeInst && bkState.cofStripeEl) {
+      bkState.cofStripeInst.createPaymentMethod({
+        type: 'card', card: bkState.cofStripeEl,
+        billing_details: { name: bkState.cust.name || '', email: bkState.cust.email || '' }
+      }).then(function(r) {
+        if (r.error) { cb(new Error(r.error.message)); } else { cb(null, r.paymentMethod.id); }
+      }).catch(function(e) { cb(e); });
+    } else if (proc === 'clover' && bkState.cofCloverInst) {
+      bkState.cofCloverInst.createToken().then(function(r) {
+        if (r.errors) { cb(new Error(Object.values(r.errors)[0] || 'Card error')); }
+        else { cb(null, r.token); }
+      }).catch(function(e) { cb(e); });
+    } else {
+      cb(new Error('Card form not ready. Please wait and try again.'));
+    }
+  }
+
+  function bkCofSubmit() {
+    var c = bkState.cust;
+    var fields = bkGetContactFields();
+    var missing = fields.filter(function(f) { return f.required && !c[f.key]; });
+    var errEl = document.getElementById('sbk-cof-error');
+    if (missing.length) {
+      if (errEl) { errEl.textContent = 'Please fill in all required fields'; errEl.style.display = ''; }
+      return;
+    }
+    if (!bkState.cofCardReady) {
+      if (errEl) { errEl.textContent = 'Please wait for the card form to load'; errEl.style.display = ''; }
+      return;
+    }
+    if (errEl) errEl.style.display = 'none';
+    var btn = document.getElementById('sbk-cof-submit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+    bkTokenizeCof(function(err, token) {
+      if (err) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save Card & Confirm Booking'; }
+        if (errEl) { errEl.textContent = err.message || 'Card error, please try again'; errEl.style.display = ''; }
+        return;
+      }
+      // Token obtained — safe to re-render now, card element no longer needed
+      bkState.loading = true; bkState.error = null;
+      var addonIds = bkState.selAddons.map(function(a) { return a.id; });
+      var custInfo = { name: c.name || '', email: c.email || '', phone: c.phone || '' };
+      if (c.address) custInfo.address = c.address;
+      fetch(API_BASE + '/api/public/bookings/create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId: config.userId, serviceId: bkState.selService.id, additionalServiceIds: addonIds, bookingDate: bkState.selDate, startTime: bkState.selTime, customerInfo: custInfo, customerNotes: c.notes || '', assignmentType: 'any', paymentMode: 'card_on_file', cardToken: token })
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.success) {
+          bkState.success = true; bkState.bookingNum = d.bookingNumber;
+          bkState.cardOnFilePending = false; // Card saved inline — booking confirmed immediately
+          bkState.step = 'confirmation';
+        } else {
+          bkState.error = d.error || 'Booking failed';
+        }
+        bkState.loading = false; bkRender();
+      }).catch(function() { bkState.loading = false; bkState.error = 'Failed to submit booking'; bkRender(); });
     });
   }
 
@@ -859,12 +1086,18 @@
           h += '<input class="sbk-input" data-field="' + f.key + '" type="' + (f.type || 'text') + '" value="' + bkEsc(bkState.cust[f.key] || '') + '" placeholder="' + bkEsc(f.label) + '...">';
         }
       });
-      if (bkNeedsPayment() && contactPMode !== 'card_on_file') {
+      if (contactPMode === 'card_on_file') {
+        h += '<div style="margin-top:4px"><label class="sbk-label">Card Details <span class="sbk-req">*</span></label>';
+        h += '<div id="sbk-cof-card" class="sbk-cof-card"></div>';
+        h += '<div id="sbk-cof-status" class="sbk-cof-status">Loading secure card form...</div>';
+        h += '<p id="sbk-cof-error" style="color:#dc2626;font-size:13px;margin:4px 0 0;display:none"></p></div>';
+        h += '<button class="sbk-btn" id="sbk-cof-submit"' + (bkState.loading ? ' disabled' : '') + '>' + (bkState.loading ? '<span class="sbk-spin" style="width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>Confirming...' : 'Save Card & Confirm Booking') + '</button>';
+      } else if (bkNeedsPayment()) {
         h += '<button class="sbk-btn" id="sbk-to-payment"' + (bkState.loading ? ' disabled' : '') + '>Continue to Payment &rarr;</button>';
       } else {
         h += '<button class="sbk-btn" id="sbk-submit"' + (bkState.loading ? ' disabled' : '') + '>' + (bkState.loading ? '<span class="sbk-spin" style="width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>Confirming...' : 'Confirm Booking') + '</button>';
       }
-      h += '<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px">You\'ll receive a confirmation email</p>';
+      h += '<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px">' + (contactPMode === 'card_on_file' ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Your card is secured \u2014 not charged today' : 'You\'ll receive a confirmation email') + '</p>';
 
     } else if (bkState.step === 'payment') {
       if (prev) h += '<button class="sbk-btn-back" data-goback>&larr; Back</button>';
@@ -900,6 +1133,7 @@
 
     bkContent.innerHTML = h;
     bkBindEvents();
+    if (bkState.step === 'contact' && bkGetPaymentMode() === 'card_on_file') bkMountCofCard();
 
   }
 
@@ -1005,6 +1239,10 @@
     // Pay button
     var payEl = document.getElementById('sbk-pay');
     if (payEl) payEl.onclick = bkConfirmPayment;
+
+    // Card-on-file inline submit
+    var cofSubmitEl = document.getElementById('sbk-cof-submit');
+    if (cofSubmitEl) cofSubmitEl.onclick = bkCofSubmit;
   }
 
   // ── Lead Form ──────────────────────────────────────────

@@ -171,10 +171,10 @@ router.get('/booking-widget-config', async (req, res) => {
     const { businessId } = req.query;
     if (!businessId) return res.status(400).json({ error: 'businessId required' });
 
-    const [configResult, stripeResult] = await Promise.all([
+    const [configResult, paymentResult] = await Promise.all([
       pool.query('SELECT config FROM booking_widget_configs WHERE user_id = $1', [businessId]),
       pool.query(
-        "SELECT stripe_account_id FROM payment_connections WHERE user_id = $1 AND processor = 'stripe' AND is_active = true LIMIT 1",
+        "SELECT processor, stripe_account_id, square_location_id FROM payment_connections WHERE user_id = $1 AND is_active = true ORDER BY is_primary DESC LIMIT 1",
         [businessId]
       )
     ]);
@@ -193,13 +193,25 @@ router.get('/booking-widget-config', async (req, res) => {
     };
 
     const savedConfig = configResult.rows.length > 0 ? configResult.rows[0].config : {};
-    const stripeRow = stripeResult.rows[0];
+    const pRow = paymentResult.rows[0];
+    const processor = pRow?.processor || null;
+
     const config = {
       ...defaultConfig,
       ...savedConfig,
-      paymentConnected: !!stripeRow,
-      stripePublicKey: stripeRow ? (process.env.STRIPE_PUBLIC_KEY || null) : null,
-      stripeAccountId: stripeRow?.stripe_account_id || null,
+      paymentConnected: !!pRow,
+      paymentProcessor: processor,
+      // Stripe
+      stripePublicKey: processor === 'stripe' ? (process.env.STRIPE_PUBLIC_KEY || null) : null,
+      stripeAccountId: processor === 'stripe' ? (pRow?.stripe_account_id || null) : null,
+      // Square
+      squareAppId: processor === 'square' ? (process.env.SQUARE_APPLICATION_ID || null) : null,
+      squareLocationId: processor === 'square' ? (pRow?.square_location_id || null) : null,
+      squareEnvironment: process.env.SQUARE_ENVIRONMENT || 'production',
+      // Clover
+      cloverPublicKey: processor === 'clover' ? (process.env.CLOVER_PUBLIC_KEY || null) : null,
+      cloverMerchantId: processor === 'clover' ? (process.env.CLOVER_MERCHANT_ID || null) : null,
+      cloverEnvironment: process.env.CLOVER_ENVIRONMENT || 'production',
     };
 
     res.json({ config });
@@ -462,7 +474,7 @@ router.post('/bookings/create', async (req, res) => {
     const {
       businessId, serviceId, variantId, additionalServiceIds = [],
       bookingDate, startTime, customerInfo, customerNotes,
-      assignmentType, employeeId, groupId, paymentMode
+      assignmentType, employeeId, groupId, paymentMode, cardToken
     } = req.body;
 
     if (!businessId || !serviceId || !bookingDate || !startTime || !customerInfo?.name || !customerInfo?.email) {
@@ -551,8 +563,68 @@ router.post('/bookings/create', async (req, res) => {
     // Generate booking number
     const bookingNumber = 'BK-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 3).toUpperCase();
 
-    // Create booking
+    // Inline card-on-file: save card BEFORE creating the booking so we can fail cleanly
     const isCardOnFile = paymentMode === 'card_on_file';
+    let cofSavedCard = null;
+    if (isCardOnFile && cardToken) {
+      try {
+        const pcResult = await pool.query(
+          "SELECT processor, stripe_account_id, square_location_id, clover_merchant_id, clover_access_token FROM payment_connections WHERE user_id=$1 AND is_active=true ORDER BY is_primary DESC LIMIT 1",
+          [businessId]
+        );
+        const pc = pcResult.rows[0];
+        if (!pc) throw new Error('No payment processor connected');
+
+        if (pc.processor === 'square') {
+          const { client: sqClient } = await getSquareClient(businessId);
+          const sqCustId = await findOrCreateSquareCustomer(sqClient, customerInfo);
+          const { cardId, cardBrand, lastFour } = await saveCardOnFile(sqClient, { sourceId: cardToken, squareCustomerId: sqCustId });
+          cofSavedCard = { processor: 'square', processorCustomerId: sqCustId, processorCardId: cardId, cardBrand, lastFour };
+
+        } else if (pc.processor === 'stripe') {
+          const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+          const custQ = await pool.query('SELECT stripe_customer_id FROM customers WHERE id=$1', [customerId]);
+          let stripeCustId = custQ.rows[0]?.stripe_customer_id;
+          if (!stripeCustId) {
+            const sc = await stripe.customers.create(
+              { email: customerInfo.email, name: customerInfo.name },
+              { stripeAccount: pc.stripe_account_id }
+            );
+            stripeCustId = sc.id;
+          }
+          await stripe.paymentMethods.attach(cardToken, { customer: stripeCustId }, { stripeAccount: pc.stripe_account_id });
+          await stripe.customers.update(stripeCustId, { invoice_settings: { default_payment_method: cardToken } }, { stripeAccount: pc.stripe_account_id });
+          cofSavedCard = { processor: 'stripe', processorCustomerId: stripeCustId, processorCardId: cardToken, cardBrand: null, lastFour: null };
+
+        } else if (pc.processor === 'clover') {
+          const cloverBase = process.env.CLOVER_ENVIRONMENT === 'production' ? 'https://api.clover.com' : 'https://sandbox.dev.clover.com';
+          const custQ = await pool.query('SELECT clover_customer_id FROM customers WHERE id=$1', [customerId]);
+          let cloverCustId = custQ.rows[0]?.clover_customer_id;
+          if (!cloverCustId) {
+            const nameParts = (customerInfo.name || '').trim().split(/\s+/);
+            const cres = await fetch(`${cloverBase}/v3/merchants/${pc.clover_merchant_id}/customers`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${pc.clover_access_token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '', emailAddresses: customerInfo.email ? [{ emailAddress: customerInfo.email }] : [] })
+            });
+            const cdata = await cres.json();
+            cloverCustId = cdata.id;
+          }
+          const kres = await fetch(`${cloverBase}/v3/merchants/${pc.clover_merchant_id}/customers/${cloverCustId}/cards`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${pc.clover_access_token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: cardToken })
+          });
+          const kdata = await kres.json();
+          cofSavedCard = { processor: 'clover', processorCustomerId: cloverCustId, processorCardId: kdata.id, cardBrand: kdata.cardType || null, lastFour: kdata.last4 || null };
+        }
+      } catch (cardErr) {
+        console.error('Inline card save error:', cardErr.message);
+        return res.status(400).json({ error: 'Could not save card: ' + (cardErr.message || 'Card declined') });
+      }
+    }
+
+    // Create booking
     const bookingResult = await pool.query(
       `INSERT INTO bookings (user_id, customer_id, booking_number, booking_date, start_time, end_time,
         customer_name, customer_email, customer_phone, customer_notes,
@@ -565,8 +637,8 @@ router.post('/bookings/create', async (req, res) => {
         customerNotes || '',
         assignmentType === 'employee' ? employeeId : null,
         totalPrice, totalWithTax, bizTaxRate, bizTaxAmount,
-        isCardOnFile ? 'pending' : 'confirmed',
-        isCardOnFile ? 'pending' : null,
+        (isCardOnFile && !cofSavedCard) ? 'pending' : 'confirmed',
+        cofSavedCard ? 'saved' : (isCardOnFile ? 'pending' : null),
       ]
     );
 
@@ -585,55 +657,97 @@ router.post('/bookings/create', async (req, res) => {
       );
     }
 
-    // Card on file: generate secure token and email customer
-    if (isCardOnFile && customerInfo.email) {
-      const tokenResult = await pool.query(
-        `INSERT INTO card_on_file_tokens (booking_id, user_id, customer_email, customer_name)
-         VALUES ($1, $2, $3, $4) RETURNING token`,
-        [bookingResult.rows[0].id, businessId, customerInfo.email, customerInfo.name]
-      );
-      const cardToken = tokenResult.rows[0].token;
-      const frontendUrl = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
-      const cardLink = `${frontendUrl}/card-on-file/${cardToken}`;
+    // Card on file: update customer record and send emails (inline), or email link (fallback)
+    if (isCardOnFile) {
+      if (cofSavedCard) {
+        // Inline save succeeded — update customer card details
+        if (cofSavedCard.processor === 'square') {
+          await pool.query(
+            `UPDATE customers SET square_customer_id=$1, square_card_id=$2, card_processor='square', card_brand=$3, card_last_four=$4 WHERE id=$5`,
+            [cofSavedCard.processorCustomerId, cofSavedCard.processorCardId, cofSavedCard.cardBrand, cofSavedCard.lastFour, customerId]
+          );
+        } else if (cofSavedCard.processor === 'stripe') {
+          await pool.query(
+            `UPDATE customers SET stripe_customer_id=$1, stripe_payment_method_id=$2, card_processor='stripe' WHERE id=$3`,
+            [cofSavedCard.processorCustomerId, cofSavedCard.processorCardId, customerId]
+          );
+        } else if (cofSavedCard.processor === 'clover') {
+          await pool.query(
+            `UPDATE customers SET clover_customer_id=$1, clover_card_id=$2, card_processor='clover', card_brand=$3, card_last_four=$4 WHERE id=$5`,
+            [cofSavedCard.processorCustomerId, cofSavedCard.processorCardId, cofSavedCard.cardBrand, cofSavedCard.lastFour, customerId]
+          );
+        }
+        // Notify owner that card was saved inline
+        if (process.env.SENDGRID_API_KEY) {
+          const sgMail = require('@sendgrid/mail');
+          sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+          const ownerResult = await pool.query('SELECT business_name, email FROM users WHERE id=$1', [businessId]);
+          const owner = ownerResult.rows[0] || {};
+          if (owner.email) {
+            const dateStr = new Date(bookingDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+            const [hh, mm] = startTime.split(':').map(Number);
+            const timeStr = `${hh % 12 || 12}:${String(mm).padStart(2,'0')} ${hh >= 12 ? 'PM' : 'AM'}`;
+            sgMail.send({
+              to: owner.email,
+              from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
+              subject: `Card saved on file — ${customerInfo.name} is confirmed`,
+              html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+                <div style="background:#059669;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
+                  <h2 style="color:#fff;margin:0;font-size:1.25rem;">&#10003; Card on File Saved</h2>
+                </div>
+                <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+                  <p style="margin-top:0;"><strong>${customerInfo.name}</strong> saved a card on file during booking and their appointment is now confirmed.</p>
+                  <p><strong>Booking #${bookingNumber}</strong> — ${dateStr} at ${timeStr}</p>
+                </div>
+              </div>`,
+            }).catch(e => console.error('Owner card saved notification error:', e.message));
+          }
+        }
+      } else if (customerInfo.email) {
+        // Fallback: no inline token — send email link
+        const tokenResult = await pool.query(
+          `INSERT INTO card_on_file_tokens (booking_id, user_id, customer_email, customer_name)
+           VALUES ($1, $2, $3, $4) RETURNING token`,
+          [bookingResult.rows[0].id, businessId, customerInfo.email, customerInfo.name]
+        );
+        const cofLinkToken = tokenResult.rows[0].token;
+        const frontendUrl = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
+        const cardLink = `${frontendUrl}/card-on-file/${cofLinkToken}`;
 
-      if (process.env.SENDGRID_API_KEY) {
-        const sgMail = require('@sendgrid/mail');
-        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-        const ownerResult = await pool.query('SELECT business_name, email FROM users WHERE id = $1', [businessId]);
-        const owner = ownerResult.rows[0] || {};
-        const dateStr = new Date(bookingDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-        const [h, m] = startTime.split(':').map(Number);
-        const timeStr = `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
-        // Email to customer
-        sgMail.send({
-          to: customerInfo.email,
-          from: { name: owner.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
-          replyTo: owner.email ? { email: owner.email } : undefined,
-          subject: `One last step to confirm your appointment — ${owner.business_name || 'Us'}`,
-          html: `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+        if (process.env.SENDGRID_API_KEY) {
+          const sgMail = require('@sendgrid/mail');
+          sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+          const ownerResult = await pool.query('SELECT business_name, email FROM users WHERE id=$1', [businessId]);
+          const owner = ownerResult.rows[0] || {};
+          const dateStr = new Date(bookingDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+          const [hh, mm] = startTime.split(':').map(Number);
+          const timeStr = `${hh % 12 || 12}:${String(mm).padStart(2,'0')} ${hh >= 12 ? 'PM' : 'AM'}`;
+          sgMail.send({
+            to: customerInfo.email,
+            from: { name: owner.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
+            replyTo: owner.email ? { email: owner.email } : undefined,
+            subject: `One last step to confirm your appointment — ${owner.business_name || 'Us'}`,
+            html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
               <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
                 <h1 style="color:#fff;margin:0;font-size:1.5rem;">Almost Confirmed!</h1>
               </div>
               <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
                 <p style="font-size:1rem;margin-top:0;">Hi ${customerInfo.name},</p>
                 <p>Your appointment with <strong>${owner.business_name || 'us'}</strong> on ${dateStr} at ${timeStr} is almost confirmed!</p>
-                <p>We just need a card on file to complete your booking. <strong>We will not charge your card</strong> — it is only kept on file in case of a no-show per our cancellation policy.</p>
+                <p>We just need a card on file to complete your booking. <strong>We will not charge your card</strong> — it is only kept on file per our cancellation policy.</p>
                 <div style="text-align:center;margin:2rem 0;">
                   <a href="${cardLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:600;">Securely Save Card on File</a>
                 </div>
                 <p style="color:#6b7280;font-size:0.85rem;">This link expires in 48 hours.</p>
               </div>
             </div>`,
-        }).catch(e => console.error('Card on file email error:', e.message));
-        // Notify owner
-        if (owner.email) {
-          sgMail.send({
-            to: owner.email,
-            from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
-            subject: `Card on file link sent to ${customerInfo.name}`,
-            html: `
-              <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+          }).catch(e => console.error('Card on file email error:', e.message));
+          if (owner.email) {
+            sgMail.send({
+              to: owner.email,
+              from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
+              subject: `Card on file link sent to ${customerInfo.name}`,
+              html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
                 <div style="background:#d97706;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
                   <h2 style="color:#fff;margin:0;font-size:1.25rem;">Card on File Link Sent</h2>
                 </div>
@@ -642,7 +756,8 @@ router.post('/bookings/create', async (req, res) => {
                   <p style="color:#6b7280;font-size:0.9rem;">Booking #${bookingNumber} will be confirmed once they save their card. The link expires in 48 hours.</p>
                 </div>
               </div>`,
-          }).catch(e => console.error('Owner card link notification error:', e.message));
+            }).catch(e => console.error('Owner card link notification error:', e.message));
+          }
         }
       }
     }
@@ -657,8 +772,8 @@ router.post('/bookings/create', async (req, res) => {
 
     console.log(`📅 Public booking created: ${bookingNumber} for user ${businessId}`);
 
-    // Send booking confirmation emails (non-blocking) — skip for card_on_file (not yet confirmed)
-    if (!isCardOnFile) {
+    // Send booking confirmation emails (non-blocking) — skip for card_on_file email-link (not yet confirmed)
+    if (!isCardOnFile || cofSavedCard) {
       sendBookingEmails({
         userId: businessId,
         bookingNumber,
