@@ -329,16 +329,21 @@ router.get('/availability', async (req, res) => {
     // Total block = service duration + buffer (buffer prevents back-to-back bookings)
     const totalBlock = durationMinutes + bufferMinutes;
 
-    // Get employees who can perform the selected service
+    // Day name for work_days check (0=Sunday, 1=Monday, ...)
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayName = dayNames[dayOfWeek];
+
+    // Get employees who can perform the selected service AND are scheduled to work today
     // - Employees with no service assignments can do any service
     // - Employees with assignments can only do their assigned services
+    // - work_days must include today; work_hours must be present
     let employees = [];
     try {
       const ids = serviceIds ? serviceIds.split(',').filter(Boolean).map(Number) : [];
       let empResult;
       if (ids.length > 0) {
         empResult = await pool.query(
-          `SELECT DISTINCT e.id FROM employees e
+          `SELECT DISTINCT e.id, e.work_hours, e.work_days FROM employees e
            WHERE e.user_id = $1 AND e.active = true
            AND (
              NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id)
@@ -348,15 +353,19 @@ router.get('/availability', async (req, res) => {
         );
       } else {
         empResult = await pool.query(
-          'SELECT DISTINCT e.id FROM employees e WHERE e.user_id = $1 AND e.active = true',
+          'SELECT DISTINCT e.id, e.work_hours, e.work_days FROM employees e WHERE e.user_id = $1 AND e.active = true',
           [businessId]
         );
       }
-      employees = empResult.rows.map(e => e.id);
+      // Filter to employees scheduled to work on this day
+      employees = empResult.rows.filter(e => {
+        const workDays = e.work_days || {};
+        return workDays[dayName] !== false; // default true if not set
+      });
     } catch (e) { /* no employees table or no employees */ }
 
-    // If no employees, treat business as 1 slot capacity
-    const capacity = Math.max(employees.length, 1);
+    // If no employees, treat business as 1 slot capacity (no per-employee hour checking)
+    const noEmployees = employees.length === 0;
 
     // Get existing bookings for this date, including which employee and service buffer
     const bookingsResult = await pool.query(
@@ -402,13 +411,12 @@ router.get('/availability', async (req, res) => {
       const slotBlockEndM = m + totalBlock;
       const slotBlockEnd = `${String(Math.floor(slotBlockEndM / 60)).padStart(2, '0')}:${String(slotBlockEndM % 60).padStart(2, '0')}`;
 
-      if (capacity <= 1) {
-        // Single-provider: check global conflicts with buffer
+      if (noEmployees) {
+        // No employee records — single-provider mode: check global conflicts with buffer
         const isConflict = existingBookings.some(b => {
           const bStart = b.start_time.slice(0, 5);
           const bEndM = timeToMinutes(b.end_time.slice(0, 5)) + (b.booking_buffer || 0);
           const bBlockEnd = minutesToTime(bEndM);
-          // New slot's block must not overlap with existing booking's block
           return slotStart < bBlockEnd && slotBlockEnd > bStart;
         });
         if (!isConflict) {
@@ -417,19 +425,35 @@ router.get('/availability', async (req, res) => {
           slots.push({ time: slotStart, endTime: slotEnd, displayTime: `${h12}:${mm} ${ampm}` });
         }
       } else {
-        // Multi-employee: count total conflicting bookings vs capacity
-        // Each booking (assigned or not) consumes 1 worker slot
-        const totalConflicts = existingBookings.filter(b => {
-          const bStart = b.start_time.slice(0, 5);
-          const bEndM = timeToMinutes(b.end_time.slice(0, 5)) + (b.booking_buffer || 0);
-          const bBlockEnd = minutesToTime(bEndM);
-          return slotStart < bBlockEnd && slotBlockEnd > bStart;
-        }).length;
+        // Multi-employee: count employees available at this slot
+        // An employee is available if:
+        //   1. Their work hours cover the entire slot (start + duration)
+        //   2. They don't have a conflicting booking
+        let availableCount = 0;
+        for (const emp of employees) {
+          // Check work hours
+          const wh = emp.work_hours || { startTime: '00:00', endTime: '23:59' };
+          const empStartM = timeToMinutes(wh.startTime || '00:00');
+          const empEndM = timeToMinutes(wh.endTime || '23:59');
+          // Slot must start at or after employee start AND end at or before employee end
+          if (m < empStartM || slotEndM > empEndM) continue;
 
-        if (totalConflicts < capacity) {
+          // Check if employee has a conflicting booking
+          const hasConflict = existingBookings.some(b => {
+            // Only check bookings assigned to this employee OR unassigned bookings
+            if (b.assigned_employee_id && b.assigned_employee_id !== emp.id) return false;
+            const bStart = b.start_time.slice(0, 5);
+            const bEndM = timeToMinutes(b.end_time.slice(0, 5)) + (b.booking_buffer || 0);
+            const bBlockEnd = minutesToTime(bEndM);
+            return slotStart < bBlockEnd && slotBlockEnd > bStart;
+          });
+          if (!hasConflict) availableCount++;
+        }
+
+        if (availableCount > 0) {
           const h12 = ((Math.floor(m / 60) % 12) || 12);
           const ampm = Math.floor(m / 60) < 12 ? 'AM' : 'PM';
-          slots.push({ time: slotStart, endTime: slotEnd, displayTime: `${h12}:${mm} ${ampm}`, available: capacity - totalConflicts });
+          slots.push({ time: slotStart, endTime: slotEnd, displayTime: `${h12}:${mm} ${ampm}`, available: availableCount });
         }
       }
     }

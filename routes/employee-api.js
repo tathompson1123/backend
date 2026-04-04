@@ -741,6 +741,119 @@ router.get('/services', async (req, res) => {
   }
 });
 
+// GET /api/employee/performance - Weekly performance stats
+router.get('/performance', async (req, res) => {
+  try {
+    const { employeeId, userId } = req.employee;
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0=Sun
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - dayOfWeek);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+    const weekEndStr = now.toISOString().split('T')[0];
+
+    // Completed jobs this week
+    const completedResult = await pool.query(
+      `SELECT COUNT(*) as cnt,
+              COALESCE(SUM(EXTRACT(EPOCH FROM (end_time::interval - start_time::interval))/3600), 0) as total_hours
+       FROM bookings
+       WHERE user_id = $1 AND employee_id = $2 AND status = 'completed'
+         AND booking_date >= $3 AND booking_date <= $4`,
+      [userId, employeeId, weekStartStr, weekEndStr]
+    );
+
+    // Average rating from review requests linked to this employee's bookings
+    const ratingResult = await pool.query(
+      `SELECT COALESCE(AVG(rr.rating), 0) as avg_rating, COUNT(rr.id) as rating_count
+       FROM review_requests rr
+       JOIN bookings b ON b.customer_id = rr.customer_id AND b.user_id = rr.user_id
+       WHERE b.employee_id = $1 AND b.user_id = $2
+         AND rr.rating IS NOT NULL AND rr.created_at >= $3`,
+      [employeeId, userId, weekStart.toISOString()]
+    );
+
+    // Last 8 weeks completed job counts for chart
+    const chartResult = await pool.query(
+      `SELECT DATE_TRUNC('week', booking_date::timestamp) as week, COUNT(*) as cnt
+       FROM bookings
+       WHERE user_id = $1 AND employee_id = $2 AND status = 'completed'
+         AND booking_date >= (NOW() - INTERVAL '8 weeks')::date
+       GROUP BY week ORDER BY week ASC`,
+      [userId, employeeId]
+    );
+
+    // Total completed all time for Top Performer badge
+    const allTimeResult = await pool.query(
+      `SELECT COUNT(*) as cnt FROM bookings
+       WHERE user_id = $1 AND employee_id = $2 AND status = 'completed'`,
+      [userId, employeeId]
+    );
+
+    const completedJobs = parseInt(completedResult.rows[0]?.cnt || 0);
+    const totalHours = Math.round(parseFloat(completedResult.rows[0]?.total_hours || 0));
+    const avgRating = parseFloat(ratingResult.rows[0]?.avg_rating || 0);
+    const ratingCount = parseInt(ratingResult.rows[0]?.rating_count || 0);
+    const chartData = chartResult.rows.map(r => parseInt(r.cnt));
+    const allTimeCompleted = parseInt(allTimeResult.rows[0]?.cnt || 0);
+    const isTopPerformer = completedJobs >= 10 || allTimeCompleted >= 50;
+
+    res.json({
+      completedJobs,
+      totalHours,
+      avgRating: parseFloat(avgRating.toFixed(1)),
+      ratingCount,
+      chartData: chartData.length > 0 ? chartData : [0, 0, 0, 0, 0, 0, 0, 0],
+      isTopPerformer,
+      weekStart: weekStartStr,
+      weekEnd: weekEndStr,
+    });
+  } catch (error) {
+    console.error('Employee performance error:', error.message);
+    res.status(500).json({ error: 'Failed to load performance data' });
+  }
+});
+
+// GET /api/employee/home - Home dashboard summary
+router.get('/home', async (req, res) => {
+  try {
+    const { employeeId, userId } = req.employee;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const [scheduleRes, statsRes] = await Promise.all([
+      pool.query(
+        `SELECT b.id, b.booking_date, b.start_time, b.end_time, b.status,
+                b.customer_name,
+                json_agg(json_build_object('service_name', bi.service_name)) as items
+         FROM bookings b
+         LEFT JOIN booking_items bi ON b.id = bi.booking_id
+         WHERE b.user_id = $1 AND b.employee_id = $2 AND b.booking_date = $3
+           AND b.status != 'cancelled'
+         GROUP BY b.id ORDER BY b.start_time ASC`,
+        [userId, employeeId, todayStr]
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE status = 'completed') as completed,
+           COUNT(*) FILTER (WHERE status != 'cancelled') as total
+         FROM bookings
+         WHERE user_id = $1 AND employee_id = $2 AND booking_date = $3`,
+        [userId, employeeId, todayStr]
+      )
+    ]);
+
+    const bookings = scheduleRes.rows;
+    const nextJob = bookings.find(b => b.status !== 'completed') || null;
+    const completed = parseInt(statsRes.rows[0]?.completed || 0);
+    const total = parseInt(statsRes.rows[0]?.total || 0);
+
+    res.json({ bookings, nextJob, completed, total });
+  } catch (error) {
+    console.error('Employee home error:', error.message);
+    res.status(500).json({ error: 'Failed to load home data' });
+  }
+});
+
 // GET /api/employee/profile - Employee's own profile
 router.get('/profile', async (req, res) => {
   try {

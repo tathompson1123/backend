@@ -470,6 +470,15 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify permissions column:', e.message);
   }
 
+  // Add work_hours and work_days columns to employees
+  try {
+    await pool.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_hours JSONB DEFAULT '{"startTime":"09:00","endTime":"17:00"}'`);
+    await pool.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_days JSONB DEFAULT '{"monday":true,"tuesday":true,"wednesday":true,"thursday":true,"friday":true,"saturday":false,"sunday":false}'`);
+    console.log('✅ Employee work_hours/work_days columns verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify work_hours/work_days columns:', e.message);
+  }
+
   // Permission templates table
   try {
     await pool.query(`

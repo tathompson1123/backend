@@ -81,6 +81,46 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// GET - Fetch employees assigned to a service
+router.get('/:id/employees', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const svc = await pool.query('SELECT id FROM services WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (svc.rows.length === 0) return res.status(404).json({ error: 'Service not found' });
+    const result = await pool.query(
+      'SELECT employee_id FROM service_employees WHERE service_id = $1',
+      [id]
+    );
+    res.json({ employeeIds: result.rows.map(r => r.employee_id) });
+  } catch (error) {
+    console.error('Error fetching service employees:', error.message);
+    res.status(500).json({ error: 'Failed to fetch service employees' });
+  }
+});
+
+// PUT - Set employees assigned to a service (replaces existing)
+router.put('/:id/employees', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { employeeIds = [] } = req.body;
+    const svc = await pool.query('SELECT id FROM services WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (svc.rows.length === 0) return res.status(404).json({ error: 'Service not found' });
+    await pool.query('DELETE FROM service_employees WHERE service_id = $1', [id]);
+    for (const empId of employeeIds) {
+      await pool.query(
+        'INSERT INTO service_employees (service_id, employee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [id, empId]
+      );
+    }
+    res.json({ employeeIds });
+  } catch (error) {
+    console.error('Error updating service employees:', error.message);
+    res.status(500).json({ error: 'Failed to update service employees' });
+  }
+});
+
 // GET - Fetch addons for a specific service
 router.get('/:id/addons', authenticateToken, async (req, res) => {
   try {

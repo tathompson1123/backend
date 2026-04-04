@@ -399,23 +399,32 @@ function generateBookingWidgetCode(userId, theme = {}) {
     if(!cfg||!cfg.squareAppId||!cfg.squareLocationId){
       state.error='Payment not configured';state.loading=false;render();return;
     }
+    // Ensure window.setTimeout is writable before Square SDK loads
+    // (Square SDK internally reassigns setTimeout which fails in some environments)
+    try{Object.defineProperty(window,'setTimeout',{writable:true,configurable:true,value:window.setTimeout});}catch(e){}
+    try{Object.defineProperty(window,'clearTimeout',{writable:true,configurable:true,value:window.clearTimeout});}catch(e){}
     var sdkUrl=cfg.squareEnvironment==='sandbox'
       ?'https://sandbox.web.squarecdn.com/v1/square.js'
       :'https://web.squarecdn.com/v1/square.js';
     function attachSquareCard(){
-      window.Square.payments(cfg.squareAppId,cfg.squareLocationId)
-        .card()
-        .then(function(card){
-          state.squareCard=card;
-          state.loading=false;
-          render();
-          var el=document.getElementById('sbk-square-card');
-          if(el)card.attach('#sbk-square-card');
-        })
-        .catch(function(e){
-          state.error='Failed to initialize payment: '+(e.message||'');
-          state.loading=false;render();
-        });
+      try{
+        window.Square.payments(cfg.squareAppId,cfg.squareLocationId)
+          .card()
+          .then(function(card){
+            state.squareCard=card;
+            state.loading=false;
+            render();
+            var el=document.getElementById('sbk-square-card');
+            if(el)card.attach('#sbk-square-card');
+          })
+          .catch(function(e){
+            state.error='Failed to initialize payment: '+(e.message||'');
+            state.loading=false;render();
+          });
+      }catch(e){
+        state.error='Payment initialization failed. Please try again.';
+        state.loading=false;render();
+      }
     }
     if(window.Square){attachSquareCard();return;}
     var sc=document.createElement('script');

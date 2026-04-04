@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { name, email, phone, color, serviceIds } = req.body;
+    const { name, email, phone, color, serviceIds, workHours, workDays } = req.body;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'name is required' });
@@ -63,11 +63,14 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'serviceIds must be an array of valid IDs' });
     }
 
+    const defaultWorkHours = { startTime: '09:00', endTime: '17:00' };
+    const defaultWorkDays = { monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: false, sunday: false };
     const result = await pool.query(
-      `INSERT INTO employees (user_id, name, email, phone, color)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO employees (user_id, name, email, phone, color, work_hours, work_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [userId, name.trim(), email ? email.trim() : null, phone ? phone.trim() : null, color || '#3b82f6']
+      [userId, name.trim(), email ? email.trim() : null, phone ? phone.trim() : null, color || '#3b82f6',
+       JSON.stringify(workHours || defaultWorkHours), JSON.stringify(workDays || defaultWorkDays)]
     );
 
     const employee = result.rows[0];
@@ -102,7 +105,7 @@ router.put('/:id', async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const { name, email, phone, color, active, serviceIds } = req.body;
+    const { name, email, phone, color, active, serviceIds, workHours, workDays } = req.body;
 
     if (!isValidId(id)) {
       return res.status(400).json({ error: 'Invalid employee ID' });
@@ -134,10 +137,14 @@ router.put('/:id', async (req, res) => {
            email = COALESCE($2, email),
            phone = COALESCE($3, phone),
            color = COALESCE($4, color),
-           active = COALESCE($5, active)
+           active = COALESCE($5, active),
+           work_hours = COALESCE($8, work_hours),
+           work_days = COALESCE($9, work_days)
        WHERE id = $6 AND user_id = $7
        RETURNING *`,
-      [name, email, phone, color, active, id, userId]
+      [name, email, phone, color, active, id, userId,
+       workHours ? JSON.stringify(workHours) : null,
+       workDays ? JSON.stringify(workDays) : null]
     );
 
     if (result.rows.length === 0) {
