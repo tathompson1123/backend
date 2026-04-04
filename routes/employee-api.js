@@ -580,23 +580,36 @@ router.post('/my-bookings/:id/invoice/record-payment', requirePermission('proces
   }
 });
 
-// GET /api/employee/my-schedule - Today's schedule with upcoming bookings
+// GET /api/employee/my-schedule - Schedule (single date, week, or month)
 router.get('/my-schedule', async (req, res) => {
   try {
     const { employeeId, userId } = req.employee;
-    const { date, showAll } = req.query;
+    const { date, showAll, startDate, endDate } = req.query;
 
     if (date && !DATE_REGEX.test(date)) {
       return res.status(400).json({ error: 'date must be YYYY-MM-DD format' });
     }
+    if (startDate && !DATE_REGEX.test(startDate)) {
+      return res.status(400).json({ error: 'startDate must be YYYY-MM-DD format' });
+    }
+    if (endDate && !DATE_REGEX.test(endDate)) {
+      return res.status(400).json({ error: 'endDate must be YYYY-MM-DD format' });
+    }
 
+    const isRange = startDate && endDate;
     const targetDate = date || new Date().toISOString().split('T')[0];
 
-    const params = [userId, targetDate];
-    let employeeFilter = 'AND b.employee_id = $3';
-    if (showAll === 'true') {
-      employeeFilter = '';
-    } else {
+    let dateFilter = isRange
+      ? `AND b.booking_date >= $2 AND b.booking_date <= $3`
+      : `AND b.booking_date = $2`;
+
+    const params = isRange ? [userId, startDate, endDate] : [userId, targetDate];
+    let paramOffset = params.length;
+
+    let employeeFilter = '';
+    if (showAll !== 'true') {
+      paramOffset++;
+      employeeFilter = `AND b.employee_id = $${paramOffset}`;
       params.push(employeeId);
     }
 
@@ -614,11 +627,11 @@ router.get('/my-schedule', async (req, res) => {
        LEFT JOIN booking_items bi ON b.id = bi.booking_id
        LEFT JOIN employees e ON e.id = b.employee_id
        WHERE b.user_id = $1
-         AND b.booking_date = $2
+         ${dateFilter}
          ${employeeFilter}
          AND b.status NOT IN ('cancelled')
        GROUP BY b.id, e.name
-       ORDER BY b.start_time`,
+       ORDER BY b.booking_date, b.start_time`,
       params
     );
 
@@ -1017,6 +1030,213 @@ router.post('/my-bookings/:id/invoice/tap-payment', requirePermission('process_p
   } catch (error) {
     console.error('Error recording tap payment:', error.message);
     res.status(500).json({ error: 'Failed to record tap payment' });
+  }
+});
+
+// ============================================================
+// COMMUNITY NOTES — Group messaging between all employees
+// ============================================================
+
+// GET /api/employee/community - Fetch messages (newest first, paginated)
+router.get('/community', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const before = req.query.before; // message id cursor for pagination
+
+    let cursorFilter = '';
+    const params = [userId, limit];
+    if (before && isValidId(before)) {
+      cursorFilter = `AND m.id < $3`;
+      params.push(parseInt(before));
+    }
+
+    const result = await pool.query(
+      `SELECT m.*,
+         r.id as reply_author_id, r.employee_name as reply_author_name,
+         r.body as reply_body
+       FROM employee_messages m
+       LEFT JOIN employee_messages r ON r.id = m.reply_to_id
+       WHERE m.user_id = $1 ${cursorFilter}
+       ORDER BY m.created_at DESC
+       LIMIT $2`,
+      params
+    );
+
+    // Return pinned messages separately on first page
+    let pinned = [];
+    if (!before) {
+      const pinnedRes = await pool.query(
+        `SELECT m.*, r.employee_name as reply_author_name, r.body as reply_body
+         FROM employee_messages m
+         LEFT JOIN employee_messages r ON r.id = m.reply_to_id
+         WHERE m.user_id = $1 AND m.pinned = true
+         ORDER BY m.created_at DESC LIMIT 5`,
+        [userId]
+      );
+      pinned = pinnedRes.rows;
+    }
+
+    res.json({ messages: result.rows.reverse(), pinned, hasMore: result.rows.length === limit });
+  } catch (error) {
+    console.error('Error fetching community messages:', error.message);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// POST /api/employee/community - Post a new message
+router.post('/community', async (req, res) => {
+  try {
+    const { employeeId, userId } = req.employee;
+    const { body, replyToId } = req.body;
+
+    if (!body || !body.trim()) return res.status(400).json({ error: 'Message body is required' });
+    if (body.length > 2000) return res.status(400).json({ error: 'Message too long (max 2000 chars)' });
+
+    // Get employee info
+    const empRes = await pool.query(
+      'SELECT name, color FROM employees WHERE id = $1 AND user_id = $2',
+      [employeeId, userId]
+    );
+    if (empRes.rows.length === 0) return res.status(404).json({ error: 'Employee not found' });
+    const emp = empRes.rows[0];
+
+    // Validate reply_to if provided
+    let replyPreview = null;
+    if (replyToId && isValidId(replyToId)) {
+      const replyRes = await pool.query(
+        'SELECT employee_name, body FROM employee_messages WHERE id = $1 AND user_id = $2',
+        [replyToId, userId]
+      );
+      if (replyRes.rows.length > 0) {
+        replyPreview = replyRes.rows[0].body.slice(0, 100);
+      }
+    }
+
+    const result = await pool.query(
+      `INSERT INTO employee_messages
+         (user_id, employee_id, employee_name, employee_color, body, reply_to_id, reply_preview)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [userId, employeeId, emp.name, emp.color || '#6b7280', body.trim(),
+       replyToId && isValidId(replyToId) ? replyToId : null, replyPreview]
+    );
+
+    res.json({ message: result.rows[0] });
+  } catch (error) {
+    console.error('Error posting message:', error.message);
+    res.status(500).json({ error: 'Failed to post message' });
+  }
+});
+
+// PUT /api/employee/community/:id/react - Toggle emoji reaction
+router.put('/community/:id/react', async (req, res) => {
+  try {
+    const { employeeId, userId } = req.employee;
+    const { id } = req.params;
+    const { emoji } = req.body;
+
+    if (!isValidId(id)) return res.status(400).json({ error: 'Invalid message ID' });
+    if (!emoji || typeof emoji !== 'string' || emoji.length > 10) {
+      return res.status(400).json({ error: 'Valid emoji required' });
+    }
+
+    const msgRes = await pool.query(
+      'SELECT reactions FROM employee_messages WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (msgRes.rows.length === 0) return res.status(404).json({ error: 'Message not found' });
+
+    const reactions = msgRes.rows[0].reactions || {};
+    if (!reactions[emoji]) reactions[emoji] = [];
+
+    const idx = reactions[emoji].indexOf(employeeId);
+    if (idx === -1) {
+      reactions[emoji].push(employeeId);
+    } else {
+      reactions[emoji].splice(idx, 1);
+      if (reactions[emoji].length === 0) delete reactions[emoji];
+    }
+
+    const result = await pool.query(
+      'UPDATE employee_messages SET reactions = $1 WHERE id = $2 AND user_id = $3 RETURNING reactions',
+      [JSON.stringify(reactions), id, userId]
+    );
+
+    res.json({ reactions: result.rows[0].reactions });
+  } catch (error) {
+    console.error('Error updating reaction:', error.message);
+    res.status(500).json({ error: 'Failed to update reaction' });
+  }
+});
+
+// PUT /api/employee/community/:id - Edit own message
+router.put('/community/:id', async (req, res) => {
+  try {
+    const { employeeId, userId } = req.employee;
+    const { id } = req.params;
+    const { body } = req.body;
+
+    if (!isValidId(id)) return res.status(400).json({ error: 'Invalid message ID' });
+    if (!body || !body.trim()) return res.status(400).json({ error: 'Body is required' });
+    if (body.length > 2000) return res.status(400).json({ error: 'Message too long' });
+
+    const result = await pool.query(
+      `UPDATE employee_messages SET body = $1, edited_at = NOW()
+       WHERE id = $2 AND user_id = $3 AND employee_id = $4
+       RETURNING *`,
+      [body.trim(), id, userId, employeeId]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Message not found or not yours' });
+    res.json({ message: result.rows[0] });
+  } catch (error) {
+    console.error('Error editing message:', error.message);
+    res.status(500).json({ error: 'Failed to edit message' });
+  }
+});
+
+// DELETE /api/employee/community/:id - Delete own message
+router.delete('/community/:id', async (req, res) => {
+  try {
+    const { employeeId, userId } = req.employee;
+    const { id } = req.params;
+
+    if (!isValidId(id)) return res.status(400).json({ error: 'Invalid message ID' });
+
+    const result = await pool.query(
+      'DELETE FROM employee_messages WHERE id = $1 AND user_id = $2 AND employee_id = $3 RETURNING id',
+      [id, userId, employeeId]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Message not found or not yours' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting message:', error.message);
+    res.status(500).json({ error: 'Failed to delete message' });
+  }
+});
+
+// PUT /api/employee/community/:id/pin - Pin/unpin message (any employee can pin)
+router.put('/community/:id/pin', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+
+    if (!isValidId(id)) return res.status(400).json({ error: 'Invalid message ID' });
+
+    const result = await pool.query(
+      `UPDATE employee_messages SET pinned = NOT pinned
+       WHERE id = $1 AND user_id = $2
+       RETURNING id, pinned`,
+      [id, userId]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Message not found' });
+    res.json({ pinned: result.rows[0].pinned });
+  } catch (error) {
+    console.error('Error pinning message:', error.message);
+    res.status(500).json({ error: 'Failed to pin message' });
   }
 });
 

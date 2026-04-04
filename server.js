@@ -470,6 +470,30 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify permissions column:', e.message);
   }
 
+  // Employee community messages table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS employee_messages (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        employee_name VARCHAR(255) NOT NULL,
+        employee_color VARCHAR(7) DEFAULT '#6b7280',
+        body TEXT NOT NULL,
+        reactions JSONB DEFAULT '{}',
+        reply_to_id INTEGER REFERENCES employee_messages(id) ON DELETE SET NULL,
+        reply_preview TEXT,
+        pinned BOOLEAN DEFAULT false,
+        edited_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_employee_messages_user ON employee_messages(user_id, created_at DESC)`);
+    console.log('✅ Employee messages table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify employee_messages table:', e.message);
+  }
+
   // Add work_hours and work_days columns to employees
   try {
     await pool.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_hours JSONB DEFAULT '{"startTime":"09:00","endTime":"17:00"}'`);
