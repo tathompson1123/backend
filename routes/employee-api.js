@@ -100,9 +100,9 @@ router.get('/my-bookings/:id', requirePermission('view_bookings'), async (req, r
        FROM bookings b
        LEFT JOIN booking_items bi ON b.id = bi.booking_id
        JOIN users u ON u.id = b.user_id
-       WHERE b.id = $1 AND b.user_id = $2 AND b.employee_id = $3
+       WHERE b.id = $1 AND b.user_id = $2
        GROUP BY b.id, u.default_tax_rate`,
-      [id, userId, employeeId]
+      [id, userId]
     );
 
     if (result.rows.length === 0) {
@@ -653,7 +653,7 @@ router.get('/contacts', requirePermission('view_customers'), async (req, res) =>
     }
 
     let query = `
-      SELECT id, name, email, phone, last_service, last_service_date, total_jobs, lifetime_value
+      SELECT id, name, email, phone, last_service, last_service_date, total_jobs, lifetime_value, notes
       FROM customers
       WHERE user_id = $1
     `;
@@ -865,6 +865,22 @@ router.get('/home', async (req, res) => {
     console.error('Employee home error:', error.message);
     res.status(500).json({ error: 'Failed to load home data' });
   }
+});
+
+// GET /api/employee/business-address - Business address for pre-filling bookings
+router.get('/business-address', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const result = await pool.query(
+      `SELECT address, city, state, zip_code FROM business_information WHERE user_id = $1`,
+      [userId]
+    );
+    const row = result.rows[0];
+    const address = row
+      ? [row.address, row.city, row.state, row.zip_code].filter(Boolean).join(', ')
+      : null;
+    res.json({ address });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/employee/profile - Employee's own profile
@@ -1240,15 +1256,18 @@ router.put('/community/:id/pin', async (req, res) => {
   }
 });
 
-// GET /api/employee/services
-router.get('/services', async (req, res) => {
+// GET /api/employee/team-members - All active employees in the business (for assignment)
+router.get('/team-members', async (req, res) => {
   try {
     const { userId } = req.employee;
     const result = await pool.query(
-      'SELECT id, name, price, duration_hours, description FROM services WHERE user_id = $1 AND active = true AND is_addon = false ORDER BY name',
+      `SELECT e.id, e.name, e.color
+       FROM employees e
+       WHERE e.user_id = $1 AND e.active = true
+       ORDER BY e.name`,
       [userId]
     );
-    res.json({ services: result.rows });
+    res.json({ members: result.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1405,6 +1424,54 @@ router.get('/admin/conversations', requireAdmin, async (req, res) => {
       [userId]
     );
     res.json({ conversations: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/members - List all employees in this business
+router.get('/admin/members', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const result = await pool.query(
+      `SELECT e.id, e.name, e.color, e.is_admin, e.active, ec.email
+       FROM employees e
+       LEFT JOIN employee_credentials ec ON ec.employee_id = e.id
+       JOIN users u ON u.id = e.user_id
+       WHERE e.user_id = $1 AND e.active = true
+       ORDER BY e.name`,
+      [userId]
+    );
+    // Also mark the owner
+    const ownerResult = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
+    const ownerEmail = ownerResult.rows[0]?.email?.toLowerCase();
+    const members = result.rows.map(m => ({
+      ...m,
+      is_owner: m.email && m.email.toLowerCase() === ownerEmail,
+    }));
+    res.json({ members });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/employee/admin/members/:id/admin - Toggle admin for an employee
+router.put('/admin/members/:id/admin', requireAdmin, async (req, res) => {
+  try {
+    const { userId, employeeId } = req.employee;
+    const { id } = req.params;
+    const { isAdmin } = req.body;
+
+    if (!isValidId(id)) return res.status(400).json({ error: 'Invalid employee ID' });
+
+    // Can't remove admin from self
+    if (Number(id) === employeeId && !isAdmin) {
+      return res.status(400).json({ error: 'You cannot remove your own admin access.' });
+    }
+
+    const result = await pool.query(
+      `UPDATE employees SET is_admin = $1 WHERE id = $2 AND user_id = $3 RETURNING id, name, is_admin`,
+      [isAdmin, id, userId]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Employee not found' });
+    res.json({ success: true, employee: result.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

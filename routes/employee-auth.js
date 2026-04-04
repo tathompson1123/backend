@@ -135,10 +135,12 @@ router.post('/login', async (req, res) => {
 
     const result = await pool.query(
       `SELECT ec.*, e.name as employee_name, e.user_id, e.color, e.active, e.is_admin,
-              u.business_name, u.plan
+              u.business_name, u.plan, u.email as owner_email,
+              bi.address as biz_address, bi.city as biz_city, bi.state as biz_state, bi.zip_code as biz_zip
        FROM employee_credentials ec
        JOIN employees e ON e.id = ec.employee_id
        JOIN users u ON u.id = e.user_id
+       LEFT JOIN business_information bi ON bi.user_id = u.id
        WHERE ec.email = $1 AND ec.invite_accepted_at IS NOT NULL`,
       [email.toLowerCase().trim()]
     );
@@ -185,7 +187,8 @@ router.post('/login', async (req, res) => {
         color: cred.color,
         businessName: cred.business_name,
         plan: cred.plan,
-        isAdmin: cred.is_admin || false
+        isAdmin: cred.is_admin || (cred.owner_email && cred.email.toLowerCase() === cred.owner_email.toLowerCase()) || false,
+        businessAddress: [cred.biz_address, cred.biz_city, cred.biz_state, cred.biz_zip].filter(Boolean).join(', ') || null,
       }
     });
   } catch (error) {
@@ -198,9 +201,11 @@ router.post('/login', async (req, res) => {
 router.get('/verify', authenticateEmployee, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT e.id, e.name, e.email, e.color, e.active, e.is_admin, u.business_name, u.plan
+      `SELECT e.id, e.name, e.email, e.color, e.active, e.is_admin, u.business_name, u.plan, u.email as owner_email,
+              bi.address as biz_address, bi.city as biz_city, bi.state as biz_state, bi.zip_code as biz_zip
        FROM employees e
        JOIN users u ON u.id = e.user_id
+       LEFT JOIN business_information bi ON bi.user_id = u.id
        WHERE e.id = $1`,
       [req.employee.employeeId]
     );
@@ -223,7 +228,8 @@ router.get('/verify', authenticateEmployee, async (req, res) => {
         color: emp.color,
         businessName: emp.business_name,
         plan: emp.plan,
-        isAdmin: emp.is_admin || false
+        isAdmin: emp.is_admin || (emp.owner_email && emp.email && emp.email.toLowerCase() === emp.owner_email.toLowerCase()) || false,
+        businessAddress: [emp.biz_address, emp.biz_city, emp.biz_state, emp.biz_zip].filter(Boolean).join(', ') || null,
       }
     });
   } catch (error) {

@@ -511,6 +511,22 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify work_hours/work_days columns:', e.message);
   }
 
+  // Auto-assign is_admin to employees who are the business owner
+  try {
+    await pool.query(`
+      UPDATE employees e
+      SET is_admin = true
+      FROM employee_credentials ec, users u
+      WHERE ec.employee_id = e.id
+        AND e.user_id = u.id
+        AND LOWER(ec.email) = LOWER(u.email)
+        AND e.is_admin = false
+    `);
+    console.log('✅ Owner employees auto-assigned admin');
+  } catch (e) {
+    console.warn('⚠️ Could not auto-assign owner admin:', e.message);
+  }
+
   // Permission templates table
   try {
     await pool.query(`
