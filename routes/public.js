@@ -628,6 +628,42 @@ router.post('/bookings/create', async (req, res) => {
       }
     }
 
+    // Auto-assign a free employee who can perform the service
+    // Priority: employees with specific service assignment > unassigned (can-do-all) employees
+    let assignedEmployeeId = assignmentType === 'employee' ? employeeId : null;
+    if (!assignedEmployeeId) {
+      try {
+        // Get all active employees who can do this service (same logic as availability)
+        const eligibleResult = await pool.query(
+          `SELECT e.id FROM employees e
+           WHERE e.user_id = $1 AND e.active = true
+           AND (
+             NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id)
+             OR EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id AND service_id = $2)
+           )
+           ORDER BY
+             EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id AND service_id = $2) DESC,
+             e.id ASC`,
+          [businessId, Number(serviceId)]
+        );
+        // Find first employee with no conflict at this time slot
+        const endM = timeToMinutes(endTime);
+        for (const row of eligibleResult.rows) {
+          const conflict = await pool.query(
+            `SELECT 1 FROM bookings
+             WHERE user_id = $1 AND employee_id = $2 AND booking_date = $3 AND status != 'cancelled'
+             AND start_time < $4 AND end_time > $5
+             LIMIT 1`,
+            [businessId, row.id, bookingDate, endTime, startTime]
+          );
+          if (conflict.rows.length === 0) {
+            assignedEmployeeId = row.id;
+            break;
+          }
+        }
+      } catch (e) { /* employees table may not exist — leave unassigned */ }
+    }
+
     // Create booking
     const bookingResult = await pool.query(
       `INSERT INTO bookings (user_id, customer_id, booking_number, booking_date, start_time, end_time,
@@ -639,7 +675,7 @@ router.post('/bookings/create', async (req, res) => {
         businessId, customerId, bookingNumber, bookingDate, startTime, endTime,
         customerInfo.name, customerInfo.email, customerInfo.phone || '',
         customerNotes || '',
-        assignmentType === 'employee' ? employeeId : null,
+        assignedEmployeeId,
         totalPrice, totalWithTax, bizTaxRate, bizTaxAmount,
         (isCardOnFile && !cofSavedCard) ? 'pending' : 'confirmed',
         cofSavedCard ? 'saved' : (isCardOnFile ? 'pending' : null),
