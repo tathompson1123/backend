@@ -124,6 +124,9 @@ function generateBookingWidgetCode(userId, theme = {}) {
     stripeInstance:null,
     cardElement:null,
     clientSecret:'',
+    squareCard:null,
+    squarePayments:null,
+    cofCardToken:null,
     calMonth:new Date().getMonth(),
     calYear:new Date().getFullYear()
   };
@@ -330,9 +333,15 @@ function generateBookingWidgetCode(userId, theme = {}) {
     var addonIds=state.selAddons.map(function(a){return a.id});
     var custInfo={name:c.name||'',email:c.email||'',phone:c.phone||''};
     if(c.address)custInfo.address=c.address;
+    var pMode=getPaymentMode();
+    var payload={businessId:UID,serviceId:state.selService.id,additionalServiceIds:addonIds,bookingDate:state.selDate,startTime:state.selTime,customerInfo:custInfo,customerNotes:c.notes||'',assignmentType:'any'};
+    if(pMode==='card_on_file'){
+      payload.isCardOnFile=true;
+      if(state.cofCardToken)payload.cardToken=state.cofCardToken;
+    }
     fetch(API+'/api/public/bookings/create',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({businessId:UID,serviceId:state.selService.id,additionalServiceIds:addonIds,bookingDate:state.selDate,startTime:state.selTime,customerInfo:custInfo,customerNotes:c.notes||'',assignmentType:'any'})
+      body:JSON.stringify(payload)
     }).then(function(r){return r.json()}).then(function(d){
       if(d.success){state.success=true;state.bookingNum=d.bookingNumber;state.step='confirmation'}else{state.error=d.error||'Booking failed'}
       state.loading=false;render();
@@ -360,9 +369,14 @@ function generateBookingWidgetCode(userId, theme = {}) {
   }
 
   function setupPayment(){
-    state.loading=true;state.error=null;render();
+    state.loading=true;state.error=null;state.cofCardToken=null;render();
     calcTotal();
     var pMode=getPaymentMode();
+    var proc=state.config&&state.config.paymentProcessor;
+    if(proc==='square'){
+      initSquare();
+      return;
+    }
     var chargeAmt=pMode==='card_on_file'?0:Math.round(getDepositAmount()*100);
     fetch(API+'/api/public/bookings/payment-setup',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -380,7 +394,53 @@ function generateBookingWidgetCode(userId, theme = {}) {
     }).catch(function(){state.loading=false;state.error='Failed to set up payment';render()});
   }
 
+  function initSquare(){
+    var cfg=state.config;
+    if(!cfg||!cfg.squareAppId||!cfg.squareLocationId){
+      state.error='Payment not configured';state.loading=false;render();return;
+    }
+    var sdkUrl=cfg.squareEnvironment==='sandbox'
+      ?'https://sandbox.web.squarecdn.com/v1/square.js'
+      :'https://web.squarecdn.com/v1/square.js';
+    function attachSquareCard(){
+      window.Square.payments(cfg.squareAppId,cfg.squareLocationId)
+        .card()
+        .then(function(card){
+          state.squareCard=card;
+          state.loading=false;
+          render();
+          var el=document.getElementById('sbk-square-card');
+          if(el)card.attach('#sbk-square-card');
+        })
+        .catch(function(e){
+          state.error='Failed to initialize payment: '+(e.message||'');
+          state.loading=false;render();
+        });
+    }
+    if(window.Square){attachSquareCard();return;}
+    var sc=document.createElement('script');
+    sc.src=sdkUrl;
+    sc.onload=attachSquareCard;
+    sc.onerror=function(){state.error='Failed to load payment system';state.loading=false;render();};
+    document.head.appendChild(sc);
+  }
+
   function confirmPayment(){
+    var proc=state.config&&state.config.paymentProcessor;
+    if(proc==='square'){
+      if(!state.squareCard){state.error='Payment not ready';render();return}
+      state.loading=true;state.error=null;render();
+      state.squareCard.tokenize().then(function(result){
+        if(result.status==='OK'){
+          state.cofCardToken=result.token;
+          submit();
+        }else{
+          var msg=(result.errors&&result.errors[0]&&result.errors[0].message)||'Card error';
+          state.error=msg;state.loading=false;render();
+        }
+      }).catch(function(){state.error='Failed to process card';state.loading=false;render()});
+      return;
+    }
     if(!state.stripeInstance||!state.cardElement){state.error='Payment not ready';render();return}
     state.loading=true;state.error=null;render();
     var confirmFn=state.clientSecret.indexOf('seti_')===0
@@ -388,7 +448,12 @@ function generateBookingWidgetCode(userId, theme = {}) {
       :state.stripeInstance.confirmCardPayment(state.clientSecret,{payment_method:{card:state.cardElement,billing_details:{email:state.cust.email,name:state.cust.name}}});
     confirmFn.then(function(result){
       if(result.error){state.error=result.error.message;state.loading=false;render()}
-      else{submit()}
+      else{
+        if(result.setupIntent&&result.setupIntent.payment_method){
+          state.cofCardToken=result.setupIntent.payment_method;
+        }
+        submit();
+      }
     });
   }
 
@@ -608,18 +673,24 @@ function generateBookingWidgetCode(userId, theme = {}) {
         }
       }
       h+='</div>';
+      var cProc=state.config&&state.config.paymentProcessor;
       if(state.loading){
         h+='<div class="sbk-loading" style="padding:20px"><div class="sbk-spin"></div>Setting up payment...</div>';
       }else{
         h+='<label class="sbk-label">Card Details</label>';
-        h+='<div class="sbk-stripe-card"></div>';
+        if(cProc==='square'){
+          h+='<div id="sbk-square-card" style="border:2px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:12px;min-height:48px;"></div>';
+        }else{
+          h+='<div class="sbk-stripe-card"></div>';
+        }
         if(pMode==='card_on_file'){
           h+='<button class="sbk-btn" id="sbk-pay">Save Card & Confirm</button>';
         }else{
           h+='<button class="sbk-btn" id="sbk-pay">Pay $'+depAmt.toFixed(2)+'</button>';
         }
       }
-      h+='<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Secured by Stripe</p>';
+      var securedBy=cProc==='square'?'Square':'Stripe';
+      h+='<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:10px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Secured by '+securedBy+'</p>';
     }
 
     content.innerHTML=h;

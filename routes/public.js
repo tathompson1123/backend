@@ -628,6 +628,32 @@ router.post('/bookings/create', async (req, res) => {
       }
     }
 
+    // Global capacity check: prevent overbooking regardless of employee assignment
+    // Handles race conditions and unassigned-employee bookings consuming capacity slots
+    try {
+      const countResult = await pool.query(
+        `SELECT COUNT(*) as cnt FROM bookings
+         WHERE user_id = $1 AND booking_date = $2 AND status != 'cancelled'
+         AND start_time < $3 AND end_time > $4`,
+        [businessId, bookingDate, endTime, startTime]
+      );
+      const existingCount = parseInt(countResult.rows[0].cnt);
+      const eligibleCountResult = await pool.query(
+        `SELECT COUNT(*) as cnt FROM employees e
+         WHERE e.user_id = $1 AND e.active = true
+         AND (
+           NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id)
+           OR EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id AND service_id = $2)
+         )`,
+        [businessId, Number(serviceId)]
+      );
+      const eligibleCount = parseInt(eligibleCountResult.rows[0].cnt) || 0;
+      const slotCapacity = Math.max(eligibleCount, 1);
+      if (existingCount >= slotCapacity) {
+        return res.status(409).json({ error: 'This time slot is no longer available. Please choose a different time.' });
+      }
+    } catch (e) { /* employees table may not exist — skip check */ }
+
     // Auto-assign a free employee who can perform the service
     // Priority: employees with specific service assignment > unassigned (can-do-all) employees
     let assignedEmployeeId = assignmentType === 'employee' ? employeeId : null;
