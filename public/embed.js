@@ -200,7 +200,7 @@
       '.sbk-steps-indicator .sbk-dot.done{background:' + tc + ';opacity:.4}\n' +
       '.sbk-stripe-card{border:2px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:12px;transition:border .15s}\n' +
       '.sbk-stripe-card.StripeElement--focus{border-color:' + tc + '}\n' +
-      '.sbk-cof-card{border:2px solid #e5e7eb;border-radius:8px;padding:14px;min-height:46px;transition:border .15s;background:#fff}\n' +
+      '.sbk-cof-card{border:2px solid #e5e7eb;border-radius:8px;padding:14px;min-height:90px;width:100%;box-sizing:border-box;overflow:visible;background:#fff}\n' +
       '.sbk-cof-status{font-size:12px;color:#9ca3af;text-align:center;padding:4px 0 8px}\n' +
       '.sbk-svc-card-inner{display:flex;align-items:center}\n' +
       '.sbk-svc-card-info{flex:1;min-width:0}\n' +
@@ -717,14 +717,18 @@
     if (bkState.cofCardStarted) {
       // Re-mount to newly rebuilt DOM after a re-render
       if (proc === 'square' && bkState.cofSquareCard) {
+        var container = document.getElementById('sbk-cof-card');
+        if (container) container.innerHTML = ''; // clear stale content before re-attach
         bkState.cofSquareCard.attach('#sbk-cof-card').then(function() {
           bkState.cofCardReady = true; bkUpdateCofStatus('ready');
         }).catch(function() { bkUpdateCofStatus('loading', 'Loading card form...'); });
       } else if (proc === 'stripe' && bkState.cofStripeEl) {
         bkState.cofStripeEl.mount('#sbk-cof-card');
         bkState.cofCardReady = true; bkUpdateCofStatus('ready');
-      } else if (proc === 'clover' && bkState.cofCloverInst) {
+      } else if (proc === 'clover') {
         bkState.cofCardStarted = false; bkInitCloverCof();
+      } else {
+        // Still initializing — do nothing, card will mount when async init completes
       }
       return;
     }
@@ -738,30 +742,43 @@
 
   function bkInitSquareCof() {
     var cfg = bkState.config;
-    if (!cfg.squareAppId || !cfg.squareLocationId) { bkUpdateCofStatus('error', 'Payment not configured'); return; }
+    if (!cfg.squareAppId || !cfg.squareLocationId) {
+      bkUpdateCofStatus('error', 'Payment not configured (missing Square credentials)');
+      return;
+    }
     var src = cfg.squareEnvironment === 'production'
       ? 'https://web.squarecdn.com/v1/square.js'
       : 'https://sandbox.web.squarecdn.com/v1/square.js';
     function doInit() {
+      if (!window.Square) { bkUpdateCofStatus('error', 'Square SDK failed to load'); return; }
       window.Square.payments(cfg.squareAppId, cfg.squareLocationId).then(function(payments) {
         bkState.cofSquarePayments = payments;
-        return payments.card();
+        return payments.card({ style: { '.input-container': { borderRadius: '6px' } } });
       }).then(function(card) {
-        bkState.cofSquareCard = card;
-        if (!document.getElementById('sbk-cof-card')) return;
-        return card.attach('#sbk-cof-card');
-      }).then(function() {
-        bkState.cofCardReady = true; bkUpdateCofStatus('ready');
+        if (!document.getElementById('sbk-cof-card')) {
+          // DOM was rebuilt during async — store card and it will attach on next bkMountCofCard call
+          bkState.cofSquareCard = card;
+          return;
+        }
+        return card.attach('#sbk-cof-card').then(function() {
+          bkState.cofSquareCard = card;
+          bkState.cofCardReady = true;
+          bkUpdateCofStatus('ready');
+        });
       }).catch(function(e) {
         bkState.cofCardStarted = false;
-        bkUpdateCofStatus('error', 'Failed to load card form');
-        console.error('Square COF init:', e);
+        bkUpdateCofStatus('error', 'Card form error: ' + (e && e.message ? e.message : 'unknown'));
+        console.error('Square COF init error:', e);
       });
     }
     if (window.Square) { doInit(); return; }
     var s = document.createElement('script');
-    s.src = src; s.onload = doInit;
-    s.onerror = function() { bkUpdateCofStatus('error', 'Failed to load payment system'); };
+    s.src = src;
+    s.onload = doInit;
+    s.onerror = function() {
+      bkState.cofCardStarted = false;
+      bkUpdateCofStatus('error', 'Failed to load Square SDK');
+    };
     document.head.appendChild(s);
   }
 

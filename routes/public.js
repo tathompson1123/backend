@@ -413,14 +413,14 @@ router.get('/availability', async (req, res) => {
           });
           if (!hasConflict) freeCount++;
         }
-        // Also count unassigned bookings against total capacity
-        const unassignedConflicts = existingBookings.filter(b => !b.assigned_employee_id).some(b => {
+        // Unassigned bookings consume capacity — subtract each one
+        const unassignedConflictCount = existingBookings.filter(b => !b.assigned_employee_id).filter(b => {
           const bStart = b.start_time.slice(0, 5);
           const bEndM = timeToMinutes(b.end_time.slice(0, 5)) + (b.booking_buffer || 0);
           const bBlockEnd = minutesToTime(bEndM);
           return slotStart < bBlockEnd && slotBlockEnd > bStart;
-        });
-        if (unassignedConflicts) freeCount = Math.max(freeCount - 1, 0);
+        }).length;
+        freeCount = Math.max(freeCount - unassignedConflictCount, 0);
 
         if (freeCount > 0) {
           const h12 = ((Math.floor(m / 60) % 12) || 12);
