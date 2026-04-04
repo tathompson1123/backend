@@ -228,6 +228,53 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
+// POST - Bulk import leads from CSV
+router.post('/bulk-import', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { leads } = req.body;
+
+    if (!Array.isArray(leads) || leads.length === 0) {
+      return res.status(400).json({ error: 'leads array is required' });
+    }
+
+    if (leads.length > 5000) {
+      return res.status(400).json({ error: 'Maximum 5000 leads per import' });
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const l of leads) {
+        if (!l.name || !l.name.trim()) { errorCount++; continue; }
+        try {
+          await client.query(
+            `INSERT INTO leads (user_id, name, email, phone, status, source, notes, service, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+            [userId, l.name.trim(), l.email || null, l.phone || null,
+             l.status || 'new', l.source || 'manual', l.notes || null, l.service || null]
+          );
+          successCount++;
+        } catch { errorCount++; }
+      }
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+
+    res.json({ success: true, successCount, errorCount });
+  } catch (error) {
+    console.error('Error bulk importing leads:', error.message);
+    res.status(500).json({ error: 'Failed to import leads' });
+  }
+});
+
 // ============================================
 // PATCH - Update lead
 // ============================================

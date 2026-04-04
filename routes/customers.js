@@ -54,6 +54,63 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
+// POST - Bulk import customers from CSV
+router.post('/bulk-import', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { customers } = req.body;
+
+    if (!Array.isArray(customers) || customers.length === 0) {
+      return res.status(400).json({ error: 'customers array is required' });
+    }
+
+    if (customers.length > 5000) {
+      return res.status(400).json({ error: 'Maximum 5000 customers per import' });
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      for (const c of customers) {
+        if (!c.name || !c.name.trim()) { errorCount++; continue; }
+        const safeDate = c.last_service_date && /^\d{4}-\d{2}-\d{2}/.test(c.last_service_date)
+          ? c.last_service_date : null;
+        try {
+          await client.query(
+            `INSERT INTO customers (user_id, name, email, phone, last_service, last_service_date, notes, total_jobs, lifetime_value, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 0, CURRENT_TIMESTAMP)
+             ON CONFLICT DO NOTHING`,
+            [userId, c.name.trim(), c.email || null, c.phone || null,
+             c.last_service || null, safeDate, c.notes || null]
+          );
+          successCount++;
+        } catch (rowErr) {
+          errorCount++;
+          errors.push(c.name);
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+
+    console.log(`✅ Bulk import: ${successCount} customers added for user ${userId}`);
+    res.json({ success: true, successCount, errorCount, errors: errors.slice(0, 10) });
+  } catch (error) {
+    console.error('Error bulk importing customers:', error.message);
+    res.status(500).json({ error: 'Failed to import customers' });
+  }
+});
+
 // PATCH - Update customer field
 router.patch('/:id', authenticateToken, async (req, res) => {
   try {
