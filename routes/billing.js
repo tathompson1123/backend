@@ -183,11 +183,13 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
           zipCode: userData?.zip_code,
           userId
         });
+        const { getTimezoneFromPhone } = require('../utils/zipToTimezone');
+        const detectedTz = getTimezoneFromPhone(result.phoneNumber);
         await pool.query(
-          'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2 WHERE id = $3',
-          [result.phoneNumber, result.phoneSid, userId]
+          'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2, timezone = $3 WHERE id = $4',
+          [result.phoneNumber, result.phoneSid, detectedTz, userId]
         );
-        console.log(`✅ Auto-provisioned Twilio number ${result.phoneNumber} for user ${userId} (${plan} plan, zip ${userData?.zip_code})`);
+        console.log(`✅ Auto-provisioned Twilio number ${result.phoneNumber} for user ${userId} (${plan} plan, zip ${userData?.zip_code}, tz ${detectedTz})`);
       } else if (plan === 'basic' && !userData?.twilio_phone_number) {
         // Basic trial: assign the shared default number (no purchase needed)
         const sharedNumber = process.env.TWILIO_SHARED_TRIAL_NUMBER;

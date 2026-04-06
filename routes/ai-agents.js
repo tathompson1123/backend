@@ -626,12 +626,14 @@ router.post('/lead-form/deploy', authenticateToken, async (req, res) => {
             zipCode: userData?.zip_code,
             userId
           });
+          const { getTimezoneFromPhone } = require('../utils/zipToTimezone');
+          const detectedTz = getTimezoneFromPhone(result.phoneNumber);
           await pool.query(
-            'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2 WHERE id = $3',
-            [result.phoneNumber, result.phoneSid, userId]
+            'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2, timezone = $3 WHERE id = $4',
+            [result.phoneNumber, result.phoneSid, detectedTz, userId]
           );
           phoneNumber = result.phoneNumber;
-          console.log(`✅ Auto-provisioned ${phoneNumber} for user ${userId} (zip: ${userData?.zip_code})`);
+          console.log(`✅ Auto-provisioned ${phoneNumber} for user ${userId} (zip: ${userData?.zip_code}, tz: ${detectedTz})`);
         } else {
           // Basic/trial: assign shared number
           const sharedNumber = process.env.TWILIO_SHARED_TRIAL_NUMBER;

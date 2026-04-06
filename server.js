@@ -315,6 +315,29 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify cancellation policy / SMS reminder columns:', e.message);
   }
 
+  // Timezone per user (derived from phone area code)
+  try {
+    const { getTimezoneFromPhone } = require('./utils/zipToTimezone');
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone VARCHAR(60) DEFAULT 'America/New_York'`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMP`);
+    // Backfill timezone for existing users that have a phone number
+    const usersToFix = await pool.query(
+      `SELECT id, telnyx_phone_number, twilio_phone_number FROM users
+       WHERE (timezone IS NULL OR timezone = 'America/New_York')
+         AND (telnyx_phone_number IS NOT NULL OR twilio_phone_number IS NOT NULL)`
+    );
+    for (const u of usersToFix.rows) {
+      const phone = u.telnyx_phone_number || u.twilio_phone_number;
+      const tz = getTimezoneFromPhone(phone);
+      if (tz !== 'America/New_York') {
+        await pool.query('UPDATE users SET timezone = $1 WHERE id = $2', [tz, u.id]);
+      }
+    }
+    console.log('✅ User timezone column verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify user timezone:', e.message);
+  }
+
   try {
     await pool.query(`CREATE TABLE IF NOT EXISTS booking_time_slots (
       id SERIAL PRIMARY KEY,
@@ -1434,38 +1457,52 @@ cron.schedule('*/60 * * * * *', async () => {
   }
 });
 
-// ── Service-duration review trigger cron ─────────────────
-// Runs every 5 minutes. For users with send_trigger='service_duration',
-// creates review requests for bookings that have been completed and whose
-// send_delay has elapsed since the completion time.
-// NOTE: We require status='completed' to avoid timezone ambiguity —
-// using booking_date+start_time::interval against UTC NOW() would fire
-// hours early for US-based users.
+// ── Review trigger cron ───────────────────────────────────
+// Runs every 5 minutes.
+// service_duration trigger: timezone-aware — fires send_delay hours after
+//   the booking's calculated service end time in the business's local timezone.
+// booking_completed trigger: fires send_delay hours after status set to
+//   'completed' (manual). The review_request is also created inline in
+//   bookings.js/employee-api.js so this cron acts as a safety net.
 cron.schedule('*/5 * * * *', async () => {
   try {
     const eligible = await pool.query(
       `SELECT DISTINCT ON (b.id)
               b.id AS booking_id, b.user_id, b.customer_id,
-              rc.send_delay, rc.incentive_enabled
+              rc.send_delay, rc.incentive_enabled, rc.send_trigger
        FROM bookings b
+       JOIN users u ON u.id = b.user_id
        JOIN review_configs rc ON rc.user_id = b.user_id
-       WHERE rc.send_trigger = 'service_duration'
-         AND rc.auto_send_enabled = true
-         AND b.status = 'completed'
-         AND b.updated_at + (COALESCE(rc.send_delay, 1) * INTERVAL '1 hour') <= NOW()
+       LEFT JOIN booking_items bi ON bi.booking_id = b.id
+       WHERE rc.auto_send_enabled = true
          AND b.customer_id IS NOT NULL
+         AND b.status NOT IN ('cancelled')
          AND NOT EXISTS (
            SELECT 1 FROM review_requests rr
            WHERE rr.customer_id = b.customer_id
              AND rr.user_id = b.user_id
              AND rr.created_at > NOW() - INTERVAL '24 hours'
          )
-       ORDER BY b.id`
+         AND (
+           -- Automatic: service has ended + delay (timezone-aware)
+           (rc.send_trigger = 'service_duration'
+            AND (b.booking_date || ' ' || b.start_time)::timestamp
+                  AT TIME ZONE COALESCE(u.timezone, 'America/New_York')
+                + COALESCE(bi.service_duration, 1) * INTERVAL '1 hour'
+                + COALESCE(rc.send_delay, 1) * INTERVAL '1 hour'
+                <= NOW())
+           OR
+           -- Manual: booking marked complete + delay elapsed
+           (rc.send_trigger = 'booking_completed'
+            AND b.status = 'completed'
+            AND b.updated_at + COALESCE(rc.send_delay, 1) * INTERVAL '1 hour' <= NOW())
+         )
+       ORDER BY b.id, bi.id`
     );
 
     for (const row of eligible.rows) {
       try {
-        // scheduled_send_time = now (delay already elapsed in the WHERE clause)
+        // scheduled_send_time = now (the delay condition already passed in WHERE)
         const scheduledTime = new Date();
         const incentiveCode = row.incentive_enabled
           ? `REV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
@@ -1483,6 +1520,76 @@ cron.schedule('*/5 * * * *', async () => {
     }
   } catch (err) {
     console.error('❌ Service-duration review cron error:', err.message || err);
+  }
+});
+
+// ── Review follow-up email cron — runs every 30 minutes ──────────────────────
+// Sends a follow-up review request email 24 hours after the SMS was sent.
+cron.schedule('*/30 * * * *', async () => {
+  try {
+    const sgMail = require('@sendgrid/mail');
+    if (!process.env.SENDGRID_API_KEY) return;
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+    const pending = await pool.query(
+      `SELECT rr.id, rr.user_id, rr.customer_id, rr.incentive_code,
+              c.name AS customer_name, c.email AS customer_email, c.last_service AS service_name,
+              u.business_name, u.email AS owner_email, u.google_review_link,
+              rc.message_template, rc.incentive, rc.incentive_enabled
+       FROM review_requests rr
+       JOIN users u ON u.id = rr.user_id
+       JOIN customers c ON c.id = rr.customer_id
+       LEFT JOIN review_configs rc ON rc.user_id = rr.user_id
+       WHERE rr.sms_sent = true
+         AND (rr.email_sent = false OR rr.email_sent IS NULL)
+         AND c.email IS NOT NULL
+         AND rr.sms_sent_at + INTERVAL '24 hours' <= NOW()
+         AND (u.plan IS NOT NULL)`
+    );
+
+    for (const req of pending.rows) {
+      try {
+        const firstName = (req.customer_name || 'there').split(' ')[0];
+        const reviewLink = req.google_review_link || null;
+
+        let bodyText = req.incentive_enabled && req.incentive
+          ? `We'd love to hear about your experience! Could you take a moment to share a review? As a thank you, here's a special offer: <strong>${req.incentive}</strong>`
+          : `We'd love to hear about your experience with <strong>${req.service_name || 'our service'}</strong>. Could you take a moment to leave us a review?`;
+
+        await sgMail.send({
+          to: req.customer_email,
+          from: { name: req.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
+          replyTo: req.owner_email ? { email: req.owner_email } : undefined,
+          subject: `How was your experience? — ${req.business_name || 'Us'}`,
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+              <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
+                <h1 style="color:#fff;margin:0;font-size:1.5rem;">We Value Your Feedback</h1>
+              </div>
+              <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+                <p style="font-size:1rem;margin-top:0;">Hi ${firstName},</p>
+                <p>${bodyText}</p>
+                ${reviewLink
+                  ? `<div style="text-align:center;margin:2rem 0;">
+                       <a href="${reviewLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:600;">Leave a Review</a>
+                     </div>`
+                  : ''}
+                <p style="color:#6b7280;font-size:0.85rem;margin-top:1.5rem;">Thank you for choosing ${req.business_name || 'us'}. We appreciate your business!</p>
+              </div>
+            </div>`,
+        });
+
+        await pool.query(
+          `UPDATE review_requests SET email_sent = true, email_sent_at = NOW() WHERE id = $1`,
+          [req.id]
+        );
+        console.log(`📧 Cron: Review follow-up email sent for request ${req.id} to ${req.customer_email}`);
+      } catch (emailErr) {
+        console.error(`❌ Cron: Review email failed for request ${req.id}:`, emailErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('❌ Review email follow-up cron error:', err.message || err);
   }
 });
 
@@ -1609,7 +1716,11 @@ cron.schedule('*/15 * * * *', async () => {
          WHERE b.user_id = $1
            AND b.status NOT IN ('cancelled', 'completed', 'no_show')
            AND b.customer_email IS NOT NULL AND b.customer_email != ''
-           AND (b.booking_date::timestamp + b.start_time::interval - NOW()) BETWEEN
+           AND (
+             (b.booking_date || ' ' || b.start_time)::timestamp
+               AT TIME ZONE COALESCE(u.timezone, 'America/New_York')
+             - NOW()
+           ) BETWEEN
                INTERVAL '1 minute' * ($2 * 60 - $3) AND INTERVAL '1 minute' * ($2 * 60 + $3)
            AND NOT EXISTS (
              SELECT 1 FROM booking_reminders_sent brs
@@ -1709,7 +1820,11 @@ cron.schedule('*/15 * * * *', async () => {
          WHERE b.user_id = $1
            AND b.status NOT IN ('cancelled', 'completed', 'no_show')
            AND b.customer_phone IS NOT NULL AND b.customer_phone != ''
-           AND (b.booking_date::timestamp + b.start_time::interval - NOW()) BETWEEN
+           AND (
+             (b.booking_date || ' ' || b.start_time)::timestamp
+               AT TIME ZONE COALESCE(u.timezone, 'America/New_York')
+             - NOW()
+           ) BETWEEN
                INTERVAL '1 minute' * ($2 * 60 - $3) AND INTERVAL '1 minute' * ($2 * 60 + $3)
            AND NOT EXISTS (
              SELECT 1 FROM booking_reminders_sent brs
