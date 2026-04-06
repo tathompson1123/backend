@@ -315,6 +315,14 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify cancellation policy / SMS reminder columns:', e.message);
   }
 
+  // Chat conversation outcome tracking
+  try {
+    await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS outcome VARCHAR(20) DEFAULT 'no_booking'`);
+    console.log('✅ chat_conversations.outcome column verified');
+  } catch (e) {
+    console.warn('⚠️ Could not add chat_conversations.outcome:', e.message);
+  }
+
   // Timezone per user (derived from phone area code)
   try {
     const { getTimezoneFromPhone } = require('./utils/zipToTimezone');

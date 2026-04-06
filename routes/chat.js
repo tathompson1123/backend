@@ -181,7 +181,8 @@ router.post('/start', async (req, res) => {
 // Helper function to create booking from chat
 async function createBookingFromChat(userId, bookingData, { skipConfirmationEmail = false } = {}) {
   try {
-    const { serviceId, bookingDate, startTime, customerName, customerEmail } = bookingData;
+    const { serviceId, additionalServiceIds = [], bookingDate, startTime, customerName, customerEmail } = bookingData;
+    const allServiceIds = [parseInt(serviceId), ...additionalServiceIds.map(id => parseInt(id))].filter(Boolean);
     // Truncate phone to 50 chars and strip non-phone characters
     const rawPhoneInput = bookingData.customerPhone || '';
     const phoneDigitsOnly = rawPhoneInput.replace(/\D/g, '');
@@ -208,8 +209,8 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
     // Get service details, tax rate, and business address in parallel
     const [serviceResult, taxResult] = await Promise.all([
       pool.query(
-        'SELECT duration_hours, price, name, location_type, custom_address FROM services WHERE id = $1 AND user_id = $2',
-        [serviceId, userId]
+        'SELECT id, duration_hours, price, name, location_type, custom_address FROM services WHERE id = ANY($1) AND user_id = $2',
+        [allServiceIds, userId]
       ),
       pool.query(
         `SELECT u.default_tax_rate,
@@ -225,12 +226,17 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
       throw new Error('Service not found');
     }
 
-    const service = serviceResult.rows[0];
-    
-    // Calculate end time
+    // Primary service drives timing and location
+    const service = serviceResult.rows.find(s => s.id === parseInt(serviceId)) || serviceResult.rows[0];
+    const allServices = serviceResult.rows;
+
+    // Duration = sum of all selected services
+    const totalDurationHours = allServices.reduce((sum, s) => sum + parseFloat(s.duration_hours || 1), 0);
+
+    // Calculate end time based on combined duration
     const [startHour, startMin] = startTime.split(':').map(Number);
     const startMinutes = startHour * 60 + startMin;
-    const endMinutes = startMinutes + (service.duration_hours * 60);
+    const endMinutes = startMinutes + (totalDurationHours * 60);
     const endHour = Math.floor(endMinutes / 60);
     const endMin = endMinutes % 60;
     const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
@@ -313,8 +319,8 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
       console.log(`✅ Chat booking: found & updated EXISTING customer ${customerId}`);
     }
 
-    // Create booking with tax calculation
-    const servicePrice = parseFloat(service.price) || 0;
+    // Create booking with tax calculation (sum of all selected services)
+    const servicePrice = allServices.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0);
     const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate) || 0;
     const taxAmount = Math.round(servicePrice * taxRate * 100) / 100;
     const totalAmount = Math.round((servicePrice + taxAmount) * 100) / 100;
@@ -345,15 +351,18 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
 
     const booking = bookingResult.rows[0];
 
-    // Create booking items
-    await pool.query(
-      `INSERT INTO booking_items (
-        booking_id, service_id, service_name, service_duration, 
-        service_price, quantity, subtotal
-      )
-      VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-      [booking.id, serviceId, service.name, service.duration_hours, servicePrice, servicePrice]
-    );
+    // Create booking items — one row per selected service
+    for (const svc of allServices) {
+      const svcPrice = parseFloat(svc.price) || 0;
+      await pool.query(
+        `INSERT INTO booking_items (
+          booking_id, service_id, service_name, service_duration,
+          service_price, quantity, subtotal
+        )
+        VALUES ($1, $2, $3, $4, $5, 1, $6)`,
+        [booking.id, svc.id, svc.name, svc.duration_hours, svcPrice, svcPrice]
+      );
+    }
 
     // Update customer with service info
     await pool.query(
@@ -367,27 +376,27 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
 
     console.log(`✅ Chat booking created: #${bookingNumber} customer=${customerId} employee=${employeeId}`);
 
-    // Send booking confirmation emails (non-blocking) — never let email failure kill the booking result
-    if (!skipConfirmationEmail) {
-      sendBookingEmails({
-        userId,
-        bookingNumber,
-        customerName,
-        customerEmail,
-        customerPhone,
-        serviceName: service.name,
-        bookingDate,
-        startTime,
-        endTime,
-        subtotal: servicePrice,
-        taxRate,
-        taxAmount,
-        total: totalAmount,
-        location: locationDisplay,
-      }).then(() => {
-        console.log(`📧 Chat booking email sent successfully for ${bookingNumber}`);
-      }).catch(err => console.error('📧 Chat booking email FAILED:', err.message, err.response?.body));
-    }
+    // Send booking emails — always notify the owner; skip customer confirmation if card-on-file pending
+    const serviceNames = allServices.map(s => s.name).join(' + ');
+    sendBookingEmails({
+      userId,
+      bookingNumber,
+      customerName,
+      customerEmail,
+      customerPhone,
+      serviceName: serviceNames,
+      bookingDate,
+      startTime,
+      endTime,
+      subtotal: servicePrice,
+      taxRate,
+      taxAmount,
+      total: totalAmount,
+      location: locationDisplay,
+      skipCustomerEmail: skipConfirmationEmail, // skip customer email if card-on-file pending
+    }).then(() => {
+      console.log(`📧 Chat booking email sent successfully for ${bookingNumber}`);
+    }).catch(err => console.error('📧 Chat booking email FAILED:', err.message, err.response?.body));
 
     return {
       success: true,
@@ -503,8 +512,9 @@ Ask ONE question at a time in this order:
 
 STAGE 4 - CONFIRM AND BOOK:
 Once you have ALL information (service, date, time, name, email, phone), respond with:
-BOOKING_REQUEST|serviceId|YYYY-MM-DD|HH:MM|customerName|customerEmail|customerPhone
+BOOKING_REQUEST|serviceId1,serviceId2|YYYY-MM-DD|HH:MM|customerName|customerEmail|customerPhone
 
+- If the customer chose multiple services, include ALL their service IDs separated by commas in the first field (e.g., 12,47). If only one service, just use its ID (e.g., 12).
 - customerPhone must be ONLY the digits the customer gave you for their phone number — nothing else. Example: 3606230128. Never include dates, booking numbers, or other digits.
 
 RESCHEDULING — if the customer already booked and then asks to change their date or time:
@@ -661,15 +671,19 @@ REAL-TIME AVAILABILITY:
     }
 
     // Check if AI wants to create a booking
-    const bookingMatch = reply.match(/BOOKING_REQUEST\|(\d+)\|([\d-]+)\|([\d:]+)\|([^|]+)\|([^|]+)\|([^|]+)/);
+    // Supports comma-separated service IDs: BOOKING_REQUEST|12,47|date|time|name|email|phone
+    const bookingMatch = reply.match(/BOOKING_REQUEST\|([\d,]+)\|([\d-]+)\|([\d:]+)\|([^|]+)\|([^|]+)\|([^|]+)/);
 
     if (bookingMatch) {
-      const [_, serviceId, bookingDate, startTime, customerName, customerEmail, rawPhone] = bookingMatch;
+      const [_, serviceIdsRaw, bookingDate, startTime, customerName, customerEmail, rawPhone] = bookingMatch;
+      const serviceIds = serviceIdsRaw.split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean);
+      const serviceId = serviceIds[0];
+      const additionalServiceIds = serviceIds.slice(1);
       // Extract first valid 10-digit US phone number from whatever the AI provided
       const digitsOnly = rawPhone.replace(/\D/g, '');
       const phoneDigits = digitsOnly.startsWith('1') && digitsOnly.length === 11 ? digitsOnly.slice(1) : digitsOnly.slice(0, 10);
       const customerPhone = phoneDigits.length >= 7 ? phoneDigits : rawPhone.trim().substring(0, 20);
-      console.log(`🤖 Chat BOOKING_REQUEST: service=${serviceId} date=${bookingDate} time=${startTime} name=${customerName} email=${customerEmail} phone=${customerPhone}`);
+      console.log(`🤖 Chat BOOKING_REQUEST: services=${serviceIdsRaw} date=${bookingDate} time=${startTime} name=${customerName} email=${customerEmail} phone=${customerPhone}`);
 
       // Cancel any existing booking from this conversation (reschedule case)
       const prevAssistantMsgs = await pool.query(
@@ -697,7 +711,8 @@ REAL-TIME AVAILABILITY:
 
       // Create the booking
       const bookingResult = await createBookingFromChat(userId, {
-        serviceId: parseInt(serviceId),
+        serviceId,
+        additionalServiceIds,
         bookingDate,
         startTime,
         customerName: customerName.trim(),
@@ -804,6 +819,12 @@ REAL-TIME AVAILABILITY:
                   `📋 Booking #${bookingResult.bookingNumber}\n\n` +
                   `I've sent a confirmation to ${customerEmail}. Looking forward to seeing you!`;
         }
+
+        // Mark conversation as booked
+        await pool.query(
+          `UPDATE chat_conversations SET outcome = 'booked' WHERE id = $1`,
+          [conversationId]
+        );
 
         // If they were previously a lead, update status to booked
         await pool.query(
@@ -951,11 +972,13 @@ router.get('/conversations', authenticateToken, async (req, res) => {
       `SELECT cc.id, cc.source, cc.created_at, cc.updated_at,
               (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = cc.id) AS message_count,
               (SELECT cm.content FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'user' ORDER BY cm.created_at ASC LIMIT 1) AS first_message,
-              CASE
-                WHEN EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'assistant' AND (cm.content ILIKE '%booking #%' OR cm.content ILIKE '%you''re all set%')) THEN 'booked'
-                WHEN (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'user') <= 1 THEN 'no_response'
-                ELSE 'no_booking'
-              END AS outcome
+              COALESCE(cc.outcome,
+                CASE
+                  WHEN EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'assistant' AND (cm.content ILIKE '%booking #%' OR cm.content ILIKE '%you''re all set%')) THEN 'booked'
+                  WHEN (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'user') <= 1 THEN 'no_response'
+                  ELSE 'no_booking'
+                END
+              ) AS outcome
        FROM chat_conversations cc
        WHERE cc.user_id = $1
          AND (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'user') > 0

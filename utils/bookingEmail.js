@@ -101,7 +101,7 @@ async function sendBookingEmails(opts) {
     const emails = [];
 
     // ── Customer email ─────────────────────────────────────────
-    if (opts.customerEmail) {
+    if (opts.customerEmail && !opts.skipCustomerEmail) {
       emails.push({
         to: opts.customerEmail,
         from: { name: businessName || 'Your Service Provider', email: fromEmail },
