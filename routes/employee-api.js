@@ -4,6 +4,39 @@ const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { authenticateEmployee, requirePermission } = require('../config/employee-middleware');
 
+let sgMail;
+if (process.env.SENDGRID_API_KEY) {
+  sgMail = require('@sendgrid/mail');
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
+
+async function sendStatusEmail(booking, status, businessName, ownerEmail) {
+  if (!sgMail || !booking.customer_email) return;
+  const firstName = (booking.customer_name || '').split(' ')[0] || 'there';
+  const subjects = {
+    in_progress: `Your service has started — ${businessName}`,
+    completed: `Your service is complete — ${businessName}`,
+  };
+  const bodies = {
+    in_progress: `Hi ${firstName},\n\nYour service with ${businessName} has started. We'll keep you updated on our progress.\n\nThank you for choosing ${businessName}!`,
+    completed: `Hi ${firstName},\n\nYour service with ${businessName} has been completed. Thank you for your business!\n\nIf you have any questions, please don't hesitate to reach out.\n\nBest,\n${businessName}`,
+  };
+  const subject = subjects[status];
+  const text = bodies[status];
+  if (!subject) return;
+  try {
+    await sgMail.send({
+      to: booking.customer_email,
+      from: { name: businessName, email: 'noreply@sorceintegrations.com' },
+      replyTo: ownerEmail ? { name: businessName, email: ownerEmail } : undefined,
+      subject,
+      text,
+    });
+  } catch (emailErr) {
+    console.error('Failed to send status email:', emailErr.message);
+  }
+}
+
 // Validation helpers
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 function isValidId(id) { return Number.isInteger(Number(id)) && Number(id) > 0; }
@@ -143,6 +176,15 @@ router.put('/my-bookings/:id/status', requirePermission('manage_bookings'), asyn
       return res.status(404).json({ error: 'Booking not found' });
     }
 
+    // Send status email to customer (non-blocking)
+    try {
+      const booking = result.rows[0];
+      const bizResult = await pool.query('SELECT business_name, email FROM users WHERE id = $1', [userId]);
+      const businessName = bizResult.rows[0]?.business_name || 'Your Service Provider';
+      const ownerEmail = bizResult.rows[0]?.email;
+      sendStatusEmail(booking, status, businessName, ownerEmail);
+    } catch {}
+
     // If completed, update customer lifetime value + create review request
     if (status === 'completed') {
       const booking = result.rows[0];
@@ -165,11 +207,13 @@ router.put('/my-bookings/:id/status', requirePermission('manage_bookings'), asyn
         const reviewConfig = await pool.query('SELECT * FROM review_configs WHERE user_id = $1', [userId]);
         const config = reviewConfig.rows[0];
         const autoSend = config ? config.auto_send_enabled : true;
+        const trigger = config?.send_trigger || 'booking_completed';
 
-        if (autoSend && (booking.customer_email || booking.customer_phone)) {
+        if (autoSend && trigger === 'booking_completed' && (booking.customer_email || booking.customer_phone)) {
           const itemsResult = await pool.query('SELECT service_name FROM booking_items WHERE booking_id = $1 LIMIT 1', [id]);
           const serviceName = itemsResult.rows[0]?.service_name || 'Service';
-          const scheduledTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
+          const delayHours = config ? (config.send_delay ?? 2) : 2;
+          const scheduledTime = new Date(Date.now() + delayHours * 60 * 60 * 1000);
           const incentiveCode = config?.incentive_enabled
             ? `REV-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
             : null;
@@ -320,6 +364,8 @@ router.post('/my-bookings/:id/invoice', requirePermission('process_payments'), a
   try {
     const { userId } = req.employee;
     const { id } = req.params;
+    // Optional: custom items and taxRate sent from the invoice editor
+    const { items: customItems, taxRate: customTaxRate, notes: customNotes } = req.body || {};
 
     if (!isValidId(id)) {
       return res.status(400).json({ error: 'Invalid booking ID' });
@@ -349,6 +395,20 @@ router.post('/my-bookings/:id/invoice', requirePermission('process_payments'), a
       }
     }
 
+    // Use custom items if provided, else fall back to booking items
+    const lineItems = customItems && customItems.length > 0
+      ? customItems
+      : (booking.items || []).filter(i => i.service_name).map(i => ({
+          description: i.service_name,
+          unitPrice: parseFloat(i.service_price) || 0,
+          quantity: i.quantity || 1,
+        }));
+
+    const taxRate = customTaxRate != null ? parseFloat(customTaxRate) : 0;
+    const subtotal = lineItems.reduce((s, i) => s + (parseFloat(i.unitPrice) || 0) * (parseInt(i.quantity) || 1), 0);
+    const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
+    const total = subtotal + taxAmount;
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -362,25 +422,26 @@ router.post('/my-bookings/:id/invoice', requirePermission('process_payments'), a
       const invoiceResult = await client.query(
         `INSERT INTO invoices (
           user_id, booking_id, customer_id, invoice_number, customer_name, customer_email, customer_phone,
-          subtotal, total_amount, amount_due, status, due_date, payment_link_token
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'draft', $11, $12)
+          subtotal, tax_rate, tax_amount, total_amount, amount_due, notes, status, due_date, payment_link_token
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'draft', $14, $15)
         RETURNING *`,
         [userId, id, booking.customer_id, invoiceNumber, booking.customer_name,
-         booking.customer_email, booking.customer_phone, booking.subtotal || booking.total_amount,
-         booking.total_amount, booking.total_amount, dueDate, paymentLinkToken]
+         booking.customer_email, booking.customer_phone,
+         subtotal, taxRate, taxAmount, total, total,
+         customNotes || null, dueDate, paymentLinkToken]
       );
 
       const invoice = invoiceResult.rows[0];
 
-      // Create line items from booking items
-      for (const item of (booking.items || [])) {
-        if (item.service_name) {
-          await client.query(
-            `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount, service_id)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [invoice.id, item.service_name, item.quantity || 1, item.service_price, item.service_price * (item.quantity || 1), item.service_id]
-          );
-        }
+      // Create line items
+      for (const item of lineItems) {
+        const qty = parseInt(item.quantity) || 1;
+        const price = parseFloat(item.unitPrice) || 0;
+        await client.query(
+          `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [invoice.id, item.description, qty, price, price * qty]
+        );
       }
 
       // Link invoice to booking
@@ -1329,11 +1390,15 @@ async function requireAdmin(req, res, next) {
 router.get('/admin/appointments', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.employee;
-    const { status, date } = req.query;
+    const { status, date, date_from, date_to } = req.query;
     let filter = 'WHERE b.user_id = $1';
     const params = [userId];
     if (status) { filter += ` AND b.status = $${params.length+1}`; params.push(status); }
     if (date) { filter += ` AND b.booking_date = $${params.length+1}`; params.push(date); }
+    else if (date_from && date_to) {
+      filter += ` AND b.booking_date >= $${params.length+1}`; params.push(date_from);
+      filter += ` AND b.booking_date <= $${params.length+1}`; params.push(date_to);
+    }
     else { filter += ` AND b.booking_date >= CURRENT_DATE - INTERVAL '1 day'`; }
 
     const result = await pool.query(
@@ -1362,6 +1427,93 @@ router.get('/admin/leads', requireAdmin, async (req, res) => {
       [userId]
     );
     res.json({ leads: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/employee/admin/leads/:id
+router.patch('/admin/leads/:id', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+    const { status, notes, phone, email, name } = req.body;
+    const sets = [], vals = [];
+    if (status !== undefined) { sets.push(`status = $${vals.length+1}`); vals.push(status); }
+    if (notes !== undefined)  { sets.push(`notes = $${vals.length+1}`); vals.push(notes); }
+    if (phone !== undefined)  { sets.push(`phone = $${vals.length+1}`); vals.push(phone); }
+    if (email !== undefined)  { sets.push(`email = $${vals.length+1}`); vals.push(email); }
+    if (name !== undefined)   { sets.push(`name = $${vals.length+1}`);  vals.push(name); }
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+    vals.push(id, userId);
+    const result = await pool.query(
+      `UPDATE leads SET ${sets.join(', ')} WHERE id = $${vals.length-1} AND user_id = $${vals.length} RETURNING *`,
+      vals
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Lead not found' });
+    res.json({ lead: result.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/leads/:id/sms-conversation
+router.get('/admin/leads/:id/sms-conversation', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+    const leadCheck = await pool.query('SELECT id FROM leads WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (!leadCheck.rows.length) return res.status(404).json({ error: 'Lead not found' });
+    const result = await pool.query(
+      `SELECT direction, message, created_at FROM sms_messages WHERE lead_id = $1 ORDER BY created_at ASC`,
+      [id]
+    );
+    res.json({ messages: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/leads/:id/chat-conversation
+router.get('/admin/leads/:id/chat-conversation', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+    const leadResult = await pool.query(
+      'SELECT id, conversation_id, phone, email, created_at FROM leads WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (!leadResult.rows.length) return res.status(404).json({ error: 'Lead not found' });
+    const lead = leadResult.rows[0];
+    let convId = lead.conversation_id;
+
+    if (!convId) {
+      // Try to match by phone/email content in messages
+      if (lead.phone || lead.email) {
+        const patterns = [], params = [userId];
+        if (lead.phone) { params.push(`%${lead.phone.replace(/\D/g, '').slice(-10)}%`); patterns.push(`m.content ILIKE $${params.length}`); }
+        if (lead.email) { params.push(`%${lead.email}%`); patterns.push(`m.content ILIKE $${params.length}`); }
+        const r = await pool.query(
+          `SELECT DISTINCT cc.id FROM chat_conversations cc
+           JOIN chat_messages m ON m.conversation_id = cc.id
+           WHERE cc.user_id = $1 AND (${patterns.join(' OR ')})
+           ORDER BY cc.id DESC LIMIT 1`, params
+        );
+        if (r.rows.length) convId = r.rows[0].id;
+      }
+      // Fall back to time proximity
+      if (!convId && lead.created_at) {
+        const r = await pool.query(
+          `SELECT id FROM chat_conversations WHERE user_id = $1
+           AND created_at BETWEEN $2::timestamptz - INTERVAL '4 hours' AND $2::timestamptz + INTERVAL '4 hours'
+           ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $2::timestamptz))) ASC LIMIT 1`,
+          [userId, lead.created_at]
+        );
+        if (r.rows.length) convId = r.rows[0].id;
+      }
+      if (convId) pool.query('UPDATE leads SET conversation_id = $1 WHERE id = $2', [convId, lead.id]).catch(() => {});
+    }
+
+    if (!convId) return res.json({ messages: [] });
+    const msgs = await pool.query(
+      'SELECT role, content, created_at FROM chat_messages WHERE conversation_id = $1 ORDER BY created_at ASC',
+      [convId]
+    );
+    res.json({ messages: msgs.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

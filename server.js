@@ -292,6 +292,19 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
   }
 
   try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cancellation_policy_enabled BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cancellation_policy_text TEXT`);
+    await pool.query(`ALTER TABLE booking_reminder_settings ADD COLUMN IF NOT EXISTS sms_enabled BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE booking_reminders_sent ADD COLUMN IF NOT EXISTS channel VARCHAR(10) DEFAULT 'email'`);
+    // Drop old unique constraint and add channel-aware one
+    await pool.query(`ALTER TABLE booking_reminders_sent DROP CONSTRAINT IF EXISTS booking_reminders_sent_booking_id_hours_before_key`);
+    await pool.query(`ALTER TABLE booking_reminders_sent ADD CONSTRAINT IF NOT EXISTS booking_reminders_sent_booking_id_hours_before_channel_key UNIQUE (booking_id, hours_before, channel)`);
+    console.log('✅ Cancellation policy and SMS reminder columns verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify cancellation policy / SMS reminder columns:', e.message);
+  }
+
+  try {
     await pool.query(`CREATE TABLE IF NOT EXISTS booking_time_slots (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -1132,6 +1145,14 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify lead follow-up columns:', e.message);
   }
 
+  // Lead conversation_id for chat agent leads
+  try {
+    await pool.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversation_id INTEGER');
+    console.log('✅ Lead conversation_id column verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify lead conversation_id column:', e.message);
+  }
+
   // Tax and pricing columns on bookings (added for sales tax support)
   try {
     await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS subtotal DECIMAL(10,2) DEFAULT 0');
@@ -1546,11 +1567,9 @@ cron.schedule('*/10 * * * *', async () => {
 // ── Booking reminder email cron — runs every 15 minutes ──────────────────────
 cron.schedule('*/15 * * * *', async () => {
   try {
-    const { sendBookingEmails } = require('./utils/bookingEmail');
     const sgMail = require('@sendgrid/mail');
     if (!process.env.SENDGRID_API_KEY) return;
 
-    // Find all enabled reminder settings
     const settingsResult = await pool.query(
       'SELECT * FROM booking_reminder_settings WHERE enabled = true'
     );
@@ -1558,8 +1577,16 @@ cron.schedule('*/15 * * * *', async () => {
 
     for (const setting of settingsResult.rows) {
       const { user_id, hours_before, custom_message } = setting;
-      // Find bookings that fall in this reminder window (within 15 min tolerance)
       const windowMins = 15;
+
+      // Fetch cancellation policy for this user
+      const policyRow = await pool.query(
+        'SELECT cancellation_policy_enabled, cancellation_policy_text FROM users WHERE id = $1',
+        [user_id]
+      );
+      const policyEnabled = policyRow.rows[0]?.cancellation_policy_enabled;
+      const policyText = policyRow.rows[0]?.cancellation_policy_text;
+
       const result = await pool.query(
         `SELECT b.id, b.booking_number, b.booking_date, b.start_time, b.end_time,
                 b.customer_name, b.customer_email, b.total_amount,
@@ -1573,21 +1600,20 @@ cron.schedule('*/15 * * * *', async () => {
                INTERVAL '1 minute' * ($2 * 60 - $3) AND INTERVAL '1 minute' * ($2 * 60 + $3)
            AND NOT EXISTS (
              SELECT 1 FROM booking_reminders_sent brs
-             WHERE brs.booking_id = b.id AND brs.hours_before = $2
+             WHERE brs.booking_id = b.id AND brs.hours_before = $2 AND brs.channel = 'email'
            )`,
         [user_id, hours_before, windowMins]
       );
 
       for (const booking of result.rows) {
         try {
-          // Fetch service names
           const itemsResult = await pool.query(
             'SELECT service_name FROM booking_items WHERE booking_id = $1',
             [booking.id]
           );
           const serviceName = itemsResult.rows.map(r => r.service_name).join(', ') || 'your service';
 
-          const formatDate = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+          const formatDate = (d) => { const raw = String(d || ''); const dp = raw.includes('T') ? raw.split('T')[0] : raw; return new Date(dp + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); };
           const formatTime = (t) => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 
           const reminderLabel = hours_before >= 48 ? `${hours_before / 24} days` : `${hours_before} hours`;
@@ -1599,6 +1625,13 @@ cron.schedule('*/15 * * * *', async () => {
               .replace('{{date}}', formatDate(booking.booking_date))
               .replace('{{time}}', formatTime(booking.start_time))
             : `This is a reminder that your appointment for <strong>${serviceName}</strong> is coming up in <strong>${reminderLabel}</strong>.`;
+
+          const cancellationBlock = (policyEnabled && policyText)
+            ? `<div style="margin-top:1.5rem;padding:1rem;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;">
+                 <p style="margin:0;font-weight:600;font-size:0.85rem;color:#92400e;">Cancellation Policy</p>
+                 <p style="margin:0.25rem 0 0;font-size:0.85rem;color:#78350f;">${policyText}</p>
+               </div>`
+            : '';
 
           await sgMail.send({
             to: booking.customer_email,
@@ -1619,18 +1652,19 @@ cron.schedule('*/15 * * * *', async () => {
                     <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${formatTime(booking.start_time)}</td></tr>
                     ${booking.total_amount ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Total</td><td style="padding:10px 12px;">$${parseFloat(booking.total_amount).toFixed(2)}</td></tr>` : ''}
                   </table>
-                  <p style="color:#6b7280;font-size:0.9rem;">If you need to reschedule, please contact us directly.</p>
+                  ${cancellationBlock}
+                  <p style="color:#6b7280;font-size:0.9rem;margin-top:1.5rem;">If you need to reschedule, please contact us directly.</p>
                   <p style="color:#6b7280;font-size:0.9rem;margin:0;">${booking.business_name || ''}</p>
                 </div>
               </div>`
           });
 
-          // Record as sent
           await pool.query(
-            'INSERT INTO booking_reminders_sent (booking_id, hours_before) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            `INSERT INTO booking_reminders_sent (booking_id, hours_before, channel) VALUES ($1, $2, 'email')
+             ON CONFLICT (booking_id, hours_before, channel) DO NOTHING`,
             [booking.id, hours_before]
           );
-          console.log(`📧 Reminder sent: booking ${booking.booking_number} (${reminderLabel} before)`);
+          console.log(`📧 Email reminder sent: booking ${booking.booking_number} (${reminderLabel} before)`);
         } catch (emailErr) {
           console.error(`❌ Reminder email error for booking ${booking.id}:`, emailErr.message);
         }
@@ -1638,6 +1672,78 @@ cron.schedule('*/15 * * * *', async () => {
     }
   } catch (err) {
     console.error('❌ Booking reminder cron error:', err.message);
+  }
+});
+
+// ── Booking reminder SMS cron — runs every 15 minutes ────────────────────────
+cron.schedule('*/15 * * * *', async () => {
+  try {
+    const smsSettingsResult = await pool.query(
+      'SELECT * FROM booking_reminder_settings WHERE sms_enabled = true'
+    );
+    if (smsSettingsResult.rows.length === 0) return;
+
+    for (const setting of smsSettingsResult.rows) {
+      const { user_id, hours_before, custom_message } = setting;
+      const windowMins = 15;
+
+      const result = await pool.query(
+        `SELECT b.id, b.booking_number, b.booking_date, b.start_time,
+                b.customer_name, b.customer_phone, b.total_amount,
+                u.business_name
+         FROM bookings b
+         JOIN users u ON u.id = b.user_id
+         WHERE b.user_id = $1
+           AND b.status NOT IN ('cancelled', 'completed', 'no_show')
+           AND b.customer_phone IS NOT NULL AND b.customer_phone != ''
+           AND (b.booking_date::timestamp + b.start_time::interval - NOW()) BETWEEN
+               INTERVAL '1 minute' * ($2 * 60 - $3) AND INTERVAL '1 minute' * ($2 * 60 + $3)
+           AND NOT EXISTS (
+             SELECT 1 FROM booking_reminders_sent brs
+             WHERE brs.booking_id = b.id AND brs.hours_before = $2 AND brs.channel = 'sms'
+           )`,
+        [user_id, hours_before, windowMins]
+      );
+
+      for (const booking of result.rows) {
+        try {
+          const itemsResult = await pool.query(
+            'SELECT service_name FROM booking_items WHERE booking_id = $1',
+            [booking.id]
+          );
+          const serviceName = itemsResult.rows.map(r => r.service_name).join(', ') || 'your service';
+          const formatDate = (d) => { const raw = String(d || ''); const dp = raw.includes('T') ? raw.split('T')[0] : raw; return new Date(dp + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
+          const formatTime = (t) => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`; };
+
+          const reminderLabel = hours_before >= 48 ? `${hours_before / 24} days` : `${hours_before} hours`;
+          const smsText = custom_message
+            ? custom_message
+              .replace('{{customerName}}', booking.customer_name)
+              .replace('{{businessName}}', booking.business_name || '')
+              .replace('{{serviceName}}', serviceName)
+              .replace('{{date}}', formatDate(booking.booking_date))
+              .replace('{{time}}', formatTime(booking.start_time))
+            : `Hi ${(booking.customer_name || '').split(' ')[0]}! Reminder: your ${serviceName} appointment with ${booking.business_name || 'us'} is in ${reminderLabel} on ${formatDate(booking.booking_date)} at ${formatTime(booking.start_time)}.`;
+
+          const toPhone = booking.customer_phone.startsWith('+')
+            ? booking.customer_phone
+            : `+1${booking.customer_phone.replace(/\D/g, '')}`;
+
+          await sendSMSAuto(toPhone, smsText, user_id);
+
+          await pool.query(
+            `INSERT INTO booking_reminders_sent (booking_id, hours_before, channel) VALUES ($1, $2, 'sms')
+             ON CONFLICT (booking_id, hours_before, channel) DO NOTHING`,
+            [booking.id, hours_before]
+          );
+          console.log(`📱 SMS reminder sent: booking ${booking.booking_number} (${reminderLabel} before)`);
+        } catch (smsErr) {
+          console.error(`❌ Reminder SMS error for booking ${booking.id}:`, smsErr.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('❌ Booking reminder SMS cron error:', err.message);
   }
 });
 

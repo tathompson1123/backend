@@ -41,21 +41,55 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const { enabled, hours_before, label, custom_message } = req.body;
+    const { enabled, sms_enabled, hours_before, label, custom_message } = req.body;
     const result = await pool.query(
       `UPDATE booking_reminder_settings
        SET enabled = COALESCE($1, enabled),
-           hours_before = COALESCE($2, hours_before),
-           label = COALESCE($3, label),
-           custom_message = $4
-       WHERE id = $5 AND user_id = $6 RETURNING *`,
-      [enabled, hours_before, label, custom_message || null, id, userId]
+           sms_enabled = COALESCE($2, sms_enabled),
+           hours_before = COALESCE($3, hours_before),
+           label = COALESCE($4, label),
+           custom_message = $5
+       WHERE id = $6 AND user_id = $7 RETURNING *`,
+      [enabled, sms_enabled, hours_before, label, custom_message ?? null, id, userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Reminder not found' });
     res.json({ reminder: result.rows[0] });
   } catch (error) {
     console.error('Error updating reminder:', error.message);
     res.status(500).json({ error: 'Failed to update reminder' });
+  }
+});
+
+// GET - Get cancellation policy
+router.get('/cancellation-policy', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT cancellation_policy_enabled, cancellation_policy_text FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+    const row = result.rows[0] || {};
+    res.json({
+      enabled: row.cancellation_policy_enabled || false,
+      text: row.cancellation_policy_text || ''
+    });
+  } catch (error) {
+    console.error('Error fetching cancellation policy:', error.message);
+    res.status(500).json({ error: 'Failed to fetch cancellation policy' });
+  }
+});
+
+// PUT - Update cancellation policy
+router.put('/cancellation-policy', authenticateToken, async (req, res) => {
+  try {
+    const { enabled, text } = req.body;
+    await pool.query(
+      `UPDATE users SET cancellation_policy_enabled = $1, cancellation_policy_text = $2 WHERE id = $3`,
+      [!!enabled, text || null, req.user.userId]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating cancellation policy:', error.message);
+    res.status(500).json({ error: 'Failed to update cancellation policy' });
   }
 });
 

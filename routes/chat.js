@@ -851,15 +851,15 @@ REAL-TIME AVAILABILITY:
       const alreadyNeedsCallback = leadCheck.rows.length > 0 && leadCheck.rows[0].status === 'needs_callback';
       if (leadCheck.rows.length === 0) {
         await pool.query(
-          `INSERT INTO leads (user_id, name, phone, source, status, created_at)
-           VALUES ($1, $2, $3, 'ai_chat_agent', 'needs_callback', CURRENT_TIMESTAMP)`,
-          [userId, attentionName, attentionPhone]
+          `INSERT INTO leads (user_id, name, phone, source, status, conversation_id, created_at)
+           VALUES ($1, $2, $3, 'ai_chat_agent', 'needs_callback', $4, CURRENT_TIMESTAMP)`,
+          [userId, attentionName, attentionPhone, conversationId]
         );
       } else {
         await pool.query(
-          `UPDATE leads SET name = $1, status = 'needs_callback', updated_at = CURRENT_TIMESTAMP
-           WHERE user_id = $2 AND phone = $3`,
-          [attentionName, userId, attentionPhone]
+          `UPDATE leads SET name = $1, status = 'needs_callback', conversation_id = $2, updated_at = CURRENT_TIMESTAMP
+           WHERE user_id = $3 AND phone = $4`,
+          [attentionName, conversationId, userId, attentionPhone]
         );
       }
 
@@ -918,17 +918,19 @@ REAL-TIME AVAILABILITY:
         );
 
         if (leadExists.rows.length === 0) {
-          // Create lead
+          // Create lead with conversation_id
           await pool.query(
-            `INSERT INTO leads (user_id, name, email, phone, source, status, created_at)
-             VALUES ($1, $2, $3, $4, 'ai_chat_agent', 'new', CURRENT_TIMESTAMP)`,
-            [userId, name, emailMatch?.[0], phoneMatch?.[0]]
+            `INSERT INTO leads (user_id, name, email, phone, source, status, conversation_id, created_at)
+             VALUES ($1, $2, $3, $4, 'ai_chat_agent', 'new', $5, CURRENT_TIMESTAMP)`,
+            [userId, name, emailMatch?.[0], phoneMatch?.[0], conversationId]
           );
-        } else if (name !== 'Website Visitor') {
-          // Update name if we now have a real name (replacing a placeholder)
+        } else {
+          // Update with conversation_id and name if improved
           await pool.query(
-            `UPDATE leads SET name = $1 WHERE id = $2 AND name = 'Website Visitor'`,
-            [name, leadExists.rows[0].id]
+            `UPDATE leads SET conversation_id = $1${name !== 'Website Visitor' ? ', name = $3' : ''} WHERE id = $2${name !== 'Website Visitor' ? '' : ''}`,
+            name !== 'Website Visitor'
+              ? [conversationId, leadExists.rows[0].id, name]
+              : [conversationId, leadExists.rows[0].id]
           );
         }
       }

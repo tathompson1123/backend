@@ -284,7 +284,7 @@ router.get('/sms-conversations', authenticateToken, async (req, res) => {
 
     const result = await pool.query(
       `SELECT
-        l.id, l.name, l.phone, l.status, l.created_at,
+        l.id, l.name, l.phone, l.email, l.status, l.source, l.service, l.message, l.notes, l.created_at,
         COUNT(s.id)::int AS message_count,
         MAX(s.created_at) AS last_message_at,
         (SELECT s2.message FROM sms_messages s2 WHERE s2.lead_id = l.id ORDER BY s2.created_at DESC LIMIT 1) AS last_message,
@@ -292,7 +292,7 @@ router.get('/sms-conversations', authenticateToken, async (req, res) => {
        FROM leads l
        JOIN sms_messages s ON s.lead_id = l.id
        WHERE l.user_id = $1
-       GROUP BY l.id, l.name, l.phone, l.status, l.created_at
+       GROUP BY l.id, l.name, l.phone, l.email, l.status, l.source, l.service, l.message, l.notes, l.created_at
        ORDER BY MAX(s.created_at) DESC`,
       [userId]
     );
@@ -457,6 +457,80 @@ router.get('/:leadId/sms-conversation', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching SMS conversation:', error.message);
     res.status(500).json({ error: 'Failed to fetch conversation' });
+  }
+});
+
+// ============================================
+// GET - Get chat conversation for a lead (ai_chat_agent source)
+// ============================================
+router.get('/:leadId/chat-conversation', authenticateToken, async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const userId = req.user.userId;
+
+    const leadResult = await pool.query(
+      'SELECT id, conversation_id, phone, email, created_at FROM leads WHERE id = $1 AND user_id = $2',
+      [leadId, userId]
+    );
+
+    if (leadResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    const lead = leadResult.rows[0];
+    let convId = lead.conversation_id;
+
+    // If no direct link, try to find a matching conversation by time proximity + phone/email
+    if (!convId) {
+      // Strategy 1: match conversation where a message contains the lead's phone or email
+      if (lead.phone || lead.email) {
+        const patterns = [];
+        const params = [userId];
+        if (lead.phone) { params.push(`%${lead.phone.replace(/\D/g, '').slice(-10)}%`); patterns.push(`m.content ILIKE $${params.length}`); }
+        if (lead.email) { params.push(`%${lead.email}%`); patterns.push(`m.content ILIKE $${params.length}`); }
+
+        const matchResult = await pool.query(
+          `SELECT DISTINCT cc.id FROM chat_conversations cc
+           JOIN chat_messages m ON m.conversation_id = cc.id
+           WHERE cc.user_id = $1 AND (${patterns.join(' OR ')})
+           ORDER BY cc.id DESC LIMIT 1`,
+          params
+        );
+        if (matchResult.rows.length > 0) convId = matchResult.rows[0].id;
+      }
+
+      // Strategy 2: closest conversation by time (within 4 hours of lead creation)
+      if (!convId && lead.created_at) {
+        const timeResult = await pool.query(
+          `SELECT id FROM chat_conversations
+           WHERE user_id = $1
+             AND created_at BETWEEN $2::timestamptz - INTERVAL '4 hours' AND $2::timestamptz + INTERVAL '4 hours'
+           ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $2::timestamptz))) ASC
+           LIMIT 1`,
+          [userId, lead.created_at]
+        );
+        if (timeResult.rows.length > 0) convId = timeResult.rows[0].id;
+      }
+
+      // Backfill for next time
+      if (convId) {
+        pool.query('UPDATE leads SET conversation_id = $1 WHERE id = $2', [convId, lead.id]).catch(() => {});
+      }
+    }
+
+    if (!convId) {
+      return res.json({ messages: [], note: 'No matching conversation found' });
+    }
+
+    const messagesResult = await pool.query(
+      'SELECT role, content, created_at FROM chat_messages WHERE conversation_id = $1 ORDER BY created_at ASC',
+      [convId]
+    );
+
+    res.json({ messages: messagesResult.rows, conversation_id: convId });
+  } catch (error) {
+    console.error('Error fetching lead chat conversation:', error.message);
+    res.status(500).json({ error: 'Failed to fetch chat conversation' });
   }
 });
 

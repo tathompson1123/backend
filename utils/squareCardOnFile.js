@@ -1,4 +1,4 @@
-const { Client, Environment } = require('square');
+const { Client, Environment } = require('square/legacy');
 const { pool } = require('../config/database');
 
 /**

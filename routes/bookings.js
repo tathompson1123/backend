@@ -33,7 +33,7 @@ async function updateCustomerFromBooking(booking, userId) {
     } else {
       const customerId = customer.rows[0].id;
       const newTotalJobs = (customer.rows[0].total_jobs || 0) + 1;
-      const newLifetimeValue = (customer.rows[0].lifetime_value || 0) + parseFloat(booking.total_amount || 0);
+      const newLifetimeValue = parseFloat(customer.rows[0].lifetime_value || 0) + parseFloat(booking.total_amount || 0);
 
       await pool.query(
         `UPDATE customers 
@@ -569,8 +569,11 @@ router.post('/:id/send-card-link', authenticateToken, async (req, res) => {
 
     // Send email
     if (process.env.SENDGRID_API_KEY && booking.customer_email) {
-      const dateStr = booking.booking_date
-        ? new Date(booking.booking_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+      const rawDateCust = String(booking.booking_date || '');
+      const datePartCust = rawDateCust.includes('T') ? rawDateCust.split('T')[0] : rawDateCust;
+      const parsedDateCust = datePartCust ? new Date(datePartCust + 'T12:00:00') : null;
+      const dateStr = parsedDateCust && !isNaN(parsedDateCust)
+        ? parsedDateCust.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
         : '';
       await sgMail.send({
         to: booking.customer_email,
@@ -600,9 +603,13 @@ router.post('/:id/send-card-link', authenticateToken, async (req, res) => {
 
     // Notify business owner that the link was sent
     if (process.env.SENDGRID_API_KEY && booking.owner_email) {
-      const dateStr = booking.booking_date
-        ? new Date(booking.booking_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+      const rawDate = String(booking.booking_date || '');
+      const datePart = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+      const parsedDate = datePart ? new Date(datePart + 'T12:00:00') : null;
+      const dateStr = parsedDate && !isNaN(parsedDate)
+        ? parsedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
         : '';
+      const serviceLine = booking.service_name ? ` for <strong>${booking.service_name}</strong>` : '';
       sgMail.send({
         to: booking.owner_email,
         from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
@@ -614,7 +621,7 @@ router.post('/:id/send-card-link', authenticateToken, async (req, res) => {
             </div>
             <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
               <p style="margin-top:0;">A secure card-on-file link has been sent to <strong>${booking.customer_name}</strong> (${booking.customer_email})${dateStr ? ` for their ${dateStr} appointment` : ''}.</p>
-              <p style="color:#6b7280;font-size:0.9rem;">Booking #${booking.booking_number} will be automatically confirmed once they save their card. The link expires in 48 hours.</p>
+              <p style="color:#6b7280;font-size:0.9rem;">Booking #${booking.booking_number}${serviceLine} will be automatically confirmed once they save their card. The link expires in 48 hours.</p>
             </div>
           </div>`,
       }).catch(e => console.error('Owner card link notification error:', e.message));
