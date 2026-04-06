@@ -313,12 +313,18 @@ router.patch('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const fields = Object.keys(updates);
-    const values = Object.values(updates);
+    // Sanitize: empty strings become null so date/numeric columns don't fail
+    const sanitized = {};
+    for (const [k, v] of Object.entries(updates)) {
+      sanitized[k] = (v === '') ? null : v;
+    }
+
+    const fields = Object.keys(sanitized);
+    const values = Object.values(sanitized);
     const setClause = fields.map((field, idx) => `${field} = $${idx + 2}`).join(', ');
 
     const result = await pool.query(
-      `UPDATE leads 
+      `UPDATE leads
        SET ${setClause}, updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 AND user_id = $${fields.length + 2}
        RETURNING *`,

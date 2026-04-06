@@ -497,4 +497,49 @@ router.post('/contact-sales', authenticateToken, async (req, res) => {
   }
 });
 
+// POST - Enterprise inquiry (public — no auth required, works from pricing page too)
+router.post('/enterprise-inquiry', async (req, res) => {
+  try {
+    const { name, email, phone, company, reason, details } = req.body;
+    if (!name || !email || !phone) {
+      return res.status(400).json({ error: 'Name, email, and phone are required' });
+    }
+
+    // Store in DB (reuse contact_sales_requests with a type column if available, else ignore)
+    await pool.query(
+      `INSERT INTO contact_sales_requests (user_id, name, phone, reason, flaws, feedback, plan, created_at)
+       VALUES (NULL, $1, $2, $3, $4, $5, 'enterprise', NOW())`,
+      [name, phone, reason || 'Enterprise inquiry', company ? `Company: ${company}` : null, details || null]
+    ).catch(() => {}); // table may not exist yet — non-blocking
+
+    // Email the SORCE team
+    const sgMail = require('@sendgrid/mail');
+    if (process.env.SENDGRID_API_KEY) {
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      sgMail.send({
+        to: 'support@sorceintegrations.com',
+        from: { name: 'SORCE Sales', email: 'noreply@sorceintegrations.com' },
+        subject: `Enterprise Inquiry — ${company || name}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+            <h2 style="color:#7c3aed;">Enterprise Plan Inquiry</h2>
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;width:35%;">Name</td><td style="padding:8px;border-bottom:1px solid #eee;">${name}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Company</td><td style="padding:8px;border-bottom:1px solid #eee;">${company || '—'}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Email</td><td style="padding:8px;border-bottom:1px solid #eee;">${email}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Phone</td><td style="padding:8px;border-bottom:1px solid #eee;">${phone}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Reason / Use Case</td><td style="padding:8px;border-bottom:1px solid #eee;">${reason || '—'}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;vertical-align:top;">Details</td><td style="padding:8px;white-space:pre-wrap;">${details || '—'}</td></tr>
+            </table>
+          </div>`,
+      }).catch(e => console.error('Enterprise inquiry email error:', e.message));
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Enterprise inquiry error:', error.message);
+    res.status(500).json({ error: 'Failed to submit inquiry' });
+  }
+});
+
 module.exports = router;
