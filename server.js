@@ -1182,7 +1182,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
   // Lead conversation_id for chat agent leads
   try {
     await pool.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversation_id INTEGER');
-    console.log('✅ Lead conversation_id column verified');
+    await pool.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL');
+    console.log('✅ Lead conversation_id/customer_id columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify lead conversation_id column:', e.message);
   }
