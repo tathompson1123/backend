@@ -409,7 +409,7 @@ router.get('/usage', authenticateToken, async (req, res) => {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
 
-    const [smsRow, chatRow, userRow] = await Promise.all([
+    const [smsRow, chatRow, userRow, claudeRow] = await Promise.all([
       pool.query(
         `SELECT COUNT(*) FROM sms_messages WHERE user_id = $1 AND direction = 'outgoing' AND created_at >= $2`,
         [userId, monthStart]
@@ -424,12 +424,18 @@ router.get('/usage', authenticateToken, async (req, res) => {
         'SELECT plan, base_plan, trial_ends_at, stripe_subscription_id FROM users WHERE id = $1',
         [userId]
       ),
+      pool.query(
+        `SELECT COALESCE(SUM(cost_usd), 0) AS total FROM claude_usage WHERE user_id = $1 AND created_at >= $2`,
+        [userId, monthStart]
+      ),
     ]);
 
     const plan = userRow.rows[0]?.plan;
     const basePlan = userRow.rows[0]?.base_plan || plan;
     const SMS_LIMITS = { free: 0, basic: 100, pro: 100, scale: 500, expert: 200 };
     const CHAT_LIMITS = { free: 0, basic: 200, pro: 500, scale: 99999, expert: 500 };
+    // Monthly AI chat API cost limits by plan (in USD)
+    const CHAT_COST_LIMITS = { free: 0, basic: 0, pro: 6.00, scale: null, expert: 6.00 };
 
     res.json({
       plan,
@@ -438,6 +444,8 @@ router.get('/usage', authenticateToken, async (req, res) => {
       smsLimit: SMS_LIMITS[plan] || 0,
       chatUsed: parseInt(chatRow.rows[0].count, 10),
       chatLimit: CHAT_LIMITS[plan] || 0,
+      claudeCostMonth: parseFloat(claudeRow.rows[0].total) || 0,
+      chatCostLimit: CHAT_COST_LIMITS[plan] ?? null,
       monthStart: monthStart.toISOString(),
     });
   } catch (error) {

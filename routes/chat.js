@@ -452,6 +452,22 @@ router.post('/message', async (req, res) => {
 
     const userInfo = userInfoResult.rows[0] || {};
 
+    // Check monthly AI chat cost limit by plan
+    const CHAT_COST_LIMITS = { pro: 6.00, expert: 6.00 };
+    const planRow = await pool.query('SELECT plan FROM users WHERE id = $1', [userId]);
+    const userPlan = planRow.rows[0]?.plan;
+    const costLimit = CHAT_COST_LIMITS[userPlan];
+    if (costLimit != null) {
+      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+      const costRow = await pool.query(
+        `SELECT COALESCE(SUM(cost_usd), 0) AS total FROM claude_usage WHERE user_id = $1 AND created_at >= $2`,
+        [userId, monthStart]
+      );
+      if (parseFloat(costRow.rows[0].total) >= costLimit) {
+        return res.json({ reply: "We've reached our monthly AI chat limit. Please contact us directly to book or get a quote.", limitReached: true });
+      }
+    }
+
     // Get agent config for personality/objection handling
     const agentConfigResult = await pool.query(
       'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',

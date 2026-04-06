@@ -892,6 +892,23 @@ router.post('/bookings/create', async (req, res) => {
       { bookingNumber, type: 'new_booking' }
     ).catch(() => {});
 
+    // Mark any matching chat conversation as booked (non-blocking)
+    if (customerInfo.email || customerInfo.phone) {
+      pool.query(
+        `UPDATE chat_conversations SET outcome = 'booked', updated_at = NOW()
+         WHERE user_id = $1
+           AND outcome != 'booked'
+           AND id IN (
+             SELECT conversation_id FROM leads
+             WHERE user_id = $1
+               AND conversation_id IS NOT NULL
+               AND ($2::text IS NULL OR email = $2)
+               AND ($3::text IS NULL OR phone = $3)
+           )`,
+        [businessId, customerInfo.email || null, customerInfo.phone || null]
+      ).catch(() => {});
+    }
+
     res.json({
       success: true,
       bookingNumber: bookingResult.rows[0].booking_number,
