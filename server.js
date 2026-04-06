@@ -62,6 +62,7 @@ app.get('/api/health', (req, res) => {
 
 // Import routes
 const authRoutes = require('./routes/auth');
+const analyticsRoutes = require('./routes/analytics');
 const bookingRoutes = require('./routes/bookings');
 const customerRoutes = require('./routes/customers');
 const leadRoutes = require('./routes/leads');
@@ -89,6 +90,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/public', embedCors, publicRoutes);
 app.use('/api/leads/public', embedCors); // CORS for embed form submissions
 app.use('/api/leads', leadRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/service-categories', serviceCategoryRoutes);
 app.use('/api/booking-widget-config', bookingWidgetConfigRoutes);
