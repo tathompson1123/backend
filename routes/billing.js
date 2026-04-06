@@ -398,4 +398,103 @@ router.post('/cancel-subscription', authenticateToken, async (req, res) => {
   }
 });
 
+// GET - Usage stats for the current billing month
+router.get('/usage', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const [smsRow, chatRow, userRow] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*) FROM sms_messages WHERE user_id = $1 AND direction = 'outgoing' AND created_at >= $2`,
+        [userId, monthStart]
+      ),
+      pool.query(
+        `SELECT COUNT(*) FROM chat_messages cm
+         JOIN chat_conversations cc ON cc.id = cm.conversation_id
+         WHERE cc.user_id = $1 AND cm.role = 'assistant' AND cm.created_at >= $2`,
+        [userId, monthStart]
+      ),
+      pool.query(
+        'SELECT plan, base_plan, trial_ends_at, stripe_subscription_id FROM users WHERE id = $1',
+        [userId]
+      ),
+    ]);
+
+    const plan = userRow.rows[0]?.plan;
+    const basePlan = userRow.rows[0]?.base_plan || plan;
+    const SMS_LIMITS = { free: 0, basic: 100, pro: 100, scale: 500, expert: 200 };
+    const CHAT_LIMITS = { free: 0, basic: 200, pro: 500, scale: 99999, expert: 500 };
+
+    res.json({
+      plan,
+      basePlan,
+      smsUsed: parseInt(smsRow.rows[0].count, 10),
+      smsLimit: SMS_LIMITS[plan] || 0,
+      chatUsed: parseInt(chatRow.rows[0].count, 10),
+      chatLimit: CHAT_LIMITS[plan] || 0,
+      monthStart: monthStart.toISOString(),
+    });
+  } catch (error) {
+    console.error('Usage fetch error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch usage' });
+  }
+});
+
+// POST - Contact sales / unsubscribe request
+router.post('/contact-sales', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { name, phone, reason, flaws, feedback } = req.body;
+    if (!name || !phone || !reason) {
+      return res.status(400).json({ error: 'Name, phone, and reason are required' });
+    }
+
+    const userRow = await pool.query('SELECT email, plan, business_name FROM users WHERE id = $1', [userId]);
+    const u = userRow.rows[0];
+
+    // Store in DB for records
+    await pool.query(
+      `INSERT INTO contact_sales_requests (user_id, name, phone, reason, flaws, feedback, plan, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       ON CONFLICT DO NOTHING`,
+      [userId, name, phone, reason, flaws || null, feedback || null, u?.plan || null]
+    ).catch(() => {}); // table may not exist yet — non-blocking
+
+    // Email the SORCE team
+    const sgMail = require('@sendgrid/mail');
+    if (process.env.SENDGRID_API_KEY) {
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      sgMail.send({
+        to: 'support@sorceintegrations.com',
+        from: { name: 'SORCE Billing', email: 'noreply@sorceintegrations.com' },
+        subject: `Unsubscribe Request — ${u?.business_name || u?.email || 'User ' + userId} (${u?.plan || 'unknown'} plan)`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+            <h2 style="color:#dc2626;">Unsubscribe Request</h2>
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;width:35%;">User ID</td><td style="padding:8px;border-bottom:1px solid #eee;">${userId}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Business</td><td style="padding:8px;border-bottom:1px solid #eee;">${u?.business_name || '—'}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Email</td><td style="padding:8px;border-bottom:1px solid #eee;">${u?.email || '—'}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Plan</td><td style="padding:8px;border-bottom:1px solid #eee;">${u?.plan || '—'}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Contact Name</td><td style="padding:8px;border-bottom:1px solid #eee;">${name}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Phone</td><td style="padding:8px;border-bottom:1px solid #eee;">${phone}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Reason</td><td style="padding:8px;border-bottom:1px solid #eee;">${reason}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;vertical-align:top;">Dashboard Flaws</td><td style="padding:8px;border-bottom:1px solid #eee;white-space:pre-wrap;">${flaws || '—'}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;vertical-align:top;">Feedback</td><td style="padding:8px;white-space:pre-wrap;">${feedback || '—'}</td></tr>
+            </table>
+          </div>`,
+      }).catch(e => console.error('Contact-sales email error:', e.message));
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Contact sales error:', error.message);
+    res.status(500).json({ error: 'Failed to submit request' });
+  }
+});
+
 module.exports = router;

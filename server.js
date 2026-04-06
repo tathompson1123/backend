@@ -286,6 +286,17 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
   try {
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS send_trigger VARCHAR(30) DEFAULT 'booking_completed'`);
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS send_delay INTEGER DEFAULT 24`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS contact_sales_requests (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      name VARCHAR(200),
+      phone VARCHAR(50),
+      reason VARCHAR(200),
+      flaws TEXT,
+      feedback TEXT,
+      plan VARCHAR(50),
+      created_at TIMESTAMP DEFAULT NOW()
+    )`);
     console.log('✅ review_configs.send_trigger and send_delay columns verified');
   } catch (e) {
     console.warn('⚠️ Could not add send_trigger column:', e.message);
