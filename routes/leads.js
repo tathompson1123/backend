@@ -276,6 +276,35 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
 });
 
 // ============================================
+// GET - List leads with SMS conversations
+// ============================================
+router.get('/sms-conversations', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      `SELECT
+        l.id, l.name, l.phone, l.status, l.created_at,
+        COUNT(s.id)::int AS message_count,
+        MAX(s.created_at) AS last_message_at,
+        (SELECT s2.message FROM sms_messages s2 WHERE s2.lead_id = l.id ORDER BY s2.created_at DESC LIMIT 1) AS last_message,
+        (SELECT s2.direction FROM sms_messages s2 WHERE s2.lead_id = l.id ORDER BY s2.created_at DESC LIMIT 1) AS last_direction
+       FROM leads l
+       JOIN sms_messages s ON s.lead_id = l.id
+       WHERE l.user_id = $1
+       GROUP BY l.id, l.name, l.phone, l.status, l.created_at
+       ORDER BY MAX(s.created_at) DESC`,
+      [userId]
+    );
+
+    res.json({ success: true, leads: result.rows });
+  } catch (error) {
+    console.error('Error fetching SMS conversations:', error.message);
+    res.status(500).json({ error: 'Failed to fetch SMS conversations' });
+  }
+});
+
+// ============================================
 // PATCH - Update lead
 // ============================================
 router.patch('/:id', authenticateToken, async (req, res) => {
