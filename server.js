@@ -1436,21 +1436,23 @@ cron.schedule('*/60 * * * * *', async () => {
 
 // ── Service-duration review trigger cron ─────────────────
 // Runs every 5 minutes. For users with send_trigger='service_duration',
-// creates review requests for bookings whose service end time has passed.
+// creates review requests for bookings that have been completed and whose
+// send_delay has elapsed since the completion time.
+// NOTE: We require status='completed' to avoid timezone ambiguity —
+// using booking_date+start_time::interval against UTC NOW() would fire
+// hours early for US-based users.
 cron.schedule('*/5 * * * *', async () => {
   try {
     const eligible = await pool.query(
       `SELECT DISTINCT ON (b.id)
-              b.id AS booking_id, b.user_id, b.customer_id, b.start_time,
-              bi.service_duration,
+              b.id AS booking_id, b.user_id, b.customer_id,
               rc.send_delay, rc.incentive_enabled
        FROM bookings b
-       JOIN booking_items bi ON bi.booking_id = b.id
        JOIN review_configs rc ON rc.user_id = b.user_id
        WHERE rc.send_trigger = 'service_duration'
          AND rc.auto_send_enabled = true
-         AND b.status NOT IN ('cancelled')
-         AND (b.booking_date::timestamp + b.start_time::interval + COALESCE(bi.service_duration, 1) * INTERVAL '1 hour') <= NOW()
+         AND b.status = 'completed'
+         AND b.updated_at + (COALESCE(rc.send_delay, 1) * INTERVAL '1 hour') <= NOW()
          AND b.customer_id IS NOT NULL
          AND NOT EXISTS (
            SELECT 1 FROM review_requests rr
@@ -1458,13 +1460,13 @@ cron.schedule('*/5 * * * *', async () => {
              AND rr.user_id = b.user_id
              AND rr.created_at > NOW() - INTERVAL '24 hours'
          )
-       ORDER BY b.id, bi.id`
+       ORDER BY b.id`
     );
 
     for (const row of eligible.rows) {
       try {
-        const delayHours = row.send_delay ?? 24;
-        const scheduledTime = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+        // scheduled_send_time = now (delay already elapsed in the WHERE clause)
+        const scheduledTime = new Date();
         const incentiveCode = row.incentive_enabled
           ? `REV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
           : null;

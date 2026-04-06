@@ -774,7 +774,10 @@ router.post('/bookings/create', async (req, res) => {
           const ownerResult = await pool.query('SELECT business_name, email FROM users WHERE id=$1', [businessId]);
           const owner = ownerResult.rows[0] || {};
           if (owner.email) {
-            const dateStr = new Date(bookingDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+            const _rawDate1 = String(bookingDate || '');
+            const _datePart1 = _rawDate1.includes('T') ? _rawDate1.split('T')[0] : _rawDate1;
+            const _parsed1 = _datePart1 ? new Date(_datePart1 + 'T12:00:00') : null;
+            const dateStr = (_parsed1 && !isNaN(_parsed1)) ? _parsed1.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
             const [hh, mm] = startTime.split(':').map(Number);
             const timeStr = `${hh % 12 || 12}:${String(mm).padStart(2,'0')} ${hh >= 12 ? 'PM' : 'AM'}`;
             sgMail.send({
@@ -809,7 +812,10 @@ router.post('/bookings/create', async (req, res) => {
           sgMail.setApiKey(process.env.SENDGRID_API_KEY);
           const ownerResult = await pool.query('SELECT business_name, email FROM users WHERE id=$1', [businessId]);
           const owner = ownerResult.rows[0] || {};
-          const dateStr = new Date(bookingDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+          const _rawDate2 = String(bookingDate || '');
+          const _datePart2 = _rawDate2.includes('T') ? _rawDate2.split('T')[0] : _rawDate2;
+          const _parsed2 = _datePart2 ? new Date(_datePart2 + 'T12:00:00') : null;
+          const dateStr = (_parsed2 && !isNaN(_parsed2)) ? _parsed2.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
           const [hh, mm] = startTime.split(':').map(Number);
           const timeStr = `${hh % 12 || 12}:${String(mm).padStart(2,'0')} ${hh >= 12 ? 'PM' : 'AM'}`;
           sgMail.send({
@@ -982,7 +988,8 @@ router.post('/card-on-file/:token/save', async (req, res) => {
     if (!sourceId) return res.status(400).json({ error: 'sourceId required' });
 
     const result = await pool.query(
-      `SELECT t.*, b.customer_id, b.customer_name, b.customer_email, b.customer_phone
+      `SELECT t.*, b.customer_id, b.customer_name, b.customer_email, b.customer_phone,
+              b.booking_number, b.booking_date, b.start_time
        FROM card_on_file_tokens t
        JOIN bookings b ON b.id = t.booking_id
        WHERE t.token = $1 AND t.expires_at > NOW() AND t.used_at IS NULL`,
@@ -1038,9 +1045,10 @@ router.post('/card-on-file/:token/save', async (req, res) => {
         if (!owner || !owner.email) return;
         const sgMail = require('@sendgrid/mail');
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-        const dateStr = row.booking_date
-          ? new Date(row.booking_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-          : '';
+        const _rawD = String(row.booking_date || '');
+        const _dpD = _rawD.includes('T') ? _rawD.split('T')[0] : _rawD;
+        const _pD = _dpD ? new Date(_dpD + 'T12:00:00') : null;
+        const dateStr = (_pD && !isNaN(_pD)) ? _pD.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
         sgMail.send({
           to: owner.email,
           from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
