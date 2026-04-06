@@ -206,10 +206,11 @@ router.put('/my-bookings/:id/status', requirePermission('manage_bookings'), asyn
       try {
         const reviewConfig = await pool.query('SELECT * FROM review_configs WHERE user_id = $1', [userId]);
         const config = reviewConfig.rows[0];
-        const autoSend = config ? config.auto_send_enabled : true;
-        const trigger = config?.send_trigger || 'booking_completed';
+        // Only fire if user has explicitly configured review requests with booking_completed trigger
+        const autoSend = config?.auto_send_enabled;
+        const trigger = config?.send_trigger;
 
-        if (autoSend && trigger === 'booking_completed' && (booking.customer_email || booking.customer_phone)) {
+        if (config && autoSend && trigger === 'booking_completed' && (booking.customer_email || booking.customer_phone)) {
           const itemsResult = await pool.query('SELECT service_name FROM booking_items WHERE booking_id = $1 LIMIT 1', [id]);
           const serviceName = itemsResult.rows[0]?.service_name || 'Service';
           const delayHours = config ? (config.send_delay ?? 2) : 2;

@@ -403,11 +403,12 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
       );
 
       const config = reviewConfig.rows[0];
-      const autoSend = config ? config.auto_send_enabled : true;
-      const trigger = config?.send_trigger || 'booking_completed';
+      // Only fire if the user has explicitly configured review requests with booking_completed trigger
+      const autoSend = config?.auto_send_enabled;
+      const trigger = config?.send_trigger;
 
-      // Only create review here if trigger is 'booking_completed' (the other trigger uses its own cron)
-      if (autoSend && trigger === 'booking_completed' && (booking.customer_email || booking.customer_phone)) {
+      // Only create review here if trigger is explicitly 'booking_completed' (the other trigger uses its own cron)
+      if (config && autoSend && trigger === 'booking_completed' && (booking.customer_email || booking.customer_phone)) {
         // Calculate scheduled send time (SMS goes out based on send_delay hours, default 2)
         const delayHours = config ? (config.send_delay ?? 2) : 2;
         const scheduledTime = new Date(Date.now() + delayHours * 60 * 60 * 1000);
