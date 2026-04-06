@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { sendBookingEmails } = require('../utils/bookingEmail');
+const { sendPushToOwner } = require('../utils/pushNotifications');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
 const { getSquareClient, findOrCreateSquareCustomer, saveCardOnFile } = require('../utils/squareCardOnFile');
 
@@ -884,6 +885,12 @@ router.post('/bookings/create', async (req, res) => {
         notes: customerNotes || '',
       }).catch(() => {});
     }
+
+    // Notify owner/admin via push
+    sendPushToOwner(businessId, 'New Booking',
+      `${customerInfo.name} — ${servicesResult.rows.map(s => s.name).join(', ')} on ${bookingDate} at ${startTime}`,
+      { bookingNumber, type: 'new_booking' }
+    ).catch(() => {});
 
     res.json({
       success: true,

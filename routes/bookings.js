@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
-const { sendPushToEmployee } = require('../utils/pushNotifications');
+const { sendPushToEmployee, sendPushToOwner } = require('../utils/pushNotifications');
 const { sendBookingEmails } = require('../utils/bookingEmail');
 const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -244,6 +244,12 @@ router.post('/create', authenticateToken, async (req, res) => {
         { bookingId: booking.id, type: 'new_booking' }
       ).catch(err => console.error('Push notification error:', err.message));
     }
+
+    // Notify owner/admin
+    sendPushToOwner(userId, 'New Booking',
+      `${customerInfo.name} — ${service.name} on ${bookingDate} at ${startTime}`,
+      { bookingId: booking.id, type: 'new_booking' }
+    ).catch(() => {});
 
     res.json({
       success: true,

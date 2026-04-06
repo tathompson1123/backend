@@ -1423,7 +1423,7 @@ router.get('/admin/leads', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.employee;
     const result = await pool.query(
-      `SELECT id, name, email, phone, status, source, service, created_at, notes
+      `SELECT id, name, email, phone, status, source, service, message, sms_consent, created_at, notes
        FROM leads WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`,
       [userId]
     );

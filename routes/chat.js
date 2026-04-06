@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const Anthropic = require('@anthropic-ai/sdk');
 const { authenticateToken } = require('../config/middleware');
 const { sendBookingEmails } = require('../utils/bookingEmail');
+const { sendPushToOwner } = require('../utils/pushNotifications');
 const { logClaudeUsage } = require('../utils/claudeUsage');
 const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -375,6 +376,12 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
     );
 
     console.log(`✅ Chat booking created: #${bookingNumber} customer=${customerId} employee=${employeeId}`);
+
+    // Push notification to owner/admin
+    sendPushToOwner(userId, 'New Booking via Chat Agent',
+      `${customerName} — ${serviceNames} on ${bookingDate} at ${startTime}`,
+      { bookingId: booking.id, type: 'new_booking' }
+    ).catch(() => {});
 
     // Send booking emails — always notify the owner; skip customer confirmation if card-on-file pending
     const serviceNames = allServices.map(s => s.name).join(' + ');
