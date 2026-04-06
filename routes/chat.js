@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const Anthropic = require('@anthropic-ai/sdk');
 const { authenticateToken } = require('../config/middleware');
 const { sendBookingEmails } = require('../utils/bookingEmail');
+const { logClaudeUsage } = require('../utils/claudeUsage');
 const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
@@ -615,6 +616,7 @@ REAL-TIME AVAILABILITY:
         tools,
         messages: loopMessages
       });
+      logClaudeUsage(userId, 'claude-sonnet-4-20250514', response.usage, 'chat');
 
       if (response.stop_reason === 'tool_use') {
         // Append assistant message with tool_use blocks

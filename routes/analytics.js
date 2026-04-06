@@ -46,11 +46,14 @@ router.get('/data', requireAnalytics, async (req, res) => {
         u.created_at,
         u.trial_ends_at,
         u.subscription_canceling,
-        COALESCE(sms_m.cnt,  0)::int AS sms_sent_month,
-        COALESCE(sms_t.cnt,  0)::int AS sms_sent_total,
-        COALESCE(chat_m.cnt, 0)::int AS chat_convos_month,
-        COALESCE(chat_t.cnt, 0)::int AS chat_convos_total,
-        COALESCE(lead_m.cnt, 0)::int AS leads_month
+        COALESCE(sms_m.cnt,  0)::int      AS sms_sent_month,
+        COALESCE(sms_t.cnt,  0)::int      AS sms_sent_total,
+        COALESCE(chat_m.cnt, 0)::int      AS chat_convos_month,
+        COALESCE(chat_t.cnt, 0)::int      AS chat_convos_total,
+        COALESCE(lead_m.cnt, 0)::int      AS leads_month,
+        COALESCE(cu_m.claude_cost, 0)     AS claude_cost_month,
+        COALESCE(cu_m.input_tokens,  0)::int AS claude_input_tokens_month,
+        COALESCE(cu_m.output_tokens, 0)::int AS claude_output_tokens_month
       FROM users u
       -- outbound SMS this month
       LEFT JOIN (
@@ -81,15 +84,24 @@ router.get('/data', requireAnalytics, async (req, res) => {
         WHERE created_at >= date_trunc('month', NOW())
         GROUP BY user_id
       ) lead_m ON lead_m.user_id = u.id
+      -- real Claude API costs this month (from tracked usage)
+      LEFT JOIN (
+        SELECT user_id,
+          SUM(cost_usd)      AS claude_cost,
+          SUM(input_tokens)  AS input_tokens,
+          SUM(output_tokens) AS output_tokens
+        FROM claude_usage
+        WHERE created_at >= date_trunc('month', NOW())
+        GROUP BY user_id
+      ) cu_m ON cu_m.user_id = u.id
       ORDER BY u.created_at DESC
     `);
 
     const users = result.rows.map(u => {
       const revenue      = PLAN_REVENUE[u.plan] || 0;
-      const smsCost      = u.sms_sent_month  * SMS_COST;
-      const chatCost     = u.chat_convos_month * CHAT_COST;
-      const aiSmsCost    = u.sms_sent_month  * AI_SMS_COST;
-      const totalCost    = smsCost + chatCost + aiSmsCost;
+      const smsCost      = u.sms_sent_month * SMS_COST;
+      const claudeCost   = parseFloat(u.claude_cost_month) || 0;  // real tracked cost
+      const totalCost    = smsCost + claudeCost;
       const margin       = revenue - totalCost;
       const isTrialing   = u.trial_ends_at && new Date(u.trial_ends_at) > new Date();
       const isCanceling  = !!u.subscription_canceling;
@@ -104,17 +116,18 @@ router.get('/data', requireAnalytics, async (req, res) => {
         trial_ends_at: u.trial_ends_at,
         is_trialing: isTrialing,
         is_canceling: isCanceling,
-        sms_sent_month:    u.sms_sent_month,
-        sms_sent_total:    u.sms_sent_total,
-        chat_convos_month: u.chat_convos_month,
-        chat_convos_total: u.chat_convos_total,
-        leads_month:       u.leads_month,
+        sms_sent_month:            u.sms_sent_month,
+        sms_sent_total:            u.sms_sent_total,
+        chat_convos_month:         u.chat_convos_month,
+        chat_convos_total:         u.chat_convos_total,
+        leads_month:               u.leads_month,
+        claude_cost_month:         +claudeCost.toFixed(4),
+        claude_input_tokens_month: u.claude_input_tokens_month,
+        claude_output_tokens_month:u.claude_output_tokens_month,
         revenue,
-        sms_cost:    +smsCost.toFixed(4),
-        chat_cost:   +chatCost.toFixed(4),
-        ai_sms_cost: +aiSmsCost.toFixed(4),
-        total_cost:  +totalCost.toFixed(4),
-        margin:      +margin.toFixed(2),
+        sms_cost:   +smsCost.toFixed(4),
+        total_cost: +totalCost.toFixed(4),
+        margin:     +margin.toFixed(2),
       };
     });
 

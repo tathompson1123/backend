@@ -236,6 +236,7 @@ router.post('/fetch-reviews', authenticateToken, async (req, res) => {
 // ============================================
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { logClaudeUsage } = require('../utils/claudeUsage');
 const { pool } = require('../config/database');
 
 // GET - Stats for reply generation
@@ -321,6 +322,7 @@ Generate ONLY the reply text, no quotes or labels.`;
       messages: [{ role: 'user', content: prompt }]
     });
 
+    logClaudeUsage(req.user.userId, 'claude-sonnet-4-20250514', message.usage, 'review_reply');
     const reply = message.content[0].text.trim();
 
     // Log the reply generation

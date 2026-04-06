@@ -5,6 +5,7 @@
 // ============================================
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { logClaudeUsage } = require('../utils/claudeUsage');
 const { buildSchemaPrompt, detectLayout, buildOrganicSchemaFromContent } = require('../sections/generateSchemaPrompt');
 const { renderPage, renderMultiPage } = require('../sections/renderer');
 const { getThemeForBusinessType, THEMES } = require('../sections/themes');
@@ -116,6 +117,7 @@ async function generateWebsite(req, res)
         { role: 'user', content: prompt }
       ],
     });
+    logClaudeUsage(userId, 'claude-sonnet-4-20250514', message.usage, 'website_gen');
 
     // ==========================================
     // STEP 3: Parse JSON response
@@ -366,6 +368,7 @@ async function generatePreview(req, res) {
       max_tokens: 8192,
       messages: [{ role: 'user', content: prompt }],
     });
+    logClaudeUsage(userId, 'claude-sonnet-4-20250514', message.usage, 'website_gen');
 
     // STEP 3: Parse JSON
     let rawText = message.content[0].text.trim();

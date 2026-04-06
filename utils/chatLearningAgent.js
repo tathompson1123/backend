@@ -13,6 +13,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { pool } = require('../config/database');
+const { logClaudeUsage } = require('./claudeUsage');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -165,6 +166,7 @@ Respond with either "NO_CHANGE" or the new instruction text only.`;
     messages: [{ role: 'user', content: prompt }],
   });
 
+  logClaudeUsage(userId, 'claude-haiku-4-5-20251001', response.usage, 'chat_learning');
   const suggestion = response.content[0].text.trim();
   if (!suggestion || suggestion === 'NO_CHANGE') {
     console.log(`🧠 Learning: no prompt changes needed for user ${userId}`);

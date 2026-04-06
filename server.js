@@ -799,6 +799,26 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify sms_messages booking_id:', e.message);
   }
 
+  // Claude usage tracking
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS claude_usage (
+        id            SERIAL PRIMARY KEY,
+        user_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        model         VARCHAR(100),
+        input_tokens  INTEGER DEFAULT 0,
+        output_tokens INTEGER DEFAULT 0,
+        cost_usd      NUMERIC(10,6) DEFAULT 0,
+        endpoint      VARCHAR(50),
+        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_claude_usage_user ON claude_usage(user_id, created_at DESC)`);
+    console.log('✅ claude_usage table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not create claude_usage table:', e.message);
+  }
+
   // GBP Analyzer tables
   try {
     await pool.query(`

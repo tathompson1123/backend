@@ -464,6 +464,7 @@ router.post('/scrape', authenticateToken, async (req, res) => {
 
     // Use Claude to extract services
     const Anthropic = require('@anthropic-ai/sdk');
+    const { logClaudeUsage } = require('../utils/claudeUsage');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const aiResponse = await anthropic.messages.create({
@@ -496,6 +497,7 @@ ${textContent}`
       }]
     });
 
+    logClaudeUsage(req.user.userId, 'claude-sonnet-4-20250514', aiResponse.usage, 'service_scrape');
     const aiText = aiResponse.content[0].text.trim();
     let extractedServices;
     try {

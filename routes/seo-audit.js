@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const Anthropic = require('@anthropic-ai/sdk');
+const { logClaudeUsage } = require('../utils/claudeUsage');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -150,6 +151,7 @@ Be specific and actionable. Reference actual content from the HTML where relevan
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
     });
+    logClaudeUsage(userId, 'claude-sonnet-4-5', message.usage, 'seo_audit');
 
     const rawText = message.content[0]?.text || '';
 
@@ -297,6 +299,7 @@ Do NOT pad with generic advice.`;
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
     });
+    logClaudeUsage(userId, 'claude-sonnet-4-5', message.usage, 'seo_plan');
 
     const rawText = message.content[0]?.text || '';
     const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();

@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
 const Anthropic = require('@anthropic-ai/sdk');
+const { logClaudeUsage } = require('../utils/claudeUsage');
 
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY;
 const PLACES_BASE = 'https://places.googleapis.com/v1';
@@ -155,6 +156,7 @@ Return ONLY valid JSON in this exact format:
       }]
     });
 
+    logClaudeUsage(userId, 'claude-sonnet-4-20250514', aiResponse.usage, 'market_research');
     const aiText = aiResponse.content[0].text.trim();
     let aiAnalysis;
     try {
@@ -289,6 +291,7 @@ Return ONLY valid JSON:
       }]
     });
 
+    logClaudeUsage(userId, 'claude-sonnet-4-20250514', aiResponse.usage, 'market_research');
     const aiText = aiResponse.content[0].text.trim();
     let analysis;
     try {
@@ -359,6 +362,7 @@ Return ONLY valid JSON:
       }]
     });
 
+    logClaudeUsage(userId, 'claude-haiku-4-5-20251001', aiResponse.usage, 'upsell_suggestions');
     const text = aiResponse.content[0].text.trim();
     let result;
     try {

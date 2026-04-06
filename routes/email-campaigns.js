@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const Anthropic = require('@anthropic-ai/sdk');
+const { logClaudeUsage } = require('../utils/claudeUsage');
 const sgMail = require('@sendgrid/mail');
 const jwt = require('jsonwebtoken');
 
@@ -173,6 +174,7 @@ Rules:
     max_tokens: 4000,
     messages: [{ role: 'user', content: prompt }],
   });
+  logClaudeUsage(userId, 'claude-haiku-4-5-20251001', response.usage, 'email_campaign');
 
   const text = response.content[0].text.trim();
   let json = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();

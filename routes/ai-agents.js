@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
+const { logClaudeUsage } = require('../utils/claudeUsage');
 
 // Debug endpoint to verify agent config state
 router.get('/debug/config', authenticateToken, async (req, res) => {
@@ -865,6 +866,7 @@ ${config.autoBookingEnabled ? 'If they mention a date/time, confirm booking deta
       system: systemPrompt,
       messages: messages
     });
+    logClaudeUsage(userId, 'claude-sonnet-4-20250514', response.usage, 'preview_chat');
 
     let reply = response.content[0]?.text || "I'm here to help! How can I assist you today?";
 
@@ -1107,6 +1109,7 @@ IMPORTANT: Only include fields in suggestedConfig that you are CHANGING. Set sug
       system: systemPrompt,
       messages: messages
     });
+    logClaudeUsage(userId, 'claude-sonnet-4-20250514', response.usage, 'preview_chat');
 
     const responseText = response.content[0]?.text || '';
 
