@@ -676,7 +676,7 @@ router.get('/my-schedule', async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT b.*, e.name as employee_name,
+      `SELECT b.*, e.name as employee_name, e.color as employee_color,
         json_agg(
           json_build_object(
             'service_name', bi.service_name,
@@ -692,7 +692,7 @@ router.get('/my-schedule', async (req, res) => {
          ${dateFilter}
          ${employeeFilter}
          AND b.status NOT IN ('cancelled')
-       GROUP BY b.id, e.name
+       GROUP BY b.id, e.name, e.color
        ORDER BY b.booking_date, b.start_time`,
       params
     );
@@ -1353,12 +1353,15 @@ router.post('/bookings', async (req, res) => {
 
     const assignTo = assignedEmployeeId || employeeId;
 
+    const bnRes = await pool.query('SELECT generate_booking_number() as number');
+    const bookingNumber = bnRes.rows[0].number;
+
     const result = await pool.query(
-      `INSERT INTO bookings (user_id, employee_id, customer_name, customer_email, customer_phone,
+      `INSERT INTO bookings (user_id, employee_id, booking_number, customer_name, customer_email, customer_phone,
         customer_address, customer_notes, booking_date, start_time, end_time, status, total_amount, job_notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'confirmed',$11,$12)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'confirmed',$12,$13)
        RETURNING *`,
-      [userId, assignTo, customerName, customerEmail||null, customerPhone||null,
+      [userId, assignTo, bookingNumber, customerName, customerEmail||null, customerPhone||null,
        customerAddress||null, customerNotes||null, bookingDate, startTime, endTime,
        parseFloat(service.price), notes||null]
     );

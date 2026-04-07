@@ -40,7 +40,7 @@ app.post('/api/webhooks/square', express.raw({ type: 'application/json' }), paym
 app.post('/api/webhooks/paypal', express.raw({ type: 'application/json' }), paymentWebhooks.paypal);
 
 // Regular JSON parsing for all other routes
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
 // Apply rate limiting
@@ -50,13 +50,7 @@ setupMiddleware(app);
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    timestamp: new Date().toISOString(),
-    services: {
-      database: pool ? 'connected' : 'disconnected',
-      twilio: process.env.TWILIO_ACCOUNT_SID ? 'configured' : 'not configured',
-      sendgrid: process.env.SENDGRID_API_KEY ? 'configured' : 'not configured',
-      stripe: process.env.STRIPE_SECRET_KEY ? 'configured' : 'not configured'
-    }
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -309,7 +303,7 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE booking_reminders_sent ADD COLUMN IF NOT EXISTS channel VARCHAR(10) DEFAULT 'email'`);
     // Drop old unique constraint and add channel-aware one
     await pool.query(`ALTER TABLE booking_reminders_sent DROP CONSTRAINT IF EXISTS booking_reminders_sent_booking_id_hours_before_key`);
-    await pool.query(`ALTER TABLE booking_reminders_sent ADD CONSTRAINT IF NOT EXISTS booking_reminders_sent_booking_id_hours_before_channel_key UNIQUE (booking_id, hours_before, channel)`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS booking_reminders_sent_booking_id_hours_before_channel_key ON booking_reminders_sent(booking_id, hours_before, channel)`);
     console.log('✅ Cancellation policy and SMS reminder columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify cancellation policy / SMS reminder columns:', e.message);
@@ -1603,7 +1597,9 @@ cron.schedule('*/30 * * * *', async () => {
 });
 
 // ── Email campaign cron job ──────────────────────────────
-// Runs every hour. Checks if any user has a campaign scheduled for this day+hour.
+// Runs every hour. Two modes:
+//   auto_send=true  → generate + send immediately (fully automated)
+//   auto_send=false → generate draft only, owner approves via dashboard
 const { generateCampaign, sendCampaign } = require('./routes/email-campaigns');
 
 cron.schedule('0 * * * *', async () => {
@@ -1622,18 +1618,38 @@ cron.schedule('0 * * * *', async () => {
 
     for (const config of configs.rows) {
       try {
-        console.log(`📧 Email campaign cron: generating for user ${config.user_id}`);
-        const generated = await generateCampaign(config.user_id, config);
-
-        const saved = await pool.query(
-          `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, status, scheduled_for, created_at)
-           VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), NOW()) RETURNING id`,
-          [config.user_id, generated.subject, generated.previewText, generated.bodyHtml, generated.bodyText]
+        // Skip if a draft already exists for this week (owner hasn't approved last one yet)
+        const existingDraft = await pool.query(
+          `SELECT id FROM email_campaigns WHERE user_id = $1 AND status = 'draft'
+           AND created_at >= NOW() - INTERVAL '7 days' LIMIT 1`,
+          [config.user_id]
         );
-        const campaignId = saved.rows[0].id;
+        if (existingDraft.rows.length > 0) {
+          console.log(`📧 Email cron: skipping user ${config.user_id} — unapproved draft already exists`);
+          continue;
+        }
 
-        const result = await sendCampaign(config.user_id, config, campaignId);
-        console.log(`✅ Email campaign sent: ${result.sent} emails for user ${config.user_id} — "${generated.subject}"`);
+        console.log(`📧 Email campaign cron: generating for user ${config.user_id} [auto_send=${config.auto_send}]`);
+        const generated = await generateCampaign(config.user_id, config, null, true);
+
+        if (config.auto_send) {
+          // Fully automated — save as pending and send immediately
+          const saved = await pool.query(
+            `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, status, scheduled_for, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW(), NOW()) RETURNING id`,
+            [config.user_id, generated.subject, generated.previewText, generated.bodyHtml, generated.bodyText, JSON.stringify(generated.blocks || [])]
+          );
+          const result = await sendCampaign(config.user_id, config, saved.rows[0].id);
+          console.log(`✅ Auto-sent: ${result.sent} emails for user ${config.user_id} — "${generated.subject}"`);
+        } else {
+          // Manual approval mode — save as draft only, owner approves via dashboard
+          await pool.query(
+            `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, status, scheduled_for, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, 'draft', NOW(), NOW())`,
+            [config.user_id, generated.subject, generated.previewText, generated.bodyHtml, generated.bodyText, JSON.stringify(generated.blocks || [])]
+          );
+          console.log(`📝 Draft ready for approval: user ${config.user_id} — "${generated.subject}"`);
+        }
       } catch (err) {
         console.error(`❌ Email campaign failed for user ${config.user_id}:`, err.message);
       }

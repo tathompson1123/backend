@@ -44,6 +44,23 @@ const previewGenerateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// General authenticated endpoint limiter (prevents DoS from valid JWTs)
+const authenticatedLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 120, // 120 requests per minute per IP (2/sec — plenty for legit use)
+  message: { error: 'Too many requests, please slow down' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
+});
+
+// Webhook form submissions
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20,
+  message: { error: 'Too many submissions, please try again later' },
+});
+
 // Authentication middleware
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -132,9 +149,12 @@ function setupMiddleware(app) {
 
   // Public endpoints that need rate limiting (SPECIFIC PATHS ONLY)
   app.use('/api/leads/public', publicApiLimiter);
-  
-  // DON'T apply publicApiLimiter to all /api/ routes
-  // app.use('/api/', publicApiLimiter); // ❌ REMOVE THIS LINE
+
+  // Webhook form submissions
+  app.use('/api/webhooks', webhookLimiter);
+
+  // General limiter on all /api/ routes (catches authenticated abuse + unlimted endpoints)
+  app.use('/api/', authenticatedLimiter);
 }
 
 module.exports = {
@@ -142,5 +162,6 @@ module.exports = {
   requirePlan,
   setupMiddleware,
   previewGenerateLimiter,
+  authenticatedLimiter,
   EFFECTIVE_JWT_SECRET
 };

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { sendSMS } = require('../utils/twilio');
+const { sendPushToOwner } = require('../utils/pushNotifications');
 const twilio = require('twilio');
 
 // Auto-heal Twilio webhook URL for a phone number (non-blocking, fire-and-forget)
@@ -109,6 +110,10 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
       `UPDATE leads SET status = 'replied', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
       [leadId]
     );
+
+    // Push notification to owner
+    const leadName = leadResult.rows[0]?.name || From;
+    sendPushToOwner(user.id, 'New Message', `${leadName}: ${Body.slice(0, 100)}`, { leadId, screen: 'AdminLeads' }).catch(() => {});
 
     // Check if AI enabled
     const configResult = await pool.query(

@@ -85,6 +85,10 @@ router.get('/industry', authenticateToken, async (req, res) => {
 // Returns the full multi-page schema for one industry
 router.get('/industry/:key', authenticateToken, async (req, res) => {
   try {
+    // Prevent path traversal: only allow alphanumeric, hyphens, underscores
+    if (!/^[a-zA-Z0-9_-]+$/.test(req.params.key)) {
+      return res.status(400).json({ error: 'Invalid industry key' });
+    }
     const filePath = path.join(schemasDir, `${req.params.key}.json`);
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: `Industry schema "${req.params.key}" not found` });

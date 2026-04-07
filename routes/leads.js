@@ -242,7 +242,18 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Maximum 5000 leads per import' });
     }
 
+    // Load existing lead emails/names for dedup
+    const existingResult = await pool.query(
+      `SELECT LOWER(TRIM(email)) AS email, LOWER(TRIM(name)) AS name FROM leads WHERE user_id = $1`,
+      [userId]
+    );
+    const existingEmails = new Set(existingResult.rows.map(r => r.email).filter(Boolean));
+    const existingNames  = new Set(existingResult.rows.map(r => r.name).filter(Boolean));
+    const seenEmails = new Set();
+    const seenNames  = new Set();
+
     let successCount = 0;
+    let duplicateCount = 0;
     let errorCount = 0;
 
     const client = await pool.connect();
@@ -250,13 +261,26 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
       await client.query('BEGIN');
       for (const l of leads) {
         if (!l.name || !l.name.trim()) { errorCount++; continue; }
+        const normEmail = l.email ? l.email.toLowerCase().trim() : null;
+        const normName  = l.name.toLowerCase().trim();
+
+        if (normEmail && existingEmails.has(normEmail)) { duplicateCount++; continue; }
+        if (!normEmail && existingNames.has(normName))  { duplicateCount++; continue; }
+        if (normEmail && seenEmails.has(normEmail))     { duplicateCount++; continue; }
+        if (!normEmail && seenNames.has(normName))      { duplicateCount++; continue; }
+
+        if (normEmail) seenEmails.add(normEmail);
+        else           seenNames.add(normName);
+
         try {
           await client.query(
             `INSERT INTO leads (user_id, name, email, phone, status, source, notes, service, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
-            [userId, l.name.trim(), l.email || null, l.phone || null,
+            [userId, l.name.trim(), normEmail || null, l.phone || null,
              l.status || 'new', l.source || 'manual', l.notes || null, l.service || null]
           );
+          if (normEmail) existingEmails.add(normEmail);
+          else           existingNames.add(normName);
           successCount++;
         } catch { errorCount++; }
       }
@@ -268,7 +292,7 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
       client.release();
     }
 
-    res.json({ success: true, successCount, errorCount });
+    res.json({ success: true, successCount, duplicateCount, errorCount });
   } catch (error) {
     console.error('Error bulk importing leads:', error.message);
     res.status(500).json({ error: 'Failed to import leads' });
@@ -304,6 +328,12 @@ router.get('/sms-conversations', authenticateToken, async (req, res) => {
   }
 });
 
+const ALLOWED_LEAD_FIELDS = new Set([
+  'name', 'email', 'phone', 'service', 'message', 'status',
+  'notes', 'source', 'assigned_to', 'appointment_date', 'service_type',
+  'follow_up_date', 'sms_consent'
+]);
+
 // ============================================
 // PATCH - Update lead
 // ============================================
@@ -312,6 +342,11 @@ router.patch('/:id', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     const { id } = req.params;
     const updates = req.body;
+
+    const invalidFields = Object.keys(updates).filter(f => !ALLOWED_LEAD_FIELDS.has(f));
+    if (invalidFields.length > 0) {
+      return res.status(400).json({ error: `Invalid field(s): ${invalidFields.join(', ')}` });
+    }
 
     // Sanitize: empty strings become null so date/numeric columns don't fail
     const sanitized = {};

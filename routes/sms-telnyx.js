@@ -11,6 +11,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { sendSMSTelnyx } = require('../utils/telnyx');
+const { sendPushToOwner } = require('../utils/pushNotifications');
 
 // Telnyx sends JSON (not url-encoded like Twilio)
 router.post('/webhook', express.json(), async (req, res) => {
@@ -76,6 +77,10 @@ router.post('/webhook', express.json(), async (req, res) => {
       `UPDATE leads SET status = 'replied', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
       [leadId]
     );
+
+    // Push notification to owner
+    const leadName = leadResult.rows[0]?.name || fromNumber;
+    sendPushToOwner(user.id, 'New Message', `${leadName}: ${body.slice(0, 100)}`, { leadId, screen: 'AdminLeads' }).catch(() => {});
 
     // Check if AI agent enabled
     const configResult = await pool.query(

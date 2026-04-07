@@ -62,7 +62,7 @@ const result = await pool.query(
 
   } catch (error) {
     console.error('❌ Signup error:', error.message);
-    res.status(500).json({ error: 'Registration failed', message: error.message });
+    res.status(500).json({ error: 'Registration failed' });
   }
 });
 

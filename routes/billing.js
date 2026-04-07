@@ -474,30 +474,50 @@ router.post('/contact-sales', authenticateToken, async (req, res) => {
       [userId, name, phone, reason, flaws || null, feedback || null, u?.plan || null]
     ).catch(() => {}); // table may not exist yet — non-blocking
 
-    // Email the SORCE team
+    // Email the SORCE team + confirmation to user
     const sgMail = require('@sendgrid/mail');
     if (process.env.SENDGRID_API_KEY) {
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-      sgMail.send({
-        to: 'support@sorceintegrations.com',
-        from: { name: 'SORCE Billing', email: 'noreply@sorceintegrations.com' },
-        subject: `Unsubscribe Request — ${u?.business_name || u?.email || 'User ' + userId} (${u?.plan || 'unknown'} plan)`,
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-            <h2 style="color:#dc2626;">Unsubscribe Request</h2>
-            <table style="width:100%;border-collapse:collapse;font-size:14px;">
-              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;width:35%;">User ID</td><td style="padding:8px;border-bottom:1px solid #eee;">${userId}</td></tr>
-              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Business</td><td style="padding:8px;border-bottom:1px solid #eee;">${u?.business_name || '—'}</td></tr>
-              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Email</td><td style="padding:8px;border-bottom:1px solid #eee;">${u?.email || '—'}</td></tr>
-              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Plan</td><td style="padding:8px;border-bottom:1px solid #eee;">${u?.plan || '—'}</td></tr>
-              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Contact Name</td><td style="padding:8px;border-bottom:1px solid #eee;">${name}</td></tr>
-              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Phone</td><td style="padding:8px;border-bottom:1px solid #eee;">${phone}</td></tr>
-              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Reason</td><td style="padding:8px;border-bottom:1px solid #eee;">${reason}</td></tr>
-              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;vertical-align:top;">Dashboard Flaws</td><td style="padding:8px;border-bottom:1px solid #eee;white-space:pre-wrap;">${flaws || '—'}</td></tr>
-              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;vertical-align:top;">Feedback</td><td style="padding:8px;white-space:pre-wrap;">${feedback || '—'}</td></tr>
-            </table>
-          </div>`,
-      }).catch(e => console.error('Contact-sales email error:', e.message));
+      const emails = [
+        // Internal notification
+        {
+          to: 'help@sorceintegrations.com',
+          from: { name: 'SORCE Billing', email: 'noreply@sorceintegrations.com' },
+          subject: `Cancellation Request — ${u?.business_name || u?.email || 'User ' + userId} (${u?.plan || 'unknown'} plan)`,
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+              <h2 style="color:#dc2626;">Cancellation Request</h2>
+              <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <tr><td style="padding:8px;background:#f9fafb;font-weight:600;width:35%;">User ID</td><td style="padding:8px;border-bottom:1px solid #eee;">${userId}</td></tr>
+                <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Business</td><td style="padding:8px;border-bottom:1px solid #eee;">${u?.business_name || '—'}</td></tr>
+                <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Email</td><td style="padding:8px;border-bottom:1px solid #eee;">${u?.email || '—'}</td></tr>
+                <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Plan</td><td style="padding:8px;border-bottom:1px solid #eee;">${u?.plan || '—'}</td></tr>
+                <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Contact Name</td><td style="padding:8px;border-bottom:1px solid #eee;">${name}</td></tr>
+                <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Phone</td><td style="padding:8px;border-bottom:1px solid #eee;">${phone}</td></tr>
+                <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Reason</td><td style="padding:8px;border-bottom:1px solid #eee;">${reason}</td></tr>
+                <tr><td style="padding:8px;background:#f9fafb;font-weight:600;vertical-align:top;">Dashboard Flaws</td><td style="padding:8px;border-bottom:1px solid #eee;white-space:pre-wrap;">${flaws || '—'}</td></tr>
+                <tr><td style="padding:8px;background:#f9fafb;font-weight:600;vertical-align:top;">Feedback</td><td style="padding:8px;white-space:pre-wrap;">${feedback || '—'}</td></tr>
+              </table>
+            </div>`,
+        },
+      ];
+      // Confirmation to the user (if we have their email)
+      if (u?.email) {
+        emails.push({
+          to: u.email,
+          from: { name: 'SORCE', email: 'noreply@sorceintegrations.com' },
+          subject: 'We received your cancellation request',
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+              <h2 style="color:#1f2937;">Request Received</h2>
+              <p style="color:#4b5563;font-size:15px;">Hi ${name},</p>
+              <p style="color:#4b5563;font-size:15px;">We've received your cancellation request for your SORCE ${u.plan || ''} plan. A team member will reply within 24 hours to process your request.</p>
+              <p style="color:#4b5563;font-size:15px;">If you have any questions in the meantime, you can reply to this email or reach us at <a href="mailto:help@sorceintegrations.com">help@sorceintegrations.com</a>.</p>
+              <p style="color:#9ca3af;font-size:13px;margin-top:32px;">— The SORCE Team</p>
+            </div>`,
+        });
+      }
+      sgMail.send(emails).catch(e => console.error('Contact-sales email error:', e.message));
     }
 
     res.json({ success: true });
