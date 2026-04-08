@@ -136,7 +136,8 @@ router.post('/website/config', authenticateToken, async (req, res) => {
     if (req.body.requireCardOnFile === false) incoming.requireCardOnFile = false;
     if (req.body.customInstructions === '') incoming.customInstructions = '';
 
-    const config = { ...existingConfig, ...incoming, enabled: true };
+    // Preserve deployed status — saving config alone does NOT deploy the widget
+    const config = { ...existingConfig, ...incoming };
 
     console.log('💾 Saving chat config for user', userId, ':', Object.keys(incoming).join(', '));
 
@@ -304,18 +305,20 @@ router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req
 };
 
     if (existing.rows.length > 0 && existing.rows[0].config) {
-      config = { ...existing.rows[0].config, enabled: true };
+      config = { ...existing.rows[0].config, enabled: true, deployed: true };
+    } else {
+      config = { ...config, deployed: true };
     }
 
     await pool.query(
-      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at) 
-       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
-       ON CONFLICT (user_id, agent_type) 
+      `INSERT INTO agent_configs (user_id, agent_type, config, created_at, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, agent_type)
        DO UPDATE SET config = $3, updated_at = CURRENT_TIMESTAMP`,
       [userId, 'website_chat', JSON.stringify(config)]
     );
 
-    console.log('✅ Agent config saved');
+    console.log('✅ Agent config saved as deployed');
 
     // 2. Get existing website
     const websiteResult = await pool.query(

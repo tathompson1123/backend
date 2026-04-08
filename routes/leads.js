@@ -47,12 +47,16 @@ async function triggerLeadFormAgent(userId, lead) {
       [userId, 'lead_form']
     );
 
-    if (agentConfig.rows.length === 0 || !agentConfig.rows[0].config?.enabled) {
-      console.log('Lead form agent not enabled for user', userId);
+    const agentCfg = agentConfig.rows[0]?.config;
+    // SMS fires only when explicitly deployed. Backward-compat: treat enabled=true
+    // with no 'deployed' field as deployed (existing agents before this flag existed).
+    const smsAgentLive = agentCfg?.deployed === true || (agentCfg?.enabled === true && !('deployed' in (agentCfg || {})));
+    if (agentConfig.rows.length === 0 || !smsAgentLive) {
+      console.log('Lead form agent not deployed for user', userId);
       return;
     }
+    const config = agentCfg;
 
-    const config = agentConfig.rows[0].config;
     const smsTemplate = agentConfig.rows[0].sms_template;
 
     // Schedule SMS in DB — picked up by cron job every 30s

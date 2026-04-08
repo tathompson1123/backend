@@ -27,9 +27,9 @@ router.post('/signup', async (req, res) => {
 
    // In your signup route (POST /api/auth/signup)
 const result = await pool.query(
-  `INSERT INTO users (email, password_hash, name, business_name, plan, onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome, created_at)
-   VALUES ($1, $2, $3, $4, NULL, false, 1, $5, false, CURRENT_TIMESTAMP)
-   RETURNING id, email, name, business_name, plan,
+  `INSERT INTO users (email, password_hash, name, business_name, plan, trial_ends_at, onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome, created_at)
+   VALUES ($1, $2, $3, $4, 'pro', NOW() + INTERVAL '7 days', false, 1, $5, false, CURRENT_TIMESTAMP)
+   RETURNING id, email, name, business_name, plan, trial_ends_at,
              onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome, questionnaire_completed`,
   [
     email.toLowerCase(), 
@@ -53,6 +53,7 @@ const result = await pool.query(
         email: user.email,
         businessName: user.business_name,
         plan: user.plan,
+        trial_ends_at: user.trial_ends_at,
         onboarding_completed: user.onboarding_completed,
         onboarding_current_step: user.onboarding_current_step,
         onboarding_steps_completed: user.onboarding_steps_completed,
@@ -77,8 +78,9 @@ router.post('/login', async (req, res) => {
     }
 
    const result = await pool.query(
-  `SELECT id, email, password_hash, business_name, plan,
-          onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome
+  `SELECT id, email, password_hash, business_name, plan, trial_ends_at,
+          onboarding_completed, onboarding_current_step, onboarding_steps_completed,
+          has_seen_welcome, questionnaire_completed
    FROM users WHERE email = $1`,
   [email.toLowerCase()]
 );
@@ -98,19 +100,21 @@ router.post('/login', async (req, res) => {
     console.log('✅ User logged in:', email);
 
     res.json({
-  success: true,
-  token,
-  user: {
-    id: user.id,
-    email: user.email,
-    businessName: user.business_name,
-    plan: user.plan,
-    onboarding_completed: user.onboarding_completed,
-    onboarding_current_step: user.onboarding_current_step,
-    onboarding_steps_completed: user.onboarding_steps_completed,
-    hasSeenWelcome: user.has_seen_welcome  // ADD THIS LINE
-  }
-});
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        businessName: user.business_name,
+        plan: user.plan,
+        trial_ends_at: user.trial_ends_at,
+        onboarding_completed: user.onboarding_completed,
+        onboarding_current_step: user.onboarding_current_step,
+        onboarding_steps_completed: user.onboarding_steps_completed,
+        hasSeenWelcome: user.has_seen_welcome,
+        questionnaire_completed: user.questionnaire_completed || false
+      }
+    });
 
   } catch (error) {
     console.error('❌ Login error:', error.message);

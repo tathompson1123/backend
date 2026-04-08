@@ -34,8 +34,12 @@ async function injectAgents(html, userId, pool, theme) {
       [userId, 'website_chat']
     );
 
-    if (result.rows.length > 0 && result.rows[0].config?.enabled) {
-      const config = result.rows[0].config;
+    const cfg = result.rows[0]?.config;
+    // Widget is live only when explicitly deployed. Backward-compat: treat enabled=true
+    // with no 'deployed' field as deployed (existing agents before this flag existed).
+    const isLive = cfg?.deployed === true || (cfg?.enabled === true && !('deployed' in (cfg || {})));
+    if (result.rows.length > 0 && isLive) {
+      const config = cfg;
       const websiteColors = {
         primaryColor: theme?.primaryColor || '#667eea',
         accentColor: theme?.accentColor || '#764ba2',
