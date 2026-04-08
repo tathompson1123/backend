@@ -28,7 +28,7 @@ router.post('/signup', async (req, res) => {
    // In your signup route (POST /api/auth/signup)
 const result = await pool.query(
   `INSERT INTO users (email, password_hash, name, business_name, plan, trial_ends_at, onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome, created_at)
-   VALUES ($1, $2, $3, $4, 'pro', NOW() + INTERVAL '7 days', false, 1, $5, false, CURRENT_TIMESTAMP)
+   VALUES ($1, $2, $3, $4, 'pro', NOW() + INTERVAL '14 days', false, 1, $5, false, CURRENT_TIMESTAMP)
    RETURNING id, email, name, business_name, plan, trial_ends_at,
              onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome, questionnaire_completed`,
   [
