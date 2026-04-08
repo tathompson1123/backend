@@ -16,13 +16,15 @@ router.post('/run', authenticateToken, async (req, res) => {
 
   // ── Plan check ──────────────────────────────────────────────
   try {
-    const planResult = await pool.query('SELECT plan FROM users WHERE id = $1', [userId]);
+    const planResult = await pool.query('SELECT plan, trial_ends_at FROM users WHERE id = $1', [userId]);
     if (planResult.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
     const plan = planResult.rows[0].plan;
+    const trialEndsAt = planResult.rows[0].trial_ends_at;
+    const onActiveTrial = trialEndsAt && new Date(trialEndsAt) > new Date();
     const allowedPlans = ['pro', 'expert', 'scale'];
-    if (!allowedPlans.includes(plan)) {
+    if (!allowedPlans.includes(plan) && !onActiveTrial) {
       return res.status(403).json({ error: 'Pro plan required' });
     }
   } catch (err) {
