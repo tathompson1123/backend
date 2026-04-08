@@ -29,8 +29,8 @@ router.post('/signup', async (req, res) => {
 const result = await pool.query(
   `INSERT INTO users (email, password_hash, name, business_name, plan, onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome, created_at)
    VALUES ($1, $2, $3, $4, NULL, false, 1, $5, false, CURRENT_TIMESTAMP)
-   RETURNING id, email, name, business_name, plan, 
-             onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome`,
+   RETURNING id, email, name, business_name, plan,
+             onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome, questionnaire_completed`,
   [
     email.toLowerCase(), 
     hashedPassword, 
@@ -46,19 +46,20 @@ const result = await pool.query(
     console.log('✅ New user signed up (no plan, onboarding pending):', email);
 
     res.json({
-  success: true,
-  token,
-  user: {
-    id: user.id,
-    email: user.email,
-    businessName: user.business_name,
-    plan: user.plan,
-    onboarding_completed: user.onboarding_completed,
-    onboarding_current_step: user.onboarding_current_step,
-    onboarding_steps_completed: user.onboarding_steps_completed,
-    hasSeenWelcome: user.has_seen_welcome  // ADD THIS LINE
-  }
-});
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        businessName: user.business_name,
+        plan: user.plan,
+        onboarding_completed: user.onboarding_completed,
+        onboarding_current_step: user.onboarding_current_step,
+        onboarding_steps_completed: user.onboarding_steps_completed,
+        hasSeenWelcome: user.has_seen_welcome,
+        questionnaire_completed: user.questionnaire_completed || false
+      }
+    });
 
   } catch (error) {
     console.error('❌ Signup error:', error.message);
@@ -275,6 +276,26 @@ router.get('/onboarding/status', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error getting onboarding status:', error.message);
     res.status(500).json({ error: 'Failed to get status' });
+  }
+});
+
+// POST - Save signup questionnaire answers
+router.post('/onboarding/questionnaire', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { leadsPerWeek, revenueRange, interestedFeature } = req.body;
+
+    await pool.query(
+      `UPDATE users
+       SET leads_per_week = $1, revenue_range = $2, interested_feature = $3, questionnaire_completed = true
+       WHERE id = $4`,
+      [leadsPerWeek || null, revenueRange || null, interestedFeature || null, userId]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving questionnaire:', error.message);
+    res.status(500).json({ error: 'Failed to save questionnaire' });
   }
 });
 

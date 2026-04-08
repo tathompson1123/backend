@@ -977,6 +977,10 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS base_plan VARCHAR(20)");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_canceling BOOLEAN DEFAULT false");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS questionnaire_completed BOOLEAN DEFAULT false");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS leads_per_week VARCHAR(20)");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS revenue_range VARCHAR(30)");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS interested_feature VARCHAR(50)");
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS embed_configs (
