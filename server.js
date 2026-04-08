@@ -981,6 +981,18 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS leads_per_week VARCHAR(20)");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS revenue_range VARCHAR(30)");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS interested_feature VARCHAR(50)");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_code VARCHAR(10)");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS business_type VARCHAR(100)");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS business_services TEXT");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS business_known_for TEXT");
+
+    // Reset test account to setup mode on every deploy
+    await pool.query(
+      `UPDATE users SET questionnaire_completed = false, email_verified = true
+       WHERE email = 'testaccount@gmail.com'`
+    );
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS embed_configs (

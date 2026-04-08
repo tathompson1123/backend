@@ -4,6 +4,9 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
 const { EFFECTIVE_JWT_SECRET, authenticateToken } = require('../config/middleware');
+const sgMail = require('@sendgrid/mail');
+if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'noreply@sorceintegrations.com';
 
 // POST - Signup
 router.post('/signup', async (req, res) => {
@@ -43,11 +46,42 @@ const result = await pool.query(
     const user = result.rows[0];
     const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '30d' });
 
-    console.log('✅ New user signed up (no plan, onboarding pending):', email);
+    // Generate and store email verification code
+    const verificationCode = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    await pool.query(
+      `UPDATE users SET email_verification_code = $1, email_verification_expires_at = $2 WHERE id = $3`,
+      [verificationCode, expiresAt, user.id]
+    );
+
+    // Send verification email
+    try {
+      await sgMail.send({
+        to: email,
+        from: FROM_EMAIL,
+        subject: 'Verify your SORCE account',
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff">
+            <h1 style="font-size:22px;font-weight:800;color:#111;margin-bottom:8px">Welcome to SORCE 👋</h1>
+            <p style="color:#555;font-size:15px;margin-bottom:28px">Enter this code to verify your email and get started:</p>
+            <div style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:12px;padding:24px;text-align:center;margin-bottom:28px">
+              <span style="font-size:40px;font-weight:900;letter-spacing:10px;color:#111">${verificationCode}</span>
+            </div>
+            <p style="color:#888;font-size:13px">This code expires in 15 minutes. If you didn't sign up for SORCE, you can safely ignore this email.</p>
+          </div>
+        `,
+      });
+    } catch (emailErr) {
+      console.error('⚠️ Verification email failed:', emailErr.message);
+      // Don't block signup if email fails
+    }
+
+    console.log('✅ New user signed up:', email);
 
     res.json({
       success: true,
       token,
+      email_verified: false,
       user: {
         id: user.id,
         email: user.email,
@@ -58,7 +92,8 @@ const result = await pool.query(
         onboarding_current_step: user.onboarding_current_step,
         onboarding_steps_completed: user.onboarding_steps_completed,
         hasSeenWelcome: user.has_seen_welcome,
-        questionnaire_completed: user.questionnaire_completed || false
+        questionnaire_completed: user.questionnaire_completed || false,
+        email_verified: false
       }
     });
 
@@ -80,7 +115,7 @@ router.post('/login', async (req, res) => {
    const result = await pool.query(
   `SELECT id, email, password_hash, business_name, plan, trial_ends_at,
           onboarding_completed, onboarding_current_step, onboarding_steps_completed,
-          has_seen_welcome, questionnaire_completed
+          has_seen_welcome, questionnaire_completed, email_verified
    FROM users WHERE email = $1`,
   [email.toLowerCase()]
 );
@@ -112,7 +147,8 @@ router.post('/login', async (req, res) => {
         onboarding_current_step: user.onboarding_current_step,
         onboarding_steps_completed: user.onboarding_steps_completed,
         hasSeenWelcome: user.has_seen_welcome,
-        questionnaire_completed: user.questionnaire_completed || false
+        questionnaire_completed: user.questionnaire_completed || false,
+        email_verified: user.email_verified || false
       }
     });
 
@@ -136,7 +172,7 @@ router.post('/verify', async (req, res) => {
     const result = await pool.query(
   `SELECT id, email, business_name, plan, trial_ends_at,
           onboarding_completed, onboarding_current_step, onboarding_steps_completed,
-          has_seen_welcome, questionnaire_completed
+          has_seen_welcome, questionnaire_completed, email_verified
    FROM users WHERE id = $1`,
   [decoded.userId]
 );
@@ -159,7 +195,8 @@ router.post('/verify', async (req, res) => {
     onboarding_current_step: user.onboarding_current_step,
     onboarding_steps_completed: user.onboarding_steps_completed,
     hasSeenWelcome: user.has_seen_welcome,
-    questionnaire_completed: user.questionnaire_completed || false
+    questionnaire_completed: user.questionnaire_completed || false,
+    email_verified: user.email_verified || false
   }
 });
 
@@ -286,17 +323,98 @@ router.get('/onboarding/status', authenticateToken, async (req, res) => {
   }
 });
 
+// POST - Verify email with code
+router.post('/verify-email', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { code } = req.body;
+
+    if (!code) return res.status(400).json({ error: 'Code is required' });
+
+    const result = await pool.query(
+      `SELECT email_verification_code, email_verification_expires_at, email_verified FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const user = result.rows[0];
+    if (user.email_verified) return res.json({ success: true, already_verified: true });
+
+    if (!user.email_verification_code || user.email_verification_code !== code.trim()) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    if (new Date(user.email_verification_expires_at) < new Date()) {
+      return res.status(400).json({ error: 'Code has expired. Please request a new one.' });
+    }
+
+    await pool.query(
+      `UPDATE users SET email_verified = true, email_verification_code = NULL, email_verification_expires_at = NULL WHERE id = $1`,
+      [userId]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error verifying email:', error.message);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// POST - Resend verification code
+router.post('/resend-verification', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const result = await pool.query(`SELECT email, email_verified FROM users WHERE id = $1`, [userId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (result.rows[0].email_verified) return res.json({ success: true, already_verified: true });
+
+    const email = result.rows[0].email;
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await pool.query(
+      `UPDATE users SET email_verification_code = $1, email_verification_expires_at = $2 WHERE id = $3`,
+      [code, expiresAt, userId]
+    );
+
+    await sgMail.send({
+      to: email,
+      from: FROM_EMAIL,
+      subject: 'Your new SORCE verification code',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff">
+          <h1 style="font-size:22px;font-weight:800;color:#111;margin-bottom:8px">New verification code</h1>
+          <p style="color:#555;font-size:15px;margin-bottom:28px">Here's your new code:</p>
+          <div style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:12px;padding:24px;text-align:center;margin-bottom:28px">
+            <span style="font-size:40px;font-weight:900;letter-spacing:10px;color:#111">${code}</span>
+          </div>
+          <p style="color:#888;font-size:13px">This code expires in 15 minutes.</p>
+        </div>
+      `,
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error resending verification:', error.message);
+    res.status(500).json({ error: 'Failed to resend code' });
+  }
+});
+
 // POST - Save signup questionnaire answers
 router.post('/onboarding/questionnaire', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { leadsPerWeek, revenueRange, interestedFeature } = req.body;
+    const { leadsPerWeek, revenueRange, interestedFeature, businessType, businessServices, businessKnownFor } = req.body;
 
     await pool.query(
       `UPDATE users
-       SET leads_per_week = $1, revenue_range = $2, interested_feature = $3, questionnaire_completed = true
-       WHERE id = $4`,
-      [leadsPerWeek || null, revenueRange || null, interestedFeature || null, userId]
+       SET leads_per_week = $1, revenue_range = $2, interested_feature = $3, questionnaire_completed = true,
+           business_type = $4, business_services = $5, business_known_for = $6
+       WHERE id = $7`,
+      [leadsPerWeek || null, revenueRange || null, interestedFeature || null,
+       businessType || null, businessServices || null, businessKnownFor || null, userId]
     );
 
     res.json({ success: true });
