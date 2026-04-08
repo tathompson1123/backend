@@ -134,8 +134,9 @@ router.post('/verify', async (req, res) => {
     const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET);
 
     const result = await pool.query(
-  `SELECT id, email, business_name, plan,
-          onboarding_completed, onboarding_current_step, onboarding_steps_completed, has_seen_welcome
+  `SELECT id, email, business_name, plan, trial_ends_at,
+          onboarding_completed, onboarding_current_step, onboarding_steps_completed,
+          has_seen_welcome, questionnaire_completed
    FROM users WHERE id = $1`,
   [decoded.userId]
 );
@@ -153,10 +154,12 @@ router.post('/verify', async (req, res) => {
     email: user.email,
     businessName: user.business_name,
     plan: user.plan,
+    trial_ends_at: user.trial_ends_at,
     onboarding_completed: user.onboarding_completed,
     onboarding_current_step: user.onboarding_current_step,
     onboarding_steps_completed: user.onboarding_steps_completed,
-    hasSeenWelcome: user.has_seen_welcome  // ADD THIS LINE
+    hasSeenWelcome: user.has_seen_welcome,
+    questionnaire_completed: user.questionnaire_completed || false
   }
 });
 
