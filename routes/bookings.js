@@ -516,6 +516,25 @@ router.patch('/:id/status', authenticateToken, async (req, res) => {
       [status, id, userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+
+    // Cancel any pending review requests for this customer when booking is cancelled or no-show
+    if (status === 'cancelled' || status === 'no_show') {
+      const booking = result.rows[0];
+      if (booking.customer_id) {
+        const cancelled = await pool.query(
+          `UPDATE review_requests
+           SET status = 'cancelled'
+           WHERE user_id = $1 AND customer_id = $2
+             AND status = 'pending' AND sms_sent = false
+           RETURNING id`,
+          [userId, booking.customer_id]
+        );
+        if (cancelled.rows.length > 0) {
+          console.log(`🚫 Cancelled ${cancelled.rows.length} review request(s) for booking ${id} (status: ${status})`);
+        }
+      }
+    }
+
     res.json({ success: true, booking: result.rows[0] });
   } catch (error) {
     console.error('Error updating booking status:', error.message);

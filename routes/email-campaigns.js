@@ -85,12 +85,50 @@ async function getRecentSubjects(userId, limit = 5) {
   return result.rows.map(r => r.subject);
 }
 
-async function generateCampaign(userId, config, offerDetails) {
+// Copywriting frameworks cycled automatically each week (from email-write skill)
+const FRAMEWORKS = ['PAS', 'AIDA', 'BAB', 'FAB'];
+const FRAMEWORK_INSTRUCTIONS = {
+  PAS: 'Use the PAS framework: open with the customer\'s Problem (specific pain they feel), Agitate it (make it feel urgent and real), then introduce your offer as the Solution. The subject line should hook on the problem.',
+  AIDA: 'Use the AIDA framework: grab Attention with a bold hook, build Interest with a vivid before/after, stoke Desire by making the offer feel exclusive, then drive Action with a single clear CTA. Subject line should be curiosity-driven.',
+  BAB: 'Use the BAB framework: paint the Before (current frustrating state), show the After (the transformed result they want), then position your offer as the Bridge between the two. Subject line should tease the transformation.',
+  FAB: 'Use the FAB framework: lead with a Feature (what the offer includes), explain the Advantage (why it\'s better), then land on the Benefit (what it means for their life). Subject line should highlight the core benefit.',
+};
+
+// Focus types cycled automatically each week when autopilot is on
+const FOCUS_ROTATION = ['seasonal', 'upsell', 'referral', 'winback'];
+
+async function getNextFocus(userId, currentFocus) {
+  // Look up the last auto-sent focus for this user
+  const result = await pool.query(
+    'SELECT last_auto_focus FROM email_campaign_configs WHERE user_id = $1',
+    [userId]
+  );
+  const lastFocus = result.rows[0]?.last_auto_focus || currentFocus;
+  const idx = FOCUS_ROTATION.indexOf(lastFocus);
+  return FOCUS_ROTATION[(idx + 1) % FOCUS_ROTATION.length];
+}
+
+async function generateCampaign(userId, config, offerDetails, autoRotate = false) {
   const { businessName, industry, city, services } = await getBusinessContext(userId);
   const recentSubjects = await getRecentSubjects(userId);
   const month = new Date().toLocaleString('default', { month: 'long' });
   const tone = config?.tone || 'friendly';
-  const focus = config?.focus || 'seasonal';
+
+  // Auto-rotate focus each week when called from cron
+  let focus = config?.focus || 'seasonal';
+  if (autoRotate) {
+    focus = await getNextFocus(userId, focus);
+    // Persist the new focus so next week advances again
+    await pool.query(
+      'UPDATE email_campaign_configs SET last_auto_focus = $1 WHERE user_id = $2',
+      [focus, userId]
+    );
+  }
+
+  // Pick framework by week number so it rotates automatically
+  const weekOfYear = Math.ceil((new Date() - new Date(new Date().getFullYear(), 0, 1)) / 604800000);
+  const framework = FRAMEWORKS[weekOfYear % FRAMEWORKS.length];
+  const frameworkInstruction = FRAMEWORK_INSTRUCTIONS[framework];
 
   const focusInstructions = {
     seasonal: `Create a time-sensitive seasonal promotion tied to ${month}. Reference the season, weather, or upcoming holidays to make it feel urgent and relevant.`,
@@ -99,25 +137,54 @@ async function generateCampaign(userId, config, offerDetails) {
     winback: 'Create a "we miss you" win-back offer for customers who haven\'t booked in a while. Give them a compelling reason to come back now.',
   };
 
-  // Pick a relevant Unsplash hero image based on industry
+  // Industry-specific hero images — each is a real photo of the actual trade, not generic business shots
   const industryImages = {
-    landscaping:    'photo-1558618666-fcd25c85cd64',
-    'auto detailing': 'photo-1507136566006-cfc505b114fc',
-    'auto wrap':    'photo-1552519507-da3b142c6e3d',
-    cleaning:       'photo-1581578731548-c64695cc6952',
-    hvac:           'photo-1621905251918-48416bd8575a',
-    plumbing:       'photo-1585771724684-38269d6639fd',
-    roofing:        'photo-1625766763788-95dcce9bf5ac',
-    dental:         'photo-1606811841689-23dfddce3e95',
-    fitness:        'photo-1534438327276-14e5300c3a48',
-    salon:          'photo-1521590832167-7bcbfaa6381f',
-    restaurant:     'photo-1414235077428-338989a2e8c0',
-    photography:    'photo-1542038784456-1ea8e935640e',
-    general:        'photo-1600880292203-757bb62b4baf',
+    'auto detail':    'photo-1607860108855-64acf2078ed9', // person detailing car exterior
+    'auto wrap':      'photo-1552519507-da3b142c6e3d', // car with vinyl wrap
+    'auto':           'photo-1503376780353-7e6692767b70', // car close-up
+    'ceramic coat':   'photo-1607860108855-64acf2078ed9', // ceramic coating on car
+    'window tint':    'photo-1552519507-da3b142c6e3d', // tinted car window
+    'landscap':       'photo-1558618666-fcd25c85cd64', // lawn mowing / yard work
+    'lawn':           'photo-1558618666-fcd25c85cd64',
+    'tree':           'photo-1416879595882-3373a0480b5b', // tree trimming
+    'cleaning':       'photo-1581578731548-c64695cc6952', // professional cleaner at work
+    'maid':           'photo-1581578731548-c64695cc6952',
+    'janitorial':     'photo-1581578731548-c64695cc6952',
+    'hvac':           'photo-1621905251918-48416bd8575a', // HVAC tech on unit
+    'air condition':  'photo-1621905251918-48416bd8575a',
+    'plumb':          'photo-1585771724684-38269d6639fd', // plumber working on pipes
+    'roof':           'photo-1625766763788-95dcce9bf5ac', // roofers on a roof
+    'gutter':         'photo-1625766763788-95dcce9bf5ac',
+    'paint':          'photo-1562259949-e8e7689d7828', // painter rolling wall
+    'drywall':        'photo-1562259949-e8e7689d7828',
+    'electric':       'photo-1621905252179-8a8e2736b4c7', // electrician at panel
+    'solar':          'photo-1509391366360-2e959784a276', // solar panels install
+    'dental':         'photo-1606811841689-23dfddce3e95', // dental exam
+    'fitness':        'photo-1534438327276-14e5300c3a48', // gym / workout
+    'personal train': 'photo-1571019614242-c5c5dee9f50b', // trainer with client
+    'salon':          'photo-1521590832167-7bcbfaa6381f', // hair salon chair
+    'hair':           'photo-1522337360788-8b13dee7a37e', // hair styling
+    'barber':         'photo-1503951914875-452162b0f3f1', // barber shop
+    'nail':           'photo-1604654894610-df63bc536371', // nail salon
+    'spa':            'photo-1540555700478-4be289fbecef', // spa / massage
+    'massage':        'photo-1544161515-4ab6ce6db874',
+    'restaurant':     'photo-1414235077428-338989a2e8c0', // restaurant food
+    'food':           'photo-1414235077428-338989a2e8c0',
+    'catering':       'photo-1555244162-803834f70033',
+    'photography':    'photo-1542038784456-1ea8e935640e', // camera / photographer
+    'pest':           'photo-1635865165118-b9a9e8f19249', // pest control spray
+    'pool':           'photo-1575429198097-0414ec08e8cd', // pool cleaning
+    'moving':         'photo-1530103862676-de8c9debad1d', // movers carrying boxes
+    'storage':        'photo-1530103862676-de8c9debad1d',
+    'dog':            'photo-1587300003388-59208cc962cb', // dog grooming / walk
+    'pet':            'photo-1548199973-03cce0bbc87b',
+    'vet':            'photo-1628009368231-7bb7cfcb0def',
+    'tutor':          'photo-1580582932707-520aed937b7b', // tutoring / education
+    'general':        'photo-1600880292203-757bb62b4baf', // professional handshake
   };
-  const industryKey = Object.keys(industryImages).find(k => industry.toLowerCase().includes(k)) || 'general';
-  const heroImageId = industryImages[industryKey];
-  const heroImageUrl = `https://images.unsplash.com/${heroImageId}?w=600&q=80&auto=format&fit=crop`;
+  const ind = industry.toLowerCase();
+  const industryKey = Object.keys(industryImages).find(k => ind.includes(k)) || 'general';
+  const heroImageUrl = `https://images.unsplash.com/${industryImages[industryKey]}?w=600&q=80&auto=format&fit=crop`;
 
   // Expiry date: end of this week (Sunday)
   const expiryDate = new Date();
@@ -137,10 +204,11 @@ Month: ${month}
 Services offered: ${services.length ? services.join(', ') : 'various services'}
 Tone: ${tone}
 Campaign focus: ${focusInstructions[focus] || focusInstructions.seasonal}
+Copywriting framework: ${frameworkInstruction}
 Offer expires: ${expiryStr}
 ${offerSection ? offerSection + '\n' : ''}${recentSubjects.length ? `Recent subjects used (DO NOT repeat these concepts): ${recentSubjects.join(' | ')}` : ''}
 
-Write ONE high-converting weekly email using proven copywriting techniques.
+Write ONE high-converting weekly email. Apply the copywriting framework strictly — it should shape the flow of the entire body copy.
 
 SUBJECT LINE: Under 55 chars. Use a curiosity gap or open loop. No generic words like "newsletter".
 PREVIEW TEXT: 80-100 chars. Continue the curiosity hook, tease without revealing the offer fully.
@@ -150,6 +218,12 @@ Return ONLY valid JSON (no markdown, no code blocks) with this structure:
   "subject": "...",
   "previewText": "...",
   "bodyText": "plain text version of the full email",
+  "annotations": [
+    { "blockType": "urgency_bar", "label": "Tension builder", "note": "One sentence explaining the psychological tactic used here" },
+    { "blockType": "body", "label": "Hook", "note": "One sentence on why the opening works" },
+    { "blockType": "offer_box", "label": "Anchor offer", "note": "One sentence on why this offer structure drives action" },
+    { "blockType": "cta_button", "label": "Call to action", "note": "One sentence on the action psychology used" }
+  ],
   "blocks": [
     { "type": "header", "content": { "title": "${businessName}", "bgColor": "#111827", "textColor": "#ffffff" } },
     { "type": "hero_image", "content": { "src": "${heroImageUrl}", "alt": "${businessName} offer" } },
@@ -167,7 +241,8 @@ Rules:
 - The offer_box should include a SPECIFIC discount, free add-on, or limited availability
 - CTA button text should be action-driven (e.g. "Claim Your Spot", "Book Before ${expiryStr}", "Get 20% Off Now")
 - Keep paragraphs short (2-3 sentences max)
-- Replace ALL placeholders in brackets with real, compelling copy`;
+- Replace ALL placeholders in brackets with real, compelling copy
+- Annotations: write short, punchy labels (2-4 words) and plain-English notes (1 sentence) that explain the copywriting tactic — no jargon`;
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -193,6 +268,8 @@ Rules:
     bodyText: parsed.bodyText,
     blocks,
     bodyHtml,
+    annotations: parsed.annotations || [],
+    meta: { framework, focus },
   };
 }
 
@@ -273,8 +350,20 @@ pool.query(`
 pool.query(`ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS blocks JSONB`)
   .catch(e => console.error('email_campaigns blocks column migration error:', e.message));
 
+pool.query(`ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS annotations JSONB`)
+  .catch(e => console.error('email_campaigns annotations column migration error:', e.message));
+
+pool.query(`ALTER TABLE email_campaign_configs ADD COLUMN IF NOT EXISTS cta_link TEXT`)
+  .catch(e => console.error('email_campaign_configs cta_link migration error:', e.message));
+
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS email_unsubscribed BOOLEAN DEFAULT FALSE`)
   .catch(e => console.error('customers email_unsubscribed column migration error:', e.message));
+
+pool.query(`ALTER TABLE email_campaign_configs ADD COLUMN IF NOT EXISTS last_auto_focus VARCHAR(20)`)
+  .catch(e => console.error('email_campaign_configs last_auto_focus migration error:', e.message));
+
+pool.query(`ALTER TABLE email_campaign_configs ADD COLUMN IF NOT EXISTS auto_send BOOLEAN DEFAULT FALSE`)
+  .catch(e => console.error('email_campaign_configs auto_send migration error:', e.message));
 
 // ── Routes ──────────────────────────────────────────────
 
@@ -294,15 +383,15 @@ router.get('/config', authenticateToken, async (req, res) => {
 // PUT /api/email-campaigns/config
 router.put('/config', authenticateToken, async (req, res) => {
   try {
-    const { enabled, send_day, send_hour, from_name, from_email, tone, focus } = req.body;
+    const { enabled, send_day, send_hour, from_name, from_email, tone, focus, auto_send, cta_link } = req.body;
     const result = await pool.query(
-      `INSERT INTO email_campaign_configs (user_id, enabled, send_day, send_hour, from_name, from_email, tone, focus, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      `INSERT INTO email_campaign_configs (user_id, enabled, send_day, send_hour, from_name, from_email, tone, focus, auto_send, cta_link, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
        ON CONFLICT (user_id) DO UPDATE SET
          enabled = $2, send_day = $3, send_hour = $4,
-         from_name = $5, from_email = $6, tone = $7, focus = $8, updated_at = NOW()
+         from_name = $5, from_email = $6, tone = $7, focus = $8, auto_send = $9, cta_link = $10, updated_at = NOW()
        RETURNING *`,
-      [req.user.userId, enabled ?? false, send_day || 'monday', send_hour ?? 9, from_name, from_email, tone || 'friendly', focus || 'seasonal']
+      [req.user.userId, enabled ?? true, send_day || 'monday', send_hour ?? 9, from_name, from_email, tone || 'friendly', focus || 'seasonal', auto_send ?? false, cta_link || null]
     );
     res.json({ success: true, config: result.rows[0] });
   } catch (e) {
@@ -318,6 +407,220 @@ router.get('/history', authenticateToken, async (req, res) => {
       [req.user.userId]
     );
     res.json({ campaigns: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/email-campaigns/current-draft — fetch or auto-generate this week's campaign
+router.get('/current-draft', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Look for a draft created in the last 7 days
+    const existing = await pool.query(
+      `SELECT id, subject, preview_text, body_html, blocks, body_text, created_at
+       FROM email_campaigns
+       WHERE user_id = $1 AND status = 'draft'
+         AND created_at >= NOW() - INTERVAL '7 days'
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    );
+
+    if (existing.rows.length > 0) {
+      const d = existing.rows[0];
+      let blocks = d.blocks || [];
+      if (typeof blocks === 'string') { try { blocks = JSON.parse(blocks); } catch { blocks = []; } }
+      return res.json({ campaign: { ...d, blocks }, generated: false });
+    }
+
+    // None found — auto-generate one now
+    const configResult = await pool.query(
+      'SELECT * FROM email_campaign_configs WHERE user_id = $1',
+      [userId]
+    );
+    const config = configResult.rows[0] || {};
+    // Pass saved CTA link as offerDetails so it applies to the button
+    const offerDetails = config.cta_link ? { ctaLink: config.cta_link } : null;
+
+    const campaign = await generateCampaign(userId, config, offerDetails, true);
+
+    const saved = await pool.query(
+      `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, annotations, status, scheduled_for, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', NOW(), NOW()) RETURNING id, created_at`,
+      [userId, campaign.subject, campaign.previewText, campaign.bodyHtml, campaign.bodyText, JSON.stringify(campaign.blocks), JSON.stringify(campaign.annotations || [])]
+    );
+
+    res.json({
+      campaign: { id: saved.rows[0].id, created_at: saved.rows[0].created_at, ...campaign },
+      generated: true,
+    });
+  } catch (e) {
+    console.error('current-draft error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/email-campaigns/refine — owner asks SORCE to tweak the draft
+router.post('/refine', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { draftId, feedback } = req.body;
+    if (!feedback?.trim()) return res.status(400).json({ error: 'Feedback is required' });
+
+    const { businessName, industry, services } = await getBusinessContext(userId);
+
+    // Load the existing draft so we can pass it as context
+    const draftResult = await pool.query(
+      'SELECT subject, preview_text, body_text FROM email_campaigns WHERE id = $1 AND user_id = $2',
+      [draftId, userId]
+    );
+    const draft = draftResult.rows[0];
+    if (!draft) return res.status(404).json({ error: 'Draft not found' });
+
+    const configResult = await pool.query(
+      'SELECT * FROM email_campaign_configs WHERE user_id = $1',
+      [userId]
+    );
+    const config = configResult.rows[0] || {};
+
+    const { businessName: bn, industry: ind, city, services: svcs } = await getBusinessContext(userId);
+    const month = new Date().toLocaleString('default', { month: 'long' });
+
+    const industryImages = {
+      'auto detail': 'photo-1607860108855-64acf2078ed9', 'auto wrap': 'photo-1552519507-da3b142c6e3d',
+      'ceramic coat': 'photo-1607860108855-64acf2078ed9', auto: 'photo-1503376780353-7e6692767b70',
+      landscap: 'photo-1558618666-fcd25c85cd64', lawn: 'photo-1558618666-fcd25c85cd64',
+      cleaning: 'photo-1581578731548-c64695cc6952', hvac: 'photo-1621905251918-48416bd8575a',
+      plumb: 'photo-1585771724684-38269d6639fd', roof: 'photo-1625766763788-95dcce9bf5ac',
+      paint: 'photo-1562259949-e8e7689d7828', electric: 'photo-1621905252179-8a8e2736b4c7',
+      dental: 'photo-1606811841689-23dfddce3e95', fitness: 'photo-1534438327276-14e5300c3a48',
+      salon: 'photo-1521590832167-7bcbfaa6381f', hair: 'photo-1522337360788-8b13dee7a37e',
+      barber: 'photo-1503951914875-452162b0f3f1', restaurant: 'photo-1414235077428-338989a2e8c0',
+      photography: 'photo-1542038784456-1ea8e935640e', pest: 'photo-1635865165118-b9a9e8f19249',
+      pool: 'photo-1575429198097-0414ec08e8cd', moving: 'photo-1530103862676-de8c9debad1d',
+      dog: 'photo-1587300003388-59208cc962cb', pet: 'photo-1548199973-03cce0bbc87b',
+      general: 'photo-1600880292203-757bb62b4baf',
+    };
+    const industryKey = Object.keys(industryImages).find(k => ind.toLowerCase().includes(k)) || 'general';
+    const heroImageUrl = `https://images.unsplash.com/${industryImages[industryKey]}?w=600&q=80&auto=format&fit=crop`;
+
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + (7 - expiryDate.getDay()));
+    const expiryStr = expiryDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+    const prompt = `You are refining a weekly promotional email for ${bn}, a ${ind} business.
+
+Current email subject: "${draft.subject}"
+Current email body (plain text):
+${draft.body_text || '(no body text saved)'}
+
+Owner's requested change: "${feedback.trim()}"
+
+Rewrite the email incorporating the owner's feedback. Keep what works, change what they asked.
+Month: ${month}. Services: ${svcs.length ? svcs.join(', ') : 'various services'}.
+
+Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
+{
+  "subject": "...",
+  "previewText": "...",
+  "bodyText": "plain text version",
+  "blocks": [
+    { "type": "header", "content": { "title": "${bn}", "bgColor": "#111827", "textColor": "#ffffff" } },
+    { "type": "hero_image", "content": { "src": "${heroImageUrl}", "alt": "${bn} offer" } },
+    { "type": "urgency_bar", "content": { "text": "⏰ This offer expires ${expiryStr} — don't miss it", "bgColor": "#fef3c7", "textColor": "#92400e" } },
+    { "type": "body", "content": { "heading": "[HOOK HEADING]", "paragraphs": ["[para 1]", "[para 2]"] } },
+    { "type": "offer_box", "content": { "title": "[OFFER TITLE]", "description": "[offer details]", "bgColor": "#f0fdf4", "borderColor": "#22c55e" } },
+    { "type": "cta_button", "content": { "text": "[CTA TEXT]", "link": "#", "bgColor": "#111827", "textColor": "#ffffff", "borderRadius": "8px" } },
+    { "type": "signoff", "content": { "text": "The ${bn} team" } },
+    { "type": "footer", "content": { "text": "You're receiving this because you've used ${bn} before.", "unsubscribeText": "Unsubscribe" } }
+  ]
+}
+Replace ALL bracket placeholders with real copy.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    logClaudeUsage(userId, 'claude-haiku-4-5-20251001', response.usage, 'email_refine');
+
+    const text = response.content[0].text.trim();
+    let json = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+    const jsonMatch = json.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON found in AI response');
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    const { randomUUID } = require('crypto');
+    const blocks = (parsed.blocks || []).map(b => ({ ...b, id: randomUUID().slice(0, 8) }));
+    const bodyHtml = emailBlocksToHtml(blocks);
+
+    // Update the existing draft in place
+    await pool.query(
+      `UPDATE email_campaigns
+       SET subject=$1, preview_text=$2, body_html=$3, body_text=$4, blocks=$5
+       WHERE id=$6 AND user_id=$7`,
+      [parsed.subject, parsed.previewText, bodyHtml, parsed.bodyText, JSON.stringify(blocks), draftId, userId]
+    );
+
+    res.json({
+      success: true,
+      campaign: { id: draftId, subject: parsed.subject, previewText: parsed.previewText, bodyHtml, bodyText: parsed.bodyText, blocks },
+    });
+  } catch (e) {
+    console.error('refine error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/email-campaigns/stats — subscriber count, next send date, last framework used
+router.get('/stats', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Count reachable subscribers (have email, not unsubscribed)
+    const subsResult = await pool.query(
+      `SELECT COUNT(*) AS count FROM customers
+       WHERE user_id = $1 AND email IS NOT NULL AND email != ''
+       AND (email_unsubscribed IS NULL OR email_unsubscribed = FALSE)`,
+      [userId]
+    );
+
+    // Get config for next-send calculation
+    const configResult = await pool.query(
+      'SELECT send_day, send_hour, enabled, last_auto_focus FROM email_campaign_configs WHERE user_id = $1',
+      [userId]
+    );
+    const cfg = configResult.rows[0];
+
+    let nextSend = null;
+    if (cfg?.enabled && cfg.send_day) {
+      const dayMap = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+      const targetDay = dayMap[cfg.send_day] ?? 1;
+      const targetHour = cfg.send_hour ?? 9;
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(targetHour, 0, 0, 0);
+      const daysUntil = (targetDay - now.getDay() + 7) % 7 || (now.getHours() >= targetHour ? 7 : 0);
+      next.setDate(now.getDate() + daysUntil);
+      nextSend = next.toISOString();
+    }
+
+    // What focus will next auto-send use
+    const lastFocus = cfg?.last_auto_focus || cfg?.focus || 'seasonal';
+    const nextFocusIdx = (FOCUS_ROTATION.indexOf(lastFocus) + 1) % FOCUS_ROTATION.length;
+    const nextFocus = FOCUS_ROTATION[nextFocusIdx];
+
+    // What framework will next auto-send use
+    const weekOfYear = Math.ceil((new Date() - new Date(new Date().getFullYear(), 0, 1)) / 604800000);
+    const nextFramework = FRAMEWORKS[(weekOfYear + 1) % FRAMEWORKS.length];
+
+    res.json({
+      subscriberCount: parseInt(subsResult.rows[0].count, 10),
+      nextSend,
+      nextFocus,
+      nextFramework,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
