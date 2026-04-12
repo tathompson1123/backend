@@ -419,7 +419,7 @@ router.get('/current-draft', authenticateToken, async (req, res) => {
 
     // Look for a draft created in the last 7 days
     const existing = await pool.query(
-      `SELECT id, subject, preview_text, body_html, blocks, body_text, created_at
+      `SELECT id, subject, preview_text, body_html, blocks, body_text, annotations, created_at
        FROM email_campaigns
        WHERE user_id = $1 AND status = 'draft'
          AND created_at >= NOW() - INTERVAL '7 days'
@@ -429,9 +429,17 @@ router.get('/current-draft', authenticateToken, async (req, res) => {
 
     if (existing.rows.length > 0) {
       const d = existing.rows[0];
-      let blocks = d.blocks || [];
-      if (typeof blocks === 'string') { try { blocks = JSON.parse(blocks); } catch { blocks = []; } }
-      return res.json({ campaign: { ...d, blocks }, generated: false });
+      let annotations = d.annotations || [];
+      if (typeof annotations === 'string') { try { annotations = JSON.parse(annotations); } catch { annotations = []; } }
+
+      if (annotations.length > 0) {
+        // Good draft with annotations — return it
+        let blocks = d.blocks || [];
+        if (typeof blocks === 'string') { try { blocks = JSON.parse(blocks); } catch { blocks = []; } }
+        return res.json({ campaign: { ...d, blocks, annotations }, generated: false });
+      }
+      // Draft has no annotations (generated before this feature) — replace it so user gets fresh annotated campaign
+      await pool.query("UPDATE email_campaigns SET status = 'replaced' WHERE id = $1", [d.id]);
     }
 
     // None found — auto-generate one now
