@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logClaudeUsage } = require('../utils/claudeUsage');
+const { fetchPexelsImages } = require('../utils/fetchPexelsImages');
 const sgMail = require('@sendgrid/mail');
 const jwt = require('jsonwebtoken');
 
@@ -137,54 +138,14 @@ async function generateCampaign(userId, config, offerDetails, autoRotate = false
     winback: 'Create a "we miss you" win-back offer for customers who haven\'t booked in a while. Give them a compelling reason to come back now.',
   };
 
-  // Industry-specific hero images — each is a real photo of the actual trade, not generic business shots
-  const industryImages = {
-    'auto detail':    'photo-1607860108855-64acf2078ed9', // person detailing car exterior
-    'auto wrap':      'photo-1552519507-da3b142c6e3d', // car with vinyl wrap
-    'auto':           'photo-1503376780353-7e6692767b70', // car close-up
-    'ceramic coat':   'photo-1607860108855-64acf2078ed9', // ceramic coating on car
-    'window tint':    'photo-1552519507-da3b142c6e3d', // tinted car window
-    'landscap':       'photo-1558618666-fcd25c85cd64', // lawn mowing / yard work
-    'lawn':           'photo-1558618666-fcd25c85cd64',
-    'tree':           'photo-1416879595882-3373a0480b5b', // tree trimming
-    'cleaning':       'photo-1581578731548-c64695cc6952', // professional cleaner at work
-    'maid':           'photo-1581578731548-c64695cc6952',
-    'janitorial':     'photo-1581578731548-c64695cc6952',
-    'hvac':           'photo-1621905251918-48416bd8575a', // HVAC tech on unit
-    'air condition':  'photo-1621905251918-48416bd8575a',
-    'plumb':          'photo-1585771724684-38269d6639fd', // plumber working on pipes
-    'roof':           'photo-1625766763788-95dcce9bf5ac', // roofers on a roof
-    'gutter':         'photo-1625766763788-95dcce9bf5ac',
-    'paint':          'photo-1562259949-e8e7689d7828', // painter rolling wall
-    'drywall':        'photo-1562259949-e8e7689d7828',
-    'electric':       'photo-1621905252179-8a8e2736b4c7', // electrician at panel
-    'solar':          'photo-1509391366360-2e959784a276', // solar panels install
-    'dental':         'photo-1606811841689-23dfddce3e95', // dental exam
-    'fitness':        'photo-1534438327276-14e5300c3a48', // gym / workout
-    'personal train': 'photo-1571019614242-c5c5dee9f50b', // trainer with client
-    'salon':          'photo-1521590832167-7bcbfaa6381f', // hair salon chair
-    'hair':           'photo-1522337360788-8b13dee7a37e', // hair styling
-    'barber':         'photo-1503951914875-452162b0f3f1', // barber shop
-    'nail':           'photo-1604654894610-df63bc536371', // nail salon
-    'spa':            'photo-1540555700478-4be289fbecef', // spa / massage
-    'massage':        'photo-1544161515-4ab6ce6db874',
-    'restaurant':     'photo-1414235077428-338989a2e8c0', // restaurant food
-    'food':           'photo-1414235077428-338989a2e8c0',
-    'catering':       'photo-1555244162-803834f70033',
-    'photography':    'photo-1542038784456-1ea8e935640e', // camera / photographer
-    'pest':           'photo-1635865165118-b9a9e8f19249', // pest control spray
-    'pool':           'photo-1575429198097-0414ec08e8cd', // pool cleaning
-    'moving':         'photo-1530103862676-de8c9debad1d', // movers carrying boxes
-    'storage':        'photo-1530103862676-de8c9debad1d',
-    'dog':            'photo-1587300003388-59208cc962cb', // dog grooming / walk
-    'pet':            'photo-1548199973-03cce0bbc87b',
-    'vet':            'photo-1628009368231-7bb7cfcb0def',
-    'tutor':          'photo-1580582932707-520aed937b7b', // tutoring / education
-    'general':        'photo-1600880292203-757bb62b4baf', // professional handshake
-  };
-  const ind = industry.toLowerCase();
-  const industryKey = Object.keys(industryImages).find(k => ind.includes(k)) || 'general';
-  const heroImageUrl = `https://images.unsplash.com/${industryImages[industryKey]}?w=600&q=80&auto=format&fit=crop`;
+  // Fetch a real Pexels hero image for this industry
+  let heroImageUrl = '';
+  try {
+    const { hero } = await fetchPexelsImages(industry, null);
+    heroImageUrl = hero[0] || '';
+  } catch (e) {
+    heroImageUrl = '';
+  }
 
   // Expiry date: end of this week (Sunday)
   const expiryDate = new Date();
@@ -495,23 +456,14 @@ router.post('/refine', authenticateToken, async (req, res) => {
     const { businessName: bn, industry: ind, city, services: svcs } = await getBusinessContext(userId);
     const month = new Date().toLocaleString('default', { month: 'long' });
 
-    const industryImages = {
-      'auto detail': 'photo-1607860108855-64acf2078ed9', 'auto wrap': 'photo-1552519507-da3b142c6e3d',
-      'ceramic coat': 'photo-1607860108855-64acf2078ed9', auto: 'photo-1503376780353-7e6692767b70',
-      landscap: 'photo-1558618666-fcd25c85cd64', lawn: 'photo-1558618666-fcd25c85cd64',
-      cleaning: 'photo-1581578731548-c64695cc6952', hvac: 'photo-1621905251918-48416bd8575a',
-      plumb: 'photo-1585771724684-38269d6639fd', roof: 'photo-1625766763788-95dcce9bf5ac',
-      paint: 'photo-1562259949-e8e7689d7828', electric: 'photo-1621905252179-8a8e2736b4c7',
-      dental: 'photo-1606811841689-23dfddce3e95', fitness: 'photo-1534438327276-14e5300c3a48',
-      salon: 'photo-1521590832167-7bcbfaa6381f', hair: 'photo-1522337360788-8b13dee7a37e',
-      barber: 'photo-1503951914875-452162b0f3f1', restaurant: 'photo-1414235077428-338989a2e8c0',
-      photography: 'photo-1542038784456-1ea8e935640e', pest: 'photo-1635865165118-b9a9e8f19249',
-      pool: 'photo-1575429198097-0414ec08e8cd', moving: 'photo-1530103862676-de8c9debad1d',
-      dog: 'photo-1587300003388-59208cc962cb', pet: 'photo-1548199973-03cce0bbc87b',
-      general: 'photo-1600880292203-757bb62b4baf',
-    };
-    const industryKey = Object.keys(industryImages).find(k => ind.toLowerCase().includes(k)) || 'general';
-    const heroImageUrl = `https://images.unsplash.com/${industryImages[industryKey]}?w=600&q=80&auto=format&fit=crop`;
+    // Fetch a real Pexels hero image for this industry
+    let heroImageUrl = '';
+    try {
+      const { hero } = await fetchPexelsImages(ind, null);
+      heroImageUrl = hero[0] || '';
+    } catch (e) {
+      heroImageUrl = '';
+    }
 
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + (7 - expiryDate.getDay()));
