@@ -48,33 +48,28 @@ const result = await pool.query(
 
     // Generate and store email verification code
     const verificationCode = String(Math.floor(100000 + Math.random() * 900000));
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 15 minutes
     await pool.query(
       `UPDATE users SET email_verification_code = $1, email_verification_expires_at = $2 WHERE id = $3`,
       [verificationCode, expiresAt, user.id]
     );
 
-    // Send verification email
-    try {
-      await sgMail.send({
-        to: email,
-        from: FROM_EMAIL,
-        subject: 'Verify your SORCE account',
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff">
-            <h1 style="font-size:22px;font-weight:800;color:#111;margin-bottom:8px">Welcome to SORCE 👋</h1>
-            <p style="color:#555;font-size:15px;margin-bottom:28px">Enter this code to verify your email and get started:</p>
-            <div style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:12px;padding:24px;text-align:center;margin-bottom:28px">
-              <span style="font-size:40px;font-weight:900;letter-spacing:10px;color:#111">${verificationCode}</span>
-            </div>
-            <p style="color:#888;font-size:13px">This code expires in 15 minutes. If you didn't sign up for SORCE, you can safely ignore this email.</p>
+    // Send verification email — fire and forget so signup response is instant
+    sgMail.send({
+      to: email,
+      from: FROM_EMAIL,
+      subject: 'Verify your SORCE account',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff">
+          <h1 style="font-size:22px;font-weight:800;color:#111;margin-bottom:8px">Welcome to SORCE 👋</h1>
+          <p style="color:#555;font-size:15px;margin-bottom:28px">Enter this code to verify your email and get started:</p>
+          <div style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:12px;padding:24px;text-align:center;margin-bottom:28px">
+            <span style="font-size:40px;font-weight:900;letter-spacing:10px;color:#111">${verificationCode}</span>
           </div>
-        `,
-      });
-    } catch (emailErr) {
-      console.error('⚠️ Verification email failed:', emailErr.message);
-      // Don't block signup if email fails
-    }
+          <p style="color:#888;font-size:13px">This code expires in 1 hour. If you didn't sign up for SORCE, you can safely ignore this email.</p>
+        </div>
+      `,
+    }).catch(emailErr => console.error('⚠️ Verification email failed:', emailErr.message));
 
     console.log('✅ New user signed up:', email);
 
@@ -372,14 +367,15 @@ router.post('/resend-verification', authenticateToken, async (req, res) => {
 
     const email = result.rows[0].email;
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
     await pool.query(
       `UPDATE users SET email_verification_code = $1, email_verification_expires_at = $2 WHERE id = $3`,
       [code, expiresAt, userId]
     );
 
-    await sgMail.send({
+    // Fire and forget — respond immediately, email sends in background
+    sgMail.send({
       to: email,
       from: FROM_EMAIL,
       subject: 'Your new SORCE verification code',
@@ -390,10 +386,11 @@ router.post('/resend-verification', authenticateToken, async (req, res) => {
           <div style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:12px;padding:24px;text-align:center;margin-bottom:28px">
             <span style="font-size:40px;font-weight:900;letter-spacing:10px;color:#111">${code}</span>
           </div>
-          <p style="color:#888;font-size:13px">This code expires in 15 minutes.</p>
+          <p style="color:#888;font-size:13px">This code expires in 1 hour.</p>
         </div>
       `,
-    });
+    }).then(() => console.log(`✅ Verification code resent to ${email}`))
+      .catch(emailErr => console.error('⚠️ Resend email failed:', emailErr.response?.body?.errors || emailErr.message));
 
     res.json({ success: true });
   } catch (error) {

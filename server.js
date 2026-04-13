@@ -990,8 +990,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
 
     // Reset test account to setup mode on every deploy
     await pool.query(
-      `UPDATE users SET questionnaire_completed = false, email_verified = true
-       WHERE email = 'testaccount@gmail.com'`
+      `UPDATE users SET questionnaire_completed = false, email_verified = false
+       WHERE email = 'testsorce@gmail.com'`
     );
 
     await pool.query(`
@@ -1778,7 +1778,7 @@ cron.schedule('*/15 * * * *', async () => {
           );
           const serviceName = itemsResult.rows.map(r => r.service_name).join(', ') || 'your service';
 
-          const formatDate = (d) => { const raw = String(d || ''); const dp = raw.includes('T') ? raw.split('T')[0] : raw; return new Date(dp + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); };
+          const formatDate = (d) => { if (!d) return ''; const dp = d instanceof Date ? d.toISOString().slice(0,10) : String(d).slice(0,10); return new Date(dp + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); };
           const formatTime = (t) => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 
           const reminderLabel = hours_before >= 48 ? `${hours_before / 24} days` : `${hours_before} hours`;
@@ -1881,7 +1881,7 @@ cron.schedule('*/15 * * * *', async () => {
             [booking.id]
           );
           const serviceName = itemsResult.rows.map(r => r.service_name).join(', ') || 'your service';
-          const formatDate = (d) => { const raw = String(d || ''); const dp = raw.includes('T') ? raw.split('T')[0] : raw; return new Date(dp + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
+          const formatDate = (d) => { if (!d) return ''; const dp = d instanceof Date ? d.toISOString().slice(0,10) : String(d).slice(0,10); return new Date(dp + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
           const formatTime = (t) => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 
           const reminderLabel = hours_before >= 48 ? `${hours_before / 24} days` : `${hours_before} hours`;

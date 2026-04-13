@@ -36,6 +36,39 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// GET - Get cancellation policy (must be before /:id to avoid route conflict)
+router.get('/cancellation-policy', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT cancellation_policy_enabled, cancellation_policy_text FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+    const row = result.rows[0] || {};
+    res.json({
+      enabled: row.cancellation_policy_enabled || false,
+      text: row.cancellation_policy_text || ''
+    });
+  } catch (error) {
+    console.error('Error fetching cancellation policy:', error.message);
+    res.status(500).json({ error: 'Failed to fetch cancellation policy' });
+  }
+});
+
+// PUT - Update cancellation policy (must be before /:id to avoid route conflict)
+router.put('/cancellation-policy', authenticateToken, async (req, res) => {
+  try {
+    const { enabled, text } = req.body;
+    await pool.query(
+      `UPDATE users SET cancellation_policy_enabled = $1, cancellation_policy_text = $2 WHERE id = $3`,
+      [!!enabled, text || null, req.user.userId]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating cancellation policy:', error.message);
+    res.status(500).json({ error: 'Failed to update cancellation policy' });
+  }
+});
+
 // PUT - Update a single reminder setting
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
@@ -57,39 +90,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error updating reminder:', error.message);
     res.status(500).json({ error: 'Failed to update reminder' });
-  }
-});
-
-// GET - Get cancellation policy
-router.get('/cancellation-policy', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT cancellation_policy_enabled, cancellation_policy_text FROM users WHERE id = $1',
-      [req.user.userId]
-    );
-    const row = result.rows[0] || {};
-    res.json({
-      enabled: row.cancellation_policy_enabled || false,
-      text: row.cancellation_policy_text || ''
-    });
-  } catch (error) {
-    console.error('Error fetching cancellation policy:', error.message);
-    res.status(500).json({ error: 'Failed to fetch cancellation policy' });
-  }
-});
-
-// PUT - Update cancellation policy
-router.put('/cancellation-policy', authenticateToken, async (req, res) => {
-  try {
-    const { enabled, text } = req.body;
-    await pool.query(
-      `UPDATE users SET cancellation_policy_enabled = $1, cancellation_policy_text = $2 WHERE id = $3`,
-      [!!enabled, text || null, req.user.userId]
-    );
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error updating cancellation policy:', error.message);
-    res.status(500).json({ error: 'Failed to update cancellation policy' });
   }
 });
 

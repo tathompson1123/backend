@@ -234,67 +234,107 @@ Rules:
   };
 }
 
+const EMAIL_SEND_LIMIT = 2000;
+const SMS_SEND_LIMIT = 500;
+
+function normalizePhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  return null; // can't normalize
+}
+
 async function sendCampaign(userId, config, campaignId) {
-  // Get all customers with emails who haven't unsubscribed
-  const customersResult = await pool.query(
-    `SELECT name, email FROM customers
-     WHERE user_id = $1 AND email IS NOT NULL AND email != ''
-     AND (email_unsubscribed IS NULL OR email_unsubscribed = FALSE)`,
-    [userId]
-  );
-
-  if (customersResult.rows.length === 0) {
-    await pool.query(
-      "UPDATE email_campaigns SET status = 'failed', sent_at = NOW() WHERE id = $1",
-      [campaignId]
-    );
-    return { sent: 0, error: 'No customers with email addresses' };
-  }
-
   const campaign = await pool.query('SELECT * FROM email_campaigns WHERE id = $1', [campaignId]);
   const c = campaign.rows[0];
 
   const fromName = config.from_name || 'Your Business';
   const ownerReplyEmail = config.from_email;
 
-  const messages = customersResult.rows.map(customer => {
-    // Generate a signed unsubscribe token for this recipient
-    const unsubToken = jwt.sign(
-      { email: customer.email, userId, type: 'unsubscribe' },
-      UNSUB_SECRET,
-      { expiresIn: '365d' }
+  // ── Email send (up to 2000) ────────────────────────────
+  const emailCustomers = await pool.query(
+    `SELECT name, email FROM customers
+     WHERE user_id = $1 AND email IS NOT NULL AND email != ''
+     AND (email_unsubscribed IS NULL OR email_unsubscribed = FALSE)
+     LIMIT $2`,
+    [userId, EMAIL_SEND_LIMIT]
+  );
+
+  let emailSent = 0;
+  if (emailCustomers.rows.length > 0) {
+    const messages = emailCustomers.rows.map(customer => {
+      const unsubToken = jwt.sign(
+        { email: customer.email, userId, type: 'unsubscribe' },
+        UNSUB_SECRET,
+        { expiresIn: '365d' }
+      );
+      const unsubUrl = `${FRONTEND_URL}/unsubscribe?token=${unsubToken}`;
+      const htmlWithUnsub = (c.body_html || '')
+        .replace(/href="#unsubscribe"/g, `href="${unsubUrl}"`)
+        .replace(/{{UNSUBSCRIBE_URL}}/g, unsubUrl);
+      return {
+        to: customer.email,
+        from: { name: fromName, email: 'noreply@sorceintegrations.com' },
+        replyTo: ownerReplyEmail ? { name: fromName, email: ownerReplyEmail } : undefined,
+        subject: c.subject,
+        text: c.body_text,
+        html: htmlWithUnsub,
+        trackingSettings: { clickTracking: { enable: true }, openTracking: { enable: true } },
+      };
+    });
+
+    for (let i = 0; i < messages.length; i += 900) {
+      await sgMail.send(messages.slice(i, i + 900));
+      emailSent += Math.min(900, messages.length - i);
+    }
+  }
+
+  // ── SMS send (up to 500) ───────────────────────────────
+  let smsSent = 0;
+  const trialNumber = process.env.TWILIO_SHARED_TRIAL_NUMBER;
+  if (trialNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+    const smsCustomers = await pool.query(
+      `SELECT name, phone FROM customers
+       WHERE user_id = $1 AND phone IS NOT NULL AND phone != ''
+       AND (sms_unsubscribed IS NULL OR sms_unsubscribed = FALSE)
+       LIMIT $2`,
+      [userId, SMS_SEND_LIMIT]
     );
-    const unsubUrl = `${FRONTEND_URL}/unsubscribe?token=${unsubToken}`;
 
-    // Inject unsubscribe URL into the email HTML (replace placeholder or append)
-    const htmlWithUnsub = (c.body_html || '').replace(/href="#unsubscribe"/g, `href="${unsubUrl}"`)
-      .replace(/{{UNSUBSCRIBE_URL}}/g, unsubUrl);
+    if (smsCustomers.rows.length > 0) {
+      const twilio = require('twilio');
+      const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
-    return {
-      to: customer.email,
-      from: { name: fromName, email: 'noreply@sorceintegrations.com' },
-      replyTo: ownerReplyEmail ? { name: fromName, email: ownerReplyEmail } : undefined,
-      subject: c.subject,
-      text: c.body_text,
-      html: htmlWithUnsub,
-      trackingSettings: { clickTracking: { enable: true }, openTracking: { enable: true } },
-    };
-  });
+      for (const customer of smsCustomers.rows) {
+        const phone = normalizePhone(customer.phone);
+        if (!phone) continue;
+        try {
+          const firstName = (customer.name || '').split(' ')[0] || 'there';
+          const body = `Hi ${firstName}! ${c.subject} — ${fromName}. Reply STOP to opt out.`;
+          await twilioClient.messages.create({ body, to: phone, from: trialNumber });
+          smsSent++;
+        } catch (err) {
+          console.error(`📵 SMS failed to ${customer.phone}:`, err.message);
+        }
+      }
+    }
+  }
 
-  // SendGrid allows up to 1000 per batch
-  let sent = 0;
-  for (let i = 0; i < messages.length; i += 900) {
-    const batch = messages.slice(i, i + 900);
-    await sgMail.send(batch);
-    sent += batch.length;
+  if (emailSent === 0 && smsSent === 0) {
+    await pool.query(
+      "UPDATE email_campaigns SET status = 'failed', sent_at = NOW() WHERE id = $1",
+      [campaignId]
+    );
+    return { sent: 0, smsSent: 0, error: 'No customers to send to' };
   }
 
   await pool.query(
     "UPDATE email_campaigns SET status = 'sent', sent_at = NOW(), recipient_count = $1 WHERE id = $2",
-    [sent, campaignId]
+    [emailSent, campaignId]
   );
 
-  return { sent };
+  console.log(`📧 Campaign ${campaignId}: ${emailSent} emails, ${smsSent} SMS sent`);
+  return { sent: emailSent, smsSent };
 }
 
 // ── Startup migrations ───────────────────────────────────
