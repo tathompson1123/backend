@@ -1100,4 +1100,32 @@ router.post('/card-on-file/:token/save', async (req, res) => {
   }
 });
 
+// GET /api/public/review-click/:id
+// Tracked redirect for review request links.
+// Sets link_clicked = true on the review_request then redirects to the Google review URL.
+router.get('/review-click/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE review_requests SET link_clicked = true
+       FROM users u
+       WHERE review_requests.id = $1
+         AND u.id = review_requests.user_id
+       RETURNING u.google_review_link`,
+      [id]
+    );
+
+    const googleLink = result.rows[0]?.google_review_link;
+    if (googleLink) {
+      return res.redirect(302, googleLink);
+    }
+    // Fallback if no link stored
+    res.redirect(302, 'https://www.google.com/maps');
+  } catch (err) {
+    console.error('Review click tracking error:', err.message);
+    res.redirect(302, 'https://www.google.com/maps');
+  }
+});
+
 module.exports = router;

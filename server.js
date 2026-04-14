@@ -1524,8 +1524,10 @@ cron.schedule('*/60 * * * * *', async () => {
           message += ` ${req.incentive}`;
         }
         if (req.google_review_link) {
+          const backendUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
+          const trackedUrl = `${backendUrl}/api/public/review-click/${req.id}`;
           if (!/[.!?]$/.test(message.trimEnd())) message = message.trimEnd() + '.';
-          message += ` Leave your review here: ${req.google_review_link}`;
+          message += ` Leave your review here: ${trackedUrl}`;
         }
 
         // Format phone number for sending
@@ -1637,6 +1639,7 @@ cron.schedule('*/30 * * * *', async () => {
        LEFT JOIN review_configs rc ON rc.user_id = rr.user_id
        WHERE rr.sms_sent = true
          AND (rr.email_sent = false OR rr.email_sent IS NULL)
+         AND (rr.link_clicked = false OR rr.link_clicked IS NULL)
          AND c.email IS NOT NULL
          AND rr.sms_sent_at + INTERVAL '24 hours' <= NOW()
          AND (u.plan IS NOT NULL)`
@@ -1645,7 +1648,8 @@ cron.schedule('*/30 * * * *', async () => {
     for (const req of pending.rows) {
       try {
         const firstName = (req.customer_name || 'there').split(' ')[0];
-        const reviewLink = req.google_review_link || null;
+        const backendUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
+        const reviewLink = req.google_review_link ? `${backendUrl}/api/public/review-click/${req.id}` : null;
 
         let bodyText = req.incentive_enabled && req.incentive
           ? `We'd love to hear about your experience! Could you take a moment to share a review? As a thank you, here's a special offer: <strong>${req.incentive}</strong>`
