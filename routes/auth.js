@@ -6,7 +6,7 @@ const { pool } = require('../config/database');
 const { EFFECTIVE_JWT_SECRET, authenticateToken } = require('../config/middleware');
 const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'noreply@sorceintegrations.com';
+const FROM_EMAIL = { name: 'SORCE', email: 'noreply@sorceintegrations.com' };
 
 // POST - Signup
 router.post('/signup', async (req, res) => {
