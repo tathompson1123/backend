@@ -246,4 +246,81 @@ Lead: ${lead.name || 'Customer'} | ${lead.email || 'No email'}`;
   }
 }
 
+// GET /api/sms/webhook-status — check Twilio webhook config for the authenticated user's number
+router.get('/webhook-status', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
+    const jwt = require('jsonwebtoken');
+    const { EFFECTIVE_JWT_SECRET } = require('../config/middleware');
+    const decoded = jwt.verify(authHeader.replace('Bearer ', ''), EFFECTIVE_JWT_SECRET);
+    const userId = decoded.userId;
+
+    const userResult = await pool.query(
+      'SELECT twilio_phone_number, twilio_phone_sid FROM users WHERE id = $1',
+      [userId]
+    );
+    if (!userResult.rows[0]?.twilio_phone_sid) {
+      return res.json({ hasNumber: false, message: 'No Twilio number provisioned' });
+    }
+
+    const { twilio_phone_number, twilio_phone_sid } = userResult.rows[0];
+    const baseUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
+    const expectedUrl = `${baseUrl}/api/sms/webhook`;
+
+    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    const numberInfo = await client.incomingPhoneNumbers(twilio_phone_sid).fetch();
+
+    const isCorrect = numberInfo.smsUrl === expectedUrl;
+
+    res.json({
+      hasNumber: true,
+      phoneNumber: twilio_phone_number,
+      currentWebhookUrl: numberInfo.smsUrl,
+      expectedWebhookUrl: expectedUrl,
+      isCorrect,
+      status: isCorrect ? '✅ Webhook correctly configured' : '❌ Webhook URL mismatch — replies not being received'
+    });
+  } catch (err) {
+    console.error('Webhook status check error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/sms/fix-webhook — force-repair the Twilio webhook URL for the authenticated user
+router.post('/fix-webhook', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
+    const jwt = require('jsonwebtoken');
+    const { EFFECTIVE_JWT_SECRET } = require('../config/middleware');
+    const decoded = jwt.verify(authHeader.replace('Bearer ', ''), EFFECTIVE_JWT_SECRET);
+    const userId = decoded.userId;
+
+    const userResult = await pool.query(
+      'SELECT twilio_phone_number, twilio_phone_sid FROM users WHERE id = $1',
+      [userId]
+    );
+    if (!userResult.rows[0]?.twilio_phone_sid) {
+      return res.status(400).json({ error: 'No Twilio number provisioned' });
+    }
+
+    const { twilio_phone_number, twilio_phone_sid } = userResult.rows[0];
+    const baseUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
+    const expectedUrl = `${baseUrl}/api/sms/webhook`;
+
+    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    await client.incomingPhoneNumbers(twilio_phone_sid).update({
+      smsUrl: expectedUrl,
+      smsMethod: 'POST'
+    });
+
+    console.log(`🔧 Manually repaired webhook for user ${userId} (${twilio_phone_number}) → ${expectedUrl}`);
+    res.json({ success: true, phoneNumber: twilio_phone_number, webhookUrl: expectedUrl });
+  } catch (err) {
+    console.error('Fix webhook error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
