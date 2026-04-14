@@ -332,6 +332,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     const { getTimezoneFromPhone } = require('./utils/zipToTimezone');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone VARCHAR(60) DEFAULT 'America/New_York'`);
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_review_requests_booking ON review_requests(booking_id) WHERE booking_id IS NOT NULL`);
     // Backfill timezone for existing users that have a phone number
     const usersToFix = await pool.query(
       `SELECT id, telnyx_phone_number, twilio_phone_number FROM users
@@ -1574,9 +1576,7 @@ cron.schedule('*/5 * * * *', async () => {
          AND b.status NOT IN ('cancelled')
          AND NOT EXISTS (
            SELECT 1 FROM review_requests rr
-           WHERE rr.customer_id = b.customer_id
-             AND rr.user_id = b.user_id
-             AND rr.created_at > NOW() - INTERVAL '24 hours'
+           WHERE rr.booking_id = b.id
          )
          AND (
            -- Automatic: service has ended + delay (timezone-aware)
@@ -1603,10 +1603,10 @@ cron.schedule('*/5 * * * *', async () => {
           ? `REV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
           : null;
         await pool.query(
-          `INSERT INTO review_requests (user_id, customer_id, status, scheduled_send_time, incentive_code, created_at)
-           VALUES ($1, $2, 'pending', $3, $4, NOW())
-           ON CONFLICT DO NOTHING`,
-          [row.user_id, row.customer_id, scheduledTime, incentiveCode]
+          `INSERT INTO review_requests (user_id, customer_id, booking_id, status, scheduled_send_time, incentive_code, created_at)
+           VALUES ($1, $2, $3, 'pending', $4, $5, NOW())
+           ON CONFLICT (booking_id) WHERE booking_id IS NOT NULL DO NOTHING`,
+          [row.user_id, row.customer_id, row.booking_id, scheduledTime, incentiveCode]
         );
         console.log(`✅ [service_duration] Review request queued for booking ${row.booking_id}`);
       } catch (rowErr) {
