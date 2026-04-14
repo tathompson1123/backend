@@ -251,7 +251,7 @@ router.post('/create', authenticateToken, async (req, res) => {
       { bookingId: booking.id, type: 'new_booking' }
     ).catch(() => {});
 
-    // Mark any matching chat conversation as booked (non-blocking)
+    // Mark any matching chat conversation and lead as booked (non-blocking)
     if (customerInfo.email || customerInfo.phone) {
       pool.query(
         `UPDATE chat_conversations SET outcome = 'booked', updated_at = NOW()
@@ -264,6 +264,16 @@ router.post('/create', authenticateToken, async (req, res) => {
                AND ($2::text IS NULL OR email = $2)
                AND ($3::text IS NULL OR phone = $3)
            )`,
+        [userId, customerInfo.email || null, customerInfo.phone || null]
+      ).catch(() => {});
+
+      pool.query(
+        `UPDATE leads SET status = 'booked', updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1
+           AND conversation_id IS NOT NULL
+           AND status != 'booked'
+           AND ($2::text IS NULL OR email = $2)
+           AND ($3::text IS NULL OR phone = $3)`,
         [userId, customerInfo.email || null, customerInfo.phone || null]
       ).catch(() => {});
     }
@@ -286,7 +296,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const { serviceId, bookingDate, startTime, customerInfo, notes, employeeId, groupId, status, sendEmail } = req.body;
+    const { serviceId, additionalServiceIds, bookingDate, startTime, customerInfo, notes, employeeId, groupId, status, sendEmail } = req.body;
 
     const serviceResult = await pool.query(
       'SELECT duration_hours, price, name FROM services WHERE id = $1',
@@ -298,7 +308,27 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     const service = serviceResult.rows[0];
-    
+
+    // Fetch add-on service details
+    const addOnIds = Array.isArray(additionalServiceIds) ? additionalServiceIds.filter(Boolean) : [];
+    let addOnServices = [];
+    if (addOnIds.length > 0) {
+      const addOnResult = await pool.query(
+        'SELECT id, duration_hours, price, name FROM services WHERE id = ANY($1::int[])',
+        [addOnIds]
+      );
+      addOnServices = addOnResult.rows;
+    }
+
+    // Recalculate totals
+    const taxResult = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
+    const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
+    const primaryPrice = parseFloat(service.price);
+    const addOnTotal = addOnServices.reduce((sum, s) => sum + parseFloat(s.price), 0);
+    const subtotal = primaryPrice + addOnTotal;
+    const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
+    const totalAmount = subtotal + taxAmount;
+
     const [startHour, startMin] = startTime.split(':').map(Number);
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = startMinutes + (service.duration_hours * 60);
@@ -307,7 +337,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
 
     const bookingResult = await pool.query(
-      `UPDATE bookings 
+      `UPDATE bookings
        SET booking_date = $1,
            start_time = $2,
            end_time = $3,
@@ -319,8 +349,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
            employee_id = $9,
            group_id = $10,
            status = $11,
+           subtotal = $12,
+           tax_amount = $13,
+           total_amount = $14,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $12 AND user_id = $13
+       WHERE id = $15 AND user_id = $16
        RETURNING *`,
       [
         bookingDate,
@@ -334,6 +367,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
         employeeId,
         groupId || null,
         status || 'confirmed',
+        subtotal,
+        taxAmount,
+        totalAmount,
         id,
         userId
       ]
@@ -347,23 +383,29 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     if (booking.customer_id && customerInfo) {
       await pool.query(
-        `UPDATE customers 
+        `UPDATE customers
          SET name = $1, email = $2, phone = $3
          WHERE id = $4`,
         [customerInfo.name, customerInfo.email, customerInfo.phone, booking.customer_id]
       );
     }
 
+    // Replace all booking_items: delete then re-insert primary + add-ons
+    await pool.query('DELETE FROM booking_items WHERE booking_id = $1', [id]);
+
     await pool.query(
-      `UPDATE booking_items
-       SET service_id = $1,
-           service_name = $2,
-           service_duration = $3,
-           service_price = $4,
-           subtotal = $5
-       WHERE booking_id = $6`,
-      [serviceId, service.name, service.duration_hours, service.price, service.price, id]
+      `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal)
+       VALUES ($1, $2, $3, $4, $5, 1, $6)`,
+      [id, serviceId, service.name, service.duration_hours, service.price, service.price]
     );
+
+    for (const addOn of addOnServices) {
+      await pool.query(
+        `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal)
+         VALUES ($1, $2, $3, $4, $5, 1, $6)`,
+        [id, addOn.id, addOn.name, addOn.duration_hours, addOn.price, addOn.price]
+      );
+    }
 
     if (sendEmail && booking.customer_email) {
       sendBookingEmails({

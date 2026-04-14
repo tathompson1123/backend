@@ -186,13 +186,40 @@ Be specific and actionable. Reference actual content from the HTML where relevan
 router.get('/last', authenticateToken, async (req, res) => {
   const userId = req.user.userId;
   try {
+    // Get the most recent audit result
     const result = await pool.query(
-      `SELECT audit, plan, url, created_at FROM seo_audits WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT audit, plan, url, created_at, head_code, llms_txt, code_generated_at FROM seo_audits WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
       [userId]
     );
     if (result.rows.length === 0) return res.json({ success: true, audit: null, plan: null });
     const row = result.rows[0];
-    res.json({ success: true, audit: row.audit, plan: row.plan || null, savedAt: row.created_at });
+
+    // If the most recent audit has no head_code (e.g. user re-ran audit without regenerating),
+    // pull the most recently generated head_code from any earlier audit row
+    let headCode = row.head_code || null;
+    let llmsTxt = row.llms_txt || null;
+    let codeGeneratedAt = row.code_generated_at || null;
+    if (!headCode) {
+      const codeRow = await pool.query(
+        `SELECT head_code, llms_txt, code_generated_at FROM seo_audits WHERE user_id = $1 AND head_code IS NOT NULL ORDER BY code_generated_at DESC LIMIT 1`,
+        [userId]
+      );
+      if (codeRow.rows.length > 0) {
+        headCode = codeRow.rows[0].head_code;
+        llmsTxt = codeRow.rows[0].llms_txt;
+        codeGeneratedAt = codeRow.rows[0].code_generated_at;
+      }
+    }
+
+    res.json({
+      success: true,
+      audit: row.audit,
+      plan: row.plan || null,
+      savedAt: row.created_at,
+      headCode,
+      llmsTxtContent: llmsTxt,
+      codeGeneratedAt,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -342,6 +369,425 @@ Do NOT pad with generic advice.`;
   } catch (err) {
     console.error('[seo-audit] Plan generation error:', err.message);
     return res.status(500).json({ error: `Failed to generate plan: ${err.message}` });
+  }
+});
+
+// ─── POST /api/seo-audit/generate-code ──────────────────────
+// Generates a copy-paste SEO embed snippet (JSON-LD + meta tags)
+// and llms.txt content that users paste into ANY platform's <head>.
+// Works the same way as the SORCE widget embed code flow.
+router.post('/generate-code', authenticateToken, async (req, res) => {
+  const userId = req.user.userId;
+
+  // Plan check
+  try {
+    const planResult = await pool.query('SELECT plan, trial_ends_at FROM users WHERE id = $1', [userId]);
+    if (!planResult.rows.length) return res.status(404).json({ error: 'User not found' });
+    const plan = planResult.rows[0].plan;
+    const trialEndsAt = planResult.rows[0].trial_ends_at;
+    const onActiveTrial = trialEndsAt && new Date(trialEndsAt) > new Date();
+    if (!['pro', 'expert', 'scale'].includes(plan) && !onActiveTrial) {
+      return res.status(403).json({ error: 'Pro plan required' });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to verify plan' });
+  }
+
+  // Build business context from multiple sources
+  let bizInfo = {};
+  let websiteInfo = {};
+  let lastAudit = null;
+  try {
+    const [bizRes, webRes, auditRes] = await Promise.all([
+      pool.query('SELECT phone, email, city, state, address FROM business_information WHERE user_id = $1', [userId]),
+      pool.query('SELECT business_name, business_type, page_data, vercel_url FROM websites WHERE user_id = $1', [userId]),
+      pool.query('SELECT audit FROM seo_audits WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1', [userId]),
+    ]);
+    bizInfo = bizRes.rows[0] || {};
+    websiteInfo = webRes.rows[0] || {};
+    lastAudit = auditRes.rows[0]?.audit || null;
+  } catch (err) {
+    console.warn('[seo/generate-code] Context load failed:', err.message);
+  }
+
+  // Extract services from page_data sections
+  let pageData = {};
+  try {
+    pageData = typeof websiteInfo.page_data === 'string'
+      ? JSON.parse(websiteInfo.page_data)
+      : (websiteInfo.page_data || {});
+  } catch { /* ignore */ }
+
+  const services = [];
+  for (const s of (Array.isArray(pageData.sections) ? pageData.sections : [])) {
+    for (const item of (s.content?.items || s.content?.services || [])) {
+      const name = item.title || item.name || item.heading || '';
+      if (name) services.push(name);
+    }
+    if (services.length >= 12) break;
+  }
+
+  const businessName = websiteInfo.business_name || pageData.meta?.businessName || 'Local Business';
+  const businessType = websiteInfo.business_type || pageData.meta?.businessType || lastAudit?.businessType || 'local service business';
+  const siteUrl = lastAudit?.url || (websiteInfo.vercel_url ? `https://${websiteInfo.vercel_url.replace(/^https?:?\/*/, '')}` : '');
+
+  const businessContext = {
+    name: businessName,
+    type: businessType,
+    phone: bizInfo.phone || '',
+    email: bizInfo.email || '',
+    address: bizInfo.address || '',
+    city: bizInfo.city || '',
+    state: bizInfo.state || '',
+    url: siteUrl,
+    services: services.slice(0, 10),
+    auditIssues: lastAudit ? [
+      ...(lastAudit.categories?.schema?.issues || []),
+      ...(lastAudit.categories?.onPage?.issues || []),
+      ...(lastAudit.categories?.aiReadiness?.issues || []),
+    ].slice(0, 6) : [],
+  };
+
+  // Generate SEO code with Claude
+  let seoCode;
+  try {
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: `You are an expert SEO developer for local service businesses.
+Generate clean, production-ready embed code. Use the real business info provided.
+Respond ONLY with valid JSON — no markdown, no code fences, no explanation.`,
+      messages: [{
+        role: 'user',
+        content: `Generate SEO embed code for this business. This code will be copy-pasted into the <head> section of their website (Wix, Squarespace, WordPress, etc.).
+
+BUSINESS INFO:
+${JSON.stringify(businessContext, null, 2)}
+
+Return ONLY a JSON object with exactly this structure:
+{
+  "headCode": "<!-- the full block to paste in <head> including JSON-LD script tag and all meta tags -->",
+  "llmsTxtContent": "full llms.txt file content"
+}
+
+Rules for headCode:
+- Start with <!-- SORCE SEO --> comment for identification
+- Include a <script type="application/ld+json"> block with the most specific Schema.org type for the business
+- JSON-LD must include: @context, @type, name, url, telephone, address (PostalAddress with streetAddress/city/state/postalCode/country), description, areaServed
+- If services are provided, include hasOfferCatalog with Offer items
+- After the script block, include meta tags: description (150-160 chars), og:title, og:description, og:type=website, og:url, twitter:card=summary_large_image, robots (index follow)
+- End with <!-- End SORCE SEO --> comment
+- All on separate lines, clean indentation
+
+Rules for llmsTxtContent:
+- Follow the llms.txt spec exactly: "# BusinessName" header, "> tagline" blockquote, description paragraph, ## Services list, ## Contact section
+- Make it detailed enough that ChatGPT, Perplexity, and Google AI can cite the business accurately`,
+      }],
+    });
+    logClaudeUsage(userId, 'claude-sonnet-4-6', message.usage, 'seo_generate_code');
+
+    const raw = message.content[0]?.text || '';
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+    seoCode = JSON.parse(cleaned);
+  } catch (err) {
+    console.error('[seo/generate-code] Claude error:', err.message);
+    return res.status(500).json({ error: `Failed to generate SEO code: ${err.message}` });
+  }
+
+  // Inject tracking pixel before closing comment
+  const backendUrl = (process.env.PRODUCTION_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:3001').replace(/\/$/, '');
+  const trackingPixel = `<script>(function(){try{var p=new Image();p.src='${backendUrl}/api/track/${userId}?r='+encodeURIComponent(document.referrer)+'&u='+encodeURIComponent(location.pathname);}catch(e){}})();</script>`;
+  const headCode = seoCode.headCode.includes('<!-- End SORCE SEO -->')
+    ? seoCode.headCode.replace('<!-- End SORCE SEO -->', `${trackingPixel}\n<!-- End SORCE SEO -->`)
+    : seoCode.headCode + '\n' + trackingPixel;
+
+  // Save generated code + timestamp to the most recent audit row
+  pool.query(
+    `UPDATE seo_audits SET code_generated_at = NOW(), head_code = $2, llms_txt = $3
+     WHERE id = (SELECT id FROM seo_audits WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1)`,
+    [userId, headCode, seoCode.llmsTxtContent]
+  ).catch(err => console.warn('[seo/generate-code] Could not save generated code:', err.message));
+
+  console.log(`✅ SEO embed code generated for user ${userId}`);
+  return res.json({
+    success: true,
+    headCode,
+    llmsTxtContent: seoCode.llmsTxtContent,
+  });
+});
+
+// ─── GET /api/seo-audit/visits ───────────────────────────
+// Returns daily website_visits counts for the last N days + the date the SEO code was first generated
+router.get('/visits', authenticateToken, async (req, res) => {
+  const userId = req.user.userId;
+  const days = Math.min(parseInt(req.query.days || '90'), 180);
+
+  try {
+    const [visitsRes, codeRes] = await Promise.all([
+      pool.query(
+        `SELECT DATE(visited_at) AS date, COUNT(*)::int AS count
+         FROM website_visits
+         WHERE user_id = $1
+           AND visited_at >= CURRENT_DATE - ($2 || ' days')::interval
+         GROUP BY DATE(visited_at)
+         ORDER BY date ASC`,
+        [userId, days]
+      ),
+      pool.query(
+        `SELECT MIN(code_generated_at) AS first_generated
+         FROM seo_audits
+         WHERE user_id = $1 AND code_generated_at IS NOT NULL`,
+        [userId]
+      ),
+    ]);
+
+    res.json({
+      success: true,
+      visits: visitsRes.rows,
+      seoCodeGeneratedAt: codeRes.rows[0]?.first_generated || null,
+      days,
+    });
+  } catch (err) {
+    console.error('[seo-audit/visits]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /api/seo-audit/generate-content ────────────────
+// Generates a full SEO-optimised blog post or service page for copy-paste into any CMS
+router.post('/generate-content', authenticateToken, async (req, res) => {
+  const userId = req.user.userId;
+
+  try {
+    const planResult = await pool.query('SELECT plan, trial_ends_at FROM users WHERE id = $1', [userId]);
+    if (!planResult.rows.length) return res.status(404).json({ error: 'User not found' });
+    const { plan, trial_ends_at } = planResult.rows[0];
+    const onTrial = trial_ends_at && new Date(trial_ends_at) > new Date();
+    if (!['pro', 'expert', 'scale'].includes(plan) && !onTrial) {
+      return res.status(403).json({ error: 'Pro plan required' });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to verify plan' });
+  }
+
+  const { type, topic } = req.body; // type: 'blog' | 'service'
+  if (!type || !topic) return res.status(400).json({ error: 'type and topic are required' });
+
+  // Load business context
+  let bizInfo = {}, websiteInfo = {}, lastAudit = null;
+  try {
+    const [bizRes, webRes, auditRes] = await Promise.all([
+      pool.query('SELECT phone, email, city, state, address FROM business_information WHERE user_id = $1', [userId]),
+      pool.query('SELECT business_name, business_type, vercel_url FROM websites WHERE user_id = $1', [userId]),
+      pool.query('SELECT audit FROM seo_audits WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1', [userId]),
+    ]);
+    bizInfo = bizRes.rows[0] || {};
+    websiteInfo = webRes.rows[0] || {};
+    lastAudit = auditRes.rows[0]?.audit || null;
+  } catch (err) {
+    console.warn('[seo/generate-content] Context load error:', err.message);
+  }
+
+  const businessName = websiteInfo.business_name || lastAudit?.businessType || 'Local Business';
+  const businessType = websiteInfo.business_type || lastAudit?.businessType || 'local service business';
+  const city = bizInfo.city || '';
+  const state = bizInfo.state || '';
+  const location = [city, state].filter(Boolean).join(', ');
+  const siteUrl = websiteInfo.vercel_url ? `https://${websiteInfo.vercel_url.replace(/^https?:?\/*/, '')}` : '';
+
+  const typeLabel = type === 'blog' ? 'blog post' : 'service page';
+  const wordTarget = type === 'blog' ? '800–1200 words' : '500–800 words';
+  const schemaType = type === 'blog' ? 'Article' : 'Service';
+
+  try {
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 6000,
+      system: `You are an expert SEO content writer for local service businesses.
+Write compelling, locally-optimised content that ranks on Google and converts visitors into customers.
+Respond ONLY with valid JSON — no markdown, no code fences, no explanation.`,
+      messages: [{
+        role: 'user',
+        content: `Write a fully SEO-optimised ${typeLabel} for this local business.
+
+BUSINESS:
+- Name: ${businessName}
+- Type: ${businessType}
+- Location: ${location || 'local area'}
+- Website: ${siteUrl || 'their website'}
+
+TOPIC: ${topic}
+TARGET LENGTH: ${wordTarget}
+
+Return ONLY a JSON object with this exact structure:
+{
+  "title": "H1 title — include primary keyword and location if relevant",
+  "slug": "url-friendly-slug-no-spaces",
+  "metaDescription": "150-160 char meta description with primary keyword",
+  "targetKeywords": ["primary keyword", "secondary keyword", "long-tail keyword", "local keyword"],
+  "wordCount": <estimated word count as number>,
+  "htmlContent": "<full HTML content using h2/h3/p/ul/li tags — NO <html>/<head>/<body> wrapper, just the body content starting with an intro paragraph>",
+  "jsonLd": "<script type=\\"application/ld+json\\"> block — use Schema.org ${schemaType} type, include all relevant fields>"
+}
+
+Content rules:
+- Use the business name and location naturally throughout
+- Include the primary keyword in the first paragraph, at least one H2, and the conclusion
+- Write for a local audience — mention the city/region if provided
+- Add a clear CTA paragraph at the end (call us, get a quote, book online)
+- For service pages: include a "Why Choose Us" section and a benefits list
+- For blog posts: include practical tips the reader can use, position the business as the local expert
+- Do NOT keyword-stuff — write for humans first, search engines second`,
+      }],
+    });
+    logClaudeUsage(userId, 'claude-sonnet-4-6', message.usage, 'seo_content');
+
+    const raw = message.content[0]?.text || '';
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+    const content = JSON.parse(cleaned);
+
+    return res.json({ success: true, content, type });
+  } catch (err) {
+    console.error('[seo/generate-content] Error:', err.message);
+    return res.status(500).json({ error: `Failed to generate content: ${err.message}` });
+  }
+});
+
+// ─── POST /api/seo-audit/verify-llms ────────────────────────
+// Fetches the user's website and checks whether llms.txt (or a /llms page) is accessible and correct
+router.post('/verify-llms', authenticateToken, async (req, res) => {
+  const { websiteUrl } = req.body;
+  if (!websiteUrl || typeof websiteUrl !== 'string') {
+    return res.status(400).json({ error: 'websiteUrl is required' });
+  }
+
+  // Normalize URL
+  let base = websiteUrl.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(base)) base = 'https://' + base;
+
+  const candidateUrls = [
+    base + '/llms.txt',
+    base + '/llms',
+    base + '/pages/llms',
+  ];
+
+  // Platforms that use client-side JavaScript rendering — a plain fetch won't see the content
+  const JS_RENDERED_MARKERS = [
+    'wix.com', 'wixstatic.com', 'wix-bolt', 'wixapps',
+    'squarespace.com', 'static.squarespace.com',
+    'shopify.com', 'cdn.shopify.com',
+    'webflow.com', 'assets.website-files.com',
+  ];
+
+  let found = null;
+  let fetchedContent = null;
+  let isJsRendered = false;
+  let foundStatusOk = false;
+
+  for (const url of candidateUrls) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const resp = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'SORCE-SEO-Verifier/1.0' },
+      });
+      clearTimeout(timeout);
+      if (resp.ok) {
+        const text = await resp.text();
+
+        // Detect JS-rendered platforms by checking raw HTML for platform markers
+        const lowerText = text.toLowerCase();
+        const detectedJsRendered = JS_RENDERED_MARKERS.some(m => lowerText.includes(m));
+
+        if (detectedJsRendered) {
+          // Page exists and is JS-rendered — content is there but can't be read by plain fetch
+          found = url;
+          isJsRendered = true;
+          foundStatusOk = true;
+          break;
+        }
+
+        // For plain HTML/text responses, strip tags and check for real content
+        const stripped = text.replace(/<[^>]*>/g, '').trim();
+        if (stripped.length > 50) {
+          found = url;
+          fetchedContent = stripped.slice(0, 3000);
+          foundStatusOk = true;
+          break;
+        }
+      }
+    } catch {
+      // try next URL
+    }
+  }
+
+  if (!foundStatusOk) {
+    return res.json({
+      status: 'not_found',
+      message: 'We couldn\'t find an llms.txt file or /llms page at your website. Double-check that you followed the upload steps for your platform and try again.',
+      checkedUrls: candidateUrls,
+    });
+  }
+
+  // JS-rendered platform (Wix, Squarespace, Shopify, Webflow) — content exists but can't be read by plain HTTP fetch
+  if (isJsRendered) {
+    return res.json({
+      status: 'found',
+      foundAt: found,
+      assessment: '✅ Your page is live and accessible! Your website uses JavaScript rendering (this is normal for Wix, Squarespace, Shopify, and Webflow). AI search engines like ChatGPT and Perplexity execute JavaScript and will read your content correctly — our checker just can\'t verify the text directly. You\'re all set.',
+    });
+  }
+
+  // Ask Claude to do a quick quality check on what was found
+  try {
+    const userId = req.user.userId;
+    // Load their saved llms.txt for comparison
+    const savedRow = await pool.query(
+      `SELECT llms_txt FROM seo_audits WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    );
+    const savedLlms = savedRow.rows[0]?.llms_txt || '';
+
+    const checkPrompt = savedLlms
+      ? `You are checking whether a business owner correctly installed their llms.txt file.
+
+Their SORCE-generated llms.txt content (expected):
+${savedLlms.slice(0, 1500)}
+
+What was found at ${found}:
+${fetchedContent}
+
+Briefly assess (2-3 sentences max): Is this correct? Does it match the expected content? Any issues?
+End with either ✅ Looks good! or ⚠️ Something looks off — and one specific fix if needed.`
+      : `You are checking whether an llms.txt file looks correct for a local service business.
+
+Found at ${found}:
+${fetchedContent}
+
+Briefly assess (2-3 sentences max): Does this look like a valid llms.txt file for a service business? Any obvious issues?
+End with either ✅ Looks good! or ⚠️ Something looks off.`;
+
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      messages: [{ role: 'user', content: checkPrompt }],
+    });
+
+    const assessment = message.content[0]?.text || '';
+
+    return res.json({
+      status: 'found',
+      foundAt: found,
+      assessment,
+    });
+  } catch (err) {
+    // Claude check failed but file was found — still a win
+    return res.json({
+      status: 'found',
+      foundAt: found,
+      assessment: '✅ We found your llms.txt file! AI search engines will be able to read it.',
+    });
   }
 });
 

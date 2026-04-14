@@ -110,6 +110,15 @@ app.use('/api/gbp-analyzer', gbpAnalyzerRoutes);
 const seoAuditRoutes = require('./routes/seo-audit');
 app.use('/api/seo-audit', seoAuditRoutes);
 
+const backlinksRoutes = require('./routes/backlinks');
+app.use('/api/backlinks', backlinksRoutes);
+
+const sorceAssistantRoutes = require('./routes/sorce-assistant');
+app.use('/api/sorce-assistant', sorceAssistantRoutes);
+
+const trackRoutes = require('./routes/track');
+app.use('/api/track', embedCors, trackRoutes);
+
 const businessHoursRoutes = require('./routes/business-hours');
 app.use('/api/business-hours', businessHoursRoutes);
 
@@ -937,6 +946,72 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.log('✅ GBP Analyzer tables verified');
   } catch (e) {
     console.warn('⚠️ Could not verify GBP Analyzer tables:', e.message);
+  }
+})();
+
+// ── Backlinks / Citations tables ─────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS citation_submissions (
+        id             SERIAL PRIMARY KEY,
+        user_id        INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        directory_id   VARCHAR(50) NOT NULL,
+        directory_name VARCHAR(100),
+        status         VARCHAR(20) DEFAULT 'pending',
+        notes          TEXT DEFAULT '',
+        submitted_at   TIMESTAMP,
+        created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, directory_id)
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_citation_submissions_user ON citation_submissions(user_id)');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS citation_checks (
+        id         SERIAL PRIMARY KEY,
+        user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        report     JSONB,
+        nap_score  INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS backlink_content (
+        id           SERIAL PRIMARY KEY,
+        user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        content_type VARCHAR(50),
+        topic        TEXT,
+        title        TEXT,
+        content_data JSONB,
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_backlink_content_user ON backlink_content(user_id, created_at DESC)');
+    console.log('✅ Backlinks tables verified');
+  } catch (e) {
+    console.warn('⚠️ Could not create backlinks tables:', e.message);
+  }
+})();
+
+// ── Website visitor tracking ─────────────────────────────
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS website_visits (
+        id         SERIAL PRIMARY KEY,
+        user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        page_url   TEXT,
+        referrer   TEXT,
+        visited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_website_visits_user_date ON website_visits(user_id, visited_at DESC)');
+    await pool.query('ALTER TABLE seo_audits ADD COLUMN IF NOT EXISTS code_generated_at TIMESTAMP');
+    await pool.query('ALTER TABLE seo_audits ADD COLUMN IF NOT EXISTS head_code TEXT');
+    await pool.query('ALTER TABLE seo_audits ADD COLUMN IF NOT EXISTS llms_txt TEXT');
+    console.log('✅ website_visits table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not create website_visits table:', e.message);
   }
 })();
 

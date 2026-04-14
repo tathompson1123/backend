@@ -1001,7 +1001,10 @@ router.get('/conversations', authenticateToken, async (req, res) => {
                   WHEN (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'user') <= 1 THEN 'no_response'
                   ELSE 'no_booking'
                 END
-              ) AS outcome
+              ) AS outcome,
+              (SELECT l.name FROM leads l WHERE l.conversation_id = cc.id AND l.user_id = cc.user_id ORDER BY l.created_at DESC LIMIT 1) AS lead_name,
+              (SELECT l.email FROM leads l WHERE l.conversation_id = cc.id AND l.user_id = cc.user_id ORDER BY l.created_at DESC LIMIT 1) AS lead_email,
+              (SELECT l.status FROM leads l WHERE l.conversation_id = cc.id AND l.user_id = cc.user_id ORDER BY l.created_at DESC LIMIT 1) AS lead_status
        FROM chat_conversations cc
        WHERE cc.user_id = $1
          AND (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'user') > 0
