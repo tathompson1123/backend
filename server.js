@@ -318,12 +318,13 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify cancellation policy / SMS reminder columns:', e.message);
   }
 
-  // Chat conversation outcome tracking
+  // Chat conversation outcome tracking + customer name
   try {
     await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS outcome VARCHAR(20) DEFAULT 'no_booking'`);
-    console.log('✅ chat_conversations.outcome column verified');
+    await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS customer_name VARCHAR(200)`);
+    console.log('✅ chat_conversations.outcome + customer_name columns verified');
   } catch (e) {
-    console.warn('⚠️ Could not add chat_conversations.outcome:', e.message);
+    console.warn('⚠️ Could not add chat_conversations columns:', e.message);
   }
 
   // Timezone per user (derived from phone area code)

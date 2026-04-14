@@ -1002,7 +1002,9 @@ router.get('/conversations', authenticateToken, async (req, res) => {
                   ELSE 'no_booking'
                 END
               ) AS outcome,
-              (SELECT l.name FROM leads l WHERE l.conversation_id = cc.id AND l.user_id = cc.user_id ORDER BY l.created_at DESC LIMIT 1) AS lead_name,
+              COALESCE(cc.customer_name,
+                (SELECT l.name FROM leads l WHERE l.conversation_id = cc.id AND l.user_id = cc.user_id ORDER BY l.created_at DESC LIMIT 1)
+              ) AS lead_name,
               (SELECT l.email FROM leads l WHERE l.conversation_id = cc.id AND l.user_id = cc.user_id ORDER BY l.created_at DESC LIMIT 1) AS lead_email,
               (SELECT l.status FROM leads l WHERE l.conversation_id = cc.id AND l.user_id = cc.user_id ORDER BY l.created_at DESC LIMIT 1) AS lead_status
        FROM chat_conversations cc
@@ -1015,6 +1017,53 @@ router.get('/conversations', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching conversations:', error.message);
     res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+// Update conversation outcome / customer name (dashboard)
+router.patch('/conversations/:id/outcome', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { outcome, customer_name } = req.body;
+
+    const valid = ['booked', 'callback', 'no_booking', 'no_response'];
+    if (outcome && !valid.includes(outcome)) {
+      return res.status(400).json({ error: 'Invalid outcome' });
+    }
+
+    // Verify ownership
+    const conv = await pool.query(
+      'SELECT id FROM chat_conversations WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (conv.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+
+    const updates = [];
+    const values = [];
+    if (outcome) { updates.push(`outcome = $${values.length + 1}`); values.push(outcome); }
+    if (customer_name !== undefined) { updates.push(`customer_name = $${values.length + 1}`); values.push(customer_name || null); }
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+
+    await pool.query(
+      `UPDATE chat_conversations SET ${updates.join(', ')} WHERE id = $${values.length}`,
+      values
+    );
+
+    // If marking as callback, also update the linked lead status
+    if (outcome === 'callback') {
+      await pool.query(
+        `UPDATE leads SET status = 'needs_callback', updated_at = NOW()
+         WHERE conversation_id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating conversation outcome:', error.message);
+    res.status(500).json({ error: 'Failed to update' });
   }
 });
 
