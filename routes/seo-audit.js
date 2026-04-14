@@ -128,7 +128,7 @@ Return ONLY a valid JSON object (no markdown, no explanation, no code fences) wi
     "aiReadiness": {
       "score": <0-100>,
       "label": "AI Search Readiness",
-      "issues": ["<AI readiness issue>", ...],
+      "issues": ["<AI readiness issue — specifically check for: missing speakable schema, missing FAQPage schema, no sameAs entity linking, schema type too generic (LocalBusiness instead of specific type), missing llms.txt, no structured Q&A content, city/state not in JSON-LD description, competitor links visible in page content>", ...],
       "passes": ["<AI readiness pass>", ...]
     }
   },
@@ -453,35 +453,73 @@ router.post('/generate-code', authenticateToken, async (req, res) => {
   try {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 6000,
       system: `You are an expert SEO developer for local service businesses.
-Generate clean, production-ready embed code. Use the real business info provided.
-Respond ONLY with valid JSON — no markdown, no code fences, no explanation.`,
+Generate clean, production-ready embed code optimized for Google AI Mode, Google SGE, ChatGPT, and Perplexity.
+Use the real business info provided. Respond ONLY with valid JSON — no markdown, no code fences, no explanation.`,
       messages: [{
         role: 'user',
-        content: `Generate SEO embed code for this business. This code will be copy-pasted into the <head> section of their website (Wix, Squarespace, WordPress, etc.).
+        content: `Generate AI-search-optimized SEO embed code for this business. This code will be copy-pasted into the <head> section of their website.
 
 BUSINESS INFO:
 ${JSON.stringify(businessContext, null, 2)}
 
 Return ONLY a JSON object with exactly this structure:
 {
-  "headCode": "<!-- the full block to paste in <head> including JSON-LD script tag and all meta tags -->",
+  "headCode": "<!-- the full block to paste in <head> -->",
   "llmsTxtContent": "full llms.txt file content"
 }
 
-Rules for headCode:
-- Start with <!-- SORCE SEO --> comment for identification
-- Include a <script type="application/ld+json"> block with the most specific Schema.org type for the business
-- JSON-LD must include: @context, @type, name, url, telephone, address (PostalAddress with streetAddress/city/state/postalCode/country), description, areaServed
-- If services are provided, include hasOfferCatalog with Offer items
-- After the script block, include meta tags: description (150-160 chars), og:title, og:description, og:type=website, og:url, twitter:card=summary_large_image, robots (index follow)
-- End with <!-- End SORCE SEO --> comment
-- All on separate lines, clean indentation
+Rules for headCode — include ALL of the following in order:
 
-Rules for llmsTxtContent:
-- Follow the llms.txt spec exactly: "# BusinessName" header, "> tagline" blockquote, description paragraph, ## Services list, ## Contact section
-- Make it detailed enough that ChatGPT, Perplexity, and Google AI can cite the business accurately`,
+1. Start with <!-- SORCE SEO --> comment
+
+2. PRIMARY JSON-LD block (script type="application/ld+json"):
+   - Use the MOST SPECIFIC Schema.org type for the business (e.g. AutomotiveService for detailing/auto, Plumber, HVACBusiness, Electrician, CleaningService, LandscapingBusiness, etc.)
+   - Required fields: @context, @type, name, url, telephone, email (if available), description (2-3 sentences, mention city/state)
+   - address: PostalAddress with streetAddress, addressLocality, addressRegion, postalCode, addressCountry
+   - areaServed: array of ServiceArea objects for the city and nearby cities
+   - sameAs: array of placeholder strings — include ["YOUR_GOOGLE_BUSINESS_PROFILE_URL", "YOUR_YELP_URL", "YOUR_FACEBOOK_URL"] with that exact placeholder text so the user knows to fill them in
+   - hasOfferCatalog: if services provided, include Offer items with name and description
+   - If it is an auto detailing / automotive business: use @type "AutomotiveService" and add "knowsAbout": ["auto detailing","car detailing","paint correction","ceramic coating"] as appropriate
+
+3. SPEAKABLE JSON-LD block (separate script tag):
+   - @type: SpeakableSpecification inside a WebPage wrapper
+   - This tells Google AI Mode which content to read aloud and cite
+   - Structure:
+     { "@context": "https://schema.org", "@type": "WebPage", "name": "BusinessName - City, State", "url": "SITE_URL",
+       "speakable": { "@type": "SpeakableSpecification", "cssSelector": ["h1", "h2", ".hero-text", "p:first-of-type"] } }
+
+4. FAQPAGE JSON-LD block (separate script tag):
+   - @type: FAQPage
+   - Generate 4-5 Question/Answer pairs that real customers search for in Google AI Mode
+   - Questions must include the business type AND city/state (e.g. "What is the best auto detailing service in Olympia WA?")
+   - Answers should be 2-3 sentences, mention the business name, city, and key services
+   - Make questions sound like real voice/AI search queries: "Who does car detailing near me in [city]?", "How much does [service] cost in [city]?", "Is [business name] good?", "What services does [business name] offer?"
+
+5. Meta tags block:
+   - description: 150-160 chars, include city/state and primary service
+   - og:title, og:description, og:type=website, og:url
+   - twitter:card=summary_large_image
+   - robots: index, follow
+   - geo.region: US-[state code]
+   - geo.placename: [city], [state]
+
+6. End with <!-- End SORCE SEO --> comment
+
+Rules for llmsTxtContent — this file is read by AI search engines (ChatGPT, Perplexity, Google AI) to understand and cite the business:
+- "# BusinessName" header
+- "> one-sentence tagline mentioning city and service"
+- 2-3 paragraph description with city/state, key services, differentiators, and years in business if known
+- ## Services (bullet list with name and brief description for each)
+- ## Service Area (city + surrounding areas)
+- ## Frequently Asked Questions section — 5-6 Q&A pairs in this format:
+  Q: [real AI search query about the business or service in this city]
+  A: [direct answer mentioning business name, location, and key fact]
+  Examples: "Q: What is the best car detailing service in Olympia WA?\\nA: Thompson's Auto Detailing is Olympia's top-rated detailing service..."
+- ## Contact & Location
+- ## Why Choose Us (3-4 bullet points)
+The llms.txt should be written so that if an AI reads it, it will cite THIS business first when someone searches for these services in this city.`,
       }],
     });
     logClaudeUsage(userId, 'claude-sonnet-4-6', message.usage, 'seo_generate_code');
