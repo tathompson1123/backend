@@ -63,6 +63,16 @@ async function getBusinessContext(userId) {
   );
   const user = userRow.rows[0] || {};
 
+  // Fallback: check websites table for business_type if users row lacks it
+  let industryFallback = '';
+  if (!user.business_type) {
+    const websiteRow = await pool.query(
+      'SELECT business_type FROM websites WHERE user_id = $1 LIMIT 1',
+      [userId]
+    );
+    industryFallback = websiteRow.rows[0]?.business_type || '';
+  }
+
   const servicesRow = await pool.query(
     'SELECT name FROM services WHERE user_id = $1 AND active = true LIMIT 10',
     [userId]
@@ -71,7 +81,7 @@ async function getBusinessContext(userId) {
 
   return {
     businessName: user.business_name || 'Our Business',
-    industry: user.business_type || 'service business',
+    industry: user.business_type || industryFallback || 'service business',
     city: '',
     state: '',
     services,
