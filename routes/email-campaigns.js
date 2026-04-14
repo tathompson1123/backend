@@ -148,10 +148,15 @@ async function generateCampaign(userId, config, offerDetails, autoRotate = false
     winback: 'Create a "we miss you" win-back offer for customers who haven\'t booked in a while. Give them a compelling reason to come back now.',
   };
 
-  // Fetch a real Pexels hero image for this industry
+  // Fetch a real Pexels hero image for this industry.
+  // If industry is still generic, fall back to the business name (e.g. "Thompson's Auto Detailing"
+  // contains "detail" → KEYWORD_MAP matches autoDetailing queries).
   let heroImageUrl = '';
   try {
-    const { hero } = await fetchPexelsImages(industry, null);
+    const pexelsQuery = (industry && industry !== 'service business')
+      ? industry
+      : businessName;
+    const { hero } = await fetchPexelsImages(pexelsQuery, null);
     heroImageUrl = hero[0] || '';
   } catch (e) {
     heroImageUrl = '';
