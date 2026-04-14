@@ -96,7 +96,12 @@ router.post('/citations/check', authenticateToken, async (req, res) => {
   let bizInfo = {}, websiteInfo = {};
   try {
     const [bizRes, webRes] = await Promise.all([
-      pool.query('SELECT name, phone, email, city, state, address, zip FROM business_information WHERE user_id = $1', [userId]),
+      pool.query(
+        `SELECT u.business_name AS name, bi.phone, bi.email, bi.city, bi.state, bi.address, bi.zip_code AS zip
+         FROM users u LEFT JOIN business_information bi ON bi.user_id = u.id
+         WHERE u.id = $1`,
+        [userId]
+      ),
       pool.query('SELECT business_name, business_type, vercel_url FROM websites WHERE user_id = $1', [userId]),
     ]);
     bizInfo = bizRes.rows[0] || {};
