@@ -315,4 +315,13 @@ async function fetchPexelsImages(businessType, layout) {
   }
 }
 
-module.exports = { fetchPexelsImages };
+/**
+ * Fetch Pexels images using a raw search query (bypasses the KEYWORD_MAP).
+ * Use this when you have a specific, user-provided search term.
+ */
+async function fetchPexelsByQuery(query, count = 5) {
+  const photos = await fetchFromPexels(query, count);
+  return (photos || []).map(p => p.src.large2x || p.src.large);
+}
+
+module.exports = { fetchPexelsImages, fetchPexelsByQuery };

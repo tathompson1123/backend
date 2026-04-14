@@ -4,7 +4,7 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logClaudeUsage } = require('../utils/claudeUsage');
-const { fetchPexelsImages } = require('../utils/fetchPexelsImages');
+const { fetchPexelsImages, fetchPexelsByQuery } = require('../utils/fetchPexelsImages');
 const sgMail = require('@sendgrid/mail');
 const jwt = require('jsonwebtoken');
 
@@ -508,7 +508,10 @@ router.post('/refine', authenticateToken, async (req, res) => {
       existingBlocks = typeof draft.blocks === 'string' ? JSON.parse(draft.blocks) : (draft.blocks || []);
     } catch (_) {}
 
-    const { businessName: bn, industry: ind, services: svcs } = await getBusinessContext(userId);
+    const { businessName: bn, industry: ind } = await getBusinessContext(userId);
+
+    // Detect if the user is asking to change the hero image
+    const isImageRequest = /\b(image|photo|picture|hero|banner|pic|background)\b/i.test(feedback.trim());
 
     const prompt = `You are making a small targeted edit to a promotional email for ${bn}.
 
@@ -520,7 +523,7 @@ ${JSON.stringify(existingBlocks, null, 2)}
 RULES — follow these exactly:
 1. Return the SAME blocks array with ONLY the specific requested change applied.
 2. Do NOT rewrite, rephrase, restructure, or improve any text that was not asked to change.
-3. Do NOT change any image URLs — the "src" field in every hero_image block must be kept EXACTLY as it is.
+3. ${isImageRequest ? 'For hero_image blocks: if the change is about the image, set "src" to the exact string "FETCH_NEW_IMAGE" as a placeholder.' : 'Do NOT change any image URLs — the "src" field in every hero_image block must be kept EXACTLY as it is.'}
 4. Do NOT add, remove, or reorder blocks.
 5. Preserve all colors, styles, and formatting of blocks that were not asked to change.
 6. If the change is to pricing/offer details, update ONLY those numbers/values.
@@ -554,7 +557,29 @@ Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
     const parsed = JSON.parse(jsonMatch[0]);
 
     const { randomUUID } = require('crypto');
-    const blocks = (parsed.blocks || []).map(b => ({ ...b, id: randomUUID().slice(0, 8) }));
+    let blocks = (parsed.blocks || []).map(b => ({ ...b, id: randomUUID().slice(0, 8) }));
+
+    // If this was an image-change request, replace any FETCH_NEW_IMAGE placeholder
+    // with a real Pexels image. Build the query from the user's feedback + business type.
+    if (isImageRequest) {
+      const imageQuery = `${ind !== 'service business' ? ind : bn} ${feedback.trim()}`.trim();
+      let newImageUrl = '';
+      try {
+        const urls = await fetchPexelsByQuery(imageQuery, 5);
+        newImageUrl = urls[0] || '';
+        console.log(`🖼️ Refine image fetch: "${imageQuery}" → ${newImageUrl ? 'found' : 'none'}`);
+      } catch (_) {}
+      blocks = blocks.map(b => {
+        if (b.type === 'hero_image') {
+          const src = b.content?.src;
+          if (src === 'FETCH_NEW_IMAGE' || isImageRequest) {
+            return { ...b, content: { ...b.content, src: newImageUrl || src } };
+          }
+        }
+        return b;
+      });
+    }
+
     const bodyHtml = emailBlocksToHtml(blocks);
 
     // Update the existing draft in place
