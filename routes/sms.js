@@ -101,9 +101,9 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     // Store incoming message
     await pool.query(
       `INSERT INTO sms_messages
-       (lead_id, user_id, direction, from_number, message, twilio_message_sid, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
-      [leadId, user.id, 'incoming', From, Body, MessageSid]
+       (lead_id, user_id, direction, from_number, to_number, message, twilio_message_sid, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+      [leadId, user.id, 'incoming', From, To, Body, MessageSid]
     );
 
     await pool.query(
