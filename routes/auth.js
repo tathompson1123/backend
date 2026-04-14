@@ -74,7 +74,8 @@ const result = await pool.query(
           <p style="color:#888;font-size:13px">This code expires in 1 hour. If you didn't sign up for SORCE, you can safely ignore this email.</p>
         </div>
       `,
-    }).catch(emailErr => console.error('⚠️ Verification email failed:', emailErr.message, emailErr.response?.body?.errors || ''));
+    }).then(() => console.log(`✅ Verification email sent to ${email} from ${FROM_EMAIL.email}`))
+      .catch(emailErr => console.error('⚠️ Verification email failed:', emailErr.message, JSON.stringify(emailErr.response?.body?.errors || emailErr.response?.body || '')));
 
     console.log('✅ New user signed up:', email);
 
@@ -449,6 +450,45 @@ router.post('/admin/force-verify', async (req, res) => {
   } catch (error) {
     console.error('Admin force-verify error:', error.message);
     res.status(500).json({ error: 'Failed' });
+  }
+});
+
+// POST - Admin: test email sending synchronously — returns full SendGrid response
+router.post('/admin/test-email', async (req, res) => {
+  const { adminSecret, email } = req.body;
+  const expectedSecret = process.env.ADMIN_SECRET;
+  if (!expectedSecret || adminSecret !== expectedSecret) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  if (!email) return res.status(400).json({ error: 'email required' });
+  if (!process.env.SENDGRID_API_KEY) {
+    return res.json({ success: false, error: 'SENDGRID_API_KEY not set', from: null });
+  }
+  try {
+    const response = await sgMail.send({
+      to: email,
+      from: FROM_EMAIL,
+      subject: 'SORCE email test',
+      html: '<p>If you received this, email sending is working correctly. From: ' + FROM_EMAIL.email + '</p>',
+    });
+    console.log(`✅ Admin test email sent to ${email} (status ${response[0]?.statusCode})`);
+    res.json({
+      success: true,
+      statusCode: response[0]?.statusCode,
+      from: FROM_EMAIL,
+      to: email,
+      message: 'Email accepted by SendGrid. Check inbox and spam folder.',
+    });
+  } catch (err) {
+    console.error('Admin test-email error:', err.message, JSON.stringify(err.response?.body || ''));
+    res.json({
+      success: false,
+      error: err.message,
+      httpStatus: err.code,
+      sendgridErrors: err.response?.body?.errors || null,
+      from: FROM_EMAIL,
+      to: email,
+    });
   }
 });
 
