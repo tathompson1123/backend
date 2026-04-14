@@ -843,10 +843,10 @@ REAL-TIME AVAILABILITY:
                   `I've sent a confirmation to ${customerEmail}. Looking forward to seeing you!`;
         }
 
-        // Mark conversation as booked
+        // Mark conversation as booked, store customer name
         await pool.query(
-          `UPDATE chat_conversations SET outcome = 'booked' WHERE id = $1`,
-          [conversationId]
+          `UPDATE chat_conversations SET outcome = 'booked', customer_name = $2 WHERE id = $1`,
+          [conversationId, customerName]
         );
 
         // If they were previously a lead, update status to booked
@@ -906,6 +906,12 @@ REAL-TIME AVAILABILITY:
           [attentionName, conversationId, userId, attentionPhone]
         );
       }
+
+      // Mark conversation as callback, store customer name
+      await pool.query(
+        `UPDATE chat_conversations SET outcome = 'callback', customer_name = $2 WHERE id = $1`,
+        [conversationId, attentionName]
+      );
 
       // Email the business owner — only if this is a fresh needs_callback, not a repeat trigger
       if (!alreadyNeedsCallback) {
