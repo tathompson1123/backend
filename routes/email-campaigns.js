@@ -479,71 +479,58 @@ router.post('/refine', authenticateToken, async (req, res) => {
 
     const { businessName, industry, services } = await getBusinessContext(userId);
 
-    // Load the existing draft so we can pass it as context
+    // Load the existing draft including its blocks so we can make surgical changes
     const draftResult = await pool.query(
-      'SELECT subject, preview_text, body_text FROM email_campaigns WHERE id = $1 AND user_id = $2',
+      'SELECT subject, preview_text, body_text, blocks FROM email_campaigns WHERE id = $1 AND user_id = $2',
       [draftId, userId]
     );
     const draft = draftResult.rows[0];
     if (!draft) return res.status(404).json({ error: 'Draft not found' });
 
-    const configResult = await pool.query(
-      'SELECT * FROM email_campaign_configs WHERE user_id = $1',
-      [userId]
-    );
-    const config = configResult.rows[0] || {};
-
-    const { businessName: bn, industry: ind, city, services: svcs } = await getBusinessContext(userId);
-    const month = new Date().toLocaleString('default', { month: 'long' });
-
-    // Fetch a real Pexels hero image for this industry
-    let heroImageUrl = '';
+    // Parse existing blocks — these are the source of truth for layout and images
+    let existingBlocks = [];
     try {
-      const { hero } = await fetchPexelsImages(ind, null);
-      heroImageUrl = hero[0] || '';
-    } catch (e) {
-      heroImageUrl = '';
-    }
+      existingBlocks = typeof draft.blocks === 'string' ? JSON.parse(draft.blocks) : (draft.blocks || []);
+    } catch (_) {}
 
-    const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + (7 - expiryDate.getDay()));
-    const expiryStr = expiryDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const { businessName: bn, industry: ind, services: svcs } = await getBusinessContext(userId);
 
-    const prompt = `You are refining a weekly promotional email for ${bn}, a ${ind} business.
+    const prompt = `You are making a small targeted edit to a promotional email for ${bn}.
 
-Current email subject: "${draft.subject}"
-Current email body (plain text):
-${draft.body_text || '(no body text saved)'}
+OWNER'S REQUESTED CHANGE: "${feedback.trim()}"
 
-Owner's requested change: "${feedback.trim()}"
+CURRENT EMAIL BLOCKS (JSON — this is the full email):
+${JSON.stringify(existingBlocks, null, 2)}
 
-Rewrite the email incorporating the owner's feedback. Keep what works, change what they asked.
-Month: ${month}. Services: ${svcs.length ? svcs.join(', ') : 'various services'}.
+RULES — follow these exactly:
+1. Return the SAME blocks array with ONLY the specific requested change applied.
+2. Do NOT rewrite, rephrase, restructure, or improve any text that was not asked to change.
+3. Do NOT change any image URLs — the "src" field in every hero_image block must be kept EXACTLY as it is.
+4. Do NOT add, remove, or reorder blocks.
+5. Preserve all colors, styles, and formatting of blocks that were not asked to change.
+6. If the change is to pricing/offer details, update ONLY those numbers/values.
+7. Update "subject", "previewText", and "bodyText" only if they are directly affected by the change.
 
 Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
 {
   "subject": "...",
   "previewText": "...",
-  "bodyText": "plain text version",
-  "blocks": [
-    { "type": "header", "content": { "title": "${bn}", "bgColor": "#111827", "textColor": "#ffffff" } },
-    { "type": "hero_image", "content": { "src": "${heroImageUrl}", "alt": "${bn} offer" } },
-    { "type": "urgency_bar", "content": { "text": "⏰ This offer expires ${expiryStr} — don't miss it", "bgColor": "#fef3c7", "textColor": "#92400e" } },
-    { "type": "body", "content": { "heading": "[HOOK HEADING]", "paragraphs": ["[para 1]", "[para 2]"] } },
-    { "type": "offer_box", "content": { "title": "[OFFER TITLE]", "description": "[offer details]", "bgColor": "#f0fdf4", "borderColor": "#22c55e" } },
-    { "type": "cta_button", "content": { "text": "[CTA TEXT]", "link": "#", "bgColor": "#111827", "textColor": "#ffffff", "borderRadius": "8px" } },
-    { "type": "signoff", "content": { "text": "The ${bn} team" } },
-    { "type": "footer", "content": { "text": "You're receiving this because you've used ${bn} before.", "unsubscribeText": "Unsubscribe" } }
-  ]
-}
-Replace ALL bracket placeholders with real copy.`;
+  "bodyText": "plain text version of the updated email",
+  "blocks": [ ...same blocks array with only the requested edit applied... ]
+}`;
+
+    const configResult = await pool.query(
+      'SELECT * FROM email_campaign_configs WHERE user_id = $1',
+      [userId]
+    );
+    const config = configResult.rows[0] || {}; // eslint-disable-line no-unused-vars
 
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     });
-    logClaudeUsage(userId, 'claude-haiku-4-5-20251001', response.usage, 'email_refine');
+    logClaudeUsage(userId, 'claude-sonnet-4-6', response.usage, 'email_refine');
 
     const text = response.content[0].text.trim();
     let json = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
