@@ -421,4 +421,30 @@ router.post('/onboarding/questionnaire', authenticateToken, async (req, res) => 
   }
 });
 
+// POST - Admin: manually verify a user's email (protected by ADMIN_SECRET env var)
+router.post('/admin/force-verify', async (req, res) => {
+  try {
+    const { adminSecret, email } = req.body;
+    const expectedSecret = process.env.ADMIN_SECRET;
+    if (!expectedSecret || adminSecret !== expectedSecret) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (!email) return res.status(400).json({ error: 'email required' });
+
+    const result = await pool.query(
+      `UPDATE users SET email_verified = true, email_verification_code = NULL, email_verification_expires_at = NULL
+       WHERE email = $1 RETURNING id, email, email_verified`,
+      [email.toLowerCase()]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    console.log(`✅ Admin force-verified email for ${email}`);
+    res.json({ success: true, user: result.rows[0] });
+  } catch (error) {
+    console.error('Admin force-verify error:', error.message);
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
 module.exports = router;
