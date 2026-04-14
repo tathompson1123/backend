@@ -5,8 +5,13 @@ const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
 const { EFFECTIVE_JWT_SECRET, authenticateToken } = require('../config/middleware');
 const sgMail = require('@sendgrid/mail');
-if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-const FROM_EMAIL = { name: 'SORCE', email: 'noreply@sorceintegrations.com' };
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  console.log('✅ SendGrid initialized (auth routes)');
+} else {
+  console.warn('⚠️ SENDGRID_API_KEY not set — email sending disabled');
+}
+const FROM_EMAIL = { name: 'SORCE', email: 'help@sorceintegrations.com' };
 
 // POST - Signup
 router.post('/signup', async (req, res) => {
@@ -69,7 +74,7 @@ const result = await pool.query(
           <p style="color:#888;font-size:13px">This code expires in 1 hour. If you didn't sign up for SORCE, you can safely ignore this email.</p>
         </div>
       `,
-    }).catch(emailErr => console.error('⚠️ Verification email failed:', emailErr.message));
+    }).catch(emailErr => console.error('⚠️ Verification email failed:', emailErr.message, emailErr.response?.body?.errors || ''));
 
     console.log('✅ New user signed up:', email);
 
@@ -390,7 +395,7 @@ router.post('/resend-verification', authenticateToken, async (req, res) => {
         </div>
       `,
     }).then(() => console.log(`✅ Verification code resent to ${email}`))
-      .catch(emailErr => console.error('⚠️ Resend email failed:', emailErr.response?.body?.errors || emailErr.message));
+      .catch(emailErr => console.error('⚠️ Resend email failed:', emailErr.message, emailErr.response?.body?.errors || ''));
 
     res.json({ success: true });
   } catch (error) {
