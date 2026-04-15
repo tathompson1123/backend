@@ -1384,8 +1384,21 @@ router.post('/bookings', async (req, res) => {
 async function requireAdmin(req, res, next) {
   try {
     const { employeeId } = req.employee;
-    const r = await pool.query('SELECT is_admin FROM employees WHERE id = $1', [employeeId]);
-    if (!r.rows[0]?.is_admin) return res.status(403).json({ error: 'Admin access required' });
+    // Admin if: is_admin flag is set, OR their credential email matches the business owner's email
+    const r = await pool.query(
+      `SELECT e.is_admin, u.email as owner_email, ec.email as emp_email
+       FROM employees e
+       JOIN users u ON u.id = e.user_id
+       LEFT JOIN employee_credentials ec ON ec.employee_id = e.id
+       WHERE e.id = $1`,
+      [employeeId]
+    );
+    const row = r.rows[0];
+    const isOwner = row?.emp_email && row?.owner_email &&
+      row.emp_email.toLowerCase() === row.owner_email.toLowerCase();
+    if (!row?.is_admin && !isOwner) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
     next();
   } catch (e) { res.status(500).json({ error: 'Auth check failed' }); }
 }

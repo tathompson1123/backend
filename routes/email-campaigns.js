@@ -266,11 +266,13 @@ async function sendCampaign(userId, config, campaignId) {
   const fromName = config.from_name || 'Your Business';
   const ownerReplyEmail = config.from_email;
 
-  // ── Email send (up to 2000) ────────────────────────────
+  // ── Email send (up to 2000, deduplicated by email) ────────────────────────────
   const emailCustomers = await pool.query(
-    `SELECT name, email FROM customers
+    `SELECT DISTINCT ON (LOWER(TRIM(email))) name, email
+     FROM customers
      WHERE user_id = $1 AND email IS NOT NULL AND email != ''
      AND (email_unsubscribed IS NULL OR email_unsubscribed = FALSE)
+     ORDER BY LOWER(TRIM(email)), created_at ASC
      LIMIT $2`,
     [userId, EMAIL_SEND_LIMIT]
   );
@@ -605,9 +607,9 @@ router.get('/stats', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    // Count reachable subscribers (have email, not unsubscribed)
+    // Count reachable subscribers (deduplicated by email)
     const subsResult = await pool.query(
-      `SELECT COUNT(*) AS count FROM customers
+      `SELECT COUNT(DISTINCT LOWER(TRIM(email))) AS count FROM customers
        WHERE user_id = $1 AND email IS NOT NULL AND email != ''
        AND (email_unsubscribed IS NULL OR email_unsubscribed = FALSE)`,
       [userId]

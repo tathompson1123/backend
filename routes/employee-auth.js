@@ -201,10 +201,12 @@ router.post('/login', async (req, res) => {
 router.get('/verify', authenticateEmployee, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT e.id, e.name, e.email, e.color, e.active, e.is_admin, u.business_name, u.plan, u.email as owner_email,
+      `SELECT e.id, e.name, e.color, e.active, e.is_admin, u.business_name, u.plan, u.email as owner_email,
+              ec.email,
               bi.address as biz_address, bi.city as biz_city, bi.state as biz_state, bi.zip_code as biz_zip
        FROM employees e
        JOIN users u ON u.id = e.user_id
+       LEFT JOIN employee_credentials ec ON ec.employee_id = e.id
        LEFT JOIN business_information bi ON bi.user_id = u.id
        WHERE e.id = $1`,
       [req.employee.employeeId]

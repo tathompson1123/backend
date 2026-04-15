@@ -57,9 +57,11 @@ async function getAvailableSlotsForDate(userId, serviceId, bookingDate, duration
   );
 
   if (configuredSlots.rows.length > 0) {
+    const openHHMM = open_time.slice(0, 5);
+    const closeHHMM = close_time.slice(0, 5);
     candidateSlots = configuredSlots.rows
       .map(r => r.slot_time.slice(0, 5))
-      .filter(t => t >= open_time && t < close_time);
+      .filter(t => t >= openHHMM && t < closeHHMM);
   } else {
     const [openH, openM] = open_time.split(':').map(Number);
     for (let h = openH; h < closeH; h++) {
@@ -377,6 +379,8 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
 
     console.log(`✅ Chat booking created: #${bookingNumber} customer=${customerId} employee=${employeeId}`);
 
+    const serviceNames = allServices.map(s => s.name).join(' + ');
+
     // Push notification to owner/admin
     sendPushToOwner(userId, 'New Booking via Chat Agent',
       `${customerName} — ${serviceNames} on ${bookingDate} at ${startTime}`,
@@ -384,7 +388,6 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
     ).catch(() => {});
 
     // Send booking emails — always notify the owner; skip customer confirmation if card-on-file pending
-    const serviceNames = allServices.map(s => s.name).join(' + ');
     sendBookingEmails({
       userId,
       bookingNumber,
@@ -529,9 +532,11 @@ STAGE 3 - GATHER BOOKING DETAILS (only after they choose a service):
 Ask ONE question at a time in this order:
 1. First, ask: "What day works best for you?" (accept formats like "tomorrow", "Monday", "Jan 30", etc.)
 2. Then ask: "What time would you prefer?" (accept formats like "2pm", "14:00", "afternoon")
-3. Then ask: "Can I get your name?"
-4. Then ask: "What's the best email to send your confirmation?"
-5. Finally ask: "And your phone number?"
+3. Then ask: "Can I get your name?" — SKIP if the customer already gave their name earlier in this conversation
+4. Then ask: "What's the best email to send your confirmation?" — SKIP if already provided
+5. Finally ask: "And your phone number?" — SKIP if already provided
+
+CRITICAL: Scan the entire conversation history before asking for name, email, or phone. If the customer gave any of this information at any point earlier — even if it was before they chose a service — do NOT ask for it again. Use what they already told you.
 
 STAGE 4 - CONFIRM AND BOOK:
 Once you have ALL information (service, date, time, name, email, phone), respond with:
@@ -578,10 +583,9 @@ IMPORTANT RULES:
 - NEVER use markdown formatting. No asterisks for bold (**word**), no dashes for bullet points (- item), no underscores, no hashtags. Use plain sentences with commas, periods, exclamation marks, and question marks only.
 - NEVER parrot back or repeat what the customer just said. Don't restate their words, situation, or feelings back to them — it sounds robotic. Instead, respond naturally and move the conversation forward. For example, if they say "a mouse got in my car and I'm grossed out", do NOT say "Having a mouse in your car would definitely make anyone feel grossed out." Just acknowledge briefly ("Oh no, we can definitely help with that!") and move to your recommendation.
 - Convert dates to YYYY-MM-DD format. Today is ${bizDateTime.fullDate} (${bizDateTime.isoDate}), current time is ${bizDateTime.currentTime}.
-- UPCOMING DATES — use this exact table, do not calculate on your own:
+- UPCOMING DATES — this is the ONLY source of truth for dates. Do NOT use your training data or internal calendar. Do NOT calculate. Only use what is listed here:
 ${(function() {
   const tz = bizDateTime.timezone;
-  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const lines = [];
   const now = new Date();
   for (let i = 0; i <= 14; i++) {
@@ -594,8 +598,10 @@ ${(function() {
   }
   return lines.join('\n');
 })()}
-- When a customer says "Thursday" or "next Friday", look up the exact date in the table above. NEVER guess or calculate — only use the dates listed.
-- If a customer gives both a day name AND a date number that don't match, gently correct them using the table above.
+- When a customer says "Thursday" or "next Friday" or "next week", find the matching row in the table above by weekday name. NEVER guess a date number — always read it from the table.
+- CRITICAL: If you say "Thursday the 24th", verify BOTH that Thursday and 24 appear on the SAME ROW in the table. If they don't match, you have made an error.
+- When describing a range like "next week Monday through Friday", read all five day names AND date numbers directly from the table. Do not assume which number goes with which day.
+- If a customer gives both a day name AND a date number that don't match the table, gently correct them using the table above.
 - CRITICAL: The YYYY-MM-DD in BOOKING_REQUEST must exactly match an entry from the table above for the day you verbally confirmed.
 - Convert times to 24-hour format (2pm = 14:00, 9am = 09:00)
 - Only send BOOKING_REQUEST when you have ALL 6 pieces of information
