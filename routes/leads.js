@@ -246,14 +246,20 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Maximum 5000 leads per import' });
     }
 
-    // Load existing lead emails/names for dedup
+    // Load existing lead emails, phones, and names for dedup
     const existingResult = await pool.query(
-      `SELECT LOWER(TRIM(email)) AS email, LOWER(TRIM(name)) AS name FROM leads WHERE user_id = $1`,
+      `SELECT LOWER(TRIM(email)) AS email,
+              LOWER(TRIM(name))  AS name,
+              regexp_replace(COALESCE(phone,''), '[^0-9]', '', 'g') AS phone
+       FROM leads WHERE user_id = $1`,
       [userId]
     );
+    const normPhone10 = p => p ? p.replace(/\D/g, '').slice(-10) : null;
     const existingEmails = new Set(existingResult.rows.map(r => r.email).filter(Boolean));
+    const existingPhones = new Set(existingResult.rows.map(r => normPhone10(r.phone)).filter(Boolean));
     const existingNames  = new Set(existingResult.rows.map(r => r.name).filter(Boolean));
     const seenEmails = new Set();
+    const seenPhones = new Set();
     const seenNames  = new Set();
 
     let successCount = 0;
@@ -266,15 +272,21 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
       for (const l of leads) {
         if (!l.name || !l.name.trim()) { errorCount++; continue; }
         const normEmail = l.email ? l.email.toLowerCase().trim() : null;
+        const normPhone = normPhone10(l.phone);
         const normName  = l.name.toLowerCase().trim();
 
-        if (normEmail && existingEmails.has(normEmail)) { duplicateCount++; continue; }
-        if (!normEmail && existingNames.has(normName))  { duplicateCount++; continue; }
-        if (normEmail && seenEmails.has(normEmail))     { duplicateCount++; continue; }
-        if (!normEmail && seenNames.has(normName))      { duplicateCount++; continue; }
+        // Dedup priority: email → phone → name
+        if (normEmail) {
+          if (existingEmails.has(normEmail) || seenEmails.has(normEmail)) { duplicateCount++; continue; }
+        } else if (normPhone) {
+          if (existingPhones.has(normPhone) || seenPhones.has(normPhone)) { duplicateCount++; continue; }
+        } else {
+          if (existingNames.has(normName) || seenNames.has(normName)) { duplicateCount++; continue; }
+        }
 
         if (normEmail) seenEmails.add(normEmail);
-        else           seenNames.add(normName);
+        else if (normPhone) seenPhones.add(normPhone);
+        else seenNames.add(normName);
 
         try {
           await client.query(
@@ -284,7 +296,8 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
              l.status || 'new', l.source || 'manual', l.notes || null, l.service || null]
           );
           if (normEmail) existingEmails.add(normEmail);
-          else           existingNames.add(normName);
+          else if (normPhone) existingPhones.add(normPhone);
+          else existingNames.add(normName);
           successCount++;
         } catch { errorCount++; }
       }

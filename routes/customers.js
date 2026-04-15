@@ -81,17 +81,22 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Maximum 5000 customers per import' });
     }
 
-    // Load all existing emails and names for this user for dedup checking
+    // Load all existing emails, phones, and names for dedup
     const existingResult = await pool.query(
-      `SELECT LOWER(TRIM(email)) AS email, LOWER(TRIM(name)) AS name
+      `SELECT LOWER(TRIM(email)) AS email,
+              LOWER(TRIM(name))  AS name,
+              regexp_replace(COALESCE(phone,''), '[^0-9]', '', 'g') AS phone
        FROM customers WHERE user_id = $1`,
       [userId]
     );
+    const normPhone10 = p => p ? p.replace(/\D/g, '').slice(-10) : null;
     const existingEmails = new Set(existingResult.rows.map(r => r.email).filter(Boolean));
+    const existingPhones = new Set(existingResult.rows.map(r => normPhone10(r.phone)).filter(Boolean));
     const existingNames  = new Set(existingResult.rows.map(r => r.name).filter(Boolean));
 
-    // Dedup within the CSV itself (same email → skip later occurrences; same name if no email)
+    // Dedup within the CSV batch: email > phone > name (as last resort)
     const seenEmails = new Set();
+    const seenPhones = new Set();
     const seenNames  = new Set();
 
     let successCount = 0;
@@ -106,19 +111,22 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
         if (!c.name || !c.name.trim()) { errorCount++; continue; }
 
         const normEmail = c.email ? c.email.toLowerCase().trim() : null;
+        const normPhone = normPhone10(c.phone);
         const normName  = c.name.toLowerCase().trim();
 
-        // Skip if already exists in DB
-        if (normEmail && existingEmails.has(normEmail)) { duplicateCount++; continue; }
-        if (!normEmail && existingNames.has(normName))  { duplicateCount++; continue; }
-
-        // Skip if already seen in this CSV batch
-        if (normEmail && seenEmails.has(normEmail)) { duplicateCount++; continue; }
-        if (!normEmail && seenNames.has(normName))  { duplicateCount++; continue; }
+        // Dedup priority: email → phone → name (name only when no email and no phone)
+        if (normEmail) {
+          if (existingEmails.has(normEmail) || seenEmails.has(normEmail)) { duplicateCount++; continue; }
+        } else if (normPhone) {
+          if (existingPhones.has(normPhone) || seenPhones.has(normPhone)) { duplicateCount++; continue; }
+        } else {
+          if (existingNames.has(normName) || seenNames.has(normName)) { duplicateCount++; continue; }
+        }
 
         // Mark as seen
         if (normEmail) seenEmails.add(normEmail);
-        else           seenNames.add(normName);
+        else if (normPhone) seenPhones.add(normPhone);
+        else seenNames.add(normName);
 
         const safeDate = c.last_service_date && /^\d{4}-\d{2}-\d{2}/.test(c.last_service_date)
           ? c.last_service_date : null;
@@ -132,7 +140,8 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
           );
           // Track newly inserted so subsequent rows in same batch treat it as existing
           if (normEmail) existingEmails.add(normEmail);
-          else           existingNames.add(normName);
+          else if (normPhone) existingPhones.add(normPhone);
+          else existingNames.add(normName);
           successCount++;
         } catch (rowErr) {
           errorCount++;
