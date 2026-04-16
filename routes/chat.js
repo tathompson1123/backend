@@ -205,7 +205,9 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
       return { success: false, error: 'we are closed on that day' };
     }
     const bizHours = hoursCheck.rows[0];
-    if (startTime < bizHours.open_time || startTime >= bizHours.close_time) {
+    const openHHMM = bizHours.open_time.slice(0, 5);
+    const closeHHMM = bizHours.close_time.slice(0, 5);
+    if (startTime < openHHMM || startTime >= closeHHMM) {
       return { success: false, error: 'that time is outside our business hours' };
     }
 
