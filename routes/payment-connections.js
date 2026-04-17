@@ -122,8 +122,8 @@ router.get('/square/callback', async (req, res) => {
     setImmediate(async () => {
       try {
         const pCount = await syncSquarePayments(userId, result.accessToken, pool);
-        const iCount = await syncSquareInvoices(userId, result.accessToken, locationId, pool);
-        console.log(`✅ Auto-synced ${pCount} Square payments and ${iCount} invoices for user ${userId}`);
+        const { invoicesSynced, estimatesSynced } = await syncSquareInvoices(userId, result.accessToken, locationId, pool);
+        console.log(`✅ Auto-synced ${pCount} Square payments, ${invoicesSynced} invoices, ${estimatesSynced} estimates for user ${userId}`);
       } catch (err) {
         console.error('Square auto-sync error:', err.message);
       }

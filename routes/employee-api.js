@@ -1729,16 +1729,26 @@ router.get('/admin/conversations', requireAdmin, async (req, res) => {
       `SELECT cc.id,
               cc.customer_name,
               cc.outcome,
-              cc.created_at,
-              cc.updated_at,
+              to_char(cc.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
               (SELECT COUNT(*) FROM chat_messages WHERE conversation_id = cc.id) AS message_count,
               (SELECT content FROM chat_messages WHERE conversation_id = cc.id ORDER BY created_at DESC LIMIT 1) AS last_message,
-              (SELECT created_at FROM chat_messages WHERE conversation_id = cc.id ORDER BY created_at DESC LIMIT 1) AS last_message_at,
-              l.name AS lead_name, l.phone AS lead_phone, l.email AS lead_email, l.status AS lead_status
+              to_char(
+                (SELECT created_at FROM chat_messages WHERE conversation_id = cc.id ORDER BY created_at DESC LIMIT 1)
+                AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+              ) AS last_message_at,
+              (SELECT name  FROM leads WHERE user_id = cc.user_id AND source IN ('ai_chat_agent','website_chat')
+               AND created_at BETWEEN cc.created_at - INTERVAL '2 hours' AND cc.created_at + INTERVAL '2 hours'
+               ORDER BY created_at LIMIT 1) AS lead_name,
+              (SELECT phone FROM leads WHERE user_id = cc.user_id AND source IN ('ai_chat_agent','website_chat')
+               AND created_at BETWEEN cc.created_at - INTERVAL '2 hours' AND cc.created_at + INTERVAL '2 hours'
+               ORDER BY created_at LIMIT 1) AS lead_phone,
+              (SELECT email FROM leads WHERE user_id = cc.user_id AND source IN ('ai_chat_agent','website_chat')
+               AND created_at BETWEEN cc.created_at - INTERVAL '2 hours' AND cc.created_at + INTERVAL '2 hours'
+               ORDER BY created_at LIMIT 1) AS lead_email,
+              (SELECT status FROM leads WHERE user_id = cc.user_id AND source IN ('ai_chat_agent','website_chat')
+               AND created_at BETWEEN cc.created_at - INTERVAL '2 hours' AND cc.created_at + INTERVAL '2 hours'
+               ORDER BY created_at LIMIT 1) AS lead_status
        FROM chat_conversations cc
-       LEFT JOIN leads l ON l.user_id = cc.user_id
-         AND l.source = 'ai_chat_agent'
-         AND l.created_at BETWEEN cc.created_at - INTERVAL '2 hours' AND cc.created_at + INTERVAL '2 hours'
        WHERE cc.user_id = $1
        ORDER BY COALESCE(
          (SELECT created_at FROM chat_messages WHERE conversation_id = cc.id ORDER BY created_at DESC LIMIT 1),

@@ -227,6 +227,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS default_tax_rate DECIMAL(5,4) DEFAULT 0");
     await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS links JSONB DEFAULT '[]'::jsonb");
     await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb");
+    await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS square_estimate_id VARCHAR(255)");
+    await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS estimates_square_id_idx ON estimates(square_estimate_id) WHERE square_estimate_id IS NOT NULL");
     await pool.query(`CREATE TABLE IF NOT EXISTS invoice_items_catalog (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,

@@ -39,49 +39,74 @@ async function syncSquarePayments(userId, accessToken, pool) {
 async function syncSquareInvoices(userId, accessToken, locationId, pool) {
   const client = makeClient(accessToken);
   const { result } = await client.invoicesApi.listInvoices(locationId);
-  const squareInvoices = result.invoices || [];
+  const allItems = result.invoices || [];
 
-  const statusMap = {
+  const invoiceStatusMap = {
     DRAFT: 'draft', UNPAID: 'sent', SCHEDULED: 'sent',
     PARTIALLY_PAID: 'partial', PAID: 'paid',
     REFUNDED: 'refunded', CANCELLED: 'cancelled',
     FAILED: 'overdue', PAYMENT_PENDING: 'sent',
   };
+  const estimateStatusMap = {
+    DRAFT: 'draft', UNPAID: 'sent', ACCEPTED: 'accepted',
+    REJECTED: 'rejected', CANCELLED: 'expired',
+  };
 
-  let synced = 0;
-  for (const inv of squareInvoices) {
-    const status = statusMap[inv.status] || 'sent';
+  let invoicesSynced = 0;
+  let estimatesSynced = 0;
+
+  for (const inv of allItems) {
+    const isEstimate = inv.invoiceType === 'ESTIMATE';
     const rawTotal = inv.paymentRequests?.[0]?.computedAmountMoney?.amount
       ?? inv.paymentRequests?.[0]?.requestedMoney?.amount;
     const totalAmount = rawTotal ? Number(rawTotal) / 100 : 0;
-    const rawPaid = inv.paymentRequests?.[0]?.totalCompletedAmountMoney?.amount;
-    const amountPaid = rawPaid ? Number(rawPaid) / 100 : 0;
-    const amountDue = Math.max(0, totalAmount - amountPaid);
-    const dueDate = inv.paymentRequests?.[0]?.dueDate || null;
     const customerName = inv.primaryRecipient?.givenName
       ? `${inv.primaryRecipient.givenName} ${inv.primaryRecipient.familyName || ''}`.trim()
       : inv.primaryRecipient?.companyName || null;
     const customerEmail = inv.primaryRecipient?.emailAddress || null;
-    const invoiceNumber = `SQ-${inv.invoiceNumber || inv.id}`;
-    const paidAt = status === 'paid' ? inv.updatedAt : null;
 
-    await pool.query(
-      `INSERT INTO invoices (user_id, invoice_number, customer_name, customer_email,
-         subtotal, total_amount, amount_paid, amount_due, status, issue_date, due_date,
-         paid_at, payment_processor, notes, square_invoice_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'square', $13, $14, $15, NOW())
-       ON CONFLICT (invoice_number) DO UPDATE SET
-         status = EXCLUDED.status, amount_paid = EXCLUDED.amount_paid,
-         amount_due = EXCLUDED.amount_due, paid_at = EXCLUDED.paid_at,
-         square_invoice_id = EXCLUDED.square_invoice_id, updated_at = NOW()`,
-      [userId, invoiceNumber, customerName, customerEmail,
-       totalAmount, totalAmount, amountPaid, amountDue,
-       status, inv.createdAt?.split('T')[0], dueDate,
-       paidAt, inv.description || null, inv.id, inv.createdAt]
-    );
-    synced++;
+    if (isEstimate) {
+      const status = estimateStatusMap[inv.status] || 'draft';
+      const estimateNumber = `SQ-EST-${inv.invoiceNumber || inv.id}`;
+      const validUntil = inv.paymentRequests?.[0]?.dueDate || null;
+      await pool.query(
+        `INSERT INTO estimates (user_id, estimate_number, customer_name, customer_email,
+           subtotal, tax_amount, tax_rate, total_amount, discount_amount,
+           status, valid_until, notes, square_estimate_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 0, 0, $5, 0, $6, $7, $8, $9, $10, NOW())
+         ON CONFLICT (square_estimate_id) WHERE square_estimate_id IS NOT NULL DO UPDATE SET
+           status = EXCLUDED.status, total_amount = EXCLUDED.total_amount,
+           valid_until = EXCLUDED.valid_until, updated_at = NOW()`,
+        [userId, estimateNumber, customerName, customerEmail,
+         totalAmount, status, validUntil, inv.description || null, inv.id, inv.createdAt]
+      );
+      estimatesSynced++;
+    } else {
+      const status = invoiceStatusMap[inv.status] || 'sent';
+      const rawPaid = inv.paymentRequests?.[0]?.totalCompletedAmountMoney?.amount;
+      const amountPaid = rawPaid ? Number(rawPaid) / 100 : 0;
+      const amountDue = Math.max(0, totalAmount - amountPaid);
+      const dueDate = inv.paymentRequests?.[0]?.dueDate || null;
+      const invoiceNumber = `SQ-${inv.invoiceNumber || inv.id}`;
+      const paidAt = status === 'paid' ? inv.updatedAt : null;
+      await pool.query(
+        `INSERT INTO invoices (user_id, invoice_number, customer_name, customer_email,
+           subtotal, total_amount, amount_paid, amount_due, status, issue_date, due_date,
+           paid_at, payment_processor, notes, square_invoice_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, 'square', $12, $13, $14, NOW())
+         ON CONFLICT (invoice_number) DO UPDATE SET
+           status = EXCLUDED.status, amount_paid = EXCLUDED.amount_paid,
+           amount_due = EXCLUDED.amount_due, paid_at = EXCLUDED.paid_at,
+           square_invoice_id = EXCLUDED.square_invoice_id, updated_at = NOW()`,
+        [userId, invoiceNumber, customerName, customerEmail,
+         totalAmount, amountPaid, amountDue,
+         status, inv.createdAt?.split('T')[0], dueDate,
+         paidAt, inv.description || null, inv.id, inv.createdAt]
+      );
+      invoicesSynced++;
+    }
   }
-  return synced;
+  return { invoicesSynced, estimatesSynced };
 }
 
 module.exports = { syncSquarePayments, syncSquareInvoices };
