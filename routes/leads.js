@@ -403,28 +403,41 @@ router.patch('/:id', authenticateToken, async (req, res) => {
 router.get('/analytics/sources', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
+    // Use a subquery to avoid join fan-out inflating lead counts
     const [sourceRes, adSpendRes] = await Promise.all([
       pool.query(`
-        SELECT COALESCE(l.source, 'unknown') AS source,
-               COUNT(*)::int AS lead_count,
-               COUNT(*) FILTER (WHERE l.status = 'converted')::int AS converted_count,
-               COALESCE(SUM(b.total_amount) FILTER (WHERE b.status = 'completed'), 0) AS revenue
-        FROM leads l
-        LEFT JOIN bookings b ON b.user_id = l.user_id
-          AND b.status = 'completed'
-          AND (
-            (l.email IS NOT NULL AND l.email != '' AND LOWER(b.customer_email) = LOWER(l.email)) OR
-            (l.phone IS NOT NULL AND l.phone != '' AND REGEXP_REPLACE(b.customer_phone,'[^0-9]','','g') = REGEXP_REPLACE(l.phone,'[^0-9]','','g'))
-          )
-        WHERE l.user_id = $1
-        GROUP BY l.source
+        SELECT src AS source,
+               lead_count,
+               converted_count,
+               COALESCE((
+                 SELECT SUM(b.total_amount)
+                 FROM bookings b
+                 WHERE b.user_id = $1 AND b.status = 'completed'
+                   AND EXISTS (
+                     SELECT 1 FROM leads l2
+                     WHERE l2.user_id = $1
+                       AND COALESCE(l2.source, 'unknown') = src
+                       AND (
+                         (l2.email IS NOT NULL AND l2.email != '' AND LOWER(b.customer_email) = LOWER(l2.email)) OR
+                         (l2.phone IS NOT NULL AND l2.phone != '' AND
+                          REGEXP_REPLACE(b.customer_phone,'[^0-9]','','g') = REGEXP_REPLACE(l2.phone,'[^0-9]','','g'))
+                       )
+                   )
+               ), 0)::numeric AS revenue
+        FROM (
+          SELECT COALESCE(source, 'unknown') AS src,
+                 COUNT(*)::int AS lead_count,
+                 COUNT(*) FILTER (WHERE status = 'converted')::int AS converted_count
+          FROM leads WHERE user_id = $1
+          GROUP BY COALESCE(source, 'unknown')
+        ) sub
         ORDER BY lead_count DESC
       `, [userId]),
       pool.query(`
         SELECT source, COALESCE(SUM(amount), 0) AS total_spend
         FROM ad_spend WHERE user_id = $1
         GROUP BY source
-      `, [userId]),
+      `, [userId]).catch(() => ({ rows: [] })),
     ]);
     const spendMap = {};
     adSpendRes.rows.forEach(r => { spendMap[r.source] = parseFloat(r.total_spend); });
