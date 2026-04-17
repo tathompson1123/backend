@@ -404,55 +404,48 @@ router.get('/analytics/sources', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     // Use a subquery to avoid join fan-out inflating lead counts
-    const [sourceRes, adSpendRes] = await Promise.all([
+    const [sourceRes, adSpendRes, revenueRes] = await Promise.all([
+      // Per-source lead counts from leads table
       pool.query(`
-        SELECT src AS source,
-               lead_count,
-               converted_count,
-               COALESCE((
-                 SELECT SUM(b.total_amount)
-                 FROM bookings b
-                 WHERE b.user_id = $1 AND b.status = 'completed'
-                   AND EXISTS (
-                     SELECT 1 FROM leads l2
-                     WHERE l2.user_id = $1
-                       AND COALESCE(l2.source, 'unknown') = src
-                       AND (
-                         (l2.email IS NOT NULL AND l2.email != '' AND LOWER(b.customer_email) = LOWER(l2.email)) OR
-                         (l2.phone IS NOT NULL AND l2.phone != '' AND
-                          REGEXP_REPLACE(b.customer_phone,'[^0-9]','','g') = REGEXP_REPLACE(l2.phone,'[^0-9]','','g'))
-                       )
-                   )
-               ), 0)::numeric AS revenue
-        FROM (
-          SELECT COALESCE(source, 'unknown') AS src,
-                 COUNT(*)::int AS lead_count,
-                 COUNT(*) FILTER (WHERE status = 'converted')::int AS converted_count
-          FROM leads WHERE user_id = $1
-          GROUP BY COALESCE(source, 'unknown')
-        ) sub
+        SELECT COALESCE(source, 'unknown') AS source,
+               COUNT(*)::int AS lead_count,
+               COUNT(*) FILTER (WHERE status = 'converted')::int AS converted_count
+        FROM leads WHERE user_id = $1
+        GROUP BY COALESCE(source, 'unknown')
         ORDER BY lead_count DESC
       `, [userId]),
+      // Ad spend per source
       pool.query(`
         SELECT source, COALESCE(SUM(amount), 0) AS total_spend
         FROM ad_spend WHERE user_id = $1
         GROUP BY source
       `, [userId]).catch(() => ({ rows: [] })),
+      // Total revenue directly from booking calendar (completed bookings)
+      pool.query(`
+        SELECT COALESCE(SUM(total_amount), 0)::numeric AS total_revenue
+        FROM bookings WHERE user_id = $1 AND status = 'completed'
+      `, [userId]),
     ]);
+
+    const totalBookingRevenue = parseFloat(revenueRes.rows[0]?.total_revenue || 0);
+    const totalLeads = sourceRes.rows.reduce((s, r) => s + r.lead_count, 0);
+
     const spendMap = {};
     adSpendRes.rows.forEach(r => { spendMap[r.source] = parseFloat(r.total_spend); });
+
     const sources = sourceRes.rows.map(s => {
       const spend = spendMap[s.source] || 0;
-      const rev = parseFloat(s.revenue) || 0;
+      // Attribute revenue proportionally by lead share
+      const revShare = totalLeads > 0 ? (s.lead_count / totalLeads) * totalBookingRevenue : 0;
       return {
         ...s,
-        revenue: rev,
+        revenue: parseFloat(revShare.toFixed(2)),
         ad_spend: spend,
-        roi: spend > 0 ? (((rev - spend) / spend) * 100).toFixed(1) : null,
+        roi: spend > 0 ? (((revShare - spend) / spend) * 100).toFixed(1) : null,
         cost_per_lead: spend > 0 && s.lead_count > 0 ? (spend / s.lead_count).toFixed(2) : null,
       };
     });
-    res.json({ sources });
+    res.json({ sources, total_booking_revenue: totalBookingRevenue });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
