@@ -1006,7 +1006,9 @@ router.get('/conversations', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const conversations = await pool.query(
-      `SELECT cc.id, cc.source, cc.created_at, cc.updated_at,
+      `SELECT cc.id, cc.source,
+              to_char(cc.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+              to_char(cc.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as updated_at,
               (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = cc.id) AS message_count,
               (SELECT cm.content FROM chat_messages cm WHERE cm.conversation_id = cc.id AND cm.role = 'user' ORDER BY cm.created_at ASC LIMIT 1) AS first_message,
               COALESCE(cc.outcome,
@@ -1094,7 +1096,7 @@ router.get('/conversations/:id/messages', authenticateToken, async (req, res) =>
       return res.status(404).json({ error: 'Conversation not found' });
     }
     const messages = await pool.query(
-      `SELECT role, content, created_at
+      `SELECT role, content, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
        FROM chat_messages
        WHERE conversation_id = $1
        ORDER BY created_at ASC`,

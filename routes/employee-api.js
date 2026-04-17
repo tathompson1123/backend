@@ -1538,25 +1538,170 @@ router.get('/admin/leads/:id/chat-conversation', requireAdmin, async (req, res) 
 router.get('/admin/revenue', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.employee;
-    const [invoiceRes, statsRes] = await Promise.all([
+    const [invoiceRes, estimateRes, paymentRes, statsRes] = await Promise.all([
       pool.query(
-        `SELECT i.*, b.customer_name, b.booking_date, b.start_time
+        `SELECT i.id, i.invoice_number, i.status, i.payment_status,
+                COALESCE(i.customer_name, b.customer_name) AS customer_name,
+                i.customer_email, i.total_amount, i.amount_paid, i.amount_due,
+                i.tax_amount, i.tax_rate, i.subtotal, i.discount_amount,
+                i.issue_date, i.due_date, i.paid_at, i.created_at
          FROM invoices i
          LEFT JOIN bookings b ON b.id = i.booking_id
-         WHERE i.user_id = $1 ORDER BY i.created_at DESC LIMIT 50`,
+         WHERE i.user_id = $1 ORDER BY i.created_at DESC LIMIT 100`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT id, estimate_number, status, customer_name, customer_email,
+                total_amount, tax_amount, tax_rate, subtotal, discount_amount,
+                issue_date, valid_until, created_at
+         FROM estimates WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT p.id, p.amount, p.status, p.processor, p.payment_method,
+                p.card_last_four, p.card_brand, p.processor_fee,
+                p.created_at, i.invoice_number, i.customer_name
+         FROM payments p
+         LEFT JOIN invoices i ON i.id = p.invoice_id
+         WHERE p.user_id = $1 ORDER BY p.created_at DESC LIMIT 100`,
         [userId]
       ),
       pool.query(
         `SELECT
-           COUNT(*) FILTER (WHERE payment_status = 'paid') as paid_count,
-           COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid'), 0) as total_revenue,
-           COALESCE(SUM(total_amount) FILTER (WHERE payment_status != 'paid' AND status != 'cancelled'), 0) as outstanding,
-           COUNT(*) FILTER (WHERE booking_date = CURRENT_DATE AND status != 'cancelled') as today_jobs
-         FROM bookings WHERE user_id = $1`,
+           COALESCE(SUM(amount_paid), 0) AS total_revenue,
+           COALESCE(SUM(amount_due) FILTER (WHERE status != 'cancelled'), 0) AS outstanding,
+           COUNT(*) FILTER (WHERE payment_status = 'paid') AS paid_count,
+           COALESCE(SUM(tax_amount), 0) AS total_tax
+         FROM invoices WHERE user_id = $1`,
         [userId]
       )
     ]);
-    res.json({ invoices: invoiceRes.rows, stats: statsRes.rows[0] });
+    res.json({
+      invoices: invoiceRes.rows,
+      estimates: estimateRes.rows,
+      transactions: paymentRes.rows,
+      stats: statsRes.rows[0],
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/overview
+router.get('/admin/overview', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const weekOffset = parseInt(req.query.weekOffset) || 0;
+
+    // Week boundaries (Sun–Sat)
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + weekOffset * 7);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const [todayRes, weekBookingsRes, weekLeadsRes, revenueRes] = await Promise.all([
+      // Today's bookings
+      pool.query(
+        `SELECT b.id, b.customer_name, b.start_time, b.status, b.total_amount,
+                COALESCE(STRING_AGG(bi.service_name, ', '), '') as services
+         FROM bookings b
+         LEFT JOIN booking_items bi ON bi.booking_id = b.id
+         WHERE b.user_id = $1 AND b.booking_date = CURRENT_DATE AND b.status != 'cancelled'
+         GROUP BY b.id ORDER BY b.start_time`,
+        [userId]
+      ),
+      // Week bookings
+      pool.query(
+        `SELECT b.id, b.status, b.source, b.total_amount
+         FROM bookings b
+         WHERE b.user_id = $1 AND b.booking_date BETWEEN $2 AND $3`,
+        [userId, weekStart.toISOString().split('T')[0], weekEnd.toISOString().split('T')[0]]
+      ),
+      // Week leads
+      pool.query(
+        `SELECT id, source, status, phone, email
+         FROM leads WHERE user_id = $1 AND created_at BETWEEN $2 AND $3`,
+        [userId, weekStart, weekEnd]
+      ),
+      // Revenue totals (all time)
+      pool.query(
+        `SELECT COALESCE(SUM(amount_paid), 0) as total_revenue,
+                COALESCE(SUM(amount_due) FILTER (WHERE status != 'cancelled'), 0) as outstanding,
+                COUNT(*) FILTER (WHERE payment_status = 'paid') as paid_count
+         FROM invoices WHERE user_id = $1`,
+        [userId]
+      ),
+    ]);
+
+    const weekBookings = weekBookingsRes.rows;
+    const weekLeads = weekLeadsRes.rows;
+    const weekRevenue = weekBookings.reduce((s, b) => s + (parseFloat(b.total_amount) || 0), 0);
+    const chatLeads = weekLeads.filter(l => l.source === 'ai_chat_agent' || l.source === 'website_chat');
+    const formLeads = weekLeads.filter(l => l.source === 'lead_form');
+    const convRate = weekLeads.length > 0
+      ? ((weekBookings.length / weekLeads.length) * 100).toFixed(1)
+      : '0';
+
+    res.json({
+      today: todayRes.rows,
+      revenue: revenueRes.rows[0],
+      weekSummary: {
+        weekStart: weekStart.toISOString(),
+        weekEnd: weekEnd.toISOString(),
+        totalLeads: weekLeads.length,
+        conversionRate: convRate,
+        weekRevenue: weekRevenue.toFixed(2),
+        totalBookings: weekBookings.length,
+        completedBookings: weekBookings.filter(b => b.status === 'completed').length,
+      },
+      performanceCards: {
+        chatAgent: {
+          conversationsStarted: chatLeads.length,
+          bookingsMade: weekBookings.filter(b => b.source === 'ai_chat_agent' || b.source === 'website_chat').length,
+          phonesCollected: chatLeads.filter(l => l.phone).length,
+          followUpLeads: chatLeads.filter(l => l.status === 'new' || l.status === 'contacted').length,
+        },
+        leadForms: {
+          totalSubmissions: formLeads.length,
+          emailConversions: formLeads.filter(l => l.email).length,
+          smsConversions: formLeads.filter(l => l.phone).length,
+          costSavings: (formLeads.length * 0.15).toFixed(2),
+        },
+        newBookings: {
+          total: weekBookings.length,
+          fromChat: weekBookings.filter(b => b.source === 'ai_chat_agent' || b.source === 'website_chat').length,
+          fromLeadForms: weekBookings.filter(b => b.source === 'lead_form').length,
+          manual: weekBookings.filter(b => !b.source || (b.source !== 'ai_chat_agent' && b.source !== 'website_chat' && b.source !== 'lead_form')).length,
+          revenue: weekRevenue.toFixed(2),
+        },
+        reviews: {
+          requestsSent: 0,
+          reviewsReceived: 0,
+          aiReplies: 0,
+          responseRate: '0',
+          timeSaved: '0',
+        },
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/tax-settings
+router.get('/admin/tax-settings', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const [settingsRes, catalogRes] = await Promise.all([
+      pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]),
+      pool.query(
+        'SELECT id, name, category, amount_type, amount, taxable FROM invoice_items_catalog WHERE user_id = $1 AND active = true ORDER BY category, name',
+        [userId]
+      ),
+    ]);
+    const rawRate = parseFloat(settingsRes.rows[0]?.default_tax_rate || 0);
+    res.json({
+      defaultTaxRate: parseFloat((rawRate * 100).toFixed(4)),
+      catalog: catalogRes.rows,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1581,18 +1726,46 @@ router.get('/admin/conversations', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.employee;
     const result = await pool.query(
-      `SELECT b.id as booking_id, b.customer_name, b.customer_phone, b.booking_date,
-         b.status, COUNT(bm.id) as message_count,
-         MAX(bm.created_at) as last_message_at,
-         (SELECT body FROM booking_messages WHERE booking_id = b.id ORDER BY created_at DESC LIMIT 1) as last_message
-       FROM bookings b
-       LEFT JOIN booking_messages bm ON bm.booking_id = b.id
-       WHERE b.user_id = $1 AND bm.id IS NOT NULL
-       GROUP BY b.id
-       ORDER BY last_message_at DESC LIMIT 50`,
+      `SELECT cc.id,
+              cc.customer_name,
+              cc.outcome,
+              cc.created_at,
+              cc.updated_at,
+              (SELECT COUNT(*) FROM chat_messages WHERE conversation_id = cc.id) AS message_count,
+              (SELECT content FROM chat_messages WHERE conversation_id = cc.id ORDER BY created_at DESC LIMIT 1) AS last_message,
+              (SELECT created_at FROM chat_messages WHERE conversation_id = cc.id ORDER BY created_at DESC LIMIT 1) AS last_message_at,
+              l.name AS lead_name, l.phone AS lead_phone, l.email AS lead_email, l.status AS lead_status
+       FROM chat_conversations cc
+       LEFT JOIN leads l ON l.user_id = cc.user_id
+         AND l.source = 'ai_chat_agent'
+         AND l.created_at BETWEEN cc.created_at - INTERVAL '2 hours' AND cc.created_at + INTERVAL '2 hours'
+       WHERE cc.user_id = $1
+       ORDER BY COALESCE(
+         (SELECT created_at FROM chat_messages WHERE conversation_id = cc.id ORDER BY created_at DESC LIMIT 1),
+         cc.created_at
+       ) DESC
+       LIMIT 50`,
       [userId]
     );
     res.json({ conversations: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/conversations/:id/messages
+router.get('/admin/conversations/:id/messages', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+    const conv = await pool.query(
+      'SELECT id FROM chat_conversations WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (conv.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+    const result = await pool.query(
+      'SELECT role, content, created_at FROM chat_messages WHERE conversation_id = $1 ORDER BY created_at ASC',
+      [id]
+    );
+    res.json({ messages: result.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
