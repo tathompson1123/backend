@@ -253,6 +253,21 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     )`);
     await pool.query('ALTER TABLE booking_items ADD COLUMN IF NOT EXISTS variant_id INTEGER');
     await pool.query('ALTER TABLE booking_items ADD COLUMN IF NOT EXISTS variant_name VARCHAR(255)');
+    await pool.query(`CREATE TABLE IF NOT EXISTS ad_spend (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      source VARCHAR(100) NOT NULL,
+      amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+      month VARCHAR(7) NOT NULL,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(user_id, source, month)
+    )`);
+    await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS google_lsa_lead_id VARCHAR(255)");
+    await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS call_recording_url TEXT");
+    await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS call_transcript TEXT");
+    await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS call_duration INTEGER");
     // Booking reminder settings
     await pool.query(`CREATE TABLE IF NOT EXISTS booking_reminder_settings (
       id SERIAL PRIMARY KEY,

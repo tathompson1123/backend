@@ -398,6 +398,150 @@ router.patch('/:id', authenticateToken, async (req, res) => {
 });
 
 // ============================================
+// GET /analytics/sources — lead source breakdown + ROI
+// ============================================
+router.get('/analytics/sources', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const [sourceRes, adSpendRes] = await Promise.all([
+      pool.query(`
+        SELECT COALESCE(l.source, 'unknown') AS source,
+               COUNT(*)::int AS lead_count,
+               COUNT(*) FILTER (WHERE l.status = 'converted')::int AS converted_count,
+               COALESCE(SUM(b.total_amount) FILTER (WHERE b.status = 'completed'), 0) AS revenue
+        FROM leads l
+        LEFT JOIN bookings b ON b.user_id = l.user_id
+          AND b.status = 'completed'
+          AND (
+            (l.email IS NOT NULL AND l.email != '' AND LOWER(b.customer_email) = LOWER(l.email)) OR
+            (l.phone IS NOT NULL AND l.phone != '' AND REGEXP_REPLACE(b.customer_phone,'[^0-9]','','g') = REGEXP_REPLACE(l.phone,'[^0-9]','','g'))
+          )
+        WHERE l.user_id = $1
+        GROUP BY l.source
+        ORDER BY lead_count DESC
+      `, [userId]),
+      pool.query(`
+        SELECT source, COALESCE(SUM(amount), 0) AS total_spend
+        FROM ad_spend WHERE user_id = $1
+        GROUP BY source
+      `, [userId]),
+    ]);
+    const spendMap = {};
+    adSpendRes.rows.forEach(r => { spendMap[r.source] = parseFloat(r.total_spend); });
+    const sources = sourceRes.rows.map(s => {
+      const spend = spendMap[s.source] || 0;
+      const rev = parseFloat(s.revenue) || 0;
+      return {
+        ...s,
+        revenue: rev,
+        ad_spend: spend,
+        roi: spend > 0 ? (((rev - spend) / spend) * 100).toFixed(1) : null,
+        cost_per_lead: spend > 0 && s.lead_count > 0 ? (spend / s.lead_count).toFixed(2) : null,
+      };
+    });
+    res.json({ sources });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================
+// GET /ad-spend — list ad spend entries
+// ============================================
+router.get('/ad-spend', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const result = await pool.query(
+      'SELECT * FROM ad_spend WHERE user_id = $1 ORDER BY month DESC, source',
+      [userId]
+    );
+    res.json({ entries: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================
+// POST /ad-spend — upsert ad spend for a source+month
+// ============================================
+router.post('/ad-spend', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { source, amount, month, notes } = req.body;
+    if (!source || amount == null || !month) return res.status(400).json({ error: 'source, amount, month required' });
+    const result = await pool.query(`
+      INSERT INTO ad_spend (user_id, source, amount, month, notes)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (user_id, source, month) DO UPDATE SET amount = $3, notes = $5, updated_at = NOW()
+      RETURNING *
+    `, [userId, source, amount, month, notes || null]);
+    res.json({ entry: result.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================
+// DELETE /ad-spend/:id
+// ============================================
+router.delete('/ad-spend/:adId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    await pool.query('DELETE FROM ad_spend WHERE id = $1 AND user_id = $2', [req.params.adId, userId]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================
+// GET /:id/detail — comprehensive lead profile
+// ============================================
+router.get('/:id/detail', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const leadRes = await pool.query(`
+      SELECT l.*,
+             c.left_review, c.lifetime_value AS customer_lifetime_value, c.total_jobs AS customer_total_jobs
+      FROM leads l
+      LEFT JOIN customers c ON c.user_id = l.user_id AND (
+        (l.email IS NOT NULL AND l.email != '' AND LOWER(c.email) = LOWER(l.email)) OR
+        (l.phone IS NOT NULL AND l.phone != '' AND
+         REGEXP_REPLACE(c.phone,'[^0-9]','','g') = REGEXP_REPLACE(l.phone,'[^0-9]','','g'))
+      )
+      WHERE l.id = $1 AND l.user_id = $2
+      LIMIT 1
+    `, [id, userId]);
+    if (!leadRes.rows[0]) return res.status(404).json({ error: 'Lead not found' });
+    const lead = leadRes.rows[0];
+
+    const bookingsRes = await pool.query(`
+      SELECT b.id, b.booking_date, b.start_time, b.end_time, b.status,
+             b.total_amount, b.source, b.customer_name, b.payment_status,
+             COALESCE(STRING_AGG(bi.service_name, ', '), '') AS services
+      FROM bookings b
+      LEFT JOIN booking_items bi ON bi.booking_id = b.id
+      WHERE b.user_id = $1 AND b.status != 'cancelled' AND (
+        ($2 IS NOT NULL AND $2 != '' AND LOWER(b.customer_email) = LOWER($2)) OR
+        ($3 IS NOT NULL AND $3 != '' AND
+         REGEXP_REPLACE(b.customer_phone,'[^0-9]','','g') = REGEXP_REPLACE($3,'[^0-9]','','g'))
+      )
+      GROUP BY b.id
+      ORDER BY b.booking_date DESC, b.start_time DESC
+    `, [userId, lead.email || '', lead.phone || '']);
+
+    const bookings = bookingsRes.rows;
+    const totalSpent = bookings.reduce((s, b) => s + (parseFloat(b.total_amount) || 0), 0);
+    const completedBookings = bookings.filter(b => b.status === 'completed');
+    const lastBooking = bookings[0] || null;
+
+    res.json({
+      lead,
+      bookings,
+      totalSpent,
+      totalBookings: bookings.length,
+      completedBookings: completedBookings.length,
+      isRecurring: completedBookings.length > 1,
+      lastBookingDate: lastBooking?.booking_date || null,
+      lastBookingServices: lastBooking?.services || null,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================
 // DELETE - Delete lead
 // ============================================
 router.delete('/:id', authenticateToken, async (req, res) => {
