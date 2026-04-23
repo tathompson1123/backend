@@ -1082,6 +1082,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS business_type VARCHAR(100)");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS business_services TEXT");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS business_known_for TEXT");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_chat_unlimited BOOLEAN DEFAULT false");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_limit_notified_at TIMESTAMPTZ");
 
     // Reset test account to setup mode on every deploy
     await pool.query(
