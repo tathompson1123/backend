@@ -459,9 +459,10 @@ router.post('/message', async (req, res) => {
 
     // Check monthly AI chat cost limit by plan
     const CHAT_COST_LIMITS = { pro: 6.00, expert: 6.00 };
-    const planRow = await pool.query('SELECT plan FROM users WHERE id = $1', [userId]);
+    const planRow = await pool.query('SELECT plan, ai_chat_unlimited FROM users WHERE id = $1', [userId]);
     const userPlan = planRow.rows[0]?.plan;
-    const costLimit = CHAT_COST_LIMITS[userPlan];
+    const unlimited = planRow.rows[0]?.ai_chat_unlimited === true;
+    const costLimit = unlimited ? null : CHAT_COST_LIMITS[userPlan];
     if (costLimit != null) {
       const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
       const costRow = await pool.query(
