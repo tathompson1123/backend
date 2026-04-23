@@ -357,6 +357,10 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
       const response = await fetchPromise;
       if (response.ok) {
         const data = await response.json();
+        if (data.silent) {
+          hideTypingIndicator();
+          return;
+        }
         // Human typing delay: 60-80 WPM (80WPM=150ms/char, 60WPM=200ms/char)
         const replyLen = (data.reply || '').length;
         const msPerChar = 150 + Math.random() * 50; // 150-200ms per char

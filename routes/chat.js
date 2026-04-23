@@ -459,9 +459,13 @@ router.post('/message', async (req, res) => {
 
     // Check monthly AI chat cost limit by plan
     const CHAT_COST_LIMITS = { pro: 6.00, expert: 6.00 };
-    const planRow = await pool.query('SELECT plan, ai_chat_unlimited FROM users WHERE id = $1', [userId]);
-    const userPlan = planRow.rows[0]?.plan;
-    const unlimited = planRow.rows[0]?.ai_chat_unlimited === true;
+    const planRow = await pool.query(
+      'SELECT plan, ai_chat_unlimited, email, business_name, chat_limit_notified_at FROM users WHERE id = $1',
+      [userId]
+    );
+    const ownerRow = planRow.rows[0] || {};
+    const userPlan = ownerRow.plan;
+    const unlimited = ownerRow.ai_chat_unlimited === true;
     const costLimit = unlimited ? null : CHAT_COST_LIMITS[userPlan];
     if (costLimit != null) {
       const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
@@ -470,7 +474,38 @@ router.post('/message', async (req, res) => {
         [userId, monthStart]
       );
       if (parseFloat(costRow.rows[0].total) >= costLimit) {
-        return res.json({ reply: "We've reached our monthly AI chat limit. Please contact us directly to book or get a quote.", limitReached: true });
+        // Notify the business owner once per month that they've hit the cap
+        const notifiedAt = ownerRow.chat_limit_notified_at ? new Date(ownerRow.chat_limit_notified_at) : null;
+        if (ownerRow.email && process.env.SENDGRID_API_KEY && (!notifiedAt || notifiedAt < monthStart)) {
+          const upgradeUrl = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/dashboard?view=billing`;
+          sgMail.send({
+            to: ownerRow.email,
+            from: { name: 'SORCE', email: 'noreply@sorceintegrations.com' },
+            subject: "You've hit your monthly AI chat limit",
+            html: `
+              <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+                <h2 style="color:#1f2937;">Your AI chat is paused</h2>
+                <p style="color:#4b5563;font-size:15px;">Hi${ownerRow.business_name ? ' ' + ownerRow.business_name : ''},</p>
+                <p style="color:#4b5563;font-size:15px;">Your website's AI chat assistant has reached its monthly usage limit on your current ${userPlan || ''} plan. To keep it answering visitor questions for the rest of the month, upgrade your plan.</p>
+                <p style="margin:24px 0;">
+                  <a href="${upgradeUrl}" style="background:#2563eb;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Upgrade your plan</a>
+                </p>
+                <p style="color:#6b7280;font-size:13px;">Usage resets at the start of each month. Questions? Reply to this email or reach us at <a href="mailto:help@sorceintegrations.com">help@sorceintegrations.com</a>.</p>
+                <p style="color:#9ca3af;font-size:13px;margin-top:32px;">— The SORCE Team</p>
+              </div>`,
+          }).catch(e => console.error('Chat limit email error:', e.message));
+          pool.query(
+            `UPDATE users SET chat_limit_notified_at = NOW() WHERE id = $1`,
+            [userId]
+          ).catch(e => console.error('chat_limit_notified_at update error:', e.message));
+        }
+        // silent: true tells new widgets to render nothing; reply is a graceful
+        // fallback for old widgets still baked into already-deployed sites.
+        return res.json({
+          silent: true,
+          limitReached: true,
+          reply: "Thanks for reaching out — please contact us directly and we'll get right back to you.",
+        });
       }
     }
 
