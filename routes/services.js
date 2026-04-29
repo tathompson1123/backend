@@ -469,7 +469,7 @@ router.post('/scrape', authenticateToken, async (req, res) => {
 
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
+      max_tokens: 6000,
       messages: [{
         role: 'user',
         content: `You are extracting services from a business website. Your job is to find EVERY SINGLE service listed on the page. Do NOT skip any. Do NOT summarize or combine services. If there are 15 services listed, return all 15.
@@ -503,9 +503,9 @@ ${textContent}`
     try {
       extractedServices = JSON.parse(aiText);
     } catch (parseErr) {
-      const jsonMatch = aiText.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        extractedServices = JSON.parse(jsonMatch[0]);
+      const lastBracket = aiText.lastIndexOf(']');
+      if (lastBracket > 0) {
+        try { extractedServices = JSON.parse(aiText.substring(0, lastBracket + 1)); } catch { return res.status(500).json({ error: 'Could not parse AI response' }); }
       } else {
         return res.status(500).json({ error: 'Could not parse AI response' });
       }

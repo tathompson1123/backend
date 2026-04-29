@@ -120,7 +120,7 @@ router.post('/competitors', async (req, res) => {
 
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 3000,
+      max_tokens: 6000,
       messages: [{
         role: 'user',
         content: `You are a competitive business analyst. Analyze these competitors for a "${businessType}" business called "${businessName}" in ${city}, ${state}.
@@ -161,9 +161,11 @@ Return ONLY valid JSON in this exact format:
     let aiAnalysis;
     try {
       aiAnalysis = JSON.parse(aiText);
-    } catch {
-      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-      aiAnalysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { competitors: [], summary: '' };
+    } catch (parseErr) {
+      const lastBrace = aiText.lastIndexOf('}');
+      if (lastBrace > 0) {
+        try { aiAnalysis = JSON.parse(aiText.substring(0, lastBrace + 1)); } catch { aiAnalysis = { competitors: [], summary: '' }; }
+      } else { aiAnalysis = { competitors: [], summary: '' }; }
     }
 
     // Merge AI analysis into competitor data
@@ -254,7 +256,7 @@ router.post('/upsells', async (req, res) => {
 
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 3000,
+      max_tokens: 6000,
       messages: [{
         role: 'user',
         content: `You are a revenue optimization expert. Analyze this "${user.business_type}" business called "${user.business_name}" and recommend upsells.
@@ -297,8 +299,10 @@ Return ONLY valid JSON:
     try {
       analysis = JSON.parse(aiText);
     } catch {
-      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-      analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { upsells: [], totalMonthlyPotential: 0, topRecommendation: '' };
+      const lastBrace = aiText.lastIndexOf('}');
+      if (lastBrace > 0) {
+        try { analysis = JSON.parse(aiText.substring(0, lastBrace + 1)); } catch { analysis = { upsells: [], totalMonthlyPotential: 0, topRecommendation: '' }; }
+      } else { analysis = { upsells: [], totalMonthlyPotential: 0, topRecommendation: '' }; }
     }
 
     analysis.generatedAt = new Date().toISOString();

@@ -2,8 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const jwt = require('jsonwebtoken');
+const sgMail = require('@sendgrid/mail');
+if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const ANALYTICS_PASSWORD = process.env.ANALYTICS_PASSWORD || 'sorce-internal-2025';
+const DASHBOARD_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 
 const PLAN_REVENUE  = { basic: 29.95, pro: 99.95, expert: 99.95, scale: 175.95 };
 const SMS_COST      = 0.0075;  // per outbound SMS (Twilio/Telnyx avg)
@@ -155,6 +158,93 @@ router.get('/data', requireAnalytics, async (req, res) => {
     console.error('Analytics data error:', error.message);
     res.status(500).json({ error: 'Failed to fetch analytics data' });
   }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// AD PLATFORM VERIFICATION REQUESTS (admin-only)
+// ══════════════════════════════════════════════════════════════════
+
+// GET /verification-requests — list all pending + recent
+router.get('/verification-requests', requireAnalytics, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT r.id, r.user_id, r.platform, r.email, r.status, r.requested_at, r.verified_at,
+             u.name AS user_name, u.email AS user_email, u.business_name
+      FROM ad_verification_requests r
+      JOIN users u ON u.id = r.user_id
+      ORDER BY
+        CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END,
+        r.requested_at DESC
+    `);
+    res.json({ requests: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /verification-requests/:id/approve — mark verified & email user
+router.post('/verification-requests/:id/approve', requireAnalytics, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
+      UPDATE ad_verification_requests
+      SET status = 'verified', verified_at = NOW()
+      WHERE id = $1 RETURNING *
+    `, [id]);
+    const request = result.rows[0];
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+
+    const userRes = await pool.query(
+      'SELECT email, name FROM users WHERE id = $1',
+      [request.user_id]
+    );
+    const user = userRes.rows[0];
+    const platformLabel = request.platform === 'google_ads' ? 'Google Ads' : 'Google Local Services';
+    const connectUrl = `${DASHBOARD_URL}/dashboard?tab=leads&subtab=analytics&connect=${request.platform}`;
+
+    if (process.env.SENDGRID_API_KEY && user?.email && process.env.SENDGRID_FROM_EMAIL) {
+      try {
+        await sgMail.send({
+          to: user.email,
+          from: process.env.SENDGRID_FROM_EMAIL,
+          subject: `Your ${platformLabel} account has been verified!`,
+          html: `
+            <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
+              <h2 style="color:#111">Your ${platformLabel} account is verified ✓</h2>
+              <p>Hi ${user.name || 'there'},</p>
+              <p>Great news — your ${platformLabel} account (<strong>${request.email}</strong>) has been approved for SORCE integration.</p>
+              <p>Click the button below to connect your account and start seeing your ad spend &amp; ROI analytics directly in your dashboard.</p>
+              <p style="margin:28px 0">
+                <a href="${connectUrl}"
+                   style="display:inline-block;padding:14px 28px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px">
+                  Connect ${platformLabel}
+                </a>
+              </p>
+              <p style="color:#555;font-size:13px">If the button doesn't work, paste this into your browser:<br>
+              <a href="${connectUrl}" style="color:#2563eb">${connectUrl}</a></p>
+              <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+              <p style="color:#888;font-size:12px">The SORCE team</p>
+            </div>
+          `,
+        });
+      } catch (e) { console.error('Approval email failed:', e.message); }
+    }
+
+    res.json({ request });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /verification-requests/:id/reject — mark rejected
+router.post('/verification-requests/:id/reject', requireAnalytics, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const result = await pool.query(`
+      UPDATE ad_verification_requests
+      SET status = 'rejected', notes = $2, verified_at = NULL
+      WHERE id = $1 RETURNING *
+    `, [id, notes || null]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Request not found' });
+    res.json({ request: result.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

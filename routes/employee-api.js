@@ -1358,8 +1358,8 @@ router.post('/bookings', async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO bookings (user_id, employee_id, booking_number, customer_name, customer_email, customer_phone,
-        customer_address, customer_notes, booking_date, start_time, end_time, status, total_amount, job_notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'confirmed',$12,$13)
+        customer_address, customer_notes, booking_date, start_time, end_time, status, total_amount, job_notes, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'confirmed',$12,$13,'manual')
        RETURNING *`,
       [userId, assignTo, bookingNumber, customerName, customerEmail||null, customerPhone||null,
        customerAddress||null, customerNotes||null, bookingDate, startTime, endTime,

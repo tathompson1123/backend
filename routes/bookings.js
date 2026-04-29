@@ -115,7 +115,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.post('/create', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { serviceId, bookingDate, startTime, customerInfo, customerNotes, employeeId, groupId } = req.body;
+    const { serviceId, bookingDate, startTime, customerInfo, customerNotes, employeeId, groupId, referralSource } = req.body;
 
     if (!serviceId || !bookingDate || !startTime || !customerInfo) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -192,14 +192,16 @@ router.post('/create', authenticateToken, async (req, res) => {
       `INSERT INTO bookings (
         user_id, customer_id, booking_number, booking_date, start_time, end_time,
         subtotal, total_amount, customer_name, customer_email,
-        customer_phone, customer_notes, status, employee_id, group_id
+        customer_phone, customer_notes, status, employee_id, group_id,
+        source, referral_source
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *`,
       [
         userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
         service.price, totalWithTax, customerInfo.name, customerInfo.email,
-        customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null
+        customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null,
+        'manual', (referralSource && String(referralSource).trim()) || null
       ]
     );
 

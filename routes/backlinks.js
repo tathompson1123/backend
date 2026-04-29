@@ -121,7 +121,7 @@ router.post('/citations/check', authenticateToken, async (req, res) => {
   try {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 3000,
+      max_tokens: 6000,
       system: `You are a local SEO expert specialising in citation consistency for small businesses.
 Respond ONLY with valid JSON — no markdown, no explanation, no code fences.`,
       messages: [{
@@ -162,7 +162,15 @@ Return ONLY a JSON object:
 
     const raw = message.content[0]?.text || '';
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-    const report = JSON.parse(cleaned);
+    let report;
+    try {
+      report = JSON.parse(cleaned);
+    } catch (parseErr) {
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (lastBrace > 0) {
+        try { report = JSON.parse(cleaned.substring(0, lastBrace + 1)); } catch { throw parseErr; }
+      } else { throw parseErr; }
+    }
 
     // Save to DB
     await pool.query(
@@ -224,7 +232,7 @@ router.post('/content/generate', authenticateToken, async (req, res) => {
   try {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 5000,
+      max_tokens: 7000,
       system: `You are an expert local SEO strategist and content marketer for small service businesses.
 You create content specifically designed to attract backlinks and social shares from local sources.
 Respond ONLY with valid JSON — no markdown, no explanation, no code fences.`,
@@ -283,7 +291,15 @@ Return ONLY a JSON object:
 
     const raw = message.content[0]?.text || '';
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-    const content = JSON.parse(cleaned);
+    let content;
+    try {
+      content = JSON.parse(cleaned);
+    } catch (parseErr) {
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (lastBrace > 0) {
+        try { content = JSON.parse(cleaned.substring(0, lastBrace + 1)); } catch { throw parseErr; }
+      } else { throw parseErr; }
+    }
 
     // Save to history
     await pool.query(

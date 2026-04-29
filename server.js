@@ -178,6 +178,10 @@ app.use('/api/embed', embedCors, embedRoutes);
 const webhookRoutes = require('./routes/webhooks');
 app.use('/api/webhooks', embedCors, webhookRoutes);
 
+// Ad platform connections (Google Ads, Google LSA, Meta Ads)
+const adPlatformRoutes = require('./routes/ad-platforms');
+app.use('/api/ad-platforms', adPlatformRoutes);
+
 // Email marketing campaigns
 const emailCampaignRoutes = require('./routes/email-campaigns');
 app.use('/api/email-campaigns', emailCampaignRoutes);
@@ -202,6 +206,11 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS telnyx_order_id VARCHAR(100)');
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS processor VARCHAR(20)");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS processor_payment_id VARCHAR(255)");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS notes TEXT");
+    await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS job_notes TEXT");
+    await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_notes TEXT");
+    await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS source VARCHAR(50)");
+    await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS referral_source TEXT");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS refund_amount NUMERIC(10,2) DEFAULT 0");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS card_brand VARCHAR(50)");
@@ -224,6 +233,7 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paypal_invoice_id VARCHAR(255)");
     await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS clover_merchant_id TEXT");
     await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS clover_access_token TEXT");
+    await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS square_token_expires_at TIMESTAMPTZ");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS default_tax_rate DECIMAL(5,4) DEFAULT 0");
     await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS links JSONB DEFAULT '[]'::jsonb");
     await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb");
@@ -263,6 +273,31 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(user_id, source, month)
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS ad_platform_connections (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      platform VARCHAR(50) NOT NULL,
+      access_token TEXT,
+      refresh_token TEXT,
+      account_id VARCHAR(255),
+      account_name VARCHAR(255),
+      token_expires_at TIMESTAMPTZ,
+      connected_at TIMESTAMPTZ DEFAULT NOW(),
+      last_synced_at TIMESTAMPTZ,
+      metadata JSONB DEFAULT '{}',
+      UNIQUE(user_id, platform)
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS ad_verification_requests (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      platform VARCHAR(50) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      status VARCHAR(20) DEFAULT 'pending',
+      notes TEXT,
+      requested_at TIMESTAMPTZ DEFAULT NOW(),
+      verified_at TIMESTAMPTZ,
+      UNIQUE(user_id, platform)
     )`);
     await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS google_lsa_lead_id VARCHAR(255)");
     await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS call_recording_url TEXT");
@@ -1029,6 +1064,16 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query('ALTER TABLE seo_audits ADD COLUMN IF NOT EXISTS code_generated_at TIMESTAMP');
     await pool.query('ALTER TABLE seo_audits ADD COLUMN IF NOT EXISTS head_code TEXT');
     await pool.query('ALTER TABLE seo_audits ADD COLUMN IF NOT EXISTS llms_txt TEXT');
+
+    // Backfill: rewrite any stored head_code pointing to localhost (generated before fallback was fixed)
+    const prodUrl = (process.env.PRODUCTION_BACKEND_URL || process.env.BACKEND_URL || 'https://backend-production-ab50.up.railway.app').replace(/\/$/, '');
+    const fix = await pool.query(
+      `UPDATE seo_audits
+         SET head_code = REPLACE(head_code, 'http://localhost:3001/api/track', $1 || '/api/track')
+       WHERE head_code LIKE '%localhost:3001/api/track%'`,
+      [prodUrl]
+    );
+    if (fix.rowCount > 0) console.log(`🛠  Rewrote tracking pixel URL in ${fix.rowCount} stored SEO code(s)`);
     console.log('✅ website_visits table verified');
   } catch (e) {
     console.warn('⚠️ Could not create website_visits table:', e.message);
@@ -2019,6 +2064,26 @@ cron.schedule('*/15 * * * *', async () => {
 // Scans recent conversations for errors & frustration, auto-improves agent prompts.
 const { runChatLearningAgent } = require('./utils/chatLearningAgent');
 cron.schedule('0 */4 * * *', () => runChatLearningAgent());
+
+// ── Ad platform spend sync — runs daily at 3am ───────────────────────────────
+const { syncGoogleAds, syncGoogleLSA, syncMeta } = require('./routes/ad-platforms');
+cron.schedule('0 3 * * *', async () => {
+  try {
+    const conns = await pool.query(`SELECT user_id, platform FROM ad_platform_connections`);
+    for (const { user_id, platform } of conns.rows) {
+      try {
+        if (platform === 'google_ads') await syncGoogleAds(user_id);
+        else if (platform === 'google_lsa') await syncGoogleLSA(user_id);
+        else if (platform === 'meta') await syncMeta(user_id);
+      } catch (e) {
+        console.error(`Ad sync error [user ${user_id} / ${platform}]:`, e.message);
+      }
+    }
+    console.log(`✅ Ad spend sync complete (${conns.rows.length} connections)`);
+  } catch (e) {
+    console.error('Ad spend sync cron error:', e.message);
+  }
+});
 
 // Start server
 app.listen(PORT, () => {

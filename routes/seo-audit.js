@@ -149,7 +149,7 @@ Be specific and actionable. Reference actual content from the HTML where relevan
   try {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 4096,
+      max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
     });
@@ -160,7 +160,21 @@ Be specific and actionable. Reference actual content from the HTML where relevan
     // Strip any accidental markdown code fences
     const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 
-    parsedAudit = JSON.parse(cleaned);
+    try {
+      parsedAudit = JSON.parse(cleaned);
+    } catch (parseErr) {
+      // Response may be truncated — attempt repair by closing open JSON structure
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (lastBrace > 0) {
+        try {
+          parsedAudit = JSON.parse(cleaned.substring(0, lastBrace + 1));
+        } catch {
+          throw parseErr;
+        }
+      } else {
+        throw parseErr;
+      }
+    }
   } catch (err) {
     console.error('[seo-audit] Claude/parse error:', err.message, err.status || '');
     return res.status(500).json({ error: `Failed to generate SEO audit: ${err.message}` });
@@ -532,8 +546,13 @@ The llms.txt should be written so that if an AI reads it, it will cite THIS busi
     return res.status(500).json({ error: `Failed to generate SEO code: ${err.message}` });
   }
 
-  // Inject tracking pixel before closing comment
-  const backendUrl = (process.env.PRODUCTION_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:3001').replace(/\/$/, '');
+  // Inject tracking pixel before closing comment.
+  // Must be a publicly reachable URL — never localhost in production (visitor browsers can't reach it).
+  const backendUrl = (
+    process.env.PRODUCTION_BACKEND_URL ||
+    process.env.BACKEND_URL ||
+    'https://backend-production-ab50.up.railway.app'
+  ).replace(/\/$/, '');
   const trackingPixel = `<script>(function(){try{var p=new Image();p.src='${backendUrl}/api/track/${userId}?r='+encodeURIComponent(document.referrer)+'&u='+encodeURIComponent(location.pathname);}catch(e){}})();</script>`;
   const headCode = seoCode.headCode.includes('<!-- End SORCE SEO -->')
     ? seoCode.headCode.replace('<!-- End SORCE SEO -->', `${trackingPixel}\n<!-- End SORCE SEO -->`)

@@ -31,7 +31,7 @@ function emailBlocksToHtml(blocks) {
       case 'header':
         return `  <div style="background:${c.bgColor||'#111827'};padding:20px 24px;text-align:center"><h1 style="color:${c.textColor||'#ffffff'};margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px">${esc(c.title||'Your Business')}</h1></div>`;
       case 'hero_image':
-        return c.src ? `  <img src="${esc(c.src)}" alt="${esc(c.alt||'')}" style="width:100%;display:block;max-height:280px;object-fit:cover" />` : '';
+        return c.src ? `  <img src="${esc(c.src)}" alt="${esc(c.alt||'')}" width="600" height="280" border="0" style="display:block;width:100%;max-width:600px;height:auto;max-height:280px;object-fit:cover;border:0;outline:none;text-decoration:none;vertical-align:middle" />` : '';
       case 'urgency_bar':
         return `  <div style="background:${c.bgColor||'#fef3c7'};border-bottom:2px solid #f59e0b;padding:12px 24px;text-align:center"><p style="margin:0;font-size:14px;font-weight:700;color:${c.textColor||'#92400e'}">${esc(c.text||'')}</p></div>`;
       case 'body': {
@@ -364,6 +364,21 @@ pool.query(`
     created_at TIMESTAMPTZ DEFAULT NOW()
   )
 `).catch(e => console.error('email_campaign_presets migration error:', e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS email_templates (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    subject TEXT,
+    preview_text TEXT,
+    blocks JSONB NOT NULL DEFAULT '[]',
+    body_html TEXT,
+    body_text TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(e => console.error('email_templates migration error:', e.message));
 
 pool.query(`ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS blocks JSONB`)
   .catch(e => console.error('email_campaigns blocks column migration error:', e.message));
@@ -886,6 +901,132 @@ router.delete('/presets/:id', authenticateToken, async (req, res) => {
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Preset not found' });
     res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Email Templates (save & reuse full campaigns) ────────
+
+// GET /api/email-campaigns/templates — list saved templates
+router.get('/templates', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, subject, preview_text, blocks, created_at, updated_at
+       FROM email_templates WHERE user_id = $1 ORDER BY updated_at DESC`,
+      [req.user.userId]
+    );
+    res.json({ templates: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/email-campaigns/templates — save a template from the current draft
+router.post('/templates', authenticateToken, async (req, res) => {
+  try {
+    const { name, subject, preview_text, blocks, body_html, body_text } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Template name is required' });
+    if (!Array.isArray(blocks) || blocks.length === 0) return res.status(400).json({ error: 'Template must include blocks' });
+    const result = await pool.query(
+      `INSERT INTO email_templates (user_id, name, subject, preview_text, blocks, body_html, body_text)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        req.user.userId,
+        name.trim(),
+        subject || null,
+        preview_text || null,
+        JSON.stringify(blocks),
+        body_html || null,
+        body_text || null,
+      ]
+    );
+    res.json({ success: true, template: result.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/email-campaigns/templates/:id — update an existing template
+router.put('/templates/:id', authenticateToken, async (req, res) => {
+  try {
+    const { name, subject, preview_text, blocks, body_html, body_text } = req.body;
+    const result = await pool.query(
+      `UPDATE email_templates
+         SET name = COALESCE($1, name),
+             subject = COALESCE($2, subject),
+             preview_text = COALESCE($3, preview_text),
+             blocks = COALESCE($4, blocks),
+             body_html = COALESCE($5, body_html),
+             body_text = COALESCE($6, body_text),
+             updated_at = NOW()
+       WHERE id = $7 AND user_id = $8 RETURNING *`,
+      [
+        name?.trim() || null,
+        subject ?? null,
+        preview_text ?? null,
+        blocks ? JSON.stringify(blocks) : null,
+        body_html ?? null,
+        body_text ?? null,
+        req.params.id,
+        req.user.userId,
+      ]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Template not found' });
+    res.json({ success: true, template: result.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/email-campaigns/templates/:id
+router.delete('/templates/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM email_templates WHERE id = $1 AND user_id = $2 RETURNING id`,
+      [req.params.id, req.user.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Template not found' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/email-campaigns/templates/:id/apply — load a template into the current draft
+router.post('/templates/:id/apply', authenticateToken, async (req, res) => {
+  try {
+    const tplRes = await pool.query(
+      'SELECT * FROM email_templates WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.userId]
+    );
+    const tpl = tplRes.rows[0];
+    if (!tpl) return res.status(404).json({ error: 'Template not found' });
+
+    const blocks = tpl.blocks || [];
+    const bodyHtml = tpl.body_html || emailBlocksToHtml(blocks);
+
+    // Replace any active drafts so the editor picks this one up via /current-draft
+    await pool.query(
+      `UPDATE email_campaigns SET status = 'replaced'
+       WHERE user_id = $1 AND status = 'draft'`,
+      [req.user.userId]
+    );
+
+    const inserted = await pool.query(
+      `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'draft', NOW()) RETURNING *`,
+      [
+        req.user.userId,
+        tpl.subject || `Re: ${tpl.name}`,
+        tpl.preview_text || '',
+        bodyHtml,
+        tpl.body_text || '',
+        JSON.stringify(blocks),
+      ]
+    );
+
+    res.json({ success: true, campaign: inserted.rows[0] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

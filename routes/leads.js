@@ -403,49 +403,291 @@ router.patch('/:id', authenticateToken, async (req, res) => {
 router.get('/analytics/sources', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
+    const { startDate, endDate } = req.query;
+    // Dates come in as YYYY-MM-DD. Inclusive on endDate (add 1 day to use < upper bound).
+    const hasStart = !!startDate;
+    const hasEnd = !!endDate;
+    const startMonth = hasStart ? String(startDate).slice(0, 7) : null;
+    const endMonth = hasEnd ? String(endDate).slice(0, 7) : null;
+
+    // Build param list and placeholder indexes in lockstep
+    const params = [userId];
+    let pStart = null, pEnd = null;
+    if (hasStart) { params.push(startDate); pStart = `$${params.length}`; }
+    if (hasEnd)   { params.push(endDate);   pEnd   = `$${params.length}`; }
+    const leadsRange = [
+      hasStart ? `AND created_at >= ${pStart}` : '',
+      hasEnd   ? `AND created_at < (${pEnd}::date + INTERVAL '1 day')` : '',
+    ].join(' ');
+    const bookingsRange = leadsRange;
+
+    const spendParams = [userId];
+    let sStart = null, sEnd = null;
+    if (hasStart) { spendParams.push(startMonth); sStart = `$${spendParams.length}`; }
+    if (hasEnd)   { spendParams.push(endMonth);   sEnd   = `$${spendParams.length}`; }
+    const spendRange = [
+      hasStart ? `AND month >= ${sStart}` : '',
+      hasEnd   ? `AND month <= ${sEnd}` : '',
+    ].join(' ');
+
+    // Real revenue-by-source attribution: match leads → bookings via email / normalized phone.
+    // Each booking is attributed to at most ONE lead (the earliest matching lead) so we don't double-count.
+    const bookingDateFilter = [
+      hasStart ? `AND b.created_at >= ${pStart}` : '',
+      hasEnd   ? `AND b.created_at < (${pEnd}::date + INTERVAL '1 day')` : '',
+    ].join(' ');
+
     // Use a subquery to avoid join fan-out inflating lead counts
-    const [sourceRes, adSpendRes, revenueRes] = await Promise.all([
+    const [sourceRes, adSpendRes, revenueRes, txnRes, taxRes, revenueBySourceRes] = await Promise.all([
       // Per-source lead counts from leads table
       pool.query(`
         SELECT COALESCE(source, 'unknown') AS source,
                COUNT(*)::int AS lead_count,
                COUNT(*) FILTER (WHERE status = 'converted')::int AS converted_count
-        FROM leads WHERE user_id = $1
+        FROM leads WHERE user_id = $1 ${leadsRange}
         GROUP BY COALESCE(source, 'unknown')
         ORDER BY lead_count DESC
-      `, [userId]),
+      `, params),
       // Ad spend per source
       pool.query(`
         SELECT source, COALESCE(SUM(amount), 0) AS total_spend
-        FROM ad_spend WHERE user_id = $1
+        FROM ad_spend WHERE user_id = $1 ${spendRange}
         GROUP BY source
-      `, [userId]).catch(() => ({ rows: [] })),
-      // Total revenue directly from booking calendar (completed bookings)
+      `, spendParams).catch(() => ({ rows: [] })),
+      // Total revenue from all calendar bookings (any status)
       pool.query(`
         SELECT COALESCE(SUM(total_amount), 0)::numeric AS total_revenue
-        FROM bookings WHERE user_id = $1 AND status = 'completed'
-      `, [userId]),
+        FROM bookings WHERE user_id = $1 ${bookingsRange}
+      `, params),
+      // Raw transaction revenue (total collected) from payments
+      pool.query(`
+        SELECT COALESCE(SUM(p.amount - COALESCE(p.refund_amount, 0)), 0)::numeric AS total_revenue
+        FROM payments p
+        WHERE p.user_id = $1 AND p.status IN ('succeeded', 'completed')
+        ${hasStart ? `AND p.created_at >= ${pStart}` : ''}
+        ${hasEnd ? `AND p.created_at < (${pEnd}::date + INTERVAL '1 day')` : ''}
+      `, params).catch(() => ({ rows: [{ total_revenue: 0 }] })),
+      // User's default tax rate (decimal, e.g. 0.0875 = 8.75%)
+      pool.query(`SELECT COALESCE(default_tax_rate, 0)::numeric AS rate FROM users WHERE id = $1`, [userId])
+        .catch(() => ({ rows: [{ rate: 0 }] })),
+      // Real revenue by source. Two-step attribution:
+      //   1. Match booking → lead (by email or last-10-digit phone). Revenue → lead.source.
+      //   2. Unmatched bookings fall back to bookings.source + bookings.referral_source.
+      // Sum always reconciles to total booking revenue (nothing is dropped).
+      pool.query(`
+        WITH b_ext AS (
+          SELECT
+            b.id, b.total_amount, b.source AS booking_source, b.referral_source,
+            NULLIF(TRIM(LOWER(COALESCE(b.customer_email, c.email))), '') AS email_norm,
+            NULLIF(RIGHT(regexp_replace(COALESCE(b.customer_phone, c.phone, ''), '\\D', '', 'g'), 10), '') AS phone_last10
+          FROM bookings b
+          LEFT JOIN customers c ON c.id = b.customer_id
+          WHERE b.user_id = $1 ${bookingDateFilter}
+        ),
+        attributed AS (
+          SELECT DISTINCT ON (b.id)
+            b.id,
+            b.total_amount,
+            l.source AS lead_source,
+            b.booking_source,
+            b.referral_source
+          FROM b_ext b
+          LEFT JOIN leads l ON l.user_id = $1
+            AND (
+              (b.email_norm IS NOT NULL
+                AND NULLIF(TRIM(LOWER(l.email)), '') = b.email_norm)
+              OR
+              (b.phone_last10 IS NOT NULL
+                AND NULLIF(RIGHT(regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g'), 10), '') = b.phone_last10)
+            )
+          ORDER BY b.id, l.created_at ASC
+        ),
+        labeled AS (
+          SELECT
+            total_amount,
+            CASE
+              WHEN lead_source IS NOT NULL THEN lead_source
+              WHEN NULLIF(TRIM(referral_source), '') IS NOT NULL
+                THEN LOWER(TRIM(referral_source))
+              WHEN booking_source IS NOT NULL THEN booking_source
+              ELSE 'unattributed'
+            END AS source
+          FROM attributed
+        )
+        SELECT source, COALESCE(SUM(total_amount), 0)::numeric AS revenue
+        FROM labeled
+        GROUP BY source
+      `, params).catch(err => { console.error('[analytics/sources] revenueBySource error:', err.message); return { rows: [] }; }),
     ]);
 
+    const defaultTaxRate = parseFloat(taxRes.rows[0]?.rate || 0);
+    const rawTxnRevenue = parseFloat(txnRes.rows[0]?.total_revenue || 0);
+    const transactionTax = rawTxnRevenue * defaultTaxRate;
+    const transactionRevenue = rawTxnRevenue - transactionTax;
+
     const totalBookingRevenue = parseFloat(revenueRes.rows[0]?.total_revenue || 0);
-    const totalLeads = sourceRes.rows.reduce((s, r) => s + r.lead_count, 0);
 
     const spendMap = {};
     adSpendRes.rows.forEach(r => { spendMap[r.source] = parseFloat(r.total_spend); });
 
+    // Real revenue per source (from matched leads → bookings)
+    const revenueMap = {};
+    revenueBySourceRes.rows.forEach(r => { revenueMap[r.source] = parseFloat(r.revenue); });
+
+    // Merge lead-based rows (with counts) and booking-only rows (manual/website/etc with no matching lead)
     const sources = sourceRes.rows.map(s => {
       const spend = spendMap[s.source] || 0;
-      // Attribute revenue proportionally by lead share
-      const revShare = totalLeads > 0 ? (s.lead_count / totalLeads) * totalBookingRevenue : 0;
+      const revenue = revenueMap[s.source] || 0;
       return {
         ...s,
-        revenue: parseFloat(revShare.toFixed(2)),
+        revenue: parseFloat(revenue.toFixed(2)),
         ad_spend: spend,
-        roi: spend > 0 ? (((revShare - spend) / spend) * 100).toFixed(1) : null,
+        roi: spend > 0 ? (((revenue - spend) / spend) * 100).toFixed(1) : null,
         cost_per_lead: spend > 0 && s.lead_count > 0 ? (spend / s.lead_count).toFixed(2) : null,
       };
     });
-    res.json({ sources, total_booking_revenue: totalBookingRevenue });
+
+    // Add any source that appears only in bookings (e.g. manual, website, embed, manual:google)
+    const knownSources = new Set(sources.map(s => s.source));
+    Object.entries(revenueMap).forEach(([source, revenue]) => {
+      if (knownSources.has(source)) return;
+      const spend = spendMap[source] || 0;
+      sources.push({
+        source,
+        lead_count: 0,
+        converted_count: 0,
+        revenue: parseFloat(revenue.toFixed(2)),
+        ad_spend: spend,
+        roi: spend > 0 ? (((revenue - spend) / spend) * 100).toFixed(1) : null,
+        cost_per_lead: null,
+      });
+    });
+    sources.sort((a, b) => b.revenue - a.revenue || b.lead_count - a.lead_count);
+    res.json({
+      sources,
+      total_booking_revenue: totalBookingRevenue,
+      total_transaction_revenue: transactionRevenue,
+      total_transaction_tax: transactionTax,
+      default_tax_rate: defaultTaxRate,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================
+// GET /analytics/bookings — drill-down list for Booking Revenue card
+// ============================================
+router.get('/analytics/bookings', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { startDate, endDate } = req.query;
+    const params = [userId];
+    let clauses = '';
+    if (startDate) { params.push(startDate); clauses += ` AND b.booking_date >= $${params.length}`; }
+    if (endDate)   { params.push(endDate);   clauses += ` AND b.booking_date < ($${params.length}::date + INTERVAL '1 day')`; }
+
+    const result = await pool.query(`
+      SELECT b.id,
+             b.booking_date,
+             b.start_time,
+             b.end_time,
+             b.status,
+             b.source,
+             b.customer_name,
+             b.customer_email,
+             b.customer_phone,
+             b.customer_address,
+             b.total_amount,
+             b.payment_status,
+             b.job_notes,
+             b.customer_notes,
+             COALESCE(STRING_AGG(bi.service_name, ', '), '') AS services
+      FROM bookings b
+      LEFT JOIN booking_items bi ON bi.booking_id = b.id
+      WHERE b.user_id = $1 ${clauses}
+      GROUP BY b.id
+      ORDER BY b.booking_date DESC, b.start_time DESC
+    `, params);
+
+    res.json({ bookings: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /analytics/bookings/:id/note — update job_notes on a booking
+router.put('/analytics/bookings/:id/note', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { note } = req.body;
+    const result = await pool.query(
+      `UPDATE bookings SET job_notes = $1, updated_at = NOW()
+       WHERE id = $2 AND user_id = $3 RETURNING id, job_notes`,
+      [note || null, id, userId]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Booking not found' });
+    res.json({ booking: result.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================
+// GET /analytics/transactions — drill-down list for Transaction Revenue card
+// ============================================
+router.get('/analytics/transactions', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { startDate, endDate } = req.query;
+    const params = [userId];
+    let clauses = '';
+    if (startDate) { params.push(startDate); clauses += ` AND p.created_at >= $${params.length}`; }
+    if (endDate)   { params.push(endDate);   clauses += ` AND p.created_at < ($${params.length}::date + INTERVAL '1 day')`; }
+
+    const result = await pool.query(`
+      SELECT p.id,
+             p.amount,
+             p.refund_amount,
+             p.currency,
+             p.processor,
+             p.payment_method,
+             p.card_brand,
+             p.card_last_four,
+             p.status,
+             p.notes,
+             p.created_at,
+             p.booking_id,
+             p.customer_id,
+             p.invoice_id,
+             c.name AS customer_name,
+             c.email AS customer_email,
+             c.phone AS customer_phone,
+             b.booking_date,
+             b.customer_name AS booking_customer_name,
+             i.invoice_number
+      FROM payments p
+      LEFT JOIN customers c ON c.id = p.customer_id
+      LEFT JOIN bookings  b ON b.id = p.booking_id
+      LEFT JOIN invoices  i ON i.id = p.invoice_id
+      WHERE p.user_id = $1
+        AND p.status IN ('succeeded', 'completed')
+        ${clauses}
+      ORDER BY p.created_at DESC
+    `, params);
+
+    res.json({ transactions: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /analytics/transactions/:id/note — update notes on a payment
+router.put('/analytics/transactions/:id/note', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { note } = req.body;
+    const result = await pool.query(
+      `UPDATE payments SET notes = $1, updated_at = NOW()
+       WHERE id = $2 AND user_id = $3 RETURNING id, notes`,
+      [note || null, id, userId]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Transaction not found' });
+    res.json({ transaction: result.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
