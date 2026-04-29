@@ -286,9 +286,32 @@ async function sendCampaign(userId, config, campaignId) {
         { expiresIn: '365d' }
       );
       const unsubUrl = `${FRONTEND_URL}/unsubscribe?token=${unsubToken}`;
-      const htmlWithUnsub = (c.body_html || '')
-        .replace(/href="#unsubscribe"/g, `href="${unsubUrl}"`)
+      const original = c.body_html || '';
+      // Cover every anchor variant that's been emitted historically:
+      //   href="#unsubscribe"  (current marker)
+      //   href='#unsubscribe'  (single-quoted)
+      //   href="#"             (legacy WYSIWYG footers — best-effort match for the unsubscribe block only)
+      //   {{UNSUBSCRIBE_URL}}  (template placeholder)
+      let htmlWithUnsub = original
+        .replace(/href=(["'])#unsubscribe\1/gi, `href="${unsubUrl}"`)
         .replace(/{{UNSUBSCRIBE_URL}}/g, unsubUrl);
+
+      // Legacy footers used href="#" inside an unsubscribe-link context — match an anchor whose
+      // text is "Unsubscribe" and whose href is "#" or empty, and rewrite that one anchor only.
+      htmlWithUnsub = htmlWithUnsub.replace(
+        /<a\s+href=(["'])#?\1([^>]*)>(\s*Unsubscribe\s*)<\/a>/gi,
+        `<a href="${unsubUrl}"$2>$3</a>`
+      );
+
+      // Last-resort fallback: if no unsubscribe link exists at all, append a compliant footer so
+      // CAN-SPAM/Yahoo/Gmail bulk-sender requirements don't reject the message.
+      if (!htmlWithUnsub.includes(unsubUrl)) {
+        htmlWithUnsub += `
+<div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 28px;text-align:center;font-family:Arial,sans-serif">
+  <p style="margin:0 0 8px;font-size:12px;color:#6b7280">You're receiving this because you've been a customer of ${esc(fromName || 'this business')}.</p>
+  <a href="${unsubUrl}" style="font-size:12px;color:#6b7280;text-decoration:underline">Unsubscribe</a>
+</div>`;
+      }
       return {
         to: customer.email,
         from: { name: fromName, email: 'noreply@sorceintegrations.com' },
