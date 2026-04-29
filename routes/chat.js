@@ -111,6 +111,15 @@ async function getAvailableSlotsForDate(userId, serviceId, bookingDate, duration
   return available;
 }
 
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 async function sendAttentionEmail({ userId, customerName, customerPhone, conversationId }) {
   if (!process.env.SENDGRID_API_KEY) return;
   try {
@@ -121,12 +130,41 @@ async function sendAttentionEmail({ userId, customerName, customerPhone, convers
     if (!userResult.rows[0]?.email) return;
     const { business_name: businessName, email: ownerEmail } = userResult.rows[0];
 
+    // Pull the full chat transcript so the owner can see the conversation
+    const msgsResult = await pool.query(
+      `SELECT role, content, created_at FROM chat_messages
+       WHERE conversation_id = $1
+       ORDER BY created_at ASC, id ASC`,
+      [conversationId]
+    );
+
+    const transcriptHtml = msgsResult.rows.length === 0
+      ? '<p style="color:#9ca3af;font-style:italic;margin:0;">No messages in this conversation.</p>'
+      : msgsResult.rows.map(m => {
+          const isCustomer = m.role === 'user';
+          const label = isCustomer ? (customerName || 'Customer') : 'Chat Agent';
+          // Strip any internal protocol tokens before showing to owner
+          const cleanContent = String(m.content || '')
+            .replace(/BOOKING_REQUEST\|[^\n]+\n?/g, '')
+            .replace(/ATTENTION_REQUEST\|[^\n]+\n?/g, '')
+            .trim();
+          if (!cleanContent) return '';
+          const bg = isCustomer ? '#eff6ff' : '#f8fafc';
+          const border = isCustomer ? '#bfdbfe' : '#e2e8f0';
+          const labelColor = isCustomer ? '#1d4ed8' : '#475569';
+          return `
+            <div style="margin:0 0 10px 0;padding:10px 12px;background:${bg};border:1px solid ${border};border-radius:8px;">
+              <div style="font-size:11px;font-weight:600;color:${labelColor};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">${escapeHtml(label)}</div>
+              <div style="font-size:14px;color:#1f2937;white-space:pre-wrap;line-height:1.45;">${escapeHtml(cleanContent)}</div>
+            </div>`;
+        }).join('');
+
     await sgMail.send({
       to: ownerEmail,
       from: { name: 'SORCE Chat Alerts', email: 'noreply@sorceintegrations.com' },
       subject: `Action needed: ${customerName} wants a call back`,
       html: `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+        <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#1a1a1a;">
           <div style="background:#dc2626;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
             <h1 style="color:#fff;margin:0;font-size:1.4rem;">Customer Needs Attention</h1>
           </div>
@@ -138,15 +176,21 @@ async function sendAttentionEmail({ userId, customerName, customerPhone, convers
             <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
               <tr>
                 <td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:35%;">Name</td>
-                <td style="padding:10px 12px;border-bottom:1px solid #eee;">${customerName}</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #eee;">${escapeHtml(customerName)}</td>
               </tr>
               <tr>
                 <td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Phone</td>
-                <td style="padding:10px 12px;">${customerPhone}</td>
+                <td style="padding:10px 12px;">${escapeHtml(customerPhone)}</td>
               </tr>
             </table>
-            <p style="color:#6b7280;font-size:0.85rem;margin:0;">
-              Business: ${businessName || 'Your business'} &nbsp;|&nbsp; Conversation #${conversationId}
+
+            <h2 style="font-size:1rem;font-weight:600;color:#1f2937;margin:1.5rem 0 0.75rem 0;">Conversation Transcript</h2>
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
+              ${transcriptHtml}
+            </div>
+
+            <p style="color:#6b7280;font-size:0.85rem;margin:1.5rem 0 0 0;">
+              Business: ${escapeHtml(businessName || 'Your business')} &nbsp;|&nbsp; Conversation #${conversationId}
             </p>
           </div>
         </div>`,
