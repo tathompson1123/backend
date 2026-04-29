@@ -31,7 +31,9 @@ function emailBlocksToHtml(blocks) {
       case 'header':
         return `  <div style="background:${c.bgColor||'#111827'};padding:20px 24px;text-align:center"><h1 style="color:${c.textColor||'#ffffff'};margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px">${esc(c.title||'Your Business')}</h1></div>`;
       case 'hero_image':
-        return c.src ? `  <img src="${esc(c.src)}" alt="${esc(c.alt||'')}" width="600" height="280" border="0" style="display:block;width:100%;max-width:600px;height:auto;max-height:280px;object-fit:cover;border:0;outline:none;text-decoration:none;vertical-align:middle" />` : '';
+        // No fixed height / object-fit — desktop Outlook & Apple Mail ignore object-fit so any
+        // height constraint squashes the image. Intrinsic height preserves aspect ratio everywhere.
+        return c.src ? `  <img src="${esc(c.src)}" alt="${esc(c.alt||'')}" width="600" border="0" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;vertical-align:middle" />` : '';
       case 'urgency_bar':
         return `  <div style="background:${c.bgColor||'#fef3c7'};border-bottom:2px solid #f59e0b;padding:12px 24px;text-align:center"><p style="margin:0;font-size:14px;font-weight:700;color:${c.textColor||'#92400e'}">${esc(c.text||'')}</p></div>`;
       case 'body': {
