@@ -823,12 +823,17 @@ REAL-TIME AVAILABILITY:
           const frontendUrl = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
           const cardLink = `${frontendUrl}/card-on-file/${cardToken}`;
 
+          // Look up owner once — used for both customer email and owner notification below
+          let owner = {};
+          if (process.env.SENDGRID_API_KEY) {
+            const ownerResult = await pool.query('SELECT business_name, email FROM users WHERE id = $1', [userId]);
+            owner = ownerResult.rows[0] || {};
+          }
+
           // Send card-on-file email (non-blocking)
           if (process.env.SENDGRID_API_KEY) {
             const sgMail = require('@sendgrid/mail');
             sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-            const ownerResult = await pool.query('SELECT business_name, email FROM users WHERE id = $1', [userId]);
-            const owner = ownerResult.rows[0] || {};
             sgMail.send({
               to: customerEmail.trim(),
               from: { name: owner.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
