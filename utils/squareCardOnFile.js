@@ -1,29 +1,20 @@
 const { Client, Environment } = require('square/legacy');
-const { pool } = require('../config/database');
+const { getValidSquareToken } = require('./squareAuth');
 
 /**
- * Get Square credentials for a business user.
+ * Get Square credentials for a business user. Refreshes the access token first
+ * if it's expired or about to expire.
  * Returns { client, locationId } or throws if not connected.
  */
 async function getSquareClient(userId) {
-  const result = await pool.query(
-    `SELECT square_access_token, square_location_id
-     FROM payment_connections
-     WHERE user_id = $1 AND processor = 'square' AND is_active = true
-     LIMIT 1`,
-    [userId]
-  );
-  if (result.rows.length === 0 || !result.rows[0].square_access_token) {
-    throw new Error('No active Square connection for this business');
-  }
-  const { square_access_token, square_location_id } = result.rows[0];
+  const { accessToken, locationId } = await getValidSquareToken(userId);
   const client = new Client({
-    accessToken: square_access_token,
+    accessToken,
     environment: process.env.SQUARE_ENVIRONMENT === 'production'
       ? Environment.Production
       : Environment.Sandbox,
   });
-  return { client, locationId: square_location_id };
+  return { client, locationId };
 }
 
 /**

@@ -179,6 +179,42 @@ class SquareProcessor extends PaymentProcessor {
       expiresAt: data.expires_at,
     };
   }
+
+  // Exchange a refresh token for a fresh access token + refresh token pair.
+  // Square access tokens expire in 30 days; refresh tokens are good for 90 days.
+  // If we go 90 days without a refresh, the merchant must re-auth from scratch.
+  static async refreshAccessToken(refreshToken) {
+    const clientId = process.env.SQUARE_APPLICATION_ID;
+    const clientSecret = process.env.SQUARE_APPLICATION_SECRET;
+    const baseUrl = process.env.SQUARE_ENVIRONMENT === 'sandbox'
+      ? 'https://connect.squareupsandbox.com'
+      : 'https://connect.squareup.com';
+
+    const response = await fetch(`${baseUrl}/oauth2/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Square-Version': '2024-01-17' },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      console.error(`Square refresh failed (${response.status}):`, body);
+      throw new Error(`Square refresh failed (${response.status}): ${body}`);
+    }
+
+    const data = await response.json();
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      merchantId: data.merchant_id,
+      expiresAt: data.expires_at,
+    };
+  }
 }
 
 module.exports = SquareProcessor;

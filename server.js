@@ -1851,14 +1851,17 @@ cron.schedule('0 * * * *', async () => {
 cron.schedule('*/10 * * * *', async () => {
   try {
     const { syncSquarePayments, syncSquareInvoices } = require('./utils/squareSync');
+    const { getValidSquareToken } = require('./utils/squareAuth');
     const connections = await pool.query(
-      "SELECT user_id, square_access_token, square_location_id FROM payment_connections WHERE processor = 'square' AND is_active = true"
+      "SELECT user_id FROM payment_connections WHERE processor = 'square' AND is_active = true"
     );
     for (const conn of connections.rows) {
       try {
-        await syncSquarePayments(conn.user_id, conn.square_access_token, pool);
-        if (conn.square_location_id) {
-          await syncSquareInvoices(conn.user_id, conn.square_access_token, conn.square_location_id, pool);
+        // Always fetch a fresh (or refreshed) token before each sync run
+        const { accessToken, locationId } = await getValidSquareToken(conn.user_id);
+        await syncSquarePayments(conn.user_id, accessToken, pool);
+        if (locationId) {
+          await syncSquareInvoices(conn.user_id, accessToken, locationId, pool);
         }
       } catch (syncErr) {
         console.error(`Square sync error for user ${conn.user_id}:`, syncErr.message);

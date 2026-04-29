@@ -71,15 +71,14 @@ router.get('/', authenticateToken, async (req, res) => {
 router.post('/sync-square', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const connResult = await pool.query(
-      "SELECT * FROM payment_connections WHERE user_id = $1 AND processor = 'square' AND is_active = true",
-      [userId]
-    );
-    if (connResult.rows.length === 0) {
+    let accessToken, locationId;
+    try {
+      const { getValidSquareToken } = require('../utils/squareAuth');
+      ({ accessToken, locationId } = await getValidSquareToken(userId));
+    } catch {
       return res.json({ success: true, synced: 0, skipped: 'Square not connected' });
     }
-    const conn = connResult.rows[0];
-    const synced = await syncSquareInvoices(userId, conn.square_access_token, conn.square_location_id, pool);
+    const synced = await syncSquareInvoices(userId, accessToken, locationId, pool);
     res.json({ success: true, synced });
   } catch (error) {
     console.error('Square invoices sync error:', error.message);
@@ -493,20 +492,19 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Customer email is required to send via Square' });
     }
 
-    const connResult = await pool.query(
-      "SELECT * FROM payment_connections WHERE user_id = $1 AND processor = 'square' AND is_active = true",
-      [userId]
-    );
-    if (connResult.rows.length === 0) {
+    let squareAccessToken, squareLocationId;
+    try {
+      const { getValidSquareToken } = require('../utils/squareAuth');
+      ({ accessToken: squareAccessToken, locationId: squareLocationId } = await getValidSquareToken(userId));
+    } catch {
       return res.status(400).json({ error: 'Square not connected. Connect Square in Payment Settings first.' });
     }
-    const conn = connResult.rows[0];
 
     const ownerResult = await pool.query('SELECT email, business_name FROM users WHERE id = $1', [userId]);
     const ownerEmail = ownerResult.rows[0]?.email || null;
 
     const client = new Client({
-      bearerAuthCredentials: { accessToken: conn.square_access_token },
+      bearerAuthCredentials: { accessToken: squareAccessToken },
       environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? Environment.Sandbox : Environment.Production,
     });
 
@@ -516,7 +514,7 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
       ? 'https://connect.squareupsandbox.com'
       : 'https://connect.squareup.com';
     const sqHdrs = {
-      'Authorization': `Bearer ${conn.square_access_token}`,
+      'Authorization': `Bearer ${squareAccessToken}`,
       'Content-Type': 'application/json',
       'Square-Version': '2025-01-23',
     };
@@ -593,7 +591,7 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
       }
 
       const { result: orderResult } = await client.ordersApi.createOrder({
-        order: { locationId: conn.square_location_id, customerId, lineItems },
+        order: { locationId: squareLocationId, customerId, lineItems },
         idempotencyKey: randomUUID(),
       });
       const orderId = orderResult.order.id;
@@ -604,7 +602,7 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
       const invoiceBody = {
         idempotency_key: randomUUID(),
         invoice: {
-          location_id: conn.square_location_id,
+          location_id: squareLocationId,
           order_id: orderId,
           primary_recipient: { customer_id: customerId },
           payment_requests: [{

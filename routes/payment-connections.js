@@ -111,11 +111,11 @@ router.get('/square/callback', async (req, res) => {
     const locationId = locResult.locations?.[0]?.id;
 
     await pool.query(
-      `INSERT INTO payment_connections (user_id, processor, square_merchant_id, square_access_token, square_refresh_token, square_location_id, is_active, is_primary)
-       VALUES ($1, 'square', $2, $3, $4, $5, true, false)
+      `INSERT INTO payment_connections (user_id, processor, square_merchant_id, square_access_token, square_refresh_token, square_location_id, square_token_expires_at, is_active, is_primary)
+       VALUES ($1, 'square', $2, $3, $4, $5, $6, true, false)
        ON CONFLICT (user_id, processor)
-       DO UPDATE SET square_merchant_id = $2, square_access_token = $3, square_refresh_token = $4, square_location_id = $5, is_active = true, updated_at = NOW()`,
-      [userId, result.merchantId, result.accessToken, result.refreshToken, locationId]
+       DO UPDATE SET square_merchant_id = $2, square_access_token = $3, square_refresh_token = $4, square_location_id = $5, square_token_expires_at = $6, is_active = true, updated_at = NOW()`,
+      [userId, result.merchantId, result.accessToken, result.refreshToken, locationId, result.expiresAt]
     );
 
     // Auto-sync payments and invoices in background after connecting

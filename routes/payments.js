@@ -129,14 +129,14 @@ router.post('/:id/refund', authenticateToken, async (req, res) => {
 router.post('/sync-square', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const connResult = await pool.query(
-      "SELECT * FROM payment_connections WHERE user_id = $1 AND processor = 'square' AND is_active = true",
-      [userId]
-    );
-    if (connResult.rows.length === 0) {
+    let accessToken;
+    try {
+      const { getValidSquareToken } = require('../utils/squareAuth');
+      ({ accessToken } = await getValidSquareToken(userId));
+    } catch {
       return res.json({ success: true, synced: 0, skipped: 'Square not connected' });
     }
-    const synced = await syncSquarePayments(userId, connResult.rows[0].square_access_token, pool);
+    const synced = await syncSquarePayments(userId, accessToken, pool);
     res.json({ success: true, synced });
   } catch (error) {
     console.error('Square payments sync error:', error.message);

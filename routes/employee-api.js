@@ -1033,26 +1033,18 @@ router.get('/square-credentials', requirePermission('process_payments'), async (
   try {
     const { userId } = req.employee;
 
-    const result = await pool.query(
-      `SELECT square_access_token, square_location_id, square_merchant_id
-       FROM payment_connections
-       WHERE user_id = $1 AND processor = 'square' AND is_active = true
-       LIMIT 1`,
-      [userId]
-    );
-
-    if (result.rows.length === 0 || !result.rows[0].square_access_token) {
+    try {
+      const { getValidSquareToken } = require('../utils/squareAuth');
+      const { accessToken, locationId } = await getValidSquareToken(userId);
+      return res.json({
+        connected: true,
+        accessToken,
+        locationId,
+        environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? 'sandbox' : 'production'
+      });
+    } catch (e) {
       return res.json({ connected: false });
     }
-
-    const { square_access_token, square_location_id } = result.rows[0];
-
-    res.json({
-      connected: true,
-      accessToken: square_access_token,
-      locationId: square_location_id,
-      environment: process.env.SQUARE_ENVIRONMENT === 'sandbox' ? 'sandbox' : 'production'
-    });
   } catch (error) {
     console.error('Error fetching Square credentials:', error.message);
     res.status(500).json({ error: 'Failed to fetch Square credentials' });
