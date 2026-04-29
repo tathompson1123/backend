@@ -81,23 +81,22 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Maximum 5000 customers per import' });
     }
 
-    // Load all existing emails, phones, and names for dedup
+    // Load existing emails and phones for dedup. We intentionally do NOT dedup on name —
+    // two people can share a name (and CRM exports often have 100s of "John Smith"-style
+    // collisions), so name-only matches were silently dropping ~94% of legitimate rows.
     const existingResult = await pool.query(
       `SELECT LOWER(TRIM(email)) AS email,
-              LOWER(TRIM(name))  AS name,
               regexp_replace(COALESCE(phone,''), '[^0-9]', '', 'g') AS phone
        FROM customers WHERE user_id = $1`,
       [userId]
     );
     const normPhone10 = p => p ? p.replace(/\D/g, '').slice(-10) : null;
     const existingEmails = new Set(existingResult.rows.map(r => r.email).filter(Boolean));
-    const existingPhones = new Set(existingResult.rows.map(r => normPhone10(r.phone)).filter(Boolean));
-    const existingNames  = new Set(existingResult.rows.map(r => r.name).filter(Boolean));
+    const existingPhones = new Set(existingResult.rows.map(r => normPhone10(r.phone)).filter(e => e && e.length === 10));
 
-    // Dedup within the CSV batch: email > phone > name (as last resort)
+    // Dedup within the CSV batch by email or phone only
     const seenEmails = new Set();
     const seenPhones = new Set();
-    const seenNames  = new Set();
 
     let successCount = 0;
     let duplicateCount = 0;
@@ -111,22 +110,19 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
         if (!c.name || !c.name.trim()) { errorCount++; continue; }
 
         const normEmail = c.email ? c.email.toLowerCase().trim() : null;
-        const normPhone = normPhone10(c.phone);
-        const normName  = c.name.toLowerCase().trim();
+        const rawPhone = normPhone10(c.phone);
+        const normPhone = rawPhone && rawPhone.length === 10 ? rawPhone : null;
 
-        // Dedup priority: email → phone → name (name only when no email and no phone)
-        if (normEmail) {
-          if (existingEmails.has(normEmail) || seenEmails.has(normEmail)) { duplicateCount++; continue; }
-        } else if (normPhone) {
-          if (existingPhones.has(normPhone) || seenPhones.has(normPhone)) { duplicateCount++; continue; }
-        } else {
-          if (existingNames.has(normName) || seenNames.has(normName)) { duplicateCount++; continue; }
+        // Dedup: only by email or phone (10-digit). Name collisions are not duplicates.
+        if (normEmail && (existingEmails.has(normEmail) || seenEmails.has(normEmail))) {
+          duplicateCount++; continue;
+        }
+        if (normPhone && (existingPhones.has(normPhone) || seenPhones.has(normPhone))) {
+          duplicateCount++; continue;
         }
 
-        // Mark as seen
         if (normEmail) seenEmails.add(normEmail);
-        else if (normPhone) seenPhones.add(normPhone);
-        else seenNames.add(normName);
+        if (normPhone) seenPhones.add(normPhone);
 
         const safeDate = c.last_service_date && /^\d{4}-\d{2}-\d{2}/.test(c.last_service_date)
           ? c.last_service_date : null;
@@ -140,10 +136,10 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
           );
           // Track newly inserted so subsequent rows in same batch treat it as existing
           if (normEmail) existingEmails.add(normEmail);
-          else if (normPhone) existingPhones.add(normPhone);
-          else existingNames.add(normName);
+          if (normPhone) existingPhones.add(normPhone);
           successCount++;
         } catch (rowErr) {
+          console.error('Bulk import row error:', rowErr.message, { name: c.name, email: c.email });
           errorCount++;
         }
       }
