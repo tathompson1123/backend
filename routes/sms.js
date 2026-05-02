@@ -28,144 +28,125 @@ function selfHealWebhook(phoneSid, phoneNumber) {
 }
 
 // Twilio webhook for incoming SMS
-router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
-  try {
-    const { From, To, Body, MessageSid } = req.body;
+// Reply to Twilio immediately (its retry budget is ~15s) and do all DB + AI work async,
+// so a slow Claude call or a pg hiccup can never cause a connection-failure (error 11200)
+// that loses the inbound message.
+router.post('/webhook', express.urlencoded({ extended: false }), (req, res) => {
+  const { From, To, Body, MessageSid } = req.body;
 
-    console.log(`📨 SMS: ${From} → ${To}: "${Body}"`);
+  console.log(`📨 SMS: ${From} → ${To}: "${Body}"`);
 
-    // Deduplication: Twilio may retry webhooks — skip if already processed
-    if (MessageSid) {
-      const dupCheck = await pool.query(
-        'SELECT id FROM sms_messages WHERE twilio_message_sid = $1 LIMIT 1',
-        [MessageSid]
-      );
-      if (dupCheck.rows.length > 0) {
-        console.log(`⚠️ Duplicate webhook for ${MessageSid} — skipping`);
-        return res.status(200).send('<Response></Response>');
-      }
-    }
+  res.status(200).type('text/xml').send('<Response></Response>');
 
-    // Find user by their Twilio phone number
-    const userResult = await pool.query(
-      'SELECT id, business_name, twilio_phone_sid FROM users WHERE twilio_phone_number = $1',
-      [To]
+  setImmediate(() => {
+    processInboundSms({ From, To, Body, MessageSid }).catch(err =>
+      console.error('SMS webhook async error:', err.message)
     );
-
-    let user;
-    if (userResult.rows.length === 0) {
-      console.log(`⚠️ No user found for ${To}`);
-      return res.status(200).send('<Response></Response>');
-    } else if (userResult.rows.length === 1) {
-      user = userResult.rows[0];
-    } else {
-      // Shared trial number — multiple users have this number
-      // Route by finding which user owns a lead with this From number
-      const leadLookup = await pool.query(
-        `SELECT user_id FROM leads WHERE phone = $1 AND user_id = ANY($2)
-         ORDER BY created_at DESC LIMIT 1`,
-        [From, userResult.rows.map(r => r.id)]
-      );
-      if (leadLookup.rows.length > 0) {
-        user = userResult.rows.find(r => r.id === leadLookup.rows[0].user_id);
-      } else {
-        // No existing lead — assign to first matching user
-        user = userResult.rows[0];
-      }
-    }
-
-    // Self-heal webhook URL in background (no-op if already correct)
-    selfHealWebhook(user.twilio_phone_sid, To);
-
-    // Find or create lead
-    let leadResult = await pool.query(
-      'SELECT id, name, email FROM leads WHERE phone = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
-      [From, user.id]
-    );
-
-    let leadId;
-    if (leadResult.rows.length === 0) {
-      const newLead = await pool.query(
-        `INSERT INTO leads (user_id, name, phone, source, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
-         RETURNING id, name, email`,
-        [user.id, From, From, 'sms_inbound', 'new']
-      );
-      leadId = newLead.rows[0].id;
-      leadResult = newLead;
-      console.log(`📝 New lead ${leadId} from ${From}`);
-    } else {
-      leadId = leadResult.rows[0].id;
-    }
-
-    // Store incoming message
-    await pool.query(
-      `INSERT INTO sms_messages
-       (lead_id, user_id, direction, from_number, to_number, message, twilio_message_sid, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
-      [leadId, user.id, 'incoming', From, To, Body, MessageSid]
-    );
-
-    await pool.query(
-      `UPDATE leads SET status = 'replied', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
-      [leadId]
-    );
-
-    // Push notification to owner
-    const leadName = leadResult.rows[0]?.name || From;
-    sendPushToOwner(user.id, 'New Message', `${leadName}: ${Body.slice(0, 100)}`, { leadId, screen: 'AdminLeads' }).catch(() => {});
-
-    // Check if AI enabled
-    const configResult = await pool.query(
-      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
-      [user.id, 'lead_form']
-    );
-
-    const agentEnabled = configResult.rows[0]?.config?.enabled !== false;
-
-    if (agentEnabled) {
-      // Generate AI response first to calculate typing delay
-      const aiResponse = await generateAIResponse(user.id, leadId, leadResult.rows[0], Body);
-
-      if (aiResponse) {
-        // Calculate human-like delay
-        // Base delay: 30-90 seconds (reading and thinking time)
-        const baseDelay = 30000 + Math.random() * 60000; // 30-90 seconds
-
-        // Typing delay: 50-80ms per character (simulates 40-60 WPM typing)
-        const typingDelay = aiResponse.length * (50 + Math.random() * 30);
-
-        const totalDelay = baseDelay + typingDelay;
-
-        console.log(`⏰ AI will respond in ${Math.round(totalDelay / 1000)} seconds (reading: ${Math.round(baseDelay / 1000)}s + typing: ${Math.round(typingDelay / 1000)}s)`);
-
-        // Schedule the response
-        setTimeout(async () => {
-          try {
-            await sendSMS(From, aiResponse, user.id);
-
-            await pool.query(
-              `INSERT INTO sms_messages
-               (lead_id, user_id, direction, to_number, message, created_at)
-               VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
-              [leadId, user.id, 'outgoing', From, aiResponse]
-            );
-
-            console.log(`🤖 AI replied to ${From} after ${Math.round(totalDelay / 1000)}s delay`);
-          } catch (error) {
-            console.error('Error sending delayed AI response:', error.message);
-          }
-        }, totalDelay);
-      }
-    }
-
-    // Always respond to Twilio immediately so it doesn't retry
-    res.status(200).send('<Response></Response>');
-  } catch (error) {
-    console.error('SMS webhook error:', error.message);
-    res.status(500).send('<Response></Response>');
-  }
+  });
 });
+
+async function processInboundSms({ From, To, Body, MessageSid }) {
+  if (MessageSid) {
+    const dupCheck = await pool.query(
+      'SELECT id FROM sms_messages WHERE twilio_message_sid = $1 LIMIT 1',
+      [MessageSid]
+    );
+    if (dupCheck.rows.length > 0) {
+      console.log(`⚠️ Duplicate webhook for ${MessageSid} — skipping`);
+      return;
+    }
+  }
+
+  const userResult = await pool.query(
+    'SELECT id, business_name, twilio_phone_sid FROM users WHERE twilio_phone_number = $1',
+    [To]
+  );
+
+  let user;
+  if (userResult.rows.length === 0) {
+    console.log(`⚠️ No user found for ${To}`);
+    return;
+  } else if (userResult.rows.length === 1) {
+    user = userResult.rows[0];
+  } else {
+    const leadLookup = await pool.query(
+      `SELECT user_id FROM leads WHERE phone = $1 AND user_id = ANY($2)
+       ORDER BY created_at DESC LIMIT 1`,
+      [From, userResult.rows.map(r => r.id)]
+    );
+    user = leadLookup.rows.length > 0
+      ? userResult.rows.find(r => r.id === leadLookup.rows[0].user_id)
+      : userResult.rows[0];
+  }
+
+  selfHealWebhook(user.twilio_phone_sid, To);
+
+  let leadResult = await pool.query(
+    'SELECT id, name, email FROM leads WHERE phone = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
+    [From, user.id]
+  );
+
+  let leadId;
+  if (leadResult.rows.length === 0) {
+    const newLead = await pool.query(
+      `INSERT INTO leads (user_id, name, phone, source, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+       RETURNING id, name, email`,
+      [user.id, From, From, 'sms_inbound', 'new']
+    );
+    leadId = newLead.rows[0].id;
+    leadResult = newLead;
+    console.log(`📝 New lead ${leadId} from ${From}`);
+  } else {
+    leadId = leadResult.rows[0].id;
+  }
+
+  await pool.query(
+    `INSERT INTO sms_messages
+     (lead_id, user_id, direction, from_number, to_number, message, twilio_message_sid, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+    [leadId, user.id, 'incoming', From, To, Body, MessageSid]
+  );
+
+  await pool.query(
+    `UPDATE leads SET status = 'replied', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
+    [leadId]
+  );
+
+  const leadName = leadResult.rows[0]?.name || From;
+  sendPushToOwner(user.id, 'New Message', `${leadName}: ${Body.slice(0, 100)}`, { leadId, screen: 'AdminLeads' }).catch(() => {});
+
+  const configResult = await pool.query(
+    'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+    [user.id, 'lead_form']
+  );
+  const agentEnabled = configResult.rows[0]?.config?.enabled !== false;
+  if (!agentEnabled) return;
+
+  const aiResponse = await generateAIResponse(user.id, leadId, leadResult.rows[0], Body);
+  if (!aiResponse) return;
+
+  const baseDelay = 30000 + Math.random() * 60000;
+  const typingDelay = aiResponse.length * (50 + Math.random() * 30);
+  const totalDelay = baseDelay + typingDelay;
+
+  console.log(`⏰ AI will respond in ${Math.round(totalDelay / 1000)}s (read ${Math.round(baseDelay / 1000)}s + type ${Math.round(typingDelay / 1000)}s)`);
+
+  setTimeout(async () => {
+    try {
+      await sendSMS(From, aiResponse, user.id);
+      await pool.query(
+        `INSERT INTO sms_messages
+         (lead_id, user_id, direction, to_number, message, created_at)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
+        [leadId, user.id, 'outgoing', From, aiResponse]
+      );
+      console.log(`🤖 AI replied to ${From} after ${Math.round(totalDelay / 1000)}s delay`);
+    } catch (error) {
+      console.error('Error sending delayed AI response:', error.message);
+    }
+  }, totalDelay);
+}
 
 // Generate AI Response
 async function generateAIResponse(userId, leadId, lead, userMessage) {

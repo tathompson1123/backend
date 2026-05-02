@@ -214,6 +214,22 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query('ALTER TABLE bookings ALTER COLUMN employee_id DROP NOT NULL');
     await pool.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS sms_scheduled_at TIMESTAMP');
     await pool.query("CREATE INDEX IF NOT EXISTS idx_leads_sms_pending ON leads(sms_scheduled_at) WHERE status = 'sms_pending'");
+    // Expand leads.source check constraint to cover sources our webhooks already write
+    // ('sms_inbound', 'inbound_call', 'google_lsa') — without this, any inbound SMS from a
+    // brand-new sender silently fails on the leads INSERT.
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'leads_source_check') THEN
+          ALTER TABLE leads DROP CONSTRAINT leads_source_check;
+        END IF;
+        ALTER TABLE leads ADD CONSTRAINT leads_source_check
+          CHECK (source IN (
+            'website', 'referral', 'social_media', 'google', 'other',
+            'lead_form', 'ai_chat_agent', 'sms_inbound', 'inbound_call', 'google_lsa'
+          ));
+      END $$;
+    `);
     await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS telnyx_phone_number VARCHAR(20)');
     await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS telnyx_order_id VARCHAR(100)');
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS processor VARCHAR(20)");
