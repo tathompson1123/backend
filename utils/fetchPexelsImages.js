@@ -227,7 +227,7 @@ function getQueryKey(businessType, layout) {
   return 'default';
 }
 
-function fetchFromPexels(query, count) {
+function fetchFromPexels(query, count, page = 1) {
   return new Promise((resolve) => {
     const apiKey = process.env.PEXELS_API_KEY;
     if (!apiKey) {
@@ -235,7 +235,7 @@ function fetchFromPexels(query, count) {
       return resolve(null);
     }
 
-    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${count}&orientation=landscape`;
+    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${count}&orientation=landscape&page=${page}`;
 
     const req = https.get(url, { headers: { Authorization: apiKey } }, (res) => {
       let data = '';
@@ -269,13 +269,19 @@ async function fetchPexelsImages(businessType, layout) {
   // Also pick a second query for variety if available
   const query2 = queries.length > 1 ? queries[(queries.indexOf(query) + 1) % queries.length] : null;
 
-  console.log(`🖼️ Fetching Pexels images: "${query}"${query2 ? ` + "${query2}"` : ''}`);
+  // Pick a random page (1-5) so we don't always hit Pexels' top-ranked photos for the
+  // same query — those repeat across every campaign. Each page returns up to per_page
+  // photos, and popular queries have hundreds of results, so 5 pages is safe.
+  const page1 = 1 + Math.floor(Math.random() * 5);
+  const page2 = 1 + Math.floor(Math.random() * 5);
+
+  console.log(`🖼️ Fetching Pexels images: "${query}" p${page1}${query2 ? ` + "${query2}" p${page2}` : ''}`);
 
   try {
     // Fetch two batches in parallel for more variety (20+ total)
     const [photos1, photos2] = await Promise.all([
-      fetchFromPexels(query, 12),
-      query2 ? fetchFromPexels(query2, 10) : Promise.resolve([]),
+      fetchFromPexels(query, 12, page1),
+      query2 ? fetchFromPexels(query2, 10, page2) : Promise.resolve([]),
     ]);
 
     // Merge, dedupe by ID, filter out black & white photos
