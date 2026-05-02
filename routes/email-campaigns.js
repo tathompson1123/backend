@@ -9,7 +9,7 @@ const sgMail = require('@sendgrid/mail');
 const jwt = require('jsonwebtoken');
 
 const UNSUB_SECRET = process.env.JWT_SECRET || process.env.UNSUB_SECRET || 'sorce-unsubscribe-secret';
-const FRONTEND_URL = process.env.FRONTEND_URL || process.env.VITE_APP_URL || 'https://app.sorceintegrations.com';
+const FRONTEND_URL = process.env.FRONTEND_URL || process.env.VITE_APP_URL || 'https://sorceintegrations.com';
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -23,6 +23,60 @@ function esc(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Swap every variant of the unsubscribe placeholder for a real per-recipient signed URL.
+// Used by both the live campaign send path and /test-send so the two can't drift.
+function applyUnsubscribeUrl(html, unsubUrl, fromName) {
+  let out = (html || '')
+    .replace(/href=(["'])#unsubscribe\1/gi, `href="${unsubUrl}"`)
+    .replace(/{{UNSUBSCRIBE_URL}}/g, unsubUrl);
+
+  // Legacy footers used href="#" inside an unsubscribe-link context — match an anchor whose
+  // text is "Unsubscribe" and whose href is "#" or empty, and rewrite that one anchor only.
+  out = out.replace(
+    /<a\s+href=(["'])#?\1([^>]*)>(\s*Unsubscribe\s*)<\/a>/gi,
+    `<a href="${unsubUrl}"$2>$3</a>`
+  );
+
+  // Last-resort fallback: if no unsubscribe link exists at all, append a compliant footer so
+  // CAN-SPAM/Yahoo/Gmail bulk-sender requirements don't reject the message.
+  if (!out.includes(unsubUrl)) {
+    out += `
+<div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 28px;text-align:center;font-family:Arial,sans-serif">
+  <p style="margin:0 0 8px;font-size:12px;color:#6b7280">You're receiving this because you've been a customer of ${esc(fromName || 'this business')}.</p>
+  <a href="${unsubUrl}" style="font-size:12px;color:#6b7280;text-decoration:underline">Unsubscribe</a>
+</div>`;
+  }
+  return out;
+}
+
+// Pin Pexels image URLs to a 3:2 server-side crop (600×400) so the image's intrinsic
+// dimensions match the width/height attrs we emit. Other hosts pass through unchanged.
+function normalizeHeroImageUrl(src) {
+  if (!src || typeof src !== 'string') return src;
+  if (!/images\.pexels\.com/i.test(src)) return src;
+  try {
+    const u = new URL(src);
+    u.searchParams.set('auto', 'compress');
+    u.searchParams.set('cs', 'tinysrgb');
+    u.searchParams.set('w', '600');
+    u.searchParams.set('h', '400');
+    u.searchParams.set('fit', 'crop');
+    u.searchParams.delete('dpr');
+    return u.toString();
+  } catch {
+    return src;
+  }
+}
+
+function buildUnsubscribeUrl(email, userId) {
+  const token = jwt.sign(
+    { email, userId, type: 'unsubscribe' },
+    UNSUB_SECRET,
+    { expiresIn: '365d' }
+  );
+  return `${FRONTEND_URL}/unsubscribe?token=${token}`;
+}
+
 function emailBlocksToHtml(blocks) {
   if (!blocks || blocks.length === 0) return '';
   const inner = blocks.map(b => {
@@ -31,9 +85,11 @@ function emailBlocksToHtml(blocks) {
       case 'header':
         return `  <div style="background:${c.bgColor||'#111827'};padding:20px 24px;text-align:center"><h1 style="color:${c.textColor||'#ffffff'};margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px">${esc(c.title||'Your Business')}</h1></div>`;
       case 'hero_image':
-        // No fixed height / object-fit — desktop Outlook & Apple Mail ignore object-fit so any
-        // height constraint squashes the image. Intrinsic height preserves aspect ratio everywhere.
-        return c.src ? `  <img src="${esc(c.src)}" alt="${esc(c.alt||'')}" width="600" border="0" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;vertical-align:middle" />` : '';
+        // Outlook on Windows uses Word's renderer, which ignores `height:auto` — without an
+        // HTML height attr it falls back to the image's intrinsic pixel height (often 1000+px)
+        // and renders huge on desktop. Pinning Pexels URLs to a fixed 600×400 crop and emitting
+        // both width/height attributes makes it render the same in every client.
+        return c.src ? `  <img src="${esc(normalizeHeroImageUrl(c.src))}" alt="${esc(c.alt||'')}" width="600" height="400" border="0" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;vertical-align:middle" />` : '';
       case 'urgency_bar':
         return `  <div style="background:${c.bgColor||'#fef3c7'};border-bottom:2px solid #f59e0b;padding:12px 24px;text-align:center"><p style="margin:0;font-size:14px;font-weight:700;color:${c.textColor||'#92400e'}">${esc(c.text||'')}</p></div>`;
       case 'body': {
@@ -282,38 +338,8 @@ async function sendCampaign(userId, config, campaignId) {
   let emailSent = 0;
   if (emailCustomers.rows.length > 0) {
     const messages = emailCustomers.rows.map(customer => {
-      const unsubToken = jwt.sign(
-        { email: customer.email, userId, type: 'unsubscribe' },
-        UNSUB_SECRET,
-        { expiresIn: '365d' }
-      );
-      const unsubUrl = `${FRONTEND_URL}/unsubscribe?token=${unsubToken}`;
-      const original = c.body_html || '';
-      // Cover every anchor variant that's been emitted historically:
-      //   href="#unsubscribe"  (current marker)
-      //   href='#unsubscribe'  (single-quoted)
-      //   href="#"             (legacy WYSIWYG footers — best-effort match for the unsubscribe block only)
-      //   {{UNSUBSCRIBE_URL}}  (template placeholder)
-      let htmlWithUnsub = original
-        .replace(/href=(["'])#unsubscribe\1/gi, `href="${unsubUrl}"`)
-        .replace(/{{UNSUBSCRIBE_URL}}/g, unsubUrl);
-
-      // Legacy footers used href="#" inside an unsubscribe-link context — match an anchor whose
-      // text is "Unsubscribe" and whose href is "#" or empty, and rewrite that one anchor only.
-      htmlWithUnsub = htmlWithUnsub.replace(
-        /<a\s+href=(["'])#?\1([^>]*)>(\s*Unsubscribe\s*)<\/a>/gi,
-        `<a href="${unsubUrl}"$2>$3</a>`
-      );
-
-      // Last-resort fallback: if no unsubscribe link exists at all, append a compliant footer so
-      // CAN-SPAM/Yahoo/Gmail bulk-sender requirements don't reject the message.
-      if (!htmlWithUnsub.includes(unsubUrl)) {
-        htmlWithUnsub += `
-<div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 28px;text-align:center;font-family:Arial,sans-serif">
-  <p style="margin:0 0 8px;font-size:12px;color:#6b7280">You're receiving this because you've been a customer of ${esc(fromName || 'this business')}.</p>
-  <a href="${unsubUrl}" style="font-size:12px;color:#6b7280;text-decoration:underline">Unsubscribe</a>
-</div>`;
-      }
+      const unsubUrl = buildUnsubscribeUrl(customer.email, userId);
+      const htmlWithUnsub = applyUnsubscribeUrl(c.body_html, unsubUrl, fromName);
       return {
         to: customer.email,
         from: { name: fromName, email: 'noreply@sorceintegrations.com' },
@@ -818,13 +844,18 @@ router.post('/test-send', authenticateToken, async (req, res) => {
       emailText = bodyText || '';
     }
 
+    // Apply the same unsubscribe-URL swap that the live send path uses, otherwise the test
+    // email lands with the literal href="#unsubscribe" placeholder and the link does nothing.
+    const unsubUrl = buildUnsubscribeUrl(config.from_email, req.user.userId);
+    const htmlWithUnsub = applyUnsubscribeUrl(emailHtml, unsubUrl, config.from_name);
+
     await sgMail.send({
       to: config.from_email,
       from: { name: config.from_name || 'Campaign Test', email: 'noreply@sorceintegrations.com' },
       replyTo: { name: config.from_name || '', email: config.from_email },
       subject: `[TEST] ${emailSubject}`,
       text: emailText,
-      html: emailHtml,
+      html: htmlWithUnsub,
     });
 
     res.json({ success: true, sentTo: config.from_email });
