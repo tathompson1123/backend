@@ -215,7 +215,10 @@ async function generateCampaign(userId, config, offerDetails, autoRotate = false
       ? industry
       : businessName;
     const { hero } = await fetchPexelsImages(pexelsQuery, null);
-    heroImageUrl = hero[0] || '';
+    // Pick a random hero from the candidates so the same photo doesn't show up
+    // in every campaign. The fetcher returns 3 hero options, all from the user's
+    // industry — any of them is a fine match.
+    heroImageUrl = hero.length > 0 ? hero[Math.floor(Math.random() * hero.length)] : '';
   } catch (e) {
     heroImageUrl = '';
   }
@@ -355,6 +358,14 @@ async function sendCampaign(userId, config, campaignId) {
       await sgMail.send(messages.slice(i, i + 900));
       emailSent += Math.min(900, messages.length - i);
     }
+
+    // CRITICAL: stamp 'sent' the instant SendGrid confirms delivery, before any subsequent
+    // step (SMS send, recipient_count update) can throw on a flaky DB connection. If we
+    // skip this and the final UPDATE fails, the campaign stays 'pending' and a retry
+    // would re-send to every customer. Wrapped so a failure here doesn't abort either —
+    // the emails are already out the door.
+    await pool.query("UPDATE email_campaigns SET status = 'sent', sent_at = NOW() WHERE id = $1", [campaignId])
+      .catch(err => console.error('⚠️ Failed to mark campaign sent (emails were delivered):', err.message));
   }
 
   // ── SMS send (up to 500) ───────────────────────────────
@@ -764,10 +775,13 @@ router.post('/send-now', authenticateToken, async (req, res) => {
     let campaignId;
 
     if (draftId) {
-      // Promote existing draft — update it in place
+      // Only retry from 'draft' — a 'pending' campaign may have already partially sent and
+      // we can't tell from the row alone, so retrying it risks double-sending to everyone.
+      // sendCampaign() now stamps 'sent' as soon as SendGrid confirms, so a stuck 'pending'
+      // means emails truly never went out and the user can re-create the draft if needed.
       const draftResult = await pool.query(
-        'SELECT * FROM email_campaigns WHERE id = $1 AND user_id = $2 AND status = $3',
-        [draftId, req.user.userId, 'draft']
+        `SELECT * FROM email_campaigns WHERE id = $1 AND user_id = $2 AND status = 'draft'`,
+        [draftId, req.user.userId]
       );
       if (draftResult.rows.length === 0) return res.status(404).json({ error: 'Draft not found' });
       const draft = draftResult.rows[0];
@@ -814,6 +828,9 @@ router.post('/send-now', authenticateToken, async (req, res) => {
       ? sgErrors.map(x => x.message).join('; ')
       : e.message;
     console.error('Send now error:', detail, sgErrors ? JSON.stringify(sgErrors) : '');
+    // Do NOT auto-rollback status — a 'pending' row might mean emails already went out
+    // (post-send DB update failed) and flipping it back to 'draft' would let a retry
+    // send the whole campaign a second time. Leave it 'pending' for manual review.
     res.status(500).json({ error: detail || 'Failed to send campaign' });
   }
 });
