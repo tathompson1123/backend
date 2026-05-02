@@ -8,6 +8,18 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const { authenticateToken, previewGenerateLimiter } = require('./config/middleware');
 
+// Safety net: pg emits a secondary 'error' event on a destroyed client AFTER its in-flight
+// query rejects (e.g. when Railway's proxy drops the TCP connection mid-query). Even with
+// the cron's try/catch and pool.on('error'), that secondary event has no listener and Node
+// treats it as fatal. Logging here keeps the process alive — every cron tick reconnects
+// fresh clients from the pool anyway.
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ uncaughtException (process kept alive):', err?.message || err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ unhandledRejection (process kept alive):', reason?.message || reason);
+});
+
 app.set('pool', pool);
 // Security & CORS
 app.set('trust proxy', 1);
