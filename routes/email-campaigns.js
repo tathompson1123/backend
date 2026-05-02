@@ -807,8 +807,14 @@ router.post('/send-now', authenticateToken, async (req, res) => {
     const result = await sendCampaign(req.user.userId, config, campaignId);
     res.json({ success: true, ...result, subject: generated.subject });
   } catch (e) {
-    console.error('Send now error:', e.message);
-    res.status(500).json({ error: e.message || 'Failed to send campaign' });
+    // SendGrid wraps real errors inside e.response.body.errors — surfacing only e.message
+    // gives us a useless "Bad Request" with no reason. Pull the detail when present.
+    const sgErrors = e?.response?.body?.errors;
+    const detail = Array.isArray(sgErrors) && sgErrors.length
+      ? sgErrors.map(x => x.message).join('; ')
+      : e.message;
+    console.error('Send now error:', detail, sgErrors ? JSON.stringify(sgErrors) : '');
+    res.status(500).json({ error: detail || 'Failed to send campaign' });
   }
 });
 
@@ -860,8 +866,12 @@ router.post('/test-send', authenticateToken, async (req, res) => {
 
     res.json({ success: true, sentTo: config.from_email });
   } catch (e) {
-    console.error('Test send error:', e.message);
-    res.status(500).json({ error: e.message || 'Failed to send test email' });
+    const sgErrors = e?.response?.body?.errors;
+    const detail = Array.isArray(sgErrors) && sgErrors.length
+      ? sgErrors.map(x => x.message).join('; ')
+      : e.message;
+    console.error('Test send error:', detail, sgErrors ? JSON.stringify(sgErrors) : '');
+    res.status(500).json({ error: detail || 'Failed to send test email' });
   }
 });
 
