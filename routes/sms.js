@@ -170,8 +170,14 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
 }
 
 // Generate AI Response
-async function generateAIResponse(userId, leadId, lead, userMessage) {
+// firstContact: when true, this is the agent's *first* outgoing message in the
+// thread — used by the SMS cron when the customer texted in before the canned
+// outreach fired. The prompt skips the boilerplate intro and goes straight to
+// qualifying questions.
+async function generateAIResponse(userId, leadId, lead, userMessage, opts = {}) {
   try {
+    const { firstContact = false, businessName = '', agentName = '' } = opts;
+
     const historyResult = await pool.query(
       `SELECT direction, message FROM sms_messages
        WHERE lead_id = $1 ORDER BY created_at ASC LIMIT 10`,
@@ -207,12 +213,22 @@ async function generateAIResponse(userId, leadId, lead, userMessage) {
       content: msg.message
     }));
 
-    const systemPrompt = `You are a friendly service business AI assistant responding to customer SMS.
+    const firstContactGuidance = firstContact
+      ? `
+
+This is your FIRST outgoing reply — the customer reached out before any automated greeting went out. Skip any "Hi I'm X from Y" introduction. Acknowledge what they asked in one short clause if helpful, then ask one specific qualifying question (vehicle, service interest, timing, or location — whichever is missing and most relevant). Do not list services. Stay under 160 characters.`
+      : '';
+
+    const identityLine = firstContact && (businessName || agentName)
+      ? `\nYou are ${agentName || 'the assistant'} at ${businessName || 'this business'}.`
+      : '';
+
+    const systemPrompt = `You are a friendly service business AI assistant responding to customer SMS.${identityLine}
 
 Goal: Qualify leads, answer questions, schedule appointments.
 Style: Brief, conversational, SMS-friendly (under 160 chars when possible). Sound like a real human texting — casual, warm, and natural.
 
-NEVER use markdown formatting. No asterisks, no dashes for bullet points, no bold text, no lists. Use plain sentences with commas, periods, exclamations, and question marks only.
+NEVER use markdown formatting. No asterisks, no dashes for bullet points, no bold text, no lists. Use plain sentences with commas, periods, exclamations, and question marks only.${firstContactGuidance}
 
 Services:
 ${services}
@@ -326,3 +342,4 @@ router.post('/fix-webhook', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.generateAIResponse = generateAIResponse;

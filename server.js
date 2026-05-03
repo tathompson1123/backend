@@ -1425,6 +1425,7 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
 const cron = require('node-cron');
 const { sendSMS } = require('./utils/twilio');
 const { sendSMSTelnyx } = require('./utils/telnyx');
+const { generateAIResponse } = require('./routes/sms');
 
 // Helper: send SMS using whichever provider the user has a number on
 async function sendSMSAuto(to, message, userId) {
@@ -1517,14 +1518,49 @@ cron.schedule('*/30 * * * * *', async () => {
         const agentConfig = agentResult.rows[0].config;
         const firstName = (lead.name || 'there').split(' ')[0];
         const agentName = agentConfig?.training?.agentName || '';
-        const personalizedSms = smsTemplate
-          .replace(/\{\{name\}\}/g, firstName)
-          .replace(/\{\{email\}\}/g, lead.email || '')
-          .replace(/\{\{phone\}\}/g, lead.phone)
-          .replace(/\{\{service\}\}/g, lead.service || 'our services')
-          .replace(/\{\{message\}\}/g, lead.message || '')
-          .replace(/\{\{agentName\}\}/g, agentName)
-          .replace(/\{\{businessName\}\}/g, lead.business_name || '');
+
+        // If the customer already texted in, skip the canned intro and let the
+        // AI agent answer/qualify directly. Otherwise use the configured template.
+        const priorInbound = await pool.query(
+          `SELECT message FROM sms_messages
+           WHERE lead_id = $1 AND direction = 'incoming'
+           ORDER BY created_at ASC LIMIT 10`,
+          [lead.id]
+        );
+
+        let personalizedSms;
+        if (priorInbound.rows.length > 0) {
+          const latest = priorInbound.rows[priorInbound.rows.length - 1].message;
+          const aiReply = await generateAIResponse(
+            lead.user_id,
+            lead.id,
+            { name: lead.name, email: lead.email },
+            latest,
+            { firstContact: true, businessName: lead.business_name || '', agentName }
+          );
+          if (aiReply) {
+            personalizedSms = aiReply;
+          } else {
+            // AI failed — fall back to canned template so the lead still gets contacted
+            personalizedSms = smsTemplate
+              .replace(/\{\{name\}\}/g, firstName)
+              .replace(/\{\{email\}\}/g, lead.email || '')
+              .replace(/\{\{phone\}\}/g, lead.phone)
+              .replace(/\{\{service\}\}/g, lead.service || 'our services')
+              .replace(/\{\{message\}\}/g, lead.message || '')
+              .replace(/\{\{agentName\}\}/g, agentName)
+              .replace(/\{\{businessName\}\}/g, lead.business_name || '');
+          }
+        } else {
+          personalizedSms = smsTemplate
+            .replace(/\{\{name\}\}/g, firstName)
+            .replace(/\{\{email\}\}/g, lead.email || '')
+            .replace(/\{\{phone\}\}/g, lead.phone)
+            .replace(/\{\{service\}\}/g, lead.service || 'our services')
+            .replace(/\{\{message\}\}/g, lead.message || '')
+            .replace(/\{\{agentName\}\}/g, agentName)
+            .replace(/\{\{businessName\}\}/g, lead.business_name || '');
+        }
 
         const smsResult = await sendSMSAuto(lead.phone, personalizedSms, lead.user_id);
 
