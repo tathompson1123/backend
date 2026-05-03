@@ -45,6 +45,27 @@ router.post('/webhook', express.urlencoded({ extended: false }), (req, res) => {
   });
 });
 
+// Build the set of phone formats we may have stored historically.
+// Twilio gives us E.164 (+1XXXXXXXXXX), but earlier code paths stored
+// 10-digit (XXXXXXXXXX) or 11-digit (1XXXXXXXXXX). Match all three.
+function phoneVariants(num) {
+  if (!num) return [num];
+  const digits = num.replace(/\D/g, '');
+  const variants = new Set([num]);
+  if (digits.length === 11 && digits.startsWith('1')) {
+    variants.add('+' + digits);          // +1XXXXXXXXXX
+    variants.add(digits);                // 1XXXXXXXXXX
+    variants.add(digits.slice(1));       // XXXXXXXXXX
+  } else if (digits.length === 10) {
+    variants.add(digits);                // XXXXXXXXXX
+    variants.add('1' + digits);          // 1XXXXXXXXXX
+    variants.add('+1' + digits);         // +1XXXXXXXXXX
+  } else if (digits) {
+    variants.add(digits);
+  }
+  return [...variants];
+}
+
 async function processInboundSms({ From, To, Body, MessageSid }) {
   if (MessageSid) {
     const dupCheck = await pool.query(
@@ -70,9 +91,9 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
     user = userResult.rows[0];
   } else {
     const leadLookup = await pool.query(
-      `SELECT user_id FROM leads WHERE phone = $1 AND user_id = ANY($2)
+      `SELECT user_id FROM leads WHERE phone = ANY($1) AND user_id = ANY($2)
        ORDER BY created_at DESC LIMIT 1`,
-      [From, userResult.rows.map(r => r.id)]
+      [phoneVariants(From), userResult.rows.map(r => r.id)]
     );
     user = leadLookup.rows.length > 0
       ? userResult.rows.find(r => r.id === leadLookup.rows[0].user_id)
@@ -82,8 +103,8 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
   selfHealWebhook(user.twilio_phone_sid, To);
 
   let leadResult = await pool.query(
-    'SELECT id, name, email FROM leads WHERE phone = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
-    [From, user.id]
+    'SELECT id, name, email FROM leads WHERE phone = ANY($1) AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
+    [phoneVariants(From), user.id]
   );
 
   let leadId;
