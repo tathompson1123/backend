@@ -16,6 +16,38 @@ function formatSlotTime(slot) {
   return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
+// Walk the model's reply for "Weekday Month Day" / "Weekday (Month Day)" / "Weekday the Nth"
+// patterns whose weekday name doesn't match the actual date in the given timezone.
+// When mismatched, replace the wrong weekday with the correct one — the AI sometimes
+// hallucinates day names even when the date table in the prompt is right.
+function fixWeekdayMismatches(text, timezone) {
+  if (!text) return text;
+  const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const MONTHS = {
+    january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+    july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+    jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11,
+  };
+  // Match: optional "(", weekday, optional ")", optional connector, Month, day with optional ordinal suffix
+  const pattern = /\b(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\b(\s*\(?[,\s]*|[\s,(-]+)(January|February|March|April|May|June|July|August|September|October|November|December|Jan\.?|Feb\.?|Mar\.?|Apr\.?|Jun\.?|Jul\.?|Aug\.?|Sep\.?|Sept\.?|Oct\.?|Nov\.?|Dec\.?)\s+(\d{1,2})(?:st|nd|rd|th)?/gi;
+  // Use the current year in the business timezone
+  const yearStr = new Date().toLocaleDateString('en-US', { timeZone: timezone || 'UTC', year: 'numeric' });
+  const year = parseInt(yearStr, 10);
+  return text.replace(pattern, (match, claimedDay, sep, monthName, dayStr) => {
+    const monthIdx = MONTHS[monthName.toLowerCase().replace(/\.$/, '')];
+    if (monthIdx == null) return match;
+    const day = parseInt(dayStr, 10);
+    if (!Number.isFinite(day) || day < 1 || day > 31) return match;
+    // Compute the actual weekday for this date in the business timezone
+    const probe = new Date(Date.UTC(year, monthIdx, day, 12, 0, 0));
+    const actualWeekday = probe.toLocaleDateString('en-US', { timeZone: timezone || 'UTC', weekday: 'long' });
+    if (!WEEKDAYS.includes(actualWeekday)) return match;
+    if (actualWeekday.toLowerCase() === claimedDay.toLowerCase()) return match;
+    // Preserve the original separator/punctuation between weekday and date
+    return match.replace(new RegExp(`^${claimedDay}`, 'i'), actualWeekday);
+  });
+}
+
 // Returns up to 3 upcoming dates (within 14 days) that have at least one open slot
 async function getAvailableDaysNearDate(userId, serviceId, bookingDate, durationHours) {
   const available = [];
@@ -632,6 +664,10 @@ RESCHEDULING — if the customer already booked and then asks to change their da
 - Do NOT say "let me get this booked" as if it's new — acknowledge the change: "Got it, switching you to [new date]!"
 - The system will automatically cancel their previous booking when the new one goes through
 
+NEVER RE-EMIT BOOKING_REQUEST UNLESS THE CUSTOMER IS EXPLICITLY ASKING TO CHANGE DATE/TIME:
+- After a successful booking, the customer may say "thank you", "great", "see you then", "have a good day", etc. These are NOT requests to re-book or reschedule. Just respond conversationally — DO NOT emit BOOKING_REQUEST again.
+- Only emit a new BOOKING_REQUEST when the customer explicitly states a new date or time they want to switch to.
+
 OBJECTION HANDLING:
 - When a customer expresses hesitation about price, timing, or need, acknowledge their concern first
 - Use social proof: mention satisfaction rates and experience
@@ -796,29 +832,60 @@ REAL-TIME AVAILABILITY:
       const customerPhone = phoneDigits.length >= 7 ? phoneDigits : rawPhone.trim().substring(0, 20);
       console.log(`🤖 Chat BOOKING_REQUEST: services=${serviceIdsRaw} date=${bookingDate} time=${startTime} name=${customerName} email=${customerEmail} phone=${customerPhone}`);
 
-      // Cancel any existing booking from this conversation (reschedule case)
-      const prevAssistantMsgs = await pool.query(
-        `SELECT content FROM chat_messages
-         WHERE conversation_id = $1 AND role = 'assistant'
-         ORDER BY created_at DESC`,
+      // Reschedule case — if this conversation already produced a booking, check the
+      // existing booking before creating a new one.
+      const convoRow = await pool.query(
+        `SELECT last_booking_id FROM chat_conversations WHERE id = $1`,
         [conversationId]
       );
-      for (const { content } of prevAssistantMsgs.rows) {
-        const prevNumMatch = content.match(/Booking #(\S+)/);
-        if (prevNumMatch) {
-          const prevNum = prevNumMatch[1];
+      const lastBookingId = convoRow.rows[0]?.last_booking_id || null;
+      let existingBookingForConv = null;
+      if (lastBookingId) {
+        const existing = await pool.query(
+          `SELECT id, booking_number, booking_date, start_time, status
+           FROM bookings WHERE id = $1 AND user_id = $2`,
+          [lastBookingId, userId]
+        );
+        existingBookingForConv = existing.rows[0] || null;
+      }
+      let skipBookingCreation = false;
+      if (existingBookingForConv) {
+        const existingDateIso = existingBookingForConv.booking_date instanceof Date
+          ? existingBookingForConv.booking_date.toISOString().slice(0, 10)
+          : String(existingBookingForConv.booking_date).slice(0, 10);
+        const existingStart = String(existingBookingForConv.start_time).slice(0, 5);
+        const sameSlot = existingDateIso === bookingDate && existingStart === startTime;
+        const cancellable = !['cancelled', 'completed', 'no_show'].includes(existingBookingForConv.status);
+        if (sameSlot && cancellable) {
+          // The model re-emitted BOOKING_REQUEST for the slot the customer is already
+          // holding. Skip the re-book and produce a context-aware reply.
+          console.log(`🔁 Chat: skipping duplicate BOOKING_REQUEST — booking #${existingBookingForConv.booking_number} already holds ${existingDateIso} ${existingStart}`);
+          reply = reply.replace(/BOOKING_REQUEST\|[^\n]+\n?/, '').trim();
+          if (!reply) {
+            const dateObj = new Date(bookingDate + 'T00:00:00');
+            const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+            const [h, mm] = startTime.split(':');
+            const hourN = parseInt(h);
+            const ampm = hourN >= 12 ? 'PM' : 'AM';
+            const dispH = hourN > 12 ? hourN - 12 : hourN === 0 ? 12 : hourN;
+            reply = `You're already booked for ${formattedDate} at ${dispH}:${mm} ${ampm}. Did you want to change something about it?`;
+          }
+          skipBookingCreation = true;
+        } else if (cancellable) {
           const cancelled = await pool.query(
             `UPDATE bookings SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
-             WHERE booking_number = $1 AND user_id = $2 AND status = 'confirmed'
+             WHERE id = $1 AND status NOT IN ('cancelled', 'completed', 'no_show')
              RETURNING id`,
-            [prevNum, userId]
+            [existingBookingForConv.id]
           );
           if (cancelled.rowCount > 0) {
-            console.log(`🔄 Chat reschedule: cancelled booking #${prevNum} → new date ${bookingDate}`);
+            console.log(`🔄 Chat reschedule: cancelled booking #${existingBookingForConv.booking_number} → new ${bookingDate} ${startTime}`);
           }
-          break;
         }
       }
+      if (skipBookingCreation) {
+        // Fall through to assistant-save / response below without creating a new booking.
+      } else {
 
       // Create the booking
       const bookingResult = await createBookingFromChat(userId, {
@@ -936,10 +1003,11 @@ REAL-TIME AVAILABILITY:
                   `I've sent a confirmation to ${customerEmail}. Looking forward to seeing you!`;
         }
 
-        // Mark conversation as booked, store customer name
+        // Mark conversation as booked, store customer name + the booking we just made
+        // so any follow-up BOOKING_REQUEST is treated as a reschedule of THIS booking.
         await pool.query(
-          `UPDATE chat_conversations SET outcome = 'booked', customer_name = $2 WHERE id = $1`,
-          [conversationId, customerName]
+          `UPDATE chat_conversations SET outcome = 'booked', customer_name = $2, last_booking_id = $3 WHERE id = $1`,
+          [conversationId, customerName, bookingResult.bookingId]
         );
 
         // If they were previously a lead, update status to booked
@@ -968,6 +1036,7 @@ REAL-TIME AVAILABILITY:
           reply = `I'm sorry, but ${bookingResult.error}. Would you like to try a different time?`;
         }
       }
+      } // end else (skipBookingCreation false)
     }
 
     // Check if AI captured a customer who needs a callback
@@ -1017,6 +1086,10 @@ REAL-TIME AVAILABILITY:
     if (!reply) {
       reply = "Got it! Is there anything else I can help you with?";
     }
+
+    // Correct any weekday/date mismatches the model produced (e.g. "Thursday May 8th"
+    // when May 8 is actually a Friday) before saving and sending to the customer.
+    reply = fixWeekdayMismatches(reply, bizDateTime.timezone);
 
     // Save assistant response (cleaned)
     await pool.query(

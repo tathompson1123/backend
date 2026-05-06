@@ -402,7 +402,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
   try {
     await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS outcome VARCHAR(20) DEFAULT 'no_booking'`);
     await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS customer_name VARCHAR(200)`);
-    console.log('✅ chat_conversations.outcome + customer_name columns verified');
+    await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL`);
+    console.log('✅ chat_conversations.outcome + customer_name + last_booking_id columns verified');
   } catch (e) {
     console.warn('⚠️ Could not add chat_conversations columns:', e.message);
   }
