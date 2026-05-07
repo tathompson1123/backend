@@ -27,6 +27,29 @@ function selfHealWebhook(phoneSid, phoneNumber) {
   });
 }
 
+// Twilio delivery status callback — logs failures and updates the sms_messages row
+router.post('/status', express.urlencoded({ extended: false }), async (req, res) => {
+  res.status(200).send('OK');
+  const { MessageSid, MessageStatus, ErrorCode, ErrorMessage } = req.body || {};
+  if (!MessageSid) return;
+  try {
+    if (ErrorCode || MessageStatus === 'failed' || MessageStatus === 'undelivered') {
+      console.error(
+        `❌ Twilio delivery failed sid=${MessageSid} status=${MessageStatus} ` +
+        `errorCode=${ErrorCode || 'none'} errorMessage="${ErrorMessage || ''}"`
+      );
+    } else {
+      console.log(`📬 Twilio status sid=${MessageSid} status=${MessageStatus}`);
+    }
+    await pool.query(
+      'UPDATE sms_messages SET status = $1 WHERE twilio_message_sid = $2',
+      [MessageStatus || 'unknown', MessageSid]
+    );
+  } catch (err) {
+    console.error('SMS status callback error:', err.message);
+  }
+});
+
 // Twilio webhook for incoming SMS
 // Reply to Twilio immediately (its retry budget is ~15s) and do all DB + AI work async,
 // so a slow Claude call or a pg hiccup can never cause a connection-failure (error 11200)

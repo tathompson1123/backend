@@ -123,11 +123,24 @@ async function sendSMS(to, message, userId, mediaUrl) {
       msgParams.mediaUrl = Array.isArray(mediaUrl) ? mediaUrl : [mediaUrl];
     }
 
+    // Get final delivery status async via callback
+    const baseUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
+    msgParams.statusCallback = `${baseUrl}/api/sms/status`;
+
     const result = await twilioClient.messages.create(msgParams);
+
+    console.log(
+      `📤 Twilio create → sid=${result.sid} status=${result.status}` +
+      (mediaUrl ? ` (MMS, ${Array.isArray(mediaUrl) ? mediaUrl.length : 1} media)` : '') +
+      (result.errorCode ? ` errorCode=${result.errorCode} errorMessage="${result.errorMessage}"` : '')
+    );
 
     return {
       success: true,
-      messageSid: result.sid
+      messageSid: result.sid,
+      status: result.status,
+      errorCode: result.errorCode || null,
+      errorMessage: result.errorMessage || null,
     };
   } catch (error) {
     console.error('Error sending SMS:', error);

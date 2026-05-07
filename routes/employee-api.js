@@ -610,6 +610,11 @@ router.post('/my-bookings/:id/invoice/send', requirePermission('process_payments
       "UPDATE invoices SET status = 'sent', sent_at = NOW(), payment_link = $1 WHERE id = $2",
       [paymentUrl, data.invoice_id]
     );
+    // Mirror on the booking so the app can show "Sent" instead of "Send to Customer"
+    await pool.query(
+      "UPDATE bookings SET payment_status = 'sent' WHERE id = $1 AND payment_status <> 'paid'",
+      [id]
+    );
 
     // Send via SMS if requested and customer has phone
     if (method === 'sms' && data.customer_phone) {
@@ -1518,13 +1523,22 @@ router.get('/admin/appointments', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/employee/admin/leads
+// GET /api/employee/admin/leads — only leads with actual conversations (SMS or chat),
+// matching the dashboard view; raw site visitors with no engagement are excluded.
 router.get('/admin/leads', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.employee;
     const result = await pool.query(
-      `SELECT id, name, email, phone, status, source, service, message, sms_consent, created_at, notes
-       FROM leads WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`,
+      `SELECT l.id, l.name, l.email, l.phone, l.status, l.source, l.service, l.message,
+              l.sms_consent, l.created_at, l.notes
+       FROM leads l
+       WHERE l.user_id = $1
+         AND (
+           EXISTS (SELECT 1 FROM sms_messages sm WHERE sm.lead_id = l.id)
+           OR EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.lead_id = l.id)
+           OR (l.message IS NOT NULL AND length(trim(l.message)) > 0)
+         )
+       ORDER BY l.created_at DESC LIMIT 100`,
       [userId]
     );
     res.json({ leads: result.rows });

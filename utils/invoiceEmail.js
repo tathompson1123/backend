@@ -59,7 +59,7 @@ function buildInvoiceEmailHtml(opts) {
 
         <!-- Header -->
         <tr>
-          <td style="background:linear-gradient(135deg,#d97706,#f59e0b);padding:36px 40px;text-align:center;">
+          <td style="background-color:#d97706;background:linear-gradient(135deg,#d97706,#f59e0b);padding:36px 40px;text-align:center;">
             <h1 style="margin:0 0 8px;color:#ffffff;font-size:22px;font-weight:800;letter-spacing:1px;">${headline}</h1>
             <p style="margin:0;color:rgba(255,255,255,0.85);font-size:14px;">Invoice ${invoiceNumber}</p>
           </td>
@@ -165,8 +165,8 @@ function buildInvoiceEmailHtml(opts) {
         <!-- Pay Now Button -->
         <tr>
           <td style="padding:8px 40px 36px;text-align:center;">
-            <a href="${paymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#d97706,#f59e0b);color:#ffffff;padding:16px 48px;text-decoration:none;border-radius:12px;font-weight:800;font-size:18px;letter-spacing:0.5px;box-shadow:0 4px 14px rgba(217,119,6,0.4);">
-              Pay Now
+            <a href="${paymentUrl}" style="display:inline-block;background-color:#d97706;background:linear-gradient(135deg,#d97706,#f59e0b);color:#ffffff;padding:16px 48px;text-decoration:none;border-radius:12px;font-weight:800;font-size:18px;letter-spacing:0.5px;box-shadow:0 4px 14px rgba(217,119,6,0.4);mso-padding-alt:0;">
+              <!--[if mso]>&nbsp;<![endif]-->Pay Now<!--[if mso]>&nbsp;<![endif]-->
             </a>
           </td>
         </tr>
