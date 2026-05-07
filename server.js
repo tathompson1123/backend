@@ -142,6 +142,9 @@ const employeeApiRoutes = require('./routes/employee-api');
 app.use('/api/employee-auth', employeeAuthRoutes);
 app.use('/api/employee', employeeApiRoutes);
 
+const todosRoutes = require('./routes/todos');
+app.use('/api/todos', todosRoutes);
+
 const invoiceRoutes = require('./routes/invoices');
 const estimateRoutes = require('./routes/estimates');
 const paymentRoutes = require('./routes/payments');
@@ -280,6 +283,17 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     )`);
     await pool.query("ALTER TABLE invoice_items_catalog ADD COLUMN IF NOT EXISTS taxable BOOLEAN DEFAULT false");
     await pool.query("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS taxable BOOLEAN DEFAULT true");
+    // Owner to-do list, shared between web dashboard and employee admin app
+    await pool.query(`CREATE TABLE IF NOT EXISTS admin_todos (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      text TEXT NOT NULL,
+      done BOOLEAN DEFAULT false,
+      priority VARCHAR(10) DEFAULT 'medium',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query("CREATE INDEX IF NOT EXISTS admin_todos_user_idx ON admin_todos(user_id, done, created_at DESC)");
     // Service variants
     await pool.query(`CREATE TABLE IF NOT EXISTS service_variants (
       id SERIAL PRIMARY KEY,
