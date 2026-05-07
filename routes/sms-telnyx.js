@@ -94,8 +94,8 @@ router.post('/webhook', express.json(), async (req, res) => {
       const aiResponse = await generateAIResponse(user.id, leadId, leadResult.rows[0], body);
 
       if (aiResponse) {
-        const baseDelay  = 30000 + Math.random() * 60000;
-        const typingDelay = aiResponse.length * (50 + Math.random() * 30);
+        const baseDelay  = 15000 + Math.random() * 30000;
+        const typingDelay = aiResponse.length * (25 + Math.random() * 15);
         const totalDelay  = baseDelay + typingDelay;
 
         console.log(`⏰ Telnyx AI will respond in ${Math.round(totalDelay / 1000)}s`);

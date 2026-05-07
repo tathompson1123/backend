@@ -102,6 +102,40 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
 
   selfHealWebhook(user.twilio_phone_sid, To);
 
+  // If this phone belongs to a booking customer, treat the reply as part of
+  // that booking thread — never let the lead agent take over a real customer
+  // conversation. Customer phone formats vary in the DB (parens, dashes, +1,
+  // bare 10-digit), so match on the last 10 digits of both sides.
+  const fromDigits = (From || '').replace(/\D/g, '');
+  const fromLast10 = fromDigits.slice(-10);
+  const bookingMatch = await pool.query(
+    `SELECT id, customer_name FROM bookings
+     WHERE user_id = $1
+       AND customer_phone IS NOT NULL
+       AND right(regexp_replace(customer_phone, '\\D', '', 'g'), 10) = $2
+     ORDER BY booking_date DESC, id DESC LIMIT 1`,
+    [user.id, fromLast10]
+  );
+
+  if (bookingMatch.rows.length > 0) {
+    const bookingId = bookingMatch.rows[0].id;
+    const customerName = bookingMatch.rows[0].customer_name || From;
+    await pool.query(
+      `INSERT INTO sms_messages
+       (user_id, booking_id, direction, from_number, to_number, message, twilio_message_sid, status, created_at)
+       VALUES ($1, $2, 'incoming', $3, $4, $5, $6, 'received', NOW())`,
+      [user.id, bookingId, From, To, Body, MessageSid]
+    );
+    sendPushToOwner(
+      user.id,
+      'New Customer Reply',
+      `${customerName}: ${Body.slice(0, 100)}`,
+      { bookingId, screen: 'BookingDetail' }
+    ).catch(() => {});
+    console.log(`💬 Booking reply from ${From} → booking #${bookingId} (lead agent skipped)`);
+    return;
+  }
+
   let leadResult = await pool.query(
     'SELECT id, name, email FROM leads WHERE phone = ANY($1) AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
     [phoneVariants(From), user.id]
@@ -147,8 +181,8 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
   const aiResponse = await generateAIResponse(user.id, leadId, leadResult.rows[0], Body);
   if (!aiResponse) return;
 
-  const baseDelay = 30000 + Math.random() * 60000;
-  const typingDelay = aiResponse.length * (50 + Math.random() * 30);
+  const baseDelay = 15000 + Math.random() * 30000;
+  const typingDelay = aiResponse.length * (25 + Math.random() * 15);
   const totalDelay = baseDelay + typingDelay;
 
   console.log(`⏰ AI will respond in ${Math.round(totalDelay / 1000)}s (read ${Math.round(baseDelay / 1000)}s + type ${Math.round(typingDelay / 1000)}s)`);

@@ -3,6 +3,17 @@ const router = express.Router();
 const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { authenticateEmployee, requirePermission } = require('../config/employee-middleware');
+const multer = require('multer');
+const { v2: cloudinary } = require('cloudinary');
+
+const mediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) cb(null, true);
+    else cb(new Error('Only image or video files are allowed'));
+  },
+});
 
 let sgMail;
 if (process.env.SENDGRID_API_KEY) {
@@ -358,6 +369,87 @@ router.post('/my-bookings/:id/messages', requirePermission('send_messages'), asy
     console.error('Error sending booking message:', error.message);
     res.status(500).json({ error: error.message || 'Failed to send message' });
   }
+});
+
+// POST /api/employee/my-bookings/:id/messages/media - Send MMS with photo/video to customer
+router.post(
+  '/my-bookings/:id/messages/media',
+  requirePermission('send_messages'),
+  mediaUpload.single('file'),
+  async (req, res) => {
+    try {
+      const { userId } = req.employee;
+      const { id } = req.params;
+      const { message } = req.body || {};
+      if (!isValidId(id)) return res.status(400).json({ error: 'Invalid booking ID' });
+      if (!req.file) return res.status(400).json({ error: 'No file provided' });
+      if (message && message.length > 1600) return res.status(400).json({ error: 'Message must be under 1600 characters' });
+
+      const booking = await pool.query(
+        'SELECT customer_phone FROM bookings WHERE id = $1 AND user_id = $2',
+        [id, userId]
+      );
+      if (booking.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+      const phone = booking.rows[0].customer_phone;
+      if (!phone) return res.status(400).json({ error: 'Customer has no phone number' });
+
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+      const apiKey = process.env.CLOUDINARY_API_KEY;
+      const apiSecret = process.env.CLOUDINARY_API_SECRET;
+      if (!cloudName || !apiKey || !apiSecret) {
+        return res.status(500).json({ error: 'Media uploads are not configured on the server.' });
+      }
+      cloudinary.config({ cloud_name: cloudName, api_key: apiKey, api_secret: apiSecret });
+
+      const isVideo = req.file.mimetype.startsWith('video/');
+      const upload = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: `sorce/${userId}/bookings/${id}`,
+            resource_type: isVideo ? 'video' : 'image',
+          },
+          (err, result) => err ? reject(err) : resolve(result)
+        );
+        stream.end(req.file.buffer);
+      });
+
+      const mediaUrl = upload.secure_url;
+      const body = (message || '').trim();
+
+      const { sendSMS } = require('../utils/twilio');
+      const smsResult = await sendSMS(phone, body, userId, mediaUrl);
+
+      await pool.query(
+        `INSERT INTO sms_messages (user_id, booking_id, direction, to_number, message, media_url, twilio_message_sid, status, created_at)
+         VALUES ($1, $2, 'outgoing', $3, $4, $5, $6, 'sent', NOW())`,
+        [userId, id, phone, body, mediaUrl, smsResult.messageSid]
+      );
+
+      res.json({ success: true, messageSid: smsResult.messageSid, mediaUrl });
+    } catch (error) {
+      console.error('Error sending booking media:', error.message);
+      res.status(500).json({ error: error.message || 'Failed to send media' });
+    }
+  }
+);
+
+// GET /api/employee/invoice-catalog - Default tax rate + saved fees/supplies catalog
+router.get('/invoice-catalog', requirePermission('process_payments'), async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const [settingsRes, catalogRes] = await Promise.all([
+      pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]),
+      pool.query(
+        'SELECT id, name, category, amount_type, amount, taxable FROM invoice_items_catalog WHERE user_id = $1 AND active = true ORDER BY category, name',
+        [userId]
+      ),
+    ]);
+    const rawRate = parseFloat(settingsRes.rows[0]?.default_tax_rate || 0);
+    res.json({
+      defaultTaxRate: parseFloat((rawRate * 100).toFixed(4)),
+      catalog: catalogRes.rows,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // POST /api/employee/my-bookings/:id/invoice - Auto-create invoice from booking
