@@ -299,26 +299,17 @@
       body: JSON.stringify({ userId: config.userId, conversationId: chatConversationId, message: msg })
     });
 
-    // 5 second "reading" delay before typing indicator appears (matches website widget)
-    setTimeout(function() {
-      showChatTyping();
-
-      fetchP.then(function(r) { return r.json(); })
+    showChatTyping();
+    fetchP.then(function(r) { return r.json(); })
       .then(function(data) {
-        // Human typing delay: 60-80 WPM (150-200ms per char)
-        var len = (data.reply || '').length;
-        var msPerChar = 150 + Math.random() * 50;
-        var typingMs = Math.min(Math.max(len * msPerChar, 2000), 15000);
-        setTimeout(function() {
-          hideChatTyping();
-          addChatMessage(data.reply, 'agent');
-        }, typingMs);
+        hideChatTyping();
+        if (data && data.silent) return;
+        addChatMessage(data.reply, 'agent');
       })
       .catch(function() {
         hideChatTyping();
         addChatMessage('Sorry, I had trouble connecting. Please try again.', 'agent');
       });
-    }, 5000);
   }
 
   function addChatMessage(text, type) {

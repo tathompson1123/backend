@@ -350,23 +350,13 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
         })
       });
 
-      // 5 second "reading" delay before typing indicator appears
-      await new Promise(r => setTimeout(r, 5000));
       showTypingIndicator();
 
       const response = await fetchPromise;
       if (response.ok) {
         const data = await response.json();
-        if (data.silent) {
-          hideTypingIndicator();
-          return;
-        }
-        // Human typing delay: 60-80 WPM (80WPM=150ms/char, 60WPM=200ms/char)
-        const replyLen = (data.reply || '').length;
-        const msPerChar = 150 + Math.random() * 50; // 150-200ms per char
-        const typingMs = Math.min(Math.max(replyLen * msPerChar, 2000), 15000);
-        await new Promise(r => setTimeout(r, typingMs));
         hideTypingIndicator();
+        if (data.silent) return;
         addMessage(data.reply, 'agent');
       } else {
         throw new Error('Message failed');
