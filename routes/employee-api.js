@@ -1149,6 +1149,75 @@ router.get('/square-credentials', requirePermission('process_payments'), async (
   }
 });
 
+// GET /api/employee/notifications
+// Aggregated activity feed for the bell: new bookings, customer replies,
+// and team chat posts from the last 7 days for this business.
+router.get('/notifications', async (req, res) => {
+  try {
+    const { userId, employeeId } = req.employee;
+    const [bookingsRes, repliesRes, teamRes] = await Promise.all([
+      pool.query(
+        `SELECT id AS ref_id, customer_name, booking_date, start_time, source, created_at
+         FROM bookings
+         WHERE user_id = $1 AND created_at > NOW() - INTERVAL '7 days'
+         ORDER BY created_at DESC LIMIT 30`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT sm.booking_id AS ref_id, b.customer_name, sm.message, sm.created_at
+         FROM sms_messages sm
+         JOIN bookings b ON b.id = sm.booking_id
+         WHERE sm.user_id = $1
+           AND sm.direction = 'incoming'
+           AND sm.booking_id IS NOT NULL
+           AND sm.created_at > NOW() - INTERVAL '7 days'
+         ORDER BY sm.created_at DESC LIMIT 30`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT id AS ref_id, employee_name, employee_color, body, created_at
+         FROM employee_messages
+         WHERE user_id = $1
+           AND employee_id <> $2
+           AND created_at > NOW() - INTERVAL '7 days'
+         ORDER BY created_at DESC LIMIT 30`,
+        [userId, employeeId]
+      ),
+    ]);
+
+    const items = [
+      ...bookingsRes.rows.map(r => ({
+        type: 'new_booking',
+        title: 'New Booking',
+        body: `${r.customer_name || 'Customer'} — ${r.booking_date} ${r.start_time || ''}`.trim(),
+        created_at: r.created_at,
+        ref_id: r.ref_id,
+        source: r.source,
+      })),
+      ...repliesRes.rows.map(r => ({
+        type: 'customer_reply',
+        title: `${r.customer_name || 'Customer'} replied`,
+        body: (r.message || '').slice(0, 140),
+        created_at: r.created_at,
+        ref_id: r.ref_id,
+      })),
+      ...teamRes.rows.map(r => ({
+        type: 'team_chat',
+        title: `${r.employee_name} in Team Chat`,
+        body: (r.body || '').slice(0, 140),
+        created_at: r.created_at,
+        ref_id: r.ref_id,
+        sender_color: r.employee_color,
+      })),
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    res.json({ notifications: items.slice(0, 50) });
+  } catch (e) {
+    console.error('Error fetching notifications:', e.message);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
 // GET /api/employee/customer-messages
 // Recent SMS conversations between any employee and any customer (grouped by booking).
 // Used by the Customers > Messages tab.
@@ -1734,7 +1803,7 @@ router.get('/admin/overview', requireAdmin, async (req, res) => {
     weekEnd.setDate(weekStart.getDate() + 6);
     weekEnd.setHours(23, 59, 59, 999);
 
-    const [todayRes, weekBookingsRes, weekLeadsRes, revenueRes] = await Promise.all([
+    const [todayRes, weekBookingsRes, weekLeadsRes, revenueRes, weekPaidRes] = await Promise.all([
       // Today's bookings
       pool.query(
         `SELECT b.id, b.customer_name, b.start_time, b.status, b.total_amount,
@@ -1766,11 +1835,22 @@ router.get('/admin/overview', requireAdmin, async (req, res) => {
          FROM invoices WHERE user_id = $1`,
         [userId]
       ),
+      // Actual paid revenue this week (from payments table, net of refunds).
+      // This replaces the previous calc that summed booking total_amount and
+      // double-counted unpaid drafts + outstanding invoices.
+      pool.query(
+        `SELECT COALESCE(SUM(amount - COALESCE(refund_amount, 0)), 0) AS week_paid
+         FROM payments
+         WHERE user_id = $1
+           AND status = 'completed'
+           AND created_at BETWEEN $2 AND $3`,
+        [userId, weekStart, weekEnd]
+      ),
     ]);
 
     const weekBookings = weekBookingsRes.rows;
     const weekLeads = weekLeadsRes.rows;
-    const weekRevenue = weekBookings.reduce((s, b) => s + (parseFloat(b.total_amount) || 0), 0);
+    const weekRevenue = parseFloat(weekPaidRes.rows[0]?.week_paid || 0);
     const chatLeads = weekLeads.filter(l => l.source === 'ai_chat_agent' || l.source === 'website_chat');
     const formLeads = weekLeads.filter(l => l.source === 'lead_form');
     const convRate = weekLeads.length > 0
@@ -1898,6 +1978,38 @@ router.get('/admin/conversations', requireAdmin, async (req, res) => {
     );
     res.json({ conversations: result.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/admin/lead-sms-conversations
+// Lead-form (and other non-chat) leads that have at least one SMS exchange.
+// Powers the "Lead SMS" tab on the admin Chats screen.
+router.get('/admin/lead-sms-conversations', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const result = await pool.query(
+      `SELECT l.id, l.name, l.phone, l.email, l.status, l.source,
+              to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+              (SELECT COUNT(*) FROM sms_messages WHERE lead_id = l.id) AS message_count,
+              (SELECT message FROM sms_messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1) AS last_message,
+              (SELECT direction FROM sms_messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1) AS last_direction,
+              to_char(
+                (SELECT created_at FROM sms_messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1)
+                AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+              ) AS last_message_at
+       FROM leads l
+       WHERE l.user_id = $1
+         AND l.source <> 'ai_chat_agent'
+         AND l.source <> 'website_chat'
+         AND EXISTS (SELECT 1 FROM sms_messages WHERE lead_id = l.id)
+       ORDER BY (SELECT MAX(created_at) FROM sms_messages WHERE lead_id = l.id) DESC NULLS LAST
+       LIMIT 50`,
+      [userId]
+    );
+    res.json({ conversations: result.rows });
+  } catch (e) {
+    console.error('Error fetching lead SMS conversations:', e.message);
+    res.status(500).json({ error: 'Failed to fetch lead SMS conversations' });
+  }
 });
 
 // GET /api/employee/admin/conversations/:id/messages
