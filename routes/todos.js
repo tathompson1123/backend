@@ -38,19 +38,24 @@ async function resolveOwner(req, res, next) {
 }
 
 const TODO_SELECT = `
-  t.id, t.text, t.done, t.priority, t.created_at, t.created_by_employee_id,
+  t.id, t.text, t.done, t.priority, t.scope, t.created_at, t.created_by_employee_id,
   e.name AS creator_name, e.color AS creator_color
 `;
 
+function normalizeScope(raw) {
+  return raw === 'team' ? 'team' : 'admin';
+}
+
 router.get('/', resolveOwner, async (req, res) => {
   try {
+    const scope = normalizeScope(req.query.scope);
     const r = await pool.query(
       `SELECT ${TODO_SELECT}
        FROM admin_todos t
        LEFT JOIN employees e ON e.id = t.created_by_employee_id
-       WHERE t.user_id = $1
+       WHERE t.user_id = $1 AND t.scope = $2
        ORDER BY t.done ASC, t.created_at DESC`,
-      [req.ownerUserId]
+      [req.ownerUserId, scope]
     );
     res.json({ todos: r.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -58,12 +63,13 @@ router.get('/', resolveOwner, async (req, res) => {
 
 router.post('/', resolveOwner, async (req, res) => {
   try {
-    const { text, priority } = req.body || {};
+    const { text, priority, scope: scopeIn } = req.body || {};
     if (!text?.trim()) return res.status(400).json({ error: 'Text required' });
+    const scope = normalizeScope(scopeIn);
     const ins = await pool.query(
-      `INSERT INTO admin_todos (user_id, text, priority, created_by_employee_id)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [req.ownerUserId, text.trim(), priority || 'medium', req.creatorEmployeeId]
+      `INSERT INTO admin_todos (user_id, text, priority, scope, created_by_employee_id)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [req.ownerUserId, text.trim(), priority || 'medium', scope, req.creatorEmployeeId]
     );
     const r = await pool.query(
       `SELECT ${TODO_SELECT}

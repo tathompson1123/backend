@@ -296,6 +296,9 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("CREATE INDEX IF NOT EXISTS admin_todos_user_idx ON admin_todos(user_id, done, created_at DESC)");
     // Track which employee created each todo (null = added from web dashboard by the owner)
     await pool.query("ALTER TABLE admin_todos ADD COLUMN IF NOT EXISTS created_by_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL");
+    // Separate scopes: 'admin' (web dashboard + admin overview), 'team' (app HomeScreen team to-do)
+    await pool.query("ALTER TABLE admin_todos ADD COLUMN IF NOT EXISTS scope VARCHAR(10) NOT NULL DEFAULT 'admin'");
+    await pool.query("CREATE INDEX IF NOT EXISTS admin_todos_user_scope_idx ON admin_todos(user_id, scope, done, created_at DESC)");
     // Service variants
     await pool.query(`CREATE TABLE IF NOT EXISTS service_variants (
       id SERIAL PRIMARY KEY,
