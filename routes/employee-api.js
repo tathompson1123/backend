@@ -1827,17 +1827,28 @@ router.get('/admin/overview', requireAdmin, async (req, res) => {
          FROM leads WHERE user_id = $1 AND created_at BETWEEN $2 AND $3`,
         [userId, weekStart, weekEnd]
       ),
-      // Revenue totals (all time)
+      // Revenue stats scoped to the selected week:
+      //  - total_revenue: actual paid revenue from payments (net of refunds)
+      //  - outstanding:   invoices created this week still owed
+      //  - paid_count:    invoices that were paid in this week
       pool.query(
-        `SELECT COALESCE(SUM(amount_paid), 0) as total_revenue,
-                COALESCE(SUM(amount_due) FILTER (WHERE status != 'cancelled'), 0) as outstanding,
-                COUNT(*) FILTER (WHERE status = 'paid') as paid_count
-         FROM invoices WHERE user_id = $1`,
-        [userId]
+        `SELECT
+           (SELECT COALESCE(SUM(amount - COALESCE(refund_amount, 0)), 0)
+            FROM payments
+            WHERE user_id = $1 AND status = 'completed'
+              AND created_at BETWEEN $2 AND $3) AS total_revenue,
+           (SELECT COALESCE(SUM(amount_due), 0)
+            FROM invoices
+            WHERE user_id = $1 AND status != 'cancelled'
+              AND created_at BETWEEN $2 AND $3) AS outstanding,
+           (SELECT COUNT(*)
+            FROM invoices
+            WHERE user_id = $1 AND status = 'paid'
+              AND paid_at BETWEEN $2 AND $3) AS paid_count`,
+        [userId, weekStart, weekEnd]
       ),
-      // Actual paid revenue this week (from payments table, net of refunds).
-      // This replaces the previous calc that summed booking total_amount and
-      // double-counted unpaid drafts + outstanding invoices.
+      // Same week-paid figure surfaced separately for the Week Summary card,
+      // keeps the existing field name in the response payload.
       pool.query(
         `SELECT COALESCE(SUM(amount - COALESCE(refund_amount, 0)), 0) AS week_paid
          FROM payments
