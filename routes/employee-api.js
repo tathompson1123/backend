@@ -5,6 +5,7 @@ const { pool } = require('../config/database');
 const { authenticateEmployee, requirePermission } = require('../config/employee-middleware');
 const multer = require('multer');
 const { v2: cloudinary } = require('cloudinary');
+const { sendPushToTeam, sendPushToEmployee } = require('../utils/pushNotifications');
 
 const mediaUpload = multer({
   storage: multer.memoryStorage(),
@@ -359,9 +360,9 @@ router.post('/my-bookings/:id/messages', requirePermission('send_messages'), asy
 
     // Store message
     await pool.query(
-      `INSERT INTO sms_messages (user_id, booking_id, direction, to_number, message, twilio_message_sid, status, created_at)
-       VALUES ($1, $2, 'outgoing', $3, $4, $5, 'sent', NOW())`,
-      [userId, id, phone, message.trim(), smsResult.messageSid]
+      `INSERT INTO sms_messages (user_id, booking_id, sent_by_employee_id, direction, to_number, message, twilio_message_sid, status, created_at)
+       VALUES ($1, $2, $3, 'outgoing', $4, $5, $6, 'sent', NOW())`,
+      [userId, id, employeeId, phone, message.trim(), smsResult.messageSid]
     );
 
     res.json({ success: true, messageSid: smsResult.messageSid });
@@ -420,9 +421,9 @@ router.post(
       const smsResult = await sendSMS(phone, body, userId, mediaUrl);
 
       await pool.query(
-        `INSERT INTO sms_messages (user_id, booking_id, direction, to_number, message, media_url, twilio_message_sid, status, created_at)
-         VALUES ($1, $2, 'outgoing', $3, $4, $5, $6, 'sent', NOW())`,
-        [userId, id, phone, body, mediaUrl, smsResult.messageSid]
+        `INSERT INTO sms_messages (user_id, booking_id, sent_by_employee_id, direction, to_number, message, media_url, twilio_message_sid, status, created_at)
+         VALUES ($1, $2, $3, 'outgoing', $4, $5, $6, $7, 'sent', NOW())`,
+        [userId, id, req.employee.employeeId, phone, body, mediaUrl, smsResult.messageSid]
       );
 
       res.json({ success: true, messageSid: smsResult.messageSid, mediaUrl });
@@ -1148,6 +1149,39 @@ router.get('/square-credentials', requirePermission('process_payments'), async (
   }
 });
 
+// GET /api/employee/customer-messages
+// Recent SMS conversations between any employee and any customer (grouped by booking).
+// Used by the Customers > Messages tab.
+router.get('/customer-messages', requirePermission('view_customers'), async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const result = await pool.query(
+      `WITH ranked AS (
+         SELECT sm.booking_id, sm.message, sm.media_url, sm.direction,
+                sm.created_at, sm.sent_by_employee_id,
+                ROW_NUMBER() OVER (PARTITION BY sm.booking_id ORDER BY sm.created_at DESC) AS rn
+         FROM sms_messages sm
+         WHERE sm.user_id = $1 AND sm.booking_id IS NOT NULL
+       )
+       SELECT r.booking_id, r.message AS last_message, r.media_url AS last_media_url,
+              r.direction AS last_direction, r.created_at AS last_message_at,
+              b.customer_name, b.customer_phone, b.booking_date, b.start_time,
+              e.name AS last_sender_name, e.color AS last_sender_color
+       FROM ranked r
+       JOIN bookings b ON b.id = r.booking_id
+       LEFT JOIN employees e ON e.id = r.sent_by_employee_id
+       WHERE r.rn = 1
+       ORDER BY r.created_at DESC
+       LIMIT 50`,
+      [userId]
+    );
+    res.json({ conversations: result.rows });
+  } catch (e) {
+    console.error('Error fetching customer messages:', e.message);
+    res.status(500).json({ error: 'Failed to fetch customer messages' });
+  }
+});
+
 // POST /api/employee/my-bookings/:id/invoice/tap-payment - Record Square tap-to-pay payment
 router.post('/my-bookings/:id/invoice/tap-payment', requirePermission('process_payments'), async (req, res) => {
   try {
@@ -1288,6 +1322,14 @@ router.post('/community', async (req, res) => {
       [userId, employeeId, emp.name, emp.color || '#6b7280', body.trim(),
        replyToId && isValidId(replyToId) ? replyToId : null, replyPreview]
     );
+
+    // Fan out push to teammates (skip sender)
+    sendPushToTeam(
+      userId, employeeId,
+      `${emp.name} in Team Chat`,
+      body.trim().slice(0, 140),
+      { type: 'team_chat', messageId: result.rows[0].id }
+    ).catch(() => {});
 
     res.json({ message: result.rows[0] });
   } catch (error) {
@@ -1533,11 +1575,6 @@ router.get('/admin/leads', requireAdmin, async (req, res) => {
               l.sms_consent, l.created_at, l.notes
        FROM leads l
        WHERE l.user_id = $1
-         AND (
-           EXISTS (SELECT 1 FROM sms_messages sm WHERE sm.lead_id = l.id)
-           OR EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.lead_id = l.id)
-           OR (l.message IS NOT NULL AND length(trim(l.message)) > 0)
-         )
        ORDER BY l.created_at DESC LIMIT 100`,
       [userId]
     );
@@ -1638,7 +1675,7 @@ router.get('/admin/revenue', requireAdmin, async (req, res) => {
     const { userId } = req.employee;
     const [invoiceRes, estimateRes, paymentRes, statsRes] = await Promise.all([
       pool.query(
-        `SELECT i.id, i.invoice_number, i.status, i.payment_status,
+        `SELECT i.id, i.invoice_number, i.status,
                 COALESCE(i.customer_name, b.customer_name) AS customer_name,
                 i.customer_email, i.total_amount, i.amount_paid, i.amount_due,
                 i.tax_amount, i.tax_rate, i.subtotal, i.discount_amount,
@@ -1668,7 +1705,7 @@ router.get('/admin/revenue', requireAdmin, async (req, res) => {
         `SELECT
            COALESCE(SUM(amount_paid), 0) AS total_revenue,
            COALESCE(SUM(amount_due) FILTER (WHERE status != 'cancelled'), 0) AS outstanding,
-           COUNT(*) FILTER (WHERE payment_status = 'paid') AS paid_count,
+           COUNT(*) FILTER (WHERE status = 'paid') AS paid_count,
            COALESCE(SUM(tax_amount), 0) AS total_tax
          FROM invoices WHERE user_id = $1`,
         [userId]
@@ -1725,7 +1762,7 @@ router.get('/admin/overview', requireAdmin, async (req, res) => {
       pool.query(
         `SELECT COALESCE(SUM(amount_paid), 0) as total_revenue,
                 COALESCE(SUM(amount_due) FILTER (WHERE status != 'cancelled'), 0) as outstanding,
-                COUNT(*) FILTER (WHERE payment_status = 'paid') as paid_count
+                COUNT(*) FILTER (WHERE status = 'paid') as paid_count
          FROM invoices WHERE user_id = $1`,
         [userId]
       ),
@@ -1848,6 +1885,10 @@ router.get('/admin/conversations', requireAdmin, async (req, res) => {
                ORDER BY created_at LIMIT 1) AS lead_status
        FROM chat_conversations cc
        WHERE cc.user_id = $1
+         AND EXISTS (
+           SELECT 1 FROM chat_messages
+           WHERE conversation_id = cc.id AND role = 'user'
+         )
        ORDER BY COALESCE(
          (SELECT created_at FROM chat_messages WHERE conversation_id = cc.id ORDER BY created_at DESC LIMIT 1),
          cc.created_at

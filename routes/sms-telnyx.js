@@ -145,9 +145,12 @@ router.post('/send', express.json(), async (req, res) => {
 async function generateAIResponse(userId, leadId, lead, userMessage) {
   try {
     const [historyResult, servicesResult, hoursResult] = await Promise.all([
+      // Most recent 30 messages, re-ordered chronologically (see sms.js for why).
       pool.query(
-        `SELECT direction, message FROM sms_messages
-         WHERE lead_id = $1 ORDER BY created_at ASC LIMIT 10`,
+        `SELECT direction, message FROM (
+           SELECT direction, message, created_at FROM sms_messages
+           WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 30
+         ) recent ORDER BY created_at ASC`,
         [leadId]
       ),
       pool.query(
@@ -177,7 +180,15 @@ async function generateAIResponse(userId, leadId, lead, userMessage) {
       content: msg.message,
     }));
 
-    const systemPrompt = `You are a friendly service business AI assistant responding to customer SMS. Goal: Qualify leads, answer questions, schedule appointments. Style: Brief, conversational, SMS-friendly (under 160 chars when possible). Sound like a real human texting. NEVER use markdown formatting, asterisks, dashes for lists, or bold text. Use plain sentences with commas, periods, exclamations, and question marks only. Services:\n${services}\nHours:\n${businessHours}\nLead: ${lead.name || 'Customer'} | ${lead.email || 'No email'}`;
+    const todayLabel = new Date().toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+    });
+
+    const systemPrompt = `You are a friendly service business AI assistant responding to customer SMS. Today is ${todayLabel} — work out weekdays from this anchor, do not guess. Goal: Qualify leads, answer questions, schedule appointments. Style: Brief, conversational, SMS-friendly (under 160 chars when possible). Sound like a real human texting.
+
+Rules: Track what the customer already told you (date, time, address, vehicles, services) and never re-ask. If you already confirmed a booking, do not re-confirm or re-summarize on the next reply — just acknowledge briefly. If you were corrected on a fact, do not keep apologizing for it on later turns.
+
+NEVER use markdown formatting, asterisks, dashes for lists, or bold text. Use plain sentences with commas, periods, exclamations, and question marks only. Services:\n${services}\nHours:\n${businessHours}\nLead: ${lead.name || 'Customer'} | ${lead.email || 'No email'}`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',

@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { sendBookingEmails } = require('../utils/bookingEmail');
+const { sendPushToOwner } = require('../utils/pushNotifications');
 
 // ─── Helper: Look up user by site key ───────────────────
 async function getUserBySiteKey(siteKey) {
@@ -271,6 +272,12 @@ router.post('/book/:siteKey', async (req, res) => {
     }).then(() => {
       console.log(`📧 Embed booking email sent for ${bookingNumber}`);
     }).catch(err => console.error(`📧 Embed booking email FAILED for ${bookingNumber}:`, err.message, err.response?.body));
+
+    // Push notify the business owner that a website booking came in
+    sendPushToOwner(user.id, 'New Booking',
+      `${customerName} — ${service.name} on ${date} at ${startTime}`,
+      { bookingId: bookingResult.rows[0].id, type: 'new_booking' }
+    ).catch(() => {});
 
     res.json({
       success: true,

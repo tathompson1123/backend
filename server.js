@@ -294,6 +294,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
       updated_at TIMESTAMP DEFAULT NOW()
     )`);
     await pool.query("CREATE INDEX IF NOT EXISTS admin_todos_user_idx ON admin_todos(user_id, done, created_at DESC)");
+    // Track which employee created each todo (null = added from web dashboard by the owner)
+    await pool.query("ALTER TABLE admin_todos ADD COLUMN IF NOT EXISTS created_by_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL");
     // Service variants
     await pool.query(`CREATE TABLE IF NOT EXISTS service_variants (
       id SERIAL PRIMARY KEY,
@@ -950,6 +952,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query('ALTER TABLE sms_messages ALTER COLUMN lead_id DROP NOT NULL');
     await pool.query('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS from_number VARCHAR(20)');
     await pool.query('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS provider VARCHAR(10)');
+    // Track which employee sent each outgoing booking SMS, so we can push them back when the customer replies
+    await pool.query('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS sent_by_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL');
     console.log('✅ sms_messages columns verified');
   } catch (e) {
     console.warn('⚠️ Could not verify sms_messages booking_id:', e.message);

@@ -74,4 +74,38 @@ async function sendPushToEmployee(employeeId, title, body, data = {}) {
   }
 }
 
-module.exports = { sendPushToEmployee, sendPushToOwner };
+/**
+ * Send a push notification to every employee on a business except (optionally) one.
+ * Used for team-chat fan-out so everyone gets notified when a teammate posts.
+ */
+async function sendPushToTeam(userId, excludeEmployeeId, title, body, data = {}) {
+  try {
+    const params = [userId];
+    let exclude = '';
+    if (excludeEmployeeId) { params.push(excludeEmployeeId); exclude = `AND e.id <> $2`; }
+    const result = await pool.query(
+      `SELECT ec.push_token
+       FROM employees e
+       JOIN employee_credentials ec ON ec.employee_id = e.id
+       WHERE e.user_id = $1 ${exclude} AND ec.push_token IS NOT NULL`,
+      params
+    );
+    const tokens = result.rows
+      .map(r => r.push_token)
+      .filter(t => Expo.isExpoPushToken(t));
+    if (!tokens.length) return { sent: 0 };
+
+    const messages = tokens.map(to => ({ to, sound: 'default', title, body, data }));
+    const chunks = expo.chunkPushNotifications(messages);
+    for (const chunk of chunks) {
+      await expo.sendPushNotificationsAsync(chunk);
+    }
+    console.log(`✅ Push fanned out to ${tokens.length} teammate(s) for user ${userId}`);
+    return { sent: tokens.length };
+  } catch (error) {
+    console.error(`❌ Failed to fan out team push for user ${userId}:`, error.message);
+    return { sent: 0, error: error.message };
+  }
+}
+
+module.exports = { sendPushToEmployee, sendPushToOwner, sendPushToTeam };

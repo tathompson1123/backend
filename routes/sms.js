@@ -149,12 +149,34 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
        VALUES ($1, $2, 'incoming', $3, $4, $5, $6, 'received', NOW())`,
       [user.id, bookingId, From, To, Body, MessageSid]
     );
+    // Push the business owner
     sendPushToOwner(
       user.id,
       'New Customer Reply',
       `${customerName}: ${Body.slice(0, 100)}`,
       { bookingId, screen: 'BookingDetail' }
     ).catch(() => {});
+    // Also push the employee who most recently messaged this booking (if different from owner)
+    try {
+      const lastSender = await pool.query(
+        `SELECT sent_by_employee_id FROM sms_messages
+         WHERE booking_id = $1 AND direction = 'outgoing' AND sent_by_employee_id IS NOT NULL
+         ORDER BY created_at DESC LIMIT 1`,
+        [bookingId]
+      );
+      const senderEmployeeId = lastSender.rows[0]?.sent_by_employee_id;
+      if (senderEmployeeId) {
+        const { sendPushToEmployee } = require('../utils/pushNotifications');
+        sendPushToEmployee(
+          senderEmployeeId,
+          'Customer Reply',
+          `${customerName}: ${Body.slice(0, 100)}`,
+          { bookingId, screen: 'BookingDetail' }
+        ).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Could not push reply to original sender:', e.message);
+    }
     console.log(`💬 Booking reply from ${From} → booking #${bookingId} (lead agent skipped)`);
     return;
   }
@@ -235,9 +257,15 @@ async function generateAIResponse(userId, leadId, lead, userMessage, opts = {}) 
   try {
     const { firstContact = false, businessName = '', agentName = '' } = opts;
 
+    // Most recent 30 messages, re-ordered chronologically for the LLM.
+    // (Previously LIMIT 10 ASC always returned the oldest 10 — once a
+    //  conversation passed 10 messages the bot lost memory of every
+    //  recent turn and kept re-asking the same questions.)
     const historyResult = await pool.query(
-      `SELECT direction, message FROM sms_messages
-       WHERE lead_id = $1 ORDER BY created_at ASC LIMIT 10`,
+      `SELECT direction, message FROM (
+         SELECT direction, message, created_at FROM sms_messages
+         WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 30
+       ) recent ORDER BY created_at ASC`,
       [leadId]
     );
 
@@ -280,10 +308,22 @@ This is your FIRST outgoing reply — the customer reached out before any automa
       ? `\nYou are ${agentName || 'the assistant'} at ${businessName || 'this business'}.`
       : '';
 
+    // Pin today's date so the model never guesses a weekday from training data.
+    const todayLabel = new Date().toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+    });
+
     const systemPrompt = `You are a friendly service business AI assistant responding to customer SMS.${identityLine}
+
+Today is ${todayLabel}. When the customer mentions a date, work out its weekday from this anchor — do not guess.
 
 Goal: Qualify leads, answer questions, schedule appointments.
 Style: Brief, conversational, SMS-friendly (under 160 chars when possible). Sound like a real human texting — casual, warm, and natural.
+
+Rules:
+- Track what the customer has already told you (date, time, address, vehicles, services). Once they confirm a detail, do not ask for it again.
+- If you already confirmed a booking in a previous turn, do not re-confirm or re-ask for the same fields — just move the conversation forward (e.g., a "thanks" reply gets a brief, friendly acknowledgement, not another booking summary).
+- If you were corrected on something (like a weekday), do not keep apologizing for it in later turns.
 
 NEVER use markdown formatting. No asterisks, no dashes for bullet points, no bold text, no lists. Use plain sentences with commas, periods, exclamations, and question marks only.${firstContactGuidance}
 
