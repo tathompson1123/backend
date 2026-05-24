@@ -1980,6 +1980,46 @@ router.get('/admin/conversations', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/employee/admin/push-status
+// For each teammate: do they have a registered, valid Expo push token,
+// what platform, and when was it last updated? Helps diagnose missing pushes.
+router.get('/admin/push-status', requireAdmin, async (req, res) => {
+  try {
+    const { Expo } = require('expo-server-sdk');
+    const { userId } = req.employee;
+    const result = await pool.query(
+      `SELECT e.id, e.name, e.email, e.color, e.is_admin,
+              ec.push_token, ec.device_platform, ec.updated_at, ec.last_login_at
+       FROM employees e
+       LEFT JOIN employee_credentials ec ON ec.employee_id = e.id
+       WHERE e.user_id = $1
+       ORDER BY e.is_admin DESC, e.name ASC`,
+      [userId]
+    );
+    const members = result.rows.map(r => {
+      const token = r.push_token || null;
+      const valid = !!token && Expo.isExpoPushToken(token);
+      return {
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        color: r.color,
+        is_admin: r.is_admin,
+        has_token: !!token,
+        token_valid: valid,
+        token_status: !token ? 'missing' : valid ? 'ok' : 'invalid',
+        device_platform: r.device_platform,
+        token_updated_at: r.updated_at,
+        last_login_at: r.last_login_at,
+      };
+    });
+    res.json({ members });
+  } catch (e) {
+    console.error('Error fetching push status:', e.message);
+    res.status(500).json({ error: 'Failed to fetch push status' });
+  }
+});
+
 // GET /api/employee/admin/lead-sms-conversations
 // Lead-form (and other non-chat) leads that have at least one SMS exchange.
 // Powers the "Lead SMS" tab on the admin Chats screen.
