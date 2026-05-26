@@ -240,10 +240,66 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
   0%, 60%, 100% { transform: translateY(0); }
   30% { transform: translateY(-10px); }
 }
+/* Mobile dismiss (X) + minimized tiny "i" */
+.chat-dismiss {
+  display: none;
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #1f2937;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+.chat-mini {
+  display: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, ${primaryColor} 0%, ${accentColor} 100%);
+  color: #fff;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  opacity: 0.85;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.chat-mini:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+#sorce-chat-widget.dismissed .chat-bubble,
+#sorce-chat-widget.dismissed .chat-window,
+#sorce-chat-widget.dismissed .chat-dismiss {
+  display: none !important;
+}
+#sorce-chat-widget.dismissed .chat-mini {
+  display: flex;
+}
 @media (max-width: 600px) {
   #sorce-chat-widget {
     bottom: 12px;
     right: 12px;
+  }
+  .chat-dismiss {
+    display: flex;
   }
   .chat-bubble {
     padding: 0;
@@ -285,11 +341,16 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
     if (!widget) return;
 
     const initial = agentName.charAt(0).toUpperCase();
-    widget.innerHTML = '<div class="chat-bubble" onclick="toggleChat()"><div class="chat-bubble-avatar">' + initial + '</div><div class="chat-bubble-info"><span class="chat-bubble-name">' + agentName + '</span><span class="chat-bubble-status"><span class="chat-bubble-dot"></span> Online now</span></div></div><div class="chat-window" id="chat-window"><div class="chat-header"><div class="chat-header-info"><div class="chat-header-avatar">' + initial + '</div><div><h3>' + agentName + '</h3><div class="chat-header-status"><span class="chat-header-status-dot"></span> Online</div></div></div><button class="chat-close" onclick="toggleChat()">\\u00d7</button></div><div class="chat-messages" id="chat-messages"></div><div class="chat-input-area"><textarea class="chat-input" id="chat-input" placeholder="Type your message..." rows="2" onkeypress="handleKeyPress(event)"></textarea><button class="chat-send-btn" onclick="sendMessage()">Send Message</button></div></div>';
+    widget.innerHTML = '<button class="chat-dismiss" onclick="dismissChat(event)" aria-label="Hide chat">\\u00d7</button><div class="chat-bubble" onclick="toggleChat()"><div class="chat-bubble-avatar">' + initial + '</div><div class="chat-bubble-info"><span class="chat-bubble-name">' + agentName + '</span><span class="chat-bubble-status"><span class="chat-bubble-dot"></span> Online now</span></div></div><div class="chat-window" id="chat-window"><div class="chat-header"><div class="chat-header-info"><div class="chat-header-avatar">' + initial + '</div><div><h3>' + agentName + '</h3><div class="chat-header-status"><span class="chat-header-status-dot"></span> Online</div></div></div><button class="chat-close" onclick="toggleChat()">\\u00d7</button></div><div class="chat-messages" id="chat-messages"></div><div class="chat-input-area"><textarea class="chat-input" id="chat-input" placeholder="Type your message..." rows="2" onkeypress="handleKeyPress(event)"></textarea><button class="chat-send-btn" onclick="sendMessage()">Send Message</button></div></div><button class="chat-mini" onclick="restoreChat(event)" aria-label="Open chat">i</button>';
+
+    if (sessionStorage.getItem('chat-dismissed')) {
+      widget.classList.add('dismissed');
+    }
 
     setTimeout(function() {
       const hasOpened = sessionStorage.getItem('chat-opened');
-      if (!isOpen && !hasOpened) {
+      const isDismissed = sessionStorage.getItem('chat-dismissed');
+      if (!isOpen && !hasOpened && !isDismissed) {
         toggleChat();
         addMessage(greetingMessage, 'agent');
         sessionStorage.setItem('chat-opened', 'true');
@@ -305,6 +366,23 @@ function generateChatWidgetCode(userId, agentConfig, websiteColors) {
     if (isOpen && !conversationId) {
       startConversation();
     }
+  };
+
+  window.dismissChat = function(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    isOpen = false;
+    const chatWindow = document.getElementById('chat-window');
+    if (chatWindow) chatWindow.classList.remove('open');
+    const widget = document.getElementById('sorce-chat-widget');
+    if (widget) widget.classList.add('dismissed');
+    sessionStorage.setItem('chat-dismissed', 'true');
+  };
+
+  window.restoreChat = function(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const widget = document.getElementById('sorce-chat-widget');
+    if (widget) widget.classList.remove('dismissed');
+    sessionStorage.removeItem('chat-dismissed');
   };
 
   window.handleKeyPress = function(event) {
