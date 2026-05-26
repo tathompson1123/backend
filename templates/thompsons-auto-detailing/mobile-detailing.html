@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mobile &amp; Full Detailing | Thompson's Auto Detailing — Olympia, WA</title>
+  <meta name="description" content="Full interior and exterior auto detailing in Olympia, WA. In-shop service or mobile to your driveway. Deep clean, polish, protect every surface — with a 100% guarantee." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy: #0f1e3d; --navy-deep: #070d1f; --navy-soft: #1a2b50;
+      --gold: #d4a544; --gold-bright: #f0c265; --gold-deep: #a8842f;
+      --off-white: #f5f3ee; --ink: #1a1a1a; --muted: rgba(245, 243, 238, 0.72);
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', system-ui, sans-serif; color: var(--off-white); background: var(--navy-deep); line-height: 1.6; overflow-x: hidden; }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+
+    /* Topbar + Nav */
+    .topbar { background: var(--navy-deep); color: var(--muted); font-size: 0.85rem; padding: 0.6rem 0; border-bottom: 1px solid rgba(212, 165, 68, 0.15); }
+    .topbar-inner { max-width: 1400px; margin: 0 auto; padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .topbar a { color: var(--gold); transition: color 0.3s; }
+    .topbar a:hover { color: var(--gold-bright); }
+    nav { position: sticky; top: 0; z-index: 1000; background: rgba(15, 30, 61, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid rgba(212, 165, 68, 0.18); }
+    .nav-inner { max-width: 1400px; margin: 0 auto; padding: 1.25rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-family: 'Playfair Display', serif; font-weight: 900; font-size: 1.6rem; color: var(--off-white); letter-spacing: 0.5px; position: relative; padding-bottom: 4px; }
+    .logo::after { content: ''; position: absolute; bottom: 0; left: 0; height: 2px; width: 100%; background: linear-gradient(90deg, var(--gold), transparent); }
+    .logo span { color: var(--gold); }
+    .nav-links { display: flex; gap: 2.25rem; align-items: center; }
+    .nav-links a { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--off-white); transition: color 0.3s; position: relative; padding: 0.5rem 0; }
+    .nav-links a::after { content: ''; position: absolute; bottom: 0; left: 0; width: 0; height: 2px; background: var(--gold); transition: width 0.3s var(--ease-out); }
+    .nav-links a.active { color: var(--gold); }
+    .nav-links a.active::after { width: 100%; }
+    .nav-links a:hover { color: var(--gold); }
+    .nav-links a:hover::after { width: 100%; }
+    .nav-cta { background: var(--gold); color: var(--navy-deep) !important; padding: 0.75rem 1.75rem; border-radius: 2px; letter-spacing: 1.5px; font-weight: 700; transition: transform 0.3s, background 0.3s, box-shadow 0.3s; }
+    .nav-cta::after { display: none !important; }
+    .nav-cta:hover { transform: translateY(-2px); background: var(--gold-bright); box-shadow: 0 12px 30px rgba(212, 165, 68, 0.35); }
+    .menu-toggle { display: none; background: none; border: 0; color: var(--off-white); font-size: 1.6rem; cursor: pointer; }
+
+    /* ---------- HERO with motion lines (mobile/movement theme) ---------- */
+    .page-hero {
+      position: relative; min-height: 70vh; padding: 8rem 2rem 6rem;
+      overflow: hidden; isolation: isolate;
+      display: flex; align-items: center; justify-content: center; text-align: center;
+    }
+    .page-hero-bg {
+      position: absolute; inset: 0; z-index: -3;
+      background: url('https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=1920&q=85') center/cover no-repeat;
+      animation: slowZoom 18s ease-in-out infinite alternate;
+    }
+    @keyframes slowZoom {
+      from { transform: scale(1.05); }
+      to   { transform: scale(1.15); }
+    }
+    .page-hero-overlay {
+      position: absolute; inset: 0; z-index: -2;
+      background: linear-gradient(135deg, rgba(7, 13, 31, 0.85) 0%, rgba(15, 30, 61, 0.7) 50%, rgba(7, 13, 31, 0.95) 100%);
+    }
+
+    /* Motion streaks — horizontal gold lines that race across the hero */
+    .motion-streak {
+      position: absolute; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      opacity: 0; pointer-events: none; z-index: -1;
+      animation: streak 6s linear infinite;
+    }
+    .motion-streak:nth-child(1) { top: 25%; width: 200px; animation-delay: 0s; }
+    .motion-streak:nth-child(2) { top: 55%; width: 320px; animation-delay: 1.5s; }
+    .motion-streak:nth-child(3) { top: 75%; width: 240px; animation-delay: 3s; }
+    .motion-streak:nth-child(4) { top: 40%; width: 180px; animation-delay: 4.5s; }
+    @keyframes streak {
+      0%   { left: -25%; opacity: 0; }
+      15%  { opacity: 0.7; }
+      85%  { opacity: 0.7; }
+      100% { left: 110%; opacity: 0; }
+    }
+
+    /* Gold curtain */
+    .curtain {
+      position: absolute; top: 50%; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      transform-origin: left center; transform: scaleX(0);
+      animation: curtainDraw 1.2s var(--ease-out) 0.2s forwards; z-index: 0;
+    }
+    @keyframes curtainDraw { to { transform: scaleX(1); } }
+
+    .page-hero-inner { position: relative; z-index: 1; max-width: 900px; }
+    .page-eyebrow { display: inline-block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 1.75rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.2s forwards; }
+    .page-eyebrow::before, .page-eyebrow::after { content: ''; display: inline-block; width: 30px; height: 1px; background: var(--gold); vertical-align: middle; margin: 0 0.85rem; }
+    .page-title { font-family: 'Playfair Display', serif; font-size: clamp(2.5rem, 6vw, 4.75rem); font-weight: 900; line-height: 1.05; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 1s var(--ease-out) 1.4s forwards; }
+    .page-title em { font-style: normal; background: linear-gradient(120deg, var(--gold) 0%, var(--gold-bright) 50%, var(--gold) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .page-lede { font-size: clamp(1.05rem, 1.5vw, 1.25rem); color: var(--muted); max-width: 720px; margin: 0 auto 2.5rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.7s forwards; }
+    .page-ctas { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; opacity: 0; animation: fadeUp 0.8s var(--ease-spring) 2s forwards; }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    .btn { display: inline-flex; align-items: center; gap: 0.6rem; padding: 1.1rem 2.4rem; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; border: 2px solid transparent; border-radius: 2px; cursor: pointer; transition: transform 0.3s, background 0.3s, color 0.3s, box-shadow 0.3s; }
+    .btn-primary { background: var(--gold); color: var(--navy-deep); }
+    .btn-primary:hover { background: var(--gold-bright); transform: translateY(-3px); box-shadow: 0 16px 40px rgba(212, 165, 68, 0.4); }
+    .btn-ghost { color: var(--off-white); border-color: rgba(245, 243, 238, 0.4); }
+    .btn-ghost:hover { background: var(--off-white); color: var(--navy-deep); border-color: var(--off-white); transform: translateY(-3px); }
+
+    /* Reveal */
+    .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.8s var(--ease-out), transform 0.8s var(--ease-out); }
+    .reveal.in-view { opacity: 1; transform: translateY(0); }
+    .reveal-stagger > * { opacity: 0; transform: translateY(30px); transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out); }
+    .reveal-stagger.in-view > *:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0s; }
+    .reveal-stagger.in-view > *:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.1s; }
+    .reveal-stagger.in-view > *:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.2s; }
+    .reveal-stagger.in-view > *:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 0.3s; }
+    .reveal-stagger.in-view > *:nth-child(5) { opacity: 1; transform: translateY(0); transition-delay: 0.4s; }
+    .reveal-stagger.in-view > *:nth-child(6) { opacity: 1; transform: translateY(0); transition-delay: 0.5s; }
+
+    section { padding: 6rem 2rem; }
+    .container { max-width: 1280px; margin: 0 auto; }
+    .section-eyebrow { display: block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 1rem; }
+    .section-title { font-family: 'Playfair Display', serif; font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; line-height: 1.15; margin-bottom: 1rem; }
+    .section-lede { color: var(--muted); max-width: 620px; font-size: 1.02rem; }
+    .section-head { text-align: center; margin: 0 auto 4rem; max-width: 720px; }
+    .section-head .section-lede { margin: 0 auto; }
+
+    /* In-shop vs mobile toggle cards */
+    .modes { background: var(--navy-deep); }
+    .modes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    .mode-card {
+      background: var(--navy-soft); border: 1px solid rgba(212, 165, 68, 0.18);
+      padding: 3rem 2.5rem; border-radius: 4px;
+      transition: transform 0.5s, border-color 0.5s, box-shadow 0.5s;
+      position: relative; overflow: hidden;
+    }
+    .mode-card:hover { transform: translateY(-6px); border-color: var(--gold); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4); }
+    .mode-icon {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: rgba(212, 165, 68, 0.12); border: 1px solid var(--gold);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.75rem; color: var(--gold); margin-bottom: 1.5rem;
+    }
+    .mode-card h3 { font-family: 'Playfair Display', serif; font-size: 1.7rem; margin-bottom: 0.6rem; }
+    .mode-card p { color: var(--muted); margin-bottom: 1.5rem; }
+    .mode-card ul { list-style: none; }
+    .mode-card li { padding: 0.6rem 0 0.6rem 1.75rem; position: relative; color: var(--off-white); font-size: 0.95rem; border-bottom: 1px solid rgba(245, 243, 238, 0.06); }
+    .mode-card li::before { content: '✓'; position: absolute; left: 0; color: var(--gold); font-weight: 700; }
+
+    /* Packages */
+    .packages { background: var(--navy); }
+    .pkg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
+    .pkg-card { background: var(--navy-deep); border: 1px solid rgba(212, 165, 68, 0.18); padding: 2.5rem 2rem; border-radius: 4px; transition: transform 0.4s, border-color 0.4s, box-shadow 0.4s; position: relative; }
+    .pkg-card:hover { transform: translateY(-6px); border-color: var(--gold); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4); }
+    .pkg-card.featured { border-color: var(--gold); box-shadow: 0 20px 50px rgba(212, 165, 68, 0.2); }
+    .pkg-card.featured::before { content: 'MOST POPULAR'; position: absolute; top: -12px; left: 2rem; background: var(--gold); color: var(--navy-deep); padding: 0.4rem 0.85rem; font-size: 0.7rem; letter-spacing: 1.5px; font-weight: 700; }
+    .pkg-card .tier { font-size: 0.78rem; letter-spacing: 3px; text-transform: uppercase; color: var(--gold); margin-bottom: 1rem; }
+    .pkg-card .price { font-family: 'Playfair Display', serif; font-size: 2.5rem; font-weight: 700; color: var(--off-white); margin-bottom: 0.5rem; }
+    .pkg-card .price small { font-size: 1rem; color: var(--muted); font-weight: 400; }
+    .pkg-card .price-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .pkg-section-label { display: block; font-size: 0.72rem; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin: 1.25rem 0 0.5rem; padding-top: 1rem; border-top: 1px solid rgba(212, 165, 68, 0.15); }
+    .pkg-card ul { list-style: none; margin-bottom: 0.5rem; }
+    .pkg-card li { padding: 0.45rem 0 0.45rem 1.5rem; position: relative; color: var(--muted); font-size: 0.88rem; }
+    .pkg-card li::before { content: '✓'; position: absolute; left: 0; color: var(--gold); font-weight: 700; }
+    .pkg-card .btn { width: 100%; justify-content: center; margin-top: 1.5rem; }
+
+    /* Service area */
+    .area { background: linear-gradient(180deg, var(--navy-deep), var(--navy)); text-align: center; }
+    .area-list { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
+    .area-pill { padding: 0.7rem 1.5rem; border: 1px solid rgba(212, 165, 68, 0.4); border-radius: 100px; color: var(--off-white); font-size: 0.9rem; transition: background 0.3s, color 0.3s, border-color 0.3s, transform 0.3s var(--ease-out); }
+    .area-pill:hover { background: var(--gold); color: var(--navy-deep); border-color: var(--gold); transform: translateY(-3px); }
+
+    /* FAQ */
+    .faq { background: var(--navy-deep); }
+    .faq-list { max-width: 820px; margin: 0 auto; }
+    .faq-item { border-bottom: 1px solid rgba(212, 165, 68, 0.18); padding: 1.5rem 0; }
+    .faq-q { display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 1rem; font-family: 'Playfair Display', serif; font-size: 1.2rem; color: var(--off-white); }
+    .faq-toggle { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--gold); display: flex; align-items: center; justify-content: center; color: var(--gold); transition: transform 0.4s var(--ease-out); }
+    .faq-item[open] .faq-toggle { transform: rotate(45deg); background: var(--gold); color: var(--navy-deep); }
+    .faq-a { color: var(--muted); padding-top: 1rem; font-size: 0.97rem; }
+    .faq-q::-webkit-details-marker { display: none; }
+
+    /* CTA */
+    .cta-band { background: linear-gradient(120deg, var(--navy) 0%, var(--navy-soft) 50%, var(--navy) 100%); text-align: center; padding: 6rem 2rem; position: relative; overflow: hidden; }
+    .cta-band::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(212, 165, 68, 0.18) 0%, transparent 60%); }
+    .cta-band > * { position: relative; z-index: 1; }
+    .cta-band h2 { font-family: 'Playfair Display', serif; font-size: clamp(2rem, 4vw, 3rem); margin-bottom: 1rem; }
+    .cta-band p { color: var(--muted); margin-bottom: 2rem; font-size: 1.05rem; }
+
+    /* Footer */
+    footer { background: var(--navy-deep); padding: 4rem 2rem 2rem; border-top: 1px solid rgba(212, 165, 68, 0.18); }
+    .footer-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 3rem; max-width: 1280px; margin: 0 auto 3rem; }
+    .footer-brand h4 { font-family: 'Playfair Display', serif; color: var(--off-white); font-size: 1.4rem; margin-bottom: 0.5rem; }
+    .footer-brand h4 span { color: var(--gold); }
+    .footer-brand p { color: var(--muted); font-size: 0.95rem; }
+    .footer-col h5 { font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin-bottom: 1rem; }
+    .footer-col a, .footer-col p { color: var(--muted); display: block; margin-bottom: 0.5rem; transition: color 0.3s; font-size: 0.95rem; }
+    .footer-col a:hover { color: var(--gold); }
+    .socials { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+    .socials a { width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(212, 165, 68, 0.4); display: inline-flex; align-items: center; justify-content: center; color: var(--gold); margin: 0; transition: all 0.3s; }
+    .socials a:hover { background: var(--gold); color: var(--navy-deep); transform: translateY(-3px); }
+    .footer-bottom { max-width: 1280px; margin: 0 auto; padding-top: 2rem; border-top: 1px solid rgba(245, 243, 238, 0.1); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; color: var(--muted); font-size: 0.85rem; }
+
+    @media (max-width: 900px) {
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; gap: 0; background: var(--navy-deep); padding: 1rem 2rem; border-bottom: 1px solid rgba(212, 165, 68, 0.18); }
+      .nav-links.open { display: flex; }
+      .nav-links a { padding: 1rem 0; }
+      .menu-toggle { display: block; }
+      .topbar-inner { flex-direction: column; gap: 0.4rem; text-align: center; font-size: 0.78rem; }
+      .modes-grid, .pkg-grid, .footer-grid { grid-template-columns: 1fr; gap: 2rem; }
+      section { padding: 4.5rem 1.5rem; }
+      .footer-bottom { flex-direction: column; text-align: center; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+  </style>
+</head>
+<body>
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <span>📞 <a href="tel:3604631391">360-463-1391</a> &nbsp;|&nbsp; ✉ <a href="mailto:ty@thompsonsautodetailing.com">ty@thompsonsautodetailing.com</a></span>
+      <span>Mon–Fri 7:30 AM – 5:00 PM &nbsp;·&nbsp; Olympia, WA</span>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-inner">
+      <a href="index.html" class="logo">Thompson's<span>.</span></a>
+      <button class="menu-toggle" aria-label="Toggle menu">☰</button>
+      <div class="nav-links" id="navLinks">
+        <a href="liquid-ppf.html">Liquid PPF</a>
+        <a href="ceramic-coating.html">Ceramic Coating</a>
+        <a href="window-tint.html">Window Tint</a>
+        <a href="mobile-detailing.html" class="active">Detailing</a>
+        <a href="gift-cards.html">Gift Cards</a>
+        <a href="contact.html" class="nav-cta">Book Now</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Page hero with motion streaks -->
+  <header class="page-hero">
+    <div class="page-hero-bg"></div>
+    <div class="page-hero-overlay"></div>
+    <span class="motion-streak"></span>
+    <span class="motion-streak"></span>
+    <span class="motion-streak"></span>
+    <span class="motion-streak"></span>
+    <div class="curtain" aria-hidden="true"></div>
+
+    <div class="page-hero-inner">
+      <span class="page-eyebrow">In-shop · Mobile</span>
+      <h1 class="page-title">Full <em>Detailing</em>.</h1>
+      <p class="page-lede">
+        Top-to-bottom interior and exterior detailing — at our climate-controlled studio in Olympia, or mobile to your driveway anywhere in Thurston County. Deep clean, polish, and protect every surface.
+      </p>
+      <div class="page-ctas">
+        <a href="contact.html" class="btn btn-primary">Book a detail</a>
+        <a href="#packages" class="btn btn-ghost">See packages</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- In-shop vs Mobile -->
+  <section class="modes">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Two ways to book</span>
+        <h2 class="section-title">In our shop, or in your driveway.</h2>
+        <p class="section-lede">Both deliver the same quality result. Pick what fits your week.</p>
+      </div>
+
+      <div class="modes-grid reveal-stagger">
+        <div class="mode-card">
+          <div class="mode-icon">🏠</div>
+          <h3>In-Shop Service</h3>
+          <p>Drop off at our climate-controlled studio at 6235 Rich Rd SE in Olympia. We handle the rest, you pick up a finished vehicle.</p>
+          <ul>
+            <li>Climate-controlled environment for paint correction</li>
+            <li>Lift access for full undercarriage detail</li>
+            <li>Faster turnaround (no setup time)</li>
+            <li>Best option for ceramic, PPF, and tint</li>
+          </ul>
+        </div>
+
+        <div class="mode-card">
+          <div class="mode-icon">🚐</div>
+          <h3>Mobile Service</h3>
+          <p>We come to you with water, power, and every tool we need. Driveway, parking lot, office — wherever you can leave the car for a few hours.</p>
+          <ul>
+            <li>Fully self-contained — no hookups needed</li>
+            <li>Travel-friendly throughout Thurston County</li>
+            <li>Best for full details &amp; maintenance washes</li>
+            <li>Save the trip — we bring the shop to you</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Packages -->
+  <section class="packages" id="packages">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Packages</span>
+        <h2 class="section-title">Pick your detail.</h2>
+        <p class="section-lede">Three tiers that cover everything from a quick refresh to a full restoration. Pricing varies by vehicle size — contact for an exact quote.</p>
+      </div>
+
+      <div class="pkg-grid reveal-stagger">
+        <div class="pkg-card">
+          <div class="tier">Express</div>
+          <div class="price">$149<small> +</small></div>
+          <p class="price-desc">A quick refresh, inside and out</p>
+          <span class="pkg-section-label">Exterior</span>
+          <ul>
+            <li>Foam wash &amp; rinse</li>
+            <li>Wheels &amp; tires cleaned</li>
+            <li>Spray sealant for gloss</li>
+            <li>Windows cleaned</li>
+          </ul>
+          <span class="pkg-section-label">Interior</span>
+          <ul>
+            <li>Vacuum floors &amp; seats</li>
+            <li>Wipe-down of all surfaces</li>
+            <li>Interior glass cleaned</li>
+          </ul>
+          <a href="contact.html" class="btn btn-ghost">Book Express</a>
+        </div>
+
+        <div class="pkg-card featured">
+          <div class="tier">Signature ★</div>
+          <div class="price">$329<small> +</small></div>
+          <p class="price-desc">Full interior + exterior detail</p>
+          <span class="pkg-section-label">Exterior</span>
+          <ul>
+            <li>Decontamination wash + clay treatment</li>
+            <li>Hand polish &amp; spray sealant</li>
+            <li>Wheels deep-cleaned, tires dressed</li>
+            <li>Trim &amp; chrome restoration</li>
+          </ul>
+          <span class="pkg-section-label">Interior</span>
+          <ul>
+            <li>Deep vacuum (seats, floor, trunk)</li>
+            <li>Steam clean &amp; shampoo carpets</li>
+            <li>Leather clean &amp; condition</li>
+            <li>All surfaces deep-cleaned</li>
+            <li>UV protectant applied</li>
+          </ul>
+          <a href="contact.html" class="btn btn-primary">Book Signature</a>
+        </div>
+
+        <div class="pkg-card">
+          <div class="tier">Restoration</div>
+          <div class="price">$649<small> +</small></div>
+          <p class="price-desc">Bring it back to like-new</p>
+          <span class="pkg-section-label">Exterior</span>
+          <ul>
+            <li>Everything in Signature</li>
+            <li>Multi-stage paint correction</li>
+            <li>Removes swirl marks &amp; light scratches</li>
+            <li>Long-term spray ceramic finish</li>
+          </ul>
+          <span class="pkg-section-label">Interior</span>
+          <ul>
+            <li>Everything in Signature</li>
+            <li>Pet-hair removal (heavy)</li>
+            <li>Stain &amp; odor treatment</li>
+            <li>Headliner &amp; trunk shampoo</li>
+          </ul>
+          <a href="contact.html" class="btn btn-ghost">Book Restoration</a>
+        </div>
+      </div>
+
+      <p style="text-align: center; color: var(--muted); margin-top: 2rem; font-size: 0.85rem;">
+        <em>Looking for long-term protection? Add a <a href="ceramic-coating.html" style="color: var(--gold);">ceramic coating</a> or <a href="liquid-ppf.html" style="color: var(--gold);">NANOPRO Liquid PPF</a> to lock in the finish.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- Service area -->
+  <section class="area">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Mobile coverage</span>
+        <h2 class="section-title">Where we travel.</h2>
+        <p class="section-lede">Mobile detailing across the South Sound. Outside the area? Get in touch — we'll likely make it work.</p>
+      </div>
+      <div class="area-list reveal-stagger">
+        <a class="area-pill">Olympia</a>
+        <a class="area-pill">Tumwater</a>
+        <a class="area-pill">Lacey</a>
+        <a class="area-pill">Shelton</a>
+        <a class="area-pill">Lakewood</a>
+        <a class="area-pill">Thurston County</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Common questions</span>
+        <h2 class="section-title">What buyers ask us.</h2>
+      </div>
+
+      <div class="faq-list reveal">
+        <details class="faq-item">
+          <summary class="faq-q">How long does a full detail take?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Express is 1.5–2 hours. Signature is 4–6 hours. Restoration runs 6–10 hours depending on the condition. We'll give you an honest estimate when you book.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Do I need to be there for mobile service?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Not the whole time. We just need access to the car and a place to set up. Most clients leave the keys with us and run errands while we work.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Do you bring your own water and power?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Yes. Our mobile rig is fully self-contained — water tank, generator, lights, all the supplies. We don't need anything from your house.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">What if it's raining the day of my mobile appointment?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Light rain is fine — we work under canopies. Heavy weather, we'll reach out the day before to reschedule or move you to our shop. No charges for weather reschedules.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can you remove pet hair, stains, or odors?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Yes. Heavy pet hair, set-in stains, and persistent odors are part of the Restoration package. Tell us what you're dealing with when you book and we'll quote accordingly.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">What's your guarantee?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">100% money-back. If you don't love how it looks when we hand the keys back, you don't pay. We've never had to honor it — and we don't plan to.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA band -->
+  <section class="cta-band reveal">
+    <h2>Get that new-car feeling back.</h2>
+    <p>Book in 60 seconds — or text us a few photos and tell us what you're hoping to fix.</p>
+    <a href="contact.html" class="btn btn-primary">Book a detail →</a>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <h4>Thompson's<span>.</span> Auto Detailing</h4>
+        <p>Olympia's most trusted auto detailing experts. Owner-operated, obsessive about gloss.</p>
+        <div class="socials">
+          <a href="https://www.facebook.com/profile.php?id=61563306155246" aria-label="Facebook" target="_blank" rel="noopener">f</a>
+          <a href="https://www.instagram.com/thompsonsautodetailingolympia/" aria-label="Instagram" target="_blank" rel="noopener">◎</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h5>Services</h5>
+        <a href="liquid-ppf.html">NANOPRO Liquid PPF</a>
+        <a href="ceramic-coating.html">Ceramic Coating</a>
+        <a href="window-tint.html">Window Tint</a>
+        <a href="mobile-detailing.html">Mobile Detailing</a>
+        <a href="gift-cards.html">Gift Cards</a>
+      </div>
+      <div class="footer-col">
+        <h5>Visit</h5>
+        <p>6235 Rich Rd SE, Unit C<br />Olympia, WA 98501</p>
+        <p>Mon–Fri: 7:30 AM – 5:00 PM<br />Sat–Sun: Closed</p>
+      </div>
+      <div class="footer-col">
+        <h5>Contact</h5>
+        <a href="tel:3604631391">360-463-1391</a>
+        <a href="mailto:ty@thompsonsautodetailing.com">ty@thompsonsautodetailing.com</a>
+        <a href="contact.html">Book Online →</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Thompson's Auto Detailing. All rights reserved.</span>
+      <span><a href="#">Terms</a> · <a href="#">Privacy</a> · <a href="#">Cancellation</a></span>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.querySelector('.menu-toggle');
+    const links = document.getElementById('navLinks');
+    toggle?.addEventListener('click', () => links.classList.toggle('open'));
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+    document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => io.observe(el));
+  </script>
+
+</body>
+</html>

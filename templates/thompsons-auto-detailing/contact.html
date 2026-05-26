@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Book Online &amp; Contact | Thompson's Auto Detailing — Olympia, WA</title>
+  <meta name="description" content="Book your auto detailing appointment with Thompson's in Olympia, WA. Call 360-463-1391, email ty@thompsonsautodetailing.com, or send a message below." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy: #0f1e3d; --navy-deep: #070d1f; --navy-soft: #1a2b50;
+      --gold: #d4a544; --gold-bright: #f0c265; --gold-deep: #a8842f;
+      --off-white: #f5f3ee; --ink: #1a1a1a; --muted: rgba(245, 243, 238, 0.72);
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', system-ui, sans-serif; color: var(--off-white); background: var(--navy-deep); line-height: 1.6; overflow-x: hidden; }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+
+    /* Topbar + Nav */
+    .topbar { background: var(--navy-deep); color: var(--muted); font-size: 0.85rem; padding: 0.6rem 0; border-bottom: 1px solid rgba(212, 165, 68, 0.15); }
+    .topbar-inner { max-width: 1400px; margin: 0 auto; padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .topbar a { color: var(--gold); transition: color 0.3s; }
+    .topbar a:hover { color: var(--gold-bright); }
+    nav { position: sticky; top: 0; z-index: 1000; background: rgba(15, 30, 61, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid rgba(212, 165, 68, 0.18); }
+    .nav-inner { max-width: 1400px; margin: 0 auto; padding: 1.25rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-family: 'Playfair Display', serif; font-weight: 900; font-size: 1.6rem; color: var(--off-white); letter-spacing: 0.5px; position: relative; padding-bottom: 4px; }
+    .logo::after { content: ''; position: absolute; bottom: 0; left: 0; height: 2px; width: 100%; background: linear-gradient(90deg, var(--gold), transparent); }
+    .logo span { color: var(--gold); }
+    .nav-links { display: flex; gap: 2.25rem; align-items: center; }
+    .nav-links a { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--off-white); transition: color 0.3s; position: relative; padding: 0.5rem 0; }
+    .nav-links a::after { content: ''; position: absolute; bottom: 0; left: 0; width: 0; height: 2px; background: var(--gold); transition: width 0.3s var(--ease-out); }
+    .nav-links a.active { color: var(--gold); }
+    .nav-links a.active::after { width: 100%; }
+    .nav-links a:hover { color: var(--gold); }
+    .nav-links a:hover::after { width: 100%; }
+    .nav-cta { background: var(--gold); color: var(--navy-deep) !important; padding: 0.75rem 1.75rem; border-radius: 2px; letter-spacing: 1.5px; font-weight: 700; transition: transform 0.3s, background 0.3s, box-shadow 0.3s; }
+    .nav-cta::after { display: none !important; }
+    .nav-cta:hover { transform: translateY(-2px); background: var(--gold-bright); box-shadow: 0 12px 30px rgba(212, 165, 68, 0.35); }
+    .menu-toggle { display: none; background: none; border: 0; color: var(--off-white); font-size: 1.6rem; cursor: pointer; }
+
+    /* HERO — minimal, focused on contact */
+    .page-hero {
+      position: relative; padding: 7rem 2rem 4rem;
+      overflow: hidden; isolation: isolate; text-align: center;
+    }
+    .page-hero-bg {
+      position: absolute; inset: 0; z-index: -2;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(212, 165, 68, 0.18) 0%, transparent 60%),
+        linear-gradient(180deg, var(--navy-deep) 0%, var(--navy) 100%);
+    }
+    .curtain { position: absolute; top: 50%; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--gold), transparent); transform-origin: left center; transform: scaleX(0); animation: curtainDraw 1.2s var(--ease-out) 0.2s forwards; z-index: 0; }
+    @keyframes curtainDraw { to { transform: scaleX(1); } }
+
+    .page-hero-inner { position: relative; z-index: 1; max-width: 800px; margin: 0 auto; }
+    .page-eyebrow { display: inline-block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.2s forwards; }
+    .page-eyebrow::before, .page-eyebrow::after { content: ''; display: inline-block; width: 30px; height: 1px; background: var(--gold); vertical-align: middle; margin: 0 0.85rem; }
+    .page-title { font-family: 'Playfair Display', serif; font-size: clamp(2.5rem, 5.5vw, 4rem); font-weight: 900; line-height: 1.05; margin-bottom: 1.25rem; opacity: 0; animation: fadeUp 1s var(--ease-out) 1.4s forwards; }
+    .page-title em { font-style: normal; background: linear-gradient(120deg, var(--gold) 0%, var(--gold-bright) 50%, var(--gold) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .page-lede { color: var(--muted); font-size: 1.1rem; max-width: 620px; margin: 0 auto; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.7s forwards; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    .btn { display: inline-flex; align-items: center; gap: 0.6rem; padding: 1.1rem 2.4rem; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; border: 2px solid transparent; border-radius: 2px; cursor: pointer; transition: transform 0.3s, background 0.3s, color 0.3s, box-shadow 0.3s; }
+    .btn-primary { background: var(--gold); color: var(--navy-deep); }
+    .btn-primary:hover { background: var(--gold-bright); transform: translateY(-3px); box-shadow: 0 16px 40px rgba(212, 165, 68, 0.4); }
+
+    /* Reveal */
+    .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.8s var(--ease-out), transform 0.8s var(--ease-out); }
+    .reveal.in-view { opacity: 1; transform: translateY(0); }
+    .reveal-stagger > * { opacity: 0; transform: translateY(30px); transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out); }
+    .reveal-stagger.in-view > *:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0s; }
+    .reveal-stagger.in-view > *:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.12s; }
+    .reveal-stagger.in-view > *:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.24s; }
+    .reveal-stagger.in-view > *:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 0.36s; }
+
+    section { padding: 5rem 2rem; }
+    .container { max-width: 1280px; margin: 0 auto; }
+
+    /* Contact methods grid */
+    .methods { background: var(--navy-deep); padding-top: 2rem; }
+    .methods-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+    .method-card {
+      background: var(--navy-soft); border: 1px solid rgba(212, 165, 68, 0.18);
+      padding: 2rem; border-radius: 4px; text-align: center;
+      transition: transform 0.4s, border-color 0.4s, box-shadow 0.4s;
+    }
+    .method-card:hover { transform: translateY(-6px); border-color: var(--gold); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4); }
+    .method-icon {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: rgba(212, 165, 68, 0.12); border: 1px solid var(--gold);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; color: var(--gold); margin-bottom: 1.25rem;
+    }
+    .method-card h3 { font-family: 'Playfair Display', serif; font-size: 1.2rem; margin-bottom: 0.5rem; }
+    .method-card a { color: var(--gold); font-weight: 600; font-size: 0.95rem; word-break: break-word; }
+    .method-card a:hover { color: var(--gold-bright); }
+    .method-card p { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+
+    /* Form + map split */
+    .book { background: var(--navy); }
+    .book-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 4rem; align-items: stretch; }
+
+    .form-wrap {
+      background: var(--navy-deep); border: 1px solid rgba(212, 165, 68, 0.18);
+      border-radius: 4px; padding: 3rem;
+    }
+    .form-wrap h2 { font-family: 'Playfair Display', serif; font-size: 2rem; margin-bottom: 0.5rem; }
+    .form-wrap > p { color: var(--muted); margin-bottom: 2rem; font-size: 0.97rem; }
+
+    .field { margin-bottom: 1.25rem; }
+    .field label {
+      display: block; font-size: 0.78rem; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--gold); font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .field input, .field select, .field textarea {
+      width: 100%; padding: 0.85rem 1rem;
+      background: var(--navy); border: 1px solid rgba(212, 165, 68, 0.25);
+      border-radius: 2px; color: var(--off-white); font-family: inherit;
+      font-size: 0.95rem;
+      transition: border-color 0.3s, background 0.3s;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      outline: none; border-color: var(--gold); background: var(--navy-soft);
+    }
+    .field textarea { min-height: 140px; resize: vertical; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .field-note { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; }
+    .submit-btn { width: 100%; justify-content: center; margin-top: 0.5rem; }
+
+    /* Map + info */
+    .info-wrap { display: flex; flex-direction: column; gap: 2rem; }
+    .map-frame {
+      flex: 1; min-height: 280px;
+      border: 1px solid rgba(212, 165, 68, 0.18);
+      border-radius: 4px; overflow: hidden;
+      background: var(--navy-soft);
+      display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 2rem;
+      position: relative;
+    }
+    /* Stylized "map" — replace with real Wix Maps element when porting */
+    .map-frame::before {
+      content: ''; position: absolute; inset: 0;
+      background:
+        repeating-linear-gradient(0deg, transparent 0, transparent 30px, rgba(212, 165, 68, 0.06) 30px, rgba(212, 165, 68, 0.06) 31px),
+        repeating-linear-gradient(90deg, transparent 0, transparent 30px, rgba(212, 165, 68, 0.06) 30px, rgba(212, 165, 68, 0.06) 31px),
+        radial-gradient(circle at 50% 50%, rgba(212, 165, 68, 0.15), transparent 60%);
+    }
+    .map-pin {
+      position: relative; z-index: 1;
+      background: var(--gold); color: var(--navy-deep);
+      padding: 1rem 1.5rem; border-radius: 4px;
+      box-shadow: 0 8px 30px rgba(212, 165, 68, 0.4);
+      font-weight: 700; font-size: 0.9rem; letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .map-pin::after {
+      content: ''; position: absolute;
+      bottom: -10px; left: 50%; transform: translateX(-50%);
+      border-left: 10px solid transparent; border-right: 10px solid transparent;
+      border-top: 10px solid var(--gold);
+    }
+    .info-panel {
+      background: var(--navy-deep); border: 1px solid rgba(212, 165, 68, 0.18);
+      border-radius: 4px; padding: 2rem;
+    }
+    .info-panel h3 { font-family: 'Playfair Display', serif; font-size: 1.4rem; margin-bottom: 1rem; }
+    .info-row { display: flex; gap: 1rem; padding: 0.85rem 0; border-bottom: 1px solid rgba(245, 243, 238, 0.06); align-items: flex-start; }
+    .info-row:last-child { border-bottom: 0; }
+    .info-icon { width: 32px; flex-shrink: 0; color: var(--gold); font-size: 1.1rem; padding-top: 2px; }
+    .info-row .info-label { font-size: 0.7rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); display: block; margin-bottom: 0.2rem; }
+    .info-row .info-value { color: var(--off-white); font-size: 0.95rem; }
+    .info-row .info-value a { color: var(--off-white); transition: color 0.3s; }
+    .info-row .info-value a:hover { color: var(--gold); }
+
+    /* Footer */
+    footer { background: var(--navy-deep); padding: 4rem 2rem 2rem; border-top: 1px solid rgba(212, 165, 68, 0.18); }
+    .footer-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 3rem; max-width: 1280px; margin: 0 auto 3rem; }
+    .footer-brand h4 { font-family: 'Playfair Display', serif; color: var(--off-white); font-size: 1.4rem; margin-bottom: 0.5rem; }
+    .footer-brand h4 span { color: var(--gold); }
+    .footer-brand p { color: var(--muted); font-size: 0.95rem; }
+    .footer-col h5 { font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin-bottom: 1rem; }
+    .footer-col a, .footer-col p { color: var(--muted); display: block; margin-bottom: 0.5rem; transition: color 0.3s; font-size: 0.95rem; }
+    .footer-col a:hover { color: var(--gold); }
+    .socials { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+    .socials a { width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(212, 165, 68, 0.4); display: inline-flex; align-items: center; justify-content: center; color: var(--gold); margin: 0; transition: all 0.3s; }
+    .socials a:hover { background: var(--gold); color: var(--navy-deep); transform: translateY(-3px); }
+    .footer-bottom { max-width: 1280px; margin: 0 auto; padding-top: 2rem; border-top: 1px solid rgba(245, 243, 238, 0.1); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; color: var(--muted); font-size: 0.85rem; }
+
+    @media (max-width: 900px) {
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; gap: 0; background: var(--navy-deep); padding: 1rem 2rem; border-bottom: 1px solid rgba(212, 165, 68, 0.18); }
+      .nav-links.open { display: flex; }
+      .nav-links a { padding: 1rem 0; }
+      .menu-toggle { display: block; }
+      .topbar-inner { flex-direction: column; gap: 0.4rem; text-align: center; font-size: 0.78rem; }
+      .methods-grid { grid-template-columns: 1fr 1fr; }
+      .book-grid, .footer-grid { grid-template-columns: 1fr; gap: 2rem; }
+      .field-row { grid-template-columns: 1fr; }
+      .form-wrap { padding: 2rem 1.5rem; }
+      section { padding: 3.5rem 1.5rem; }
+      .footer-bottom { flex-direction: column; text-align: center; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+  </style>
+</head>
+<body>
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <span>📞 <a href="tel:3604631391">360-463-1391</a> &nbsp;|&nbsp; ✉ <a href="mailto:ty@thompsonsautodetailing.com">ty@thompsonsautodetailing.com</a></span>
+      <span>Mon–Fri 7:30 AM – 5:00 PM &nbsp;·&nbsp; Olympia, WA</span>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-inner">
+      <a href="index.html" class="logo">Thompson's<span>.</span></a>
+      <button class="menu-toggle" aria-label="Toggle menu">☰</button>
+      <div class="nav-links" id="navLinks">
+        <a href="liquid-ppf.html">Liquid PPF</a>
+        <a href="ceramic-coating.html">Ceramic Coating</a>
+        <a href="window-tint.html">Window Tint</a>
+        <a href="mobile-detailing.html">Detailing</a>
+        <a href="gift-cards.html">Gift Cards</a>
+        <a href="contact.html" class="nav-cta active">Book Now</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Page hero -->
+  <header class="page-hero">
+    <div class="page-hero-bg"></div>
+    <div class="curtain" aria-hidden="true"></div>
+    <div class="page-hero-inner">
+      <span class="page-eyebrow">Book online · Get a quote</span>
+      <h1 class="page-title">Get in <em>touch</em>.</h1>
+      <p class="page-lede">Tell us about your car and what you're after — we'll come back with an exact quote, usually within a few hours.</p>
+    </div>
+  </header>
+
+  <!-- Contact methods -->
+  <section class="methods">
+    <div class="container">
+      <div class="methods-grid reveal-stagger">
+        <div class="method-card">
+          <div class="method-icon">📞</div>
+          <h3>Call</h3>
+          <a href="tel:3604631391">360-463-1391</a>
+          <p>Mon–Fri, 7:30–5:00</p>
+        </div>
+        <div class="method-card">
+          <div class="method-icon">💬</div>
+          <h3>Text</h3>
+          <a href="sms:3604631391">360-463-1391</a>
+          <p>Send us photos for a quote</p>
+        </div>
+        <div class="method-card">
+          <div class="method-icon">✉</div>
+          <h3>Email</h3>
+          <a href="mailto:ty@thompsonsautodetailing.com">ty@<wbr/>thompsons<wbr/>auto<wbr/>detailing.com</a>
+          <p>Reply within 24 hrs</p>
+        </div>
+        <div class="method-card">
+          <div class="method-icon">📍</div>
+          <h3>Visit</h3>
+          <a href="https://www.google.com/maps/dir//6235+Rich+Rd+SE+%23C,+Olympia,+WA+98501" target="_blank" rel="noopener">6235 Rich Rd SE, Unit C<br />Olympia, WA 98501</a>
+          <p>Climate-controlled studio</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Form + map -->
+  <section class="book">
+    <div class="container">
+      <div class="book-grid">
+        <!--
+          === WIX PORT NOTE ===
+          Replace this entire <form> with a Wix Form element when porting.
+          Wix Form will automatically:
+            - Submit to Wix CRM
+            - Send confirmation emails
+            - Handle reCAPTCHA
+            - Validate fields
+          Use the field labels below as a spec for the Wix Form fields.
+        -->
+        <div class="form-wrap reveal">
+          <h2>Request a quote</h2>
+          <p>Tell us about your car and what you'd like done. We'll respond with a quote within 24 hours.</p>
+
+          <form name="quote-request" onsubmit="event.preventDefault(); alert('In Wix, replace this form with a Wix Form element. See README.md for details.'); return false;">
+            <div class="field-row">
+              <div class="field">
+                <label for="name">Your name</label>
+                <input type="text" id="name" name="name" required />
+              </div>
+              <div class="field">
+                <label for="phone">Phone</label>
+                <input type="tel" id="phone" name="phone" required />
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="email">Email</label>
+              <input type="email" id="email" name="email" required />
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label for="vehicle">Year / Make / Model</label>
+                <input type="text" id="vehicle" name="vehicle" placeholder="2022 Toyota Tacoma" required />
+              </div>
+              <div class="field">
+                <label for="service">Service interested in</label>
+                <select id="service" name="service" required>
+                  <option value="">Select a service…</option>
+                  <option value="liquid-ppf">NANOPRO Liquid PPF</option>
+                  <option value="ceramic">Ceramic Coating</option>
+                  <option value="tint">Window Tint</option>
+                  <option value="detail-express">Detail — Express</option>
+                  <option value="detail-signature">Detail — Signature</option>
+                  <option value="detail-restoration">Detail — Restoration</option>
+                  <option value="mobile">Mobile Detailing</option>
+                  <option value="gift-card">Gift Card</option>
+                  <option value="other">Something else</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="location">Mobile or in-shop?</label>
+              <select id="location" name="location">
+                <option value="in-shop">In-shop (Olympia)</option>
+                <option value="mobile">Mobile (you come to me)</option>
+                <option value="not-sure">Not sure yet</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="message">Tell us more</label>
+              <textarea id="message" name="message" placeholder="Anything specific you want addressed — paint condition, pet hair, smoke odor, water spots, timing preferences, etc."></textarea>
+              <p class="field-note">Photos help. Text us at 360-463-1391 after submitting if you want to send some.</p>
+            </div>
+
+            <button type="submit" class="btn btn-primary submit-btn">Send Request →</button>
+          </form>
+        </div>
+
+        <div class="info-wrap reveal">
+          <!--
+            === WIX PORT NOTE ===
+            Replace .map-frame with a Wix Maps element pointing to:
+            6235 Rich Rd SE, Unit C, Olympia, WA 98501
+          -->
+          <a href="https://www.google.com/maps/dir//6235+Rich+Rd+SE+%23C,+Olympia,+WA+98501" target="_blank" rel="noopener" class="map-frame">
+            <span class="map-pin">📍 6235 Rich Rd SE</span>
+          </a>
+
+          <div class="info-panel">
+            <h3>Visit the studio</h3>
+            <div class="info-row">
+              <div class="info-icon">📍</div>
+              <div>
+                <span class="info-label">Address</span>
+                <span class="info-value"><a href="https://www.google.com/maps/dir//6235+Rich+Rd+SE+%23C,+Olympia,+WA+98501" target="_blank" rel="noopener">6235 Rich Rd SE, Unit C<br />Olympia, WA 98501</a></span>
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon">🕐</div>
+              <div>
+                <span class="info-label">Hours</span>
+                <span class="info-value">Mon–Fri: 7:30 AM – 5:00 PM<br />Sat–Sun: Closed</span>
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon">📞</div>
+              <div>
+                <span class="info-label">Phone</span>
+                <span class="info-value"><a href="tel:3604631391">360-463-1391</a></span>
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon">✉</div>
+              <div>
+                <span class="info-label">Email</span>
+                <span class="info-value"><a href="mailto:ty@thompsonsautodetailing.com">ty@thompsonsautodetailing.com</a></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <h4>Thompson's<span>.</span> Auto Detailing</h4>
+        <p>Olympia's most trusted auto detailing experts. Owner-operated, obsessive about gloss.</p>
+        <div class="socials">
+          <a href="https://www.facebook.com/profile.php?id=61563306155246" aria-label="Facebook" target="_blank" rel="noopener">f</a>
+          <a href="https://www.instagram.com/thompsonsautodetailingolympia/" aria-label="Instagram" target="_blank" rel="noopener">◎</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h5>Services</h5>
+        <a href="liquid-ppf.html">NANOPRO Liquid PPF</a>
+        <a href="ceramic-coating.html">Ceramic Coating</a>
+        <a href="window-tint.html">Window Tint</a>
+        <a href="mobile-detailing.html">Mobile Detailing</a>
+        <a href="gift-cards.html">Gift Cards</a>
+      </div>
+      <div class="footer-col">
+        <h5>Visit</h5>
+        <p>6235 Rich Rd SE, Unit C<br />Olympia, WA 98501</p>
+        <p>Mon–Fri: 7:30 AM – 5:00 PM<br />Sat–Sun: Closed</p>
+      </div>
+      <div class="footer-col">
+        <h5>Contact</h5>
+        <a href="tel:3604631391">360-463-1391</a>
+        <a href="mailto:ty@thompsonsautodetailing.com">ty@thompsonsautodetailing.com</a>
+        <a href="contact.html">Book Online →</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Thompson's Auto Detailing. All rights reserved.</span>
+      <span><a href="#">Terms</a> · <a href="#">Privacy</a> · <a href="#">Cancellation</a></span>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.querySelector('.menu-toggle');
+    const links = document.getElementById('navLinks');
+    toggle?.addEventListener('click', () => links.classList.toggle('open'));
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+    document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => io.observe(el));
+  </script>
+
+</body>
+</html>

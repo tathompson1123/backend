@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NANOPRO Liquid PPF | Thompson's Auto Detailing — Olympia, WA</title>
+  <meta name="description" content="NANOPRO Liquid Paint Protection Film in Olympia, WA. Acrylic-reinforced for stronger impact resistance than traditional PPF. Sprayed-on, seamless, with a 7-year warranty." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy: #0f1e3d;
+      --navy-deep: #070d1f;
+      --navy-soft: #1a2b50;
+      --gold: #d4a544;
+      --gold-bright: #f0c265;
+      --gold-deep: #a8842f;
+      --off-white: #f5f3ee;
+      --ink: #1a1a1a;
+      --muted: rgba(245, 243, 238, 0.72);
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      color: var(--off-white); background: var(--navy-deep);
+      line-height: 1.6; overflow-x: hidden;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ---------- Topbar + Nav (shared with index) ---------- */
+    .topbar { background: var(--navy-deep); color: var(--muted); font-size: 0.85rem; padding: 0.6rem 0; border-bottom: 1px solid rgba(212, 165, 68, 0.15); }
+    .topbar-inner { max-width: 1400px; margin: 0 auto; padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .topbar a { color: var(--gold); transition: color 0.3s; }
+    .topbar a:hover { color: var(--gold-bright); }
+
+    nav { position: sticky; top: 0; z-index: 1000; background: rgba(15, 30, 61, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid rgba(212, 165, 68, 0.18); }
+    .nav-inner { max-width: 1400px; margin: 0 auto; padding: 1.25rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-family: 'Playfair Display', serif; font-weight: 900; font-size: 1.6rem; color: var(--off-white); letter-spacing: 0.5px; position: relative; padding-bottom: 4px; }
+    .logo::after { content: ''; position: absolute; bottom: 0; left: 0; height: 2px; width: 100%; background: linear-gradient(90deg, var(--gold), transparent); }
+    .logo span { color: var(--gold); }
+    .nav-links { display: flex; gap: 2.25rem; align-items: center; }
+    .nav-links a { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--off-white); transition: color 0.3s; position: relative; padding: 0.5rem 0; }
+    .nav-links a::after { content: ''; position: absolute; bottom: 0; left: 0; width: 0; height: 2px; background: var(--gold); transition: width 0.3s var(--ease-out); }
+    .nav-links a.active { color: var(--gold); }
+    .nav-links a.active::after { width: 100%; }
+    .nav-links a:hover { color: var(--gold); }
+    .nav-links a:hover::after { width: 100%; }
+    .nav-cta { background: var(--gold); color: var(--navy-deep) !important; padding: 0.75rem 1.75rem; border-radius: 2px; letter-spacing: 1.5px; font-weight: 700; transition: transform 0.3s, background 0.3s, box-shadow 0.3s; }
+    .nav-cta::after { display: none !important; }
+    .nav-cta:hover { transform: translateY(-2px); background: var(--gold-bright); box-shadow: 0 12px 30px rgba(212, 165, 68, 0.35); }
+    .menu-toggle { display: none; background: none; border: 0; color: var(--off-white); font-size: 1.6rem; cursor: pointer; }
+
+    /* ---------- Page intro / curtain hero ---------- */
+    .page-hero {
+      position: relative;
+      min-height: 70vh;
+      padding: 8rem 2rem 6rem;
+      overflow: hidden;
+      isolation: isolate;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center;
+    }
+    .page-hero-bg {
+      position: absolute; inset: 0; z-index: -2;
+      background:
+        radial-gradient(circle at 30% 40%, rgba(212, 165, 68, 0.18) 0%, transparent 55%),
+        radial-gradient(circle at 75% 60%, rgba(26, 43, 80, 0.6) 0%, transparent 50%),
+        linear-gradient(180deg, var(--navy-deep) 0%, var(--navy) 100%);
+    }
+
+    /* Animated water beads (hydrophobic visual) */
+    .beads { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
+    .bead {
+      position: absolute; border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.6), rgba(212, 165, 68, 0.15) 50%, transparent 70%);
+      box-shadow: inset 1px 1px 4px rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+      animation: beadDrift 14s ease-in-out infinite;
+    }
+    .bead:nth-child(1)  { width: 24px; height: 24px; left: 10%; top: 20%;  animation-delay: 0s;  }
+    .bead:nth-child(2)  { width: 14px; height: 14px; left: 25%; top: 70%;  animation-delay: 1.5s;}
+    .bead:nth-child(3)  { width: 30px; height: 30px; left: 40%; top: 35%;  animation-delay: 3s;  }
+    .bead:nth-child(4)  { width: 18px; height: 18px; left: 60%; top: 25%;  animation-delay: 4.5s;}
+    .bead:nth-child(5)  { width: 22px; height: 22px; left: 75%; top: 65%;  animation-delay: 6s;  }
+    .bead:nth-child(6)  { width: 12px; height: 12px; left: 85%; top: 30%;  animation-delay: 7.5s;}
+    .bead:nth-child(7)  { width: 28px; height: 28px; left: 15%; top: 50%;  animation-delay: 9s;  }
+    .bead:nth-child(8)  { width: 16px; height: 16px; left: 50%; top: 80%;  animation-delay: 10.5s;}
+    @keyframes beadDrift {
+      0%   { opacity: 0; transform: translateY(-20px) scale(0.6); }
+      20%  { opacity: 1; transform: translateY(0) scale(1); }
+      80%  { opacity: 0.7; transform: translateY(40px) scale(1.05); }
+      100% { opacity: 0; transform: translateY(60px) scale(1.1); }
+    }
+
+    /* Curtain intro: gold line draws, then content fades up */
+    .curtain {
+      position: absolute; top: 50%; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      transform-origin: left center; transform: scaleX(0);
+      animation: curtainDraw 1.2s var(--ease-out) 0.2s forwards;
+      z-index: 0;
+    }
+    @keyframes curtainDraw {
+      to { transform: scaleX(1); }
+    }
+
+    .page-hero-inner { position: relative; z-index: 1; max-width: 900px; }
+    .page-eyebrow {
+      display: inline-block; font-size: 0.78rem; letter-spacing: 4px;
+      text-transform: uppercase; color: var(--gold); font-weight: 600;
+      margin-bottom: 1.75rem;
+      opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.2s forwards;
+    }
+    .page-eyebrow::before, .page-eyebrow::after {
+      content: ''; display: inline-block; width: 30px; height: 1px;
+      background: var(--gold); vertical-align: middle; margin: 0 0.85rem;
+    }
+    .page-title {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2.5rem, 6vw, 4.75rem);
+      font-weight: 900; line-height: 1.05; margin-bottom: 1.5rem;
+      opacity: 0; animation: fadeUp 1s var(--ease-out) 1.4s forwards;
+    }
+    .page-title em {
+      font-style: normal;
+      background: linear-gradient(120deg, var(--gold) 0%, var(--gold-bright) 50%, var(--gold) 100%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .page-lede {
+      font-size: clamp(1.05rem, 1.5vw, 1.25rem);
+      color: var(--muted); max-width: 720px; margin: 0 auto 2.5rem;
+      opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.7s forwards;
+    }
+    .page-ctas { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; opacity: 0; animation: fadeUp 0.8s var(--ease-spring) 2s forwards; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .btn { display: inline-flex; align-items: center; gap: 0.6rem; padding: 1.1rem 2.4rem; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; border: 2px solid transparent; border-radius: 2px; cursor: pointer; transition: transform 0.3s, background 0.3s, color 0.3s, box-shadow 0.3s; }
+    .btn-primary { background: var(--gold); color: var(--navy-deep); }
+    .btn-primary:hover { background: var(--gold-bright); transform: translateY(-3px); box-shadow: 0 16px 40px rgba(212, 165, 68, 0.4); }
+    .btn-ghost { color: var(--off-white); border-color: rgba(245, 243, 238, 0.4); }
+    .btn-ghost:hover { background: var(--off-white); color: var(--navy-deep); border-color: var(--off-white); transform: translateY(-3px); }
+
+    /* ---------- Reveal-on-scroll ---------- */
+    .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.8s var(--ease-out), transform 0.8s var(--ease-out); }
+    .reveal.in-view { opacity: 1; transform: translateY(0); }
+    .reveal-stagger > * { opacity: 0; transform: translateY(30px); transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out); }
+    .reveal-stagger.in-view > *:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0s; }
+    .reveal-stagger.in-view > *:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.1s; }
+    .reveal-stagger.in-view > *:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.2s; }
+    .reveal-stagger.in-view > *:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 0.3s; }
+    .reveal-stagger.in-view > *:nth-child(5) { opacity: 1; transform: translateY(0); transition-delay: 0.4s; }
+    .reveal-stagger.in-view > *:nth-child(6) { opacity: 1; transform: translateY(0); transition-delay: 0.5s; }
+
+    /* ---------- Common section styles ---------- */
+    section { padding: 6rem 2rem; }
+    .container { max-width: 1280px; margin: 0 auto; }
+    .section-eyebrow { display: block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 1rem; }
+    .section-title { font-family: 'Playfair Display', serif; font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; line-height: 1.15; margin-bottom: 1rem; }
+    .section-lede { color: var(--muted); max-width: 620px; font-size: 1.02rem; }
+    .section-head { text-align: center; margin: 0 auto 4rem; max-width: 720px; }
+    .section-head .section-lede { margin: 0 auto; }
+
+    /* ---------- "What is NANOPRO" split ---------- */
+    .what { background: var(--navy-deep); }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center; }
+    .split-image {
+      position: relative; aspect-ratio: 4/5; border-radius: 4px; overflow: hidden;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+    }
+    .split-image img { width: 100%; height: 100%; object-fit: cover; }
+    .split-image::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(180deg, transparent 60%, rgba(7, 13, 31, 0.6) 100%);
+    }
+    .split-content h2 { margin-bottom: 1.5rem; }
+    .split-content p { color: var(--muted); margin-bottom: 1rem; font-size: 1.05rem; }
+    .split-content ul { list-style: none; margin-top: 1.5rem; }
+    .split-content li { padding: 0.75rem 0 0.75rem 2rem; position: relative; color: var(--off-white); border-bottom: 1px solid rgba(212, 165, 68, 0.15); }
+    .split-content li::before {
+      content: '✓'; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+      width: 24px; height: 24px;
+      background: var(--gold); color: var(--navy-deep);
+      border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+    }
+
+    /* ---------- Comparison ---------- */
+    .compare { background: linear-gradient(180deg, var(--navy-deep), var(--navy)); }
+    .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    .compare-card {
+      background: var(--navy-soft); border: 1px solid rgba(212, 165, 68, 0.18);
+      padding: 2.5rem; border-radius: 4px; position: relative;
+      transition: transform 0.5s var(--ease-out), border-color 0.5s, box-shadow 0.5s;
+    }
+    .compare-card.featured {
+      border-color: var(--gold);
+      box-shadow: 0 30px 80px rgba(212, 165, 68, 0.18);
+      transform: translateY(-4px);
+    }
+    .compare-card.featured::before {
+      content: 'NANOPRO'; position: absolute; top: -12px; left: 2rem;
+      background: var(--gold); color: var(--navy-deep);
+      padding: 0.4rem 0.85rem; font-size: 0.7rem; letter-spacing: 1.5px; font-weight: 700;
+    }
+    .compare-card h3 { font-family: 'Playfair Display', serif; font-size: 1.6rem; margin-bottom: 0.4rem; }
+    .compare-card .compare-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .compare-list { list-style: none; }
+    .compare-list li {
+      padding: 0.85rem 0; border-bottom: 1px solid rgba(245, 243, 238, 0.08);
+      display: flex; gap: 0.75rem; align-items: flex-start;
+      color: var(--muted);
+    }
+    .compare-list li::before { content: '–'; color: rgba(245, 243, 238, 0.4); flex-shrink: 0; }
+    .compare-card.featured .compare-list li::before { content: '✓'; color: var(--gold); font-weight: 700; }
+    .compare-card.featured .compare-list li { color: var(--off-white); }
+
+    /* ---------- Benefits grid ---------- */
+    .benefits { background: var(--navy); }
+    .benefits-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
+    .benefit-card {
+      background: var(--navy-deep); border: 1px solid rgba(212, 165, 68, 0.15);
+      padding: 2.25rem; border-radius: 4px;
+      transition: transform 0.4s var(--ease-out), border-color 0.4s;
+    }
+    .benefit-card:hover { transform: translateY(-6px); border-color: var(--gold); }
+    .benefit-icon {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: rgba(212, 165, 68, 0.12); border: 1px solid var(--gold);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; color: var(--gold);
+      margin-bottom: 1.25rem;
+    }
+    .benefit-card h3 { font-family: 'Playfair Display', serif; font-size: 1.3rem; margin-bottom: 0.6rem; }
+    .benefit-card p { color: var(--muted); font-size: 0.95rem; }
+
+    /* ---------- Process ---------- */
+    .process { background: var(--navy-deep); position: relative; overflow: hidden; }
+    .process::before {
+      content: ''; position: absolute; left: 50%; top: 8rem; bottom: 5rem;
+      width: 1px; background: linear-gradient(180deg, transparent, var(--gold), transparent);
+      transform: translateX(-50%); opacity: 0.4;
+    }
+    .step-grid { display: flex; flex-direction: column; gap: 4rem; }
+    .step {
+      display: grid; grid-template-columns: 1fr 60px 1fr; gap: 2rem; align-items: center;
+    }
+    .step-num {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--gold); color: var(--navy-deep);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 700;
+      box-shadow: 0 0 0 6px var(--navy-deep), 0 0 0 7px rgba(212, 165, 68, 0.4);
+      grid-column: 2;
+    }
+    .step:nth-child(odd) .step-content { grid-column: 1; text-align: right; }
+    .step:nth-child(even) .step-content { grid-column: 3; }
+    .step-content h4 { font-family: 'Playfair Display', serif; font-size: 1.4rem; margin-bottom: 0.5rem; color: var(--off-white); }
+    .step-content p { color: var(--muted); font-size: 0.97rem; }
+
+    /* ---------- Pricing ---------- */
+    .pricing { background: var(--navy); }
+    .price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
+    .price-card {
+      background: var(--navy-deep); border: 1px solid rgba(212, 165, 68, 0.18);
+      padding: 2.5rem 2rem; border-radius: 4px; text-align: center;
+      transition: transform 0.4s, border-color 0.4s, box-shadow 0.4s;
+    }
+    .price-card:hover { transform: translateY(-6px); border-color: var(--gold); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4); }
+    .price-card.featured { border-color: var(--gold); box-shadow: 0 20px 50px rgba(212, 165, 68, 0.2); }
+    .price-card .tier { font-size: 0.78rem; letter-spacing: 3px; text-transform: uppercase; color: var(--gold); margin-bottom: 1rem; }
+    .price-card .price { font-family: 'Playfair Display', serif; font-size: 2.5rem; font-weight: 700; color: var(--off-white); margin-bottom: 0.5rem; }
+    .price-card .price small { font-size: 1rem; color: var(--muted); font-weight: 400; }
+    .price-card .price-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .price-list { list-style: none; text-align: left; margin-bottom: 2rem; }
+    .price-list li { padding: 0.6rem 0 0.6rem 1.75rem; position: relative; color: var(--muted); font-size: 0.92rem; border-bottom: 1px solid rgba(245, 243, 238, 0.06); }
+    .price-list li::before { content: '✓'; position: absolute; left: 0; color: var(--gold); font-weight: 700; }
+
+    /* ---------- FAQ ---------- */
+    .faq { background: var(--navy-deep); }
+    .faq-list { max-width: 820px; margin: 0 auto; }
+    .faq-item {
+      border-bottom: 1px solid rgba(212, 165, 68, 0.18);
+      padding: 1.5rem 0;
+    }
+    .faq-q {
+      display: flex; justify-content: space-between; align-items: center;
+      cursor: pointer; gap: 1rem;
+      font-family: 'Playfair Display', serif; font-size: 1.2rem; color: var(--off-white);
+    }
+    .faq-toggle {
+      width: 32px; height: 32px; flex-shrink: 0;
+      border-radius: 50%; border: 1px solid var(--gold);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--gold); transition: transform 0.4s var(--ease-out);
+    }
+    .faq-item[open] .faq-toggle { transform: rotate(45deg); background: var(--gold); color: var(--navy-deep); }
+    .faq-a { color: var(--muted); padding-top: 1rem; font-size: 0.97rem; }
+    .faq-q::-webkit-details-marker { display: none; }
+
+    /* ---------- CTA band ---------- */
+    .cta-band { background: linear-gradient(120deg, var(--navy) 0%, var(--navy-soft) 50%, var(--navy) 100%); text-align: center; padding: 6rem 2rem; position: relative; overflow: hidden; }
+    .cta-band::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(212, 165, 68, 0.18) 0%, transparent 60%); }
+    .cta-band > * { position: relative; z-index: 1; }
+    .cta-band h2 { font-family: 'Playfair Display', serif; font-size: clamp(2rem, 4vw, 3rem); margin-bottom: 1rem; }
+    .cta-band p { color: var(--muted); margin-bottom: 2rem; font-size: 1.05rem; }
+
+    /* ---------- Footer ---------- */
+    footer { background: var(--navy-deep); padding: 4rem 2rem 2rem; border-top: 1px solid rgba(212, 165, 68, 0.18); }
+    .footer-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 3rem; max-width: 1280px; margin: 0 auto 3rem; }
+    .footer-brand h4 { font-family: 'Playfair Display', serif; color: var(--off-white); font-size: 1.4rem; margin-bottom: 0.5rem; }
+    .footer-brand h4 span { color: var(--gold); }
+    .footer-brand p { color: var(--muted); font-size: 0.95rem; }
+    .footer-col h5 { font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin-bottom: 1rem; }
+    .footer-col a, .footer-col p { color: var(--muted); display: block; margin-bottom: 0.5rem; transition: color 0.3s; font-size: 0.95rem; }
+    .footer-col a:hover { color: var(--gold); }
+    .socials { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+    .socials a { width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(212, 165, 68, 0.4); display: inline-flex; align-items: center; justify-content: center; color: var(--gold); margin: 0; transition: all 0.3s; }
+    .socials a:hover { background: var(--gold); color: var(--navy-deep); transform: translateY(-3px); }
+    .footer-bottom { max-width: 1280px; margin: 0 auto; padding-top: 2rem; border-top: 1px solid rgba(245, 243, 238, 0.1); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; color: var(--muted); font-size: 0.85rem; }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 900px) {
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; gap: 0; background: var(--navy-deep); padding: 1rem 2rem; border-bottom: 1px solid rgba(212, 165, 68, 0.18); }
+      .nav-links.open { display: flex; }
+      .nav-links a { padding: 1rem 0; }
+      .menu-toggle { display: block; }
+      .topbar-inner { flex-direction: column; gap: 0.4rem; text-align: center; font-size: 0.78rem; }
+      .split, .compare-grid, .benefits-grid, .price-grid, .footer-grid { grid-template-columns: 1fr; gap: 2rem; }
+      .step { grid-template-columns: 60px 1fr; gap: 1.25rem; }
+      .step-num { grid-column: 1; }
+      .step:nth-child(odd) .step-content,
+      .step:nth-child(even) .step-content { grid-column: 2; text-align: left; }
+      .process::before { left: 28px; transform: none; }
+      section { padding: 4.5rem 1.5rem; }
+      .footer-bottom { flex-direction: column; text-align: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <span>📞 <a href="tel:3604631391">360-463-1391</a> &nbsp;|&nbsp; ✉ <a href="mailto:ty@thompsonsautodetailing.com">ty@thompsonsautodetailing.com</a></span>
+      <span>Mon–Fri 7:30 AM – 5:00 PM &nbsp;·&nbsp; Olympia, WA</span>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-inner">
+      <a href="index.html" class="logo">Thompson's<span>.</span></a>
+      <button class="menu-toggle" aria-label="Toggle menu">☰</button>
+      <div class="nav-links" id="navLinks">
+        <a href="liquid-ppf.html" class="active">Liquid PPF</a>
+        <a href="ceramic-coating.html">Ceramic Coating</a>
+        <a href="window-tint.html">Window Tint</a>
+        <a href="mobile-detailing.html">Detailing</a>
+        <a href="gift-cards.html">Gift Cards</a>
+        <a href="contact.html" class="nav-cta">Book Now</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Page hero -->
+  <header class="page-hero">
+    <div class="page-hero-bg"></div>
+    <div class="beads" aria-hidden="true">
+      <span class="bead"></span><span class="bead"></span><span class="bead"></span><span class="bead"></span>
+      <span class="bead"></span><span class="bead"></span><span class="bead"></span><span class="bead"></span>
+    </div>
+    <div class="curtain" aria-hidden="true"></div>
+
+    <div class="page-hero-inner">
+      <span class="page-eyebrow">New flagship service</span>
+      <h1 class="page-title"><em>NANOPRO</em><br />Liquid PPF.</h1>
+      <p class="page-lede">
+        The chemistry of traditional paint protection film, reinforced with acrylic for stronger impact resistance — sprayed on as a seamless, self-leveling coat. Stronger than the original PPF, with the gloss of a ceramic finish.
+      </p>
+      <div class="page-ctas">
+        <a href="contact.html" class="btn btn-primary">Get a Quote</a>
+        <a href="#compare" class="btn btn-ghost">vs. Traditional PPF</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- What is NANOPRO -->
+  <section class="what">
+    <div class="container">
+      <div class="split">
+        <div class="split-image reveal">
+          <img src="https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?w=900&q=85" alt="Liquid PPF being applied to a vehicle hood" />
+        </div>
+        <div class="split-content reveal">
+          <span class="section-eyebrow">What it is</span>
+          <h2 class="section-title">PPF chemistry. Acrylic strength. Sprayed-on finish.</h2>
+          <p>NANOPRO Liquid PPF shares the polymer backbone of traditional paint protection film, but adds an acrylic reinforcement that gives it noticeably stronger impact resistance than the original.</p>
+          <p>Because it's applied as a liquid that self-levels and cures, there are no seams, edges, or lifting points — it bonds to the entire painted surface as one continuous shell.</p>
+          <ul>
+            <li>Acrylic-reinforced — stronger impact &amp; abrasion resistance than traditional PPF</li>
+            <li>Seamless application — no edges to lift, no visible film lines</li>
+            <li>Hydrophobic finish — water beads and rolls off, dirt sticks less</li>
+            <li>Deep, glass-like gloss that enhances any factory paint color</li>
+            <li>UV-stable — won't yellow, fade, or chalk over time</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison -->
+  <section class="compare" id="compare">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Why upgrade</span>
+        <h2 class="section-title">NANOPRO vs. traditional PPF.</h2>
+        <p class="section-lede">Same protective DNA. Different physical and aesthetic profile.</p>
+      </div>
+
+      <div class="compare-grid reveal-stagger">
+        <div class="compare-card">
+          <h3>Traditional PPF</h3>
+          <p class="compare-sub">Pre-cut polyurethane film, hand-applied panel by panel.</p>
+          <ul class="compare-list">
+            <li>Strong impact protection from rocks &amp; debris</li>
+            <li>Visible edges where film stops on each panel</li>
+            <li>Seams can collect dirt or lift over time</li>
+            <li>Limited self-healing on minor swirl marks</li>
+            <li>Standard PPF gloss profile</li>
+          </ul>
+        </div>
+
+        <div class="compare-card featured">
+          <h3>NANOPRO Liquid PPF</h3>
+          <p class="compare-sub">Same chemistry, reinforced with acrylic, sprayed-on for full coverage.</p>
+          <ul class="compare-list">
+            <li>Stronger impact resistance — acrylic-reinforced layer</li>
+            <li>Seamless, edge-free coverage across the whole car</li>
+            <li>Bonds as one continuous shell — nothing to lift</li>
+            <li>Hydrophobic finish that sheds water and dirt</li>
+            <li>Deeper, glass-like gloss enhancement</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Benefits -->
+  <section class="benefits">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">What you get</span>
+        <h2 class="section-title">Built to take the road, then some.</h2>
+      </div>
+
+      <div class="benefits-grid reveal-stagger">
+        <div class="benefit-card">
+          <div class="benefit-icon">🛡</div>
+          <h3>Impact &amp; abrasion</h3>
+          <p>Acrylic reinforcement absorbs rock chips, road grit, and parking lot scuffs that would otherwise reach your paint.</p>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-icon">💧</div>
+          <h3>Hydrophobic finish</h3>
+          <p>Water beads up and rolls off — dirt, brake dust, and contaminants have nothing to bond to.</p>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-icon">☀</div>
+          <h3>UV stability</h3>
+          <p>Won't yellow, oxidize, or chalk under Pacific Northwest sun. Your finish stays clear and crisp for years.</p>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-icon">✨</div>
+          <h3>Glass-like gloss</h3>
+          <p>The self-leveling cure produces a depth of shine that flat-applied film can't replicate.</p>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-icon">🧪</div>
+          <h3>Chemical resistance</h3>
+          <p>Stands up to bird droppings, tree sap, road salt, fuel splatter — without etching the paint underneath.</p>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-icon">📜</div>
+          <h3>7-year warranty</h3>
+          <p>Backed by a manufacturer warranty against yellowing, cracking, and delamination — plus our 100% guarantee.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Process -->
+  <section class="process">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Our process</span>
+        <h2 class="section-title">How we apply NANOPRO.</h2>
+        <p class="section-lede">Two days in our climate-controlled studio. Done right, the first time.</p>
+      </div>
+
+      <div class="step-grid reveal-stagger">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Wash &amp; decontaminate</h4>
+            <p>Foam wash, iron decontamination, clay treatment. Every contaminant gone before we touch the paint.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Paint correction</h4>
+            <p>Multi-stage machine polishing to remove swirl marks, holograms, and fine scratches — locking in a perfect base.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Surface prep &amp; isopropyl wipe</h4>
+            <p>Final IPA wipedown to strip every trace of polishing oil. NANOPRO bonds chemically — the surface has to be surgical.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>Spray &amp; cure</h4>
+            <p>Even spray application, controlled flash time, and a full overnight cure under controlled humidity. You pick up a finished car.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="pricing">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Investment</span>
+        <h2 class="section-title">NANOPRO packages.</h2>
+        <p class="section-lede">Pricing varies by vehicle size and paint condition. Get an exact quote in under 24 hours.</p>
+      </div>
+
+      <div class="price-grid reveal-stagger">
+        <div class="price-card">
+          <div class="tier">Front-end</div>
+          <div class="price">$1,299<small> +</small></div>
+          <p class="price-desc">Hood, fenders, mirrors, front bumper</p>
+          <ul class="price-list">
+            <li>NANOPRO Liquid PPF</li>
+            <li>Wash, decon, light correction</li>
+            <li>Surface prep &amp; IPA wipe</li>
+            <li>1-day turnaround</li>
+            <li>5-year warranty</li>
+          </ul>
+          <a href="contact.html" class="btn btn-ghost" style="width: 100%; justify-content: center;">Quote me</a>
+        </div>
+
+        <div class="price-card featured">
+          <div class="tier">Full Vehicle ★</div>
+          <div class="price">$1,899<small> +</small></div>
+          <p class="price-desc">Every painted panel, edge to edge</p>
+          <ul class="price-list">
+            <li>NANOPRO Liquid PPF — full coverage</li>
+            <li>Multi-stage paint correction</li>
+            <li>Wheel face coating included</li>
+            <li>2-day turnaround</li>
+            <li>7-year warranty</li>
+            <li>100% money-back guarantee</li>
+          </ul>
+          <a href="contact.html" class="btn btn-primary" style="width: 100%; justify-content: center;">Book full vehicle</a>
+        </div>
+
+        <div class="price-card">
+          <div class="tier">Full + Glass</div>
+          <div class="price">$2,299<small> +</small></div>
+          <p class="price-desc">Full coverage plus windshield &amp; glass</p>
+          <ul class="price-list">
+            <li>Everything in Full Vehicle</li>
+            <li>Glass coating on all windows</li>
+            <li>Windshield rain-repellent treatment</li>
+            <li>2–3 day turnaround</li>
+            <li>7-year warranty</li>
+          </ul>
+          <a href="contact.html" class="btn btn-ghost" style="width: 100%; justify-content: center;">Quote me</a>
+        </div>
+      </div>
+
+      <p style="text-align: center; color: var(--muted); margin-top: 2rem; font-size: 0.85rem;">
+        <em>Pricing shown reflects our published starting tiers — final quote depends on vehicle size, paint condition, and prep work needed.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Common questions</span>
+        <h2 class="section-title">What buyers ask us.</h2>
+      </div>
+
+      <div class="faq-list reveal">
+        <details class="faq-item">
+          <summary class="faq-q">Is NANOPRO actually stronger than traditional PPF?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">It's the same polymer chemistry as traditional PPF, but reinforced with acrylic. The acrylic component improves impact and abrasion resistance compared to standard PPF. Where it really pulls ahead is application — there are no seams or edges where damage can start.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Should I get NANOPRO or a ceramic coating?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Ceramic coating is purely a chemical-resistant gloss layer — it doesn't stop rock chips. NANOPRO does both: it gives you the gloss and hydrophobic properties of ceramic, plus the impact protection of PPF. If your priority is preventing physical damage to your paint, NANOPRO is the upgrade.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">How long does the application take?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">A full vehicle is a 2-day appointment in our climate-controlled studio. Day 1 is wash, decon, and paint correction. Day 2 is prep, application, and overnight cure. You drop off, we call when it's ready.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">When can I wash my car after?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Wait 7 days before washing, and avoid automatic car washes for the first 30. Hand wash with a pH-neutral soap is fine after the first week. We'll give you a written care sheet at pickup.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Will it damage my factory paint?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">No. NANOPRO bonds on top of your clear coat — it doesn't penetrate the paint. If you ever wanted to remove it, it can be polished off. It actually protects the original paint from UV fade and chemical etching.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can NANOPRO go over an existing ceramic coating?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Not directly. The bond requires a chemically clean surface, so we'll strip and correct any existing coating first as part of the prep stage. That's included in the price.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA band -->
+  <section class="cta-band reveal">
+    <h2>Protect the paint. Keep the gloss.</h2>
+    <p>Get a NANOPRO quote in under 24 hours — text us a few photos of your car and we'll come back with a number.</p>
+    <a href="contact.html" class="btn btn-primary">Get my quote →</a>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <h4>Thompson's<span>.</span> Auto Detailing</h4>
+        <p>Olympia's most trusted auto detailing experts. Owner-operated, obsessive about gloss.</p>
+        <div class="socials">
+          <a href="https://www.facebook.com/profile.php?id=61563306155246" aria-label="Facebook" target="_blank" rel="noopener">f</a>
+          <a href="https://www.instagram.com/thompsonsautodetailingolympia/" aria-label="Instagram" target="_blank" rel="noopener">◎</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h5>Services</h5>
+        <a href="liquid-ppf.html">NANOPRO Liquid PPF</a>
+        <a href="ceramic-coating.html">Ceramic Coating</a>
+        <a href="window-tint.html">Window Tint</a>
+        <a href="mobile-detailing.html">Mobile Detailing</a>
+        <a href="gift-cards.html">Gift Cards</a>
+      </div>
+      <div class="footer-col">
+        <h5>Visit</h5>
+        <p>6235 Rich Rd SE, Unit C<br />Olympia, WA 98501</p>
+        <p>Mon–Fri: 7:30 AM – 5:00 PM<br />Sat–Sun: Closed</p>
+      </div>
+      <div class="footer-col">
+        <h5>Contact</h5>
+        <a href="tel:3604631391">360-463-1391</a>
+        <a href="mailto:ty@thompsonsautodetailing.com">ty@thompsonsautodetailing.com</a>
+        <a href="contact.html">Book Online →</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Thompson's Auto Detailing. All rights reserved.</span>
+      <span><a href="#">Terms</a> · <a href="#">Privacy</a> · <a href="#">Cancellation</a></span>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.querySelector('.menu-toggle');
+    const links = document.getElementById('navLinks');
+    toggle?.addEventListener('click', () => links.classList.toggle('open'));
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+    document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => io.observe(el));
+  </script>
+
+</body>
+</html>

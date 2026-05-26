@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gift Cards | Thompson's Auto Detailing — Olympia, WA</title>
+  <meta name="description" content="Give the gift of a clean car. Thompson's Auto Detailing gift cards in any denomination — instant digital delivery, redeemable for any service." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy: #0f1e3d; --navy-deep: #070d1f; --navy-soft: #1a2b50;
+      --gold: #d4a544; --gold-bright: #f0c265; --gold-deep: #a8842f;
+      --off-white: #f5f3ee; --ink: #1a1a1a; --muted: rgba(245, 243, 238, 0.72);
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', system-ui, sans-serif; color: var(--off-white); background: var(--navy-deep); line-height: 1.6; overflow-x: hidden; }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+
+    /* Topbar + Nav */
+    .topbar { background: var(--navy-deep); color: var(--muted); font-size: 0.85rem; padding: 0.6rem 0; border-bottom: 1px solid rgba(212, 165, 68, 0.15); }
+    .topbar-inner { max-width: 1400px; margin: 0 auto; padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .topbar a { color: var(--gold); transition: color 0.3s; }
+    .topbar a:hover { color: var(--gold-bright); }
+    nav { position: sticky; top: 0; z-index: 1000; background: rgba(15, 30, 61, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid rgba(212, 165, 68, 0.18); }
+    .nav-inner { max-width: 1400px; margin: 0 auto; padding: 1.25rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-family: 'Playfair Display', serif; font-weight: 900; font-size: 1.6rem; color: var(--off-white); letter-spacing: 0.5px; position: relative; padding-bottom: 4px; }
+    .logo::after { content: ''; position: absolute; bottom: 0; left: 0; height: 2px; width: 100%; background: linear-gradient(90deg, var(--gold), transparent); }
+    .logo span { color: var(--gold); }
+    .nav-links { display: flex; gap: 2.25rem; align-items: center; }
+    .nav-links a { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--off-white); transition: color 0.3s; position: relative; padding: 0.5rem 0; }
+    .nav-links a::after { content: ''; position: absolute; bottom: 0; left: 0; width: 0; height: 2px; background: var(--gold); transition: width 0.3s var(--ease-out); }
+    .nav-links a.active { color: var(--gold); }
+    .nav-links a.active::after { width: 100%; }
+    .nav-links a:hover { color: var(--gold); }
+    .nav-links a:hover::after { width: 100%; }
+    .nav-cta { background: var(--gold); color: var(--navy-deep) !important; padding: 0.75rem 1.75rem; border-radius: 2px; letter-spacing: 1.5px; font-weight: 700; transition: transform 0.3s, background 0.3s, box-shadow 0.3s; }
+    .nav-cta::after { display: none !important; }
+    .nav-cta:hover { transform: translateY(-2px); background: var(--gold-bright); box-shadow: 0 12px 30px rgba(212, 165, 68, 0.35); }
+    .menu-toggle { display: none; background: none; border: 0; color: var(--off-white); font-size: 1.6rem; cursor: pointer; }
+
+    /* ---------- HERO with 3D card flip ---------- */
+    .page-hero {
+      position: relative; min-height: 80vh; padding: 8rem 2rem 6rem;
+      overflow: hidden; isolation: isolate;
+      display: flex; align-items: center; justify-content: center;
+      perspective: 1600px;
+    }
+    .page-hero-bg {
+      position: absolute; inset: 0; z-index: -2;
+      background:
+        radial-gradient(circle at 70% 30%, rgba(212, 165, 68, 0.2) 0%, transparent 55%),
+        radial-gradient(circle at 30% 70%, rgba(26, 43, 80, 0.6) 0%, transparent 50%),
+        linear-gradient(180deg, var(--navy-deep) 0%, var(--navy) 100%);
+    }
+
+    .hero-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4rem;
+      align-items: center; max-width: 1280px; width: 100%;
+      position: relative; z-index: 1;
+    }
+    .hero-text .page-eyebrow { display: inline-block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 1.75rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.2s forwards; }
+    .hero-text .page-eyebrow::before, .hero-text .page-eyebrow::after { content: ''; display: inline-block; width: 30px; height: 1px; background: var(--gold); vertical-align: middle; margin: 0 0.85rem; }
+    .hero-text .page-eyebrow::before { display: none; }
+    .hero-text .page-title { font-family: 'Playfair Display', serif; font-size: clamp(2.5rem, 5.5vw, 4.5rem); font-weight: 900; line-height: 1.05; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 1s var(--ease-out) 1.4s forwards; }
+    .hero-text .page-title em { font-style: normal; background: linear-gradient(120deg, var(--gold) 0%, var(--gold-bright) 50%, var(--gold) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero-text .page-lede { font-size: clamp(1.05rem, 1.4vw, 1.2rem); color: var(--muted); margin-bottom: 2.25rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.7s forwards; }
+    .hero-text .page-ctas { display: flex; gap: 1rem; flex-wrap: wrap; opacity: 0; animation: fadeUp 0.8s var(--ease-spring) 2s forwards; }
+
+    /* THE FLIPPING CARD */
+    .gift-card-stage {
+      position: relative; width: 100%; max-width: 480px; aspect-ratio: 1.586/1;
+      transform-style: preserve-3d;
+      animation: cardFlip 1.6s var(--ease-out) 0.6s forwards, cardFloat 5s ease-in-out 2.5s infinite;
+      transform: rotateY(180deg) rotateX(8deg);
+      margin-left: auto;
+    }
+    @keyframes cardFlip {
+      0%   { transform: rotateY(180deg) rotateX(8deg) translateY(20px); }
+      100% { transform: rotateY(-12deg) rotateX(8deg) translateY(0); }
+    }
+    @keyframes cardFloat {
+      0%, 100% { transform: rotateY(-12deg) rotateX(8deg) translateY(0); }
+      50%      { transform: rotateY(-12deg) rotateX(8deg) translateY(-12px); }
+    }
+    .gift-card {
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--navy-deep) 0%, var(--navy) 50%, var(--navy-soft) 100%);
+      border: 1px solid var(--gold);
+      border-radius: 14px; padding: 2rem;
+      box-shadow:
+        0 30px 80px rgba(0, 0, 0, 0.6),
+        0 10px 30px rgba(212, 165, 68, 0.2),
+        inset 0 1px 0 rgba(245, 243, 238, 0.08);
+      display: flex; flex-direction: column; justify-content: space-between;
+      backface-visibility: hidden;
+      overflow: hidden;
+    }
+    /* shimmer line moving across the card */
+    .gift-card::before {
+      content: ''; position: absolute;
+      top: -50%; left: -100%; width: 60%; height: 200%;
+      background: linear-gradient(105deg, transparent, rgba(240, 194, 101, 0.3), transparent);
+      transform: rotate(20deg);
+      animation: shimmer 5s ease-in-out 3s infinite;
+    }
+    @keyframes shimmer {
+      0%   { left: -100%; }
+      40%  { left: 200%; }
+      100% { left: 200%; }
+    }
+    .gift-card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .gift-card-brand {
+      font-family: 'Playfair Display', serif; font-weight: 900;
+      font-size: 1.25rem; color: var(--off-white); letter-spacing: 0.5px;
+    }
+    .gift-card-brand span { color: var(--gold); }
+    .gift-card-chip {
+      width: 44px; height: 32px; border-radius: 4px;
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-deep) 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+    .gift-card-chip::before, .gift-card-chip::after {
+      content: ''; position: absolute; left: 6px; right: 6px; height: 1px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .gift-card-chip::before { top: 10px; }
+    .gift-card-chip::after { bottom: 10px; }
+    .gift-card-mid { font-family: 'Inter', monospace; font-size: 1.1rem; letter-spacing: 4px; color: var(--off-white); margin: 0.5rem 0; opacity: 0.85; }
+    .gift-card-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+    .gift-card-label { font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 0.25rem; }
+    .gift-card-name { font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--off-white); }
+    .gift-card-amount {
+      font-family: 'Playfair Display', serif; font-weight: 900;
+      font-size: 2.2rem; color: var(--gold);
+    }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    .btn { display: inline-flex; align-items: center; gap: 0.6rem; padding: 1.1rem 2.4rem; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; border: 2px solid transparent; border-radius: 2px; cursor: pointer; transition: transform 0.3s, background 0.3s, color 0.3s, box-shadow 0.3s; }
+    .btn-primary { background: var(--gold); color: var(--navy-deep); }
+    .btn-primary:hover { background: var(--gold-bright); transform: translateY(-3px); box-shadow: 0 16px 40px rgba(212, 165, 68, 0.4); }
+    .btn-ghost { color: var(--off-white); border-color: rgba(245, 243, 238, 0.4); }
+    .btn-ghost:hover { background: var(--off-white); color: var(--navy-deep); border-color: var(--off-white); transform: translateY(-3px); }
+
+    /* Reveal */
+    .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.8s var(--ease-out), transform 0.8s var(--ease-out); }
+    .reveal.in-view { opacity: 1; transform: translateY(0); }
+    .reveal-stagger > * { opacity: 0; transform: translateY(30px); transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out); }
+    .reveal-stagger.in-view > *:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0s; }
+    .reveal-stagger.in-view > *:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.1s; }
+    .reveal-stagger.in-view > *:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.2s; }
+    .reveal-stagger.in-view > *:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 0.3s; }
+
+    section { padding: 6rem 2rem; }
+    .container { max-width: 1280px; margin: 0 auto; }
+    .section-eyebrow { display: block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 1rem; }
+    .section-title { font-family: 'Playfair Display', serif; font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; line-height: 1.15; margin-bottom: 1rem; }
+    .section-lede { color: var(--muted); max-width: 620px; font-size: 1.02rem; }
+    .section-head { text-align: center; margin: 0 auto 4rem; max-width: 720px; }
+    .section-head .section-lede { margin: 0 auto; }
+
+    /* Denominations */
+    .denom { background: var(--navy-deep); }
+    .denom-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+    .denom-card {
+      background: var(--navy-soft); border: 1px solid rgba(212, 165, 68, 0.18);
+      padding: 2.5rem 1.5rem; border-radius: 4px; text-align: center;
+      cursor: pointer;
+      transition: transform 0.4s, border-color 0.4s, box-shadow 0.4s, background 0.4s;
+    }
+    .denom-card:hover {
+      transform: translateY(-6px); border-color: var(--gold);
+      background: linear-gradient(135deg, var(--navy-soft), var(--navy));
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--gold) inset;
+    }
+    .denom-card.featured { border-color: var(--gold); box-shadow: 0 20px 50px rgba(212, 165, 68, 0.2); }
+    .denom-amount { font-family: 'Playfair Display', serif; font-size: 2.5rem; font-weight: 900; color: var(--gold); display: block; margin-bottom: 0.5rem; }
+    .denom-card p { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.25rem; min-height: 40px; }
+    .denom-card .btn { width: 100%; justify-content: center; }
+
+    /* How it works */
+    .how { background: var(--navy); }
+    .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3rem; margin-top: 3rem; }
+    .how-step { text-align: center; }
+    .how-num { width: 56px; height: 56px; border-radius: 50%; background: var(--gold); color: var(--navy-deep); display: inline-flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 700; margin-bottom: 1.25rem; box-shadow: 0 0 0 6px var(--navy), 0 0 0 7px rgba(212, 165, 68, 0.4); }
+    .how-step h3 { font-family: 'Playfair Display', serif; font-size: 1.4rem; margin-bottom: 0.6rem; }
+    .how-step p { color: var(--muted); font-size: 0.97rem; }
+
+    /* FAQ */
+    .faq { background: var(--navy-deep); }
+    .faq-list { max-width: 820px; margin: 0 auto; }
+    .faq-item { border-bottom: 1px solid rgba(212, 165, 68, 0.18); padding: 1.5rem 0; }
+    .faq-q { display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 1rem; font-family: 'Playfair Display', serif; font-size: 1.2rem; color: var(--off-white); }
+    .faq-toggle { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--gold); display: flex; align-items: center; justify-content: center; color: var(--gold); transition: transform 0.4s var(--ease-out); }
+    .faq-item[open] .faq-toggle { transform: rotate(45deg); background: var(--gold); color: var(--navy-deep); }
+    .faq-a { color: var(--muted); padding-top: 1rem; font-size: 0.97rem; }
+    .faq-q::-webkit-details-marker { display: none; }
+
+    /* CTA */
+    .cta-band { background: linear-gradient(120deg, var(--navy) 0%, var(--navy-soft) 50%, var(--navy) 100%); text-align: center; padding: 6rem 2rem; position: relative; overflow: hidden; }
+    .cta-band::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(212, 165, 68, 0.18) 0%, transparent 60%); }
+    .cta-band > * { position: relative; z-index: 1; }
+    .cta-band h2 { font-family: 'Playfair Display', serif; font-size: clamp(2rem, 4vw, 3rem); margin-bottom: 1rem; }
+    .cta-band p { color: var(--muted); margin-bottom: 2rem; font-size: 1.05rem; }
+
+    /* Footer */
+    footer { background: var(--navy-deep); padding: 4rem 2rem 2rem; border-top: 1px solid rgba(212, 165, 68, 0.18); }
+    .footer-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 3rem; max-width: 1280px; margin: 0 auto 3rem; }
+    .footer-brand h4 { font-family: 'Playfair Display', serif; color: var(--off-white); font-size: 1.4rem; margin-bottom: 0.5rem; }
+    .footer-brand h4 span { color: var(--gold); }
+    .footer-brand p { color: var(--muted); font-size: 0.95rem; }
+    .footer-col h5 { font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin-bottom: 1rem; }
+    .footer-col a, .footer-col p { color: var(--muted); display: block; margin-bottom: 0.5rem; transition: color 0.3s; font-size: 0.95rem; }
+    .footer-col a:hover { color: var(--gold); }
+    .socials { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+    .socials a { width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(212, 165, 68, 0.4); display: inline-flex; align-items: center; justify-content: center; color: var(--gold); margin: 0; transition: all 0.3s; }
+    .socials a:hover { background: var(--gold); color: var(--navy-deep); transform: translateY(-3px); }
+    .footer-bottom { max-width: 1280px; margin: 0 auto; padding-top: 2rem; border-top: 1px solid rgba(245, 243, 238, 0.1); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; color: var(--muted); font-size: 0.85rem; }
+
+    @media (max-width: 900px) {
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; gap: 0; background: var(--navy-deep); padding: 1rem 2rem; border-bottom: 1px solid rgba(212, 165, 68, 0.18); }
+      .nav-links.open { display: flex; }
+      .nav-links a { padding: 1rem 0; }
+      .menu-toggle { display: block; }
+      .topbar-inner { flex-direction: column; gap: 0.4rem; text-align: center; font-size: 0.78rem; }
+      .hero-grid { grid-template-columns: 1fr; gap: 3rem; text-align: center; }
+      .gift-card-stage { margin: 0 auto; max-width: 360px; }
+      .hero-text .page-ctas { justify-content: center; }
+      .denom-grid { grid-template-columns: repeat(2, 1fr); }
+      .how-grid, .footer-grid { grid-template-columns: 1fr; gap: 2rem; }
+      section { padding: 4.5rem 1.5rem; }
+      .footer-bottom { flex-direction: column; text-align: center; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } .gift-card-stage { transform: rotateY(-12deg) rotateX(8deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <span>📞 <a href="tel:3604631391">360-463-1391</a> &nbsp;|&nbsp; ✉ <a href="mailto:ty@thompsonsautodetailing.com">ty@thompsonsautodetailing.com</a></span>
+      <span>Mon–Fri 7:30 AM – 5:00 PM &nbsp;·&nbsp; Olympia, WA</span>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-inner">
+      <a href="index.html" class="logo">Thompson's<span>.</span></a>
+      <button class="menu-toggle" aria-label="Toggle menu">☰</button>
+      <div class="nav-links" id="navLinks">
+        <a href="liquid-ppf.html">Liquid PPF</a>
+        <a href="ceramic-coating.html">Ceramic Coating</a>
+        <a href="window-tint.html">Window Tint</a>
+        <a href="mobile-detailing.html">Detailing</a>
+        <a href="gift-cards.html" class="active">Gift Cards</a>
+        <a href="contact.html" class="nav-cta">Book Now</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Page hero with 3D card flip -->
+  <header class="page-hero">
+    <div class="page-hero-bg"></div>
+
+    <div class="hero-grid">
+      <div class="hero-text">
+        <span class="page-eyebrow">Give the gift of detail</span>
+        <h1 class="page-title">A perfect <em>gift</em>.</h1>
+        <p class="page-lede">
+          Give someone you love a fully detailed car. Thompson's gift cards in any denomination — instant digital delivery, redeemable for any service.
+        </p>
+        <div class="page-ctas">
+          <a href="#denominations" class="btn btn-primary">Shop Gift Cards</a>
+          <a href="contact.html" class="btn btn-ghost">Custom Amount</a>
+        </div>
+      </div>
+
+      <div class="gift-card-stage">
+        <div class="gift-card">
+          <div class="gift-card-top">
+            <div>
+              <div class="gift-card-brand">Thompson's<span>.</span></div>
+              <div style="font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-top: 0.2rem;">Gift Card</div>
+            </div>
+            <div class="gift-card-chip"></div>
+          </div>
+          <div class="gift-card-mid">•••• •••• •••• 0001</div>
+          <div class="gift-card-bottom">
+            <div>
+              <div class="gift-card-label">Recipient</div>
+              <div class="gift-card-name">For someone special</div>
+            </div>
+            <div class="gift-card-amount">$250</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Denominations -->
+  <section class="denom" id="denominations">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Denominations</span>
+        <h2 class="section-title">Pick an amount.</h2>
+        <p class="section-lede">Or contact us for any custom amount — gift cards never expire and can be applied to any service.</p>
+      </div>
+
+      <div class="denom-grid reveal-stagger">
+        <div class="denom-card">
+          <span class="denom-amount">$100</span>
+          <p>An Express detail or two maintenance washes.</p>
+          <a href="contact.html" class="btn btn-ghost">Buy $100</a>
+        </div>
+        <div class="denom-card featured">
+          <span class="denom-amount">$250</span>
+          <p>Covers most Signature interior or exterior details.</p>
+          <a href="contact.html" class="btn btn-primary">Buy $250</a>
+        </div>
+        <div class="denom-card">
+          <span class="denom-amount">$500</span>
+          <p>Full Signature detail or partial coating package.</p>
+          <a href="contact.html" class="btn btn-ghost">Buy $500</a>
+        </div>
+        <div class="denom-card">
+          <span class="denom-amount">$1,000</span>
+          <p>The full ceramic coating or NANOPRO experience.</p>
+          <a href="contact.html" class="btn btn-ghost">Buy $1,000</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="how">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">How it works</span>
+        <h2 class="section-title">Sent in seconds. Used at any time.</h2>
+      </div>
+
+      <div class="how-grid reveal-stagger">
+        <div class="how-step">
+          <div class="how-num">1</div>
+          <h3>Choose &amp; pay</h3>
+          <p>Pick a denomination above or contact us for a custom amount. Pay securely online — Apple Pay, card, or text-to-pay.</p>
+        </div>
+        <div class="how-step">
+          <div class="how-num">2</div>
+          <h3>We send the card</h3>
+          <p>Digital gift card delivered to your inbox or theirs — your choice. Includes a unique code and a personalized message.</p>
+        </div>
+        <div class="how-step">
+          <div class="how-num">3</div>
+          <h3>They redeem it</h3>
+          <p>Recipient books any service and applies the code at checkout. Whatever's not used carries forward — gift cards never expire.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Common questions</span>
+        <h2 class="section-title">What buyers ask us.</h2>
+      </div>
+
+      <div class="faq-list reveal">
+        <details class="faq-item">
+          <summary class="faq-q">Do gift cards expire?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">No. Our gift cards never expire. Whoever receives one can use it whenever they're ready.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can the gift card be applied to any service?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Yes — any service we offer. Detailing, ceramic coating, NANOPRO Liquid PPF, window tint, gift cards apply universally. Partial use is fine; remaining balance carries forward.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">How do I send a gift card?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Pick a denomination, pay online, and tell us the recipient's email and a personal message. We send a digital card with a redemption code straight to their inbox — usually within minutes.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can I get a custom amount?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Of course. Contact us with any amount you'd like and we'll send a custom card. Great for matching a specific service price exactly.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can I get a physical card instead of digital?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Yes — let us know when you order. We'll print a card on premium stock and either mail it or have it ready for you to pick up at the shop.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA band -->
+  <section class="cta-band reveal">
+    <h2>The cleanest gift in the South Sound.</h2>
+    <p>Send a Thompson's gift card in under a minute — and let us do the wow factor for you.</p>
+    <a href="#denominations" class="btn btn-primary">Shop Gift Cards →</a>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <h4>Thompson's<span>.</span> Auto Detailing</h4>
+        <p>Olympia's most trusted auto detailing experts. Owner-operated, obsessive about gloss.</p>
+        <div class="socials">
+          <a href="https://www.facebook.com/profile.php?id=61563306155246" aria-label="Facebook" target="_blank" rel="noopener">f</a>
+          <a href="https://www.instagram.com/thompsonsautodetailingolympia/" aria-label="Instagram" target="_blank" rel="noopener">◎</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h5>Services</h5>
+        <a href="liquid-ppf.html">NANOPRO Liquid PPF</a>
+        <a href="ceramic-coating.html">Ceramic Coating</a>
+        <a href="window-tint.html">Window Tint</a>
+        <a href="mobile-detailing.html">Mobile Detailing</a>
+        <a href="gift-cards.html">Gift Cards</a>
+      </div>
+      <div class="footer-col">
+        <h5>Visit</h5>
+        <p>6235 Rich Rd SE, Unit C<br />Olympia, WA 98501</p>
+        <p>Mon–Fri: 7:30 AM – 5:00 PM<br />Sat–Sun: Closed</p>
+      </div>
+      <div class="footer-col">
+        <h5>Contact</h5>
+        <a href="tel:3604631391">360-463-1391</a>
+        <a href="mailto:ty@thompsonsautodetailing.com">ty@thompsonsautodetailing.com</a>
+        <a href="contact.html">Book Online →</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Thompson's Auto Detailing. All rights reserved.</span>
+      <span><a href="#">Terms</a> · <a href="#">Privacy</a> · <a href="#">Cancellation</a></span>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.querySelector('.menu-toggle');
+    const links = document.getElementById('navLinks');
+    toggle?.addEventListener('click', () => links.classList.toggle('open'));
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+    document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => io.observe(el));
+  </script>
+
+</body>
+</html>
