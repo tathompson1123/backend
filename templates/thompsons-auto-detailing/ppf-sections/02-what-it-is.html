@@ -115,7 +115,7 @@
     /* ---------- Protection visual: hydrophobic beading ---------- */
     .hydro { background: var(--navy-deep); }
     .hydro-stage {
-      position: relative; max-width: 1040px; margin: 0 auto; aspect-ratio: 16/9;
+      position: relative; max-width: 1040px; margin: 0 auto; height: 0; padding-top: 56.25%;
       border-radius: 8px; overflow: hidden; border: 1px solid rgba(212, 165, 68, 0.28);
       box-shadow: 0 40px 90px rgba(0, 0, 0, 0.55);
       background: url('https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=1400&q=85') center/cover no-repeat, var(--navy);
@@ -160,7 +160,7 @@
     .effects { background: linear-gradient(180deg, var(--navy-deep), var(--navy)); }
     .ba {
       --pos: 50%; position: relative; max-width: 1040px; margin: 0 auto;
-      aspect-ratio: 16/9; border-radius: 8px; overflow: hidden;
+      height: 0; padding-top: 56.25%; border-radius: 8px; overflow: hidden;
       border: 1px solid rgba(212, 165, 68, 0.28); box-shadow: 0 40px 90px rgba(0, 0, 0, 0.55);
       user-select: none; touch-action: pan-y;
     }
@@ -348,8 +348,7 @@
       .menu-toggle { display: block; }
       .topbar-inner { flex-direction: column; gap: 0.4rem; text-align: center; font-size: 0.78rem; }
       .split, .compare-grid, .assure-grid, .price-grid, .footer-grid, .ba-gallery { grid-template-columns: 1fr; gap: 2rem; }
-      .ba, .hydro-stage { aspect-ratio: 4/3; }
-      .ba { min-height: 240px; }
+      .ba, .hydro-stage { padding-top: 75%; }
       .ba-tag { font-size: 0.6rem; padding: 0.35rem 0.55rem; max-width: 44%; }
       .ba-tag small { display: none; }
       .ba-grip { width: 40px; height: 40px; font-size: 0.95rem; }
