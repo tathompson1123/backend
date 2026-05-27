@@ -50,7 +50,8 @@ async function triggerLeadFormAgent(userId, lead) {
     const agentCfg = agentConfig.rows[0]?.config;
     // SMS fires only when explicitly deployed. Backward-compat: treat enabled=true
     // with no 'deployed' field as deployed (existing agents before this flag existed).
-    const smsAgentLive = agentCfg?.deployed === true || (agentCfg?.enabled === true && !('deployed' in (agentCfg || {})));
+    // Explicit off (enabled:false) always wins; otherwise live if deployed or enabled.
+    const smsAgentLive = !!agentCfg && agentCfg.enabled !== false && (agentCfg.deployed === true || agentCfg.enabled === true);
     if (agentConfig.rows.length === 0 || !smsAgentLive) {
       console.log('Lead form agent not deployed for user', userId);
       return;

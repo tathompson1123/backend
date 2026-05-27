@@ -284,6 +284,35 @@ router.patch('/website', authenticateToken, requirePlan('pro'), async (req, res)
   }
 });
 
+// Lead Form Agent - Toggle on/off (no plan gate — turning OFF must always be allowed)
+router.patch('/lead-form', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const enabled = !!req.body.enabled;
+
+    const existing = await pool.query(
+      'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+      [userId, 'lead_form']
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead form agent has not been set up yet — deploy it first.' });
+    }
+
+    // Keep both flags in sync so every gate reads the same on/off state.
+    const config = { ...(existing.rows[0].config || {}), enabled, deployed: enabled };
+    await pool.query(
+      `UPDATE agent_configs SET config = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $2 AND agent_type = $3`,
+      [JSON.stringify(config), userId, 'lead_form']
+    );
+
+    res.json({ success: true, enabled });
+  } catch (error) {
+    console.error('Error toggling lead form agent:', error.message);
+    res.status(500).json({ error: 'Failed to toggle agent' });
+  }
+});
+
 // Website Chat Agent - Deploy
 router.post('/website/deploy', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {

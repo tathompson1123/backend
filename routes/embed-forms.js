@@ -82,7 +82,8 @@ async function scheduleLeadSms(userId, lead) {
       [userId, 'lead_form']
     );
     const cfg = agentConfig.rows[0]?.config;
-    const smsAgentLive = cfg?.deployed === true || (cfg?.enabled === true && !('deployed' in (cfg || {})));
+    // Explicit off (enabled:false) always wins; otherwise live if deployed or enabled.
+    const smsAgentLive = !!cfg && cfg.enabled !== false && (cfg.deployed === true || cfg.enabled === true);
     if (!cfg || !smsAgentLive) {
       console.log('Embed form SMS skipped — lead_form agent not deployed for user', userId);
       return;
