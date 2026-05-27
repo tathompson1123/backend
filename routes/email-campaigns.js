@@ -414,34 +414,41 @@ async function sendCampaign(userId, config, campaignId) {
       .catch(err => console.error('⚠️ Failed to mark campaign sent (emails were delivered):', err.message));
   }
 
-  // ── SMS send (up to 500) ───────────────────────────────
+  // ── SMS send (opt-in per campaign; up to 500) ───────────
+  // Off by default: this is an email tool, so a campaign only also texts customers when it
+  // explicitly opts in (c.send_sms). Wrapped in try/catch so any SMS-phase failure can never
+  // break a send whose emails already went out the door.
   let smsSent = 0;
   const trialNumber = process.env.TWILIO_SHARED_TRIAL_NUMBER;
-  if (trialNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-    const smsCustomers = await pool.query(
-      `SELECT name, phone FROM customers
-       WHERE user_id = $1 AND phone IS NOT NULL AND phone != ''
-       AND (sms_unsubscribed IS NULL OR sms_unsubscribed = FALSE)
-       LIMIT $2`,
-      [userId, SMS_SEND_LIMIT]
-    );
+  if (c.send_sms && trialNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+    try {
+      const smsCustomers = await pool.query(
+        `SELECT name, phone FROM customers
+         WHERE user_id = $1 AND phone IS NOT NULL AND phone != ''
+         AND (sms_unsubscribed IS NULL OR sms_unsubscribed = FALSE)
+         LIMIT $2`,
+        [userId, SMS_SEND_LIMIT]
+      );
 
-    if (smsCustomers.rows.length > 0) {
-      const twilio = require('twilio');
-      const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      if (smsCustomers.rows.length > 0) {
+        const twilio = require('twilio');
+        const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
-      for (const customer of smsCustomers.rows) {
-        const phone = normalizePhone(customer.phone);
-        if (!phone) continue;
-        try {
-          const firstName = (customer.name || '').split(' ')[0] || 'there';
-          const body = `Hi ${firstName}! ${c.subject} — ${fromName}. Reply STOP to opt out.`;
-          await twilioClient.messages.create({ body, to: phone, from: trialNumber });
-          smsSent++;
-        } catch (err) {
-          console.error(`📵 SMS failed to ${customer.phone}:`, err.message);
+        for (const customer of smsCustomers.rows) {
+          const phone = normalizePhone(customer.phone);
+          if (!phone) continue;
+          try {
+            const firstName = (customer.name || '').split(' ')[0] || 'there';
+            const body = `Hi ${firstName}! ${c.subject} — ${fromName}. Reply STOP to opt out.`;
+            await twilioClient.messages.create({ body, to: phone, from: trialNumber });
+            smsSent++;
+          } catch (err) {
+            console.error(`📵 SMS failed to ${customer.phone}:`, err.message);
+          }
         }
       }
+    } catch (smsErr) {
+      console.error('📵 SMS phase failed (emails already sent):', smsErr.message);
     }
   }
 
@@ -499,6 +506,15 @@ pool.query(`ALTER TABLE email_campaign_configs ADD COLUMN IF NOT EXISTS cta_link
 
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS email_unsubscribed BOOLEAN DEFAULT FALSE`)
   .catch(e => console.error('customers email_unsubscribed column migration error:', e.message));
+
+// SMS opt-out flag the campaign send filters on. Was referenced before it existed, which
+// made the SMS phase throw and bubble up as a "Send now" error even after emails went out.
+pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS sms_unsubscribed BOOLEAN DEFAULT FALSE`)
+  .catch(e => console.error('customers sms_unsubscribed column migration error:', e.message));
+
+// Campaigns are email-only unless they explicitly opt in to also blast SMS.
+pool.query(`ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS send_sms BOOLEAN DEFAULT FALSE`)
+  .catch(e => console.error('email_campaigns send_sms column migration error:', e.message));
 
 pool.query(`ALTER TABLE email_campaign_configs ADD COLUMN IF NOT EXISTS last_auto_focus VARCHAR(20)`)
   .catch(e => console.error('email_campaign_configs last_auto_focus migration error:', e.message));
@@ -1178,11 +1194,16 @@ router.get('/unsubscribe', async (req, res) => {
       return res.status(400).json({ error: 'Invalid token type' });
     }
 
-    await pool.query(
+    // Match the send path's key exactly (LOWER(TRIM(email))) so a stored address with stray
+    // whitespace can't slip through unsubscribed-but-still-emailed.
+    const upd = await pool.query(
       `UPDATE customers SET email_unsubscribed = TRUE
-       WHERE LOWER(email) = LOWER($1) AND user_id = $2`,
+       WHERE LOWER(TRIM(email)) = LOWER(TRIM($1)) AND user_id = $2`,
       [payload.email, payload.userId]
     );
+    if (upd.rowCount === 0) {
+      console.warn(`Unsubscribe: no customer matched ${payload.email} for user ${payload.userId}`);
+    }
 
     res.json({ success: true, email: payload.email });
   } catch (e) {
