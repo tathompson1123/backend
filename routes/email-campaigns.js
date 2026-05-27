@@ -327,6 +327,28 @@ function isValidEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+// Send a batch; if SendGrid rejects it (usually one malformed address that slipped past
+// validation), retry message-by-message so the rest still go out and we log the exact
+// offender — instead of one bad record failing the whole campaign.
+async function sendBatchResilient(messages) {
+  try {
+    await sgMail.send(messages);
+    return messages.length;
+  } catch (batchErr) {
+    const sgErrors = batchErr?.response?.body?.errors;
+    console.warn('⚠️ Batch email send failed; retrying individually:', sgErrors ? JSON.stringify(sgErrors) : batchErr.message);
+    let sent = 0;
+    for (const msg of messages) {
+      try { await sgMail.send(msg); sent++; }
+      catch (oneErr) {
+        const oneSg = oneErr?.response?.body?.errors;
+        console.error(`❌ Skipped recipient "${msg.to}":`, oneSg ? JSON.stringify(oneSg) : oneErr.message);
+      }
+    }
+    return sent;
+  }
+}
+
 async function sendCampaign(userId, config, campaignId) {
   const campaign = await pool.query('SELECT * FROM email_campaigns WHERE id = $1', [campaignId]);
   const c = campaign.rows[0];
@@ -380,8 +402,7 @@ async function sendCampaign(userId, config, campaignId) {
     });
 
     for (let i = 0; i < messages.length; i += 900) {
-      await sgMail.send(messages.slice(i, i + 900));
-      emailSent += Math.min(900, messages.length - i);
+      emailSent += await sendBatchResilient(messages.slice(i, i + 900));
     }
 
     // CRITICAL: stamp 'sent' the instant SendGrid confirms delivery, before any subsequent
