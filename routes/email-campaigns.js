@@ -320,6 +320,13 @@ function normalizePhone(raw) {
   return null; // can't normalize
 }
 
+// Basic email validation — guards against malformed addresses (stray spaces, missing @ or
+// domain, "none"/"n/a", phone numbers typed into the email field). A single bad address makes
+// SendGrid 400 the entire batch, so we screen them out before building the send.
+function isValidEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
 async function sendCampaign(userId, config, campaignId) {
   const campaign = await pool.query('SELECT * FROM email_campaigns WHERE id = $1', [campaignId]);
   const c = campaign.rows[0];
@@ -339,8 +346,26 @@ async function sendCampaign(userId, config, campaignId) {
   );
 
   let emailSent = 0;
-  if (emailCustomers.rows.length > 0) {
-    const messages = emailCustomers.rows.map(customer => {
+
+  // Trim + validate every address up front. One malformed recipient makes SendGrid reject the
+  // whole batch ("Does not contain a valid address"), so drop bad rows here rather than let a
+  // single dirty customer record block the entire campaign.
+  const validRecipients = [];
+  const skipped = [];
+  for (const customer of emailCustomers.rows) {
+    const email = (customer.email || '').trim();
+    if (isValidEmail(email)) {
+      validRecipients.push({ name: customer.name, email });
+    } else {
+      skipped.push(customer.email);
+    }
+  }
+  if (skipped.length > 0) {
+    console.warn(`📧 Campaign ${campaignId}: skipped ${skipped.length} invalid email(s):`, skipped.slice(0, 20).join(', '));
+  }
+
+  if (validRecipients.length > 0) {
+    const messages = validRecipients.map(customer => {
       const unsubUrl = buildUnsubscribeUrl(customer.email, userId);
       const htmlWithUnsub = applyUnsubscribeUrl(c.body_html, unsubUrl, fromName);
       return {
