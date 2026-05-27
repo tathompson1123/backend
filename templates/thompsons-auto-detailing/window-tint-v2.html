@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NANOPRO vs PPF — NANOPRO Liquid PPF</title>
+  <title>Window Tint | Thompson's Auto Detailing — Olympia, WA</title>
+  <meta name="description" content="Ceramic & carbon window tint in Olympia, WA. Reject heat, cut glare, and block 99% of UV with a clean, factory-look finish. Ceramic for maximum heat rejection and clarity; carbon for budget-friendly protection." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-
     :root {
       /* Light theme — backgrounds light, text dark, gold accents kept */
-      --navy: #ffffff;
-      --navy-deep: #f6f3ec;
-      --navy-soft: #ece4d6;
-      --gold: #d4a544;
-      --gold-bright: #f0c265;
-      --gold-deep: #8a6a23;
-      --off-white: #18283f;
-      --ink: #14181f;
+      --navy: #ffffff;            /* section backgrounds */
+      --navy-deep: #f6f3ec;       /* page / footer / deepest panels */
+      --navy-soft: #ece4d6;       /* cards / soft panels / bar tracks */
+      --gold: #d4a544;            /* gold fills (buttons, bars, icons) */
+      --gold-bright: #f0c265;     /* hover / brightest gold */
+      --gold-deep: #8a6a23;       /* gold accent TEXT (readable on light) */
+      --off-white: #18283f;       /* primary text (deep navy) */
+      --ink: #14181f;             /* text on gold fills (near-black) */
       --muted: rgba(24, 40, 63, 0.66);
       --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
       --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -69,7 +69,7 @@
     .phero { position: relative; min-height: 600px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 6rem 2rem; overflow: hidden; isolation: isolate; }
     .phero-bg {
       position: absolute; inset: -6%; z-index: -3;
-      background: url('https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=1920&q=85') center/cover no-repeat;
+      background: url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=1920&q=85') center/cover no-repeat;
       animation: kenBurns 26s ease-in-out infinite alternate; will-change: transform;
     }
     @keyframes kenBurns { 0% { transform: scale(1) translate(0, 0); } 100% { transform: scale(1.14) translate(-1.5%, -2%); } }
@@ -145,8 +145,8 @@
     .drop:nth-child(8)  { width: 14px; height: 14px; left: 48%; top: 72%; animation-delay: 3.6s; }
     .drop:nth-child(9)  { width: 20px; height: 20px; left: 20%; top: 74%; animation-delay: 4.1s; }
     .drop:nth-child(10) { width: 28px; height: 28px; left: 60%; top: 46%; animation-delay: 0.9s; }
-    .hydro-badge { position: absolute; bottom: 1.1rem; left: 1.1rem; z-index: 3; display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(7, 13, 31, 0.6); backdrop-filter: blur(6px); border: 1px solid rgba(212, 165, 68, 0.5); color: #f5f3ee; font-size: 0.8rem; letter-spacing: 0.5px; padding: 0.55rem 1rem; border-radius: 100px; }
-    .hydro-badge span { color: var(--gold-bright); }
+    .hydro-badge { position: absolute; bottom: 1.1rem; left: 1.1rem; z-index: 3; display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(7, 13, 31, 0.6); backdrop-filter: blur(6px); border: 1px solid rgba(212, 165, 68, 0.5); color: var(--off-white); font-size: 0.8rem; letter-spacing: 0.5px; padding: 0.55rem 1rem; border-radius: 100px; }
+    .hydro-badge span { color: var(--gold-deep); }
 
     /* ---------- "What is NANOPRO" split (KEPT) ---------- */
     .what { background: var(--navy); }
@@ -169,34 +169,23 @@
       user-select: none; touch-action: pan-y;
     }
     .ba-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-    .ba-img-after { filter: saturate(1.12) contrast(1.06) brightness(1.02); }
+    .ba-img-after { filter: brightness(0.6) saturate(1.05) contrast(1.05); }
     .ba-after-fx { position: absolute; inset: 0; z-index: 1; clip-path: inset(0 0 0 var(--pos)); pointer-events: none; }
     .ba-after-fx .gloss { position: absolute; top: -25%; right: 8%; width: 30%; height: 150%; background: linear-gradient(105deg, transparent, rgba(255,255,255,0.16), transparent); transform: rotate(8deg); }
     .ba-after-fx .drop { animation: none; opacity: 0.95; }
     .ba-after-fx .drop:nth-child(2) { width: 24px; height: 24px; right: 10%; top: 30%; left: auto; }
     .ba-after-fx .drop:nth-child(3) { width: 16px; height: 16px; right: 24%; top: 58%; left: auto; }
     .ba-after-fx .drop:nth-child(4) { width: 30px; height: 30px; right: 16%; top: 68%; left: auto; }
-    .ba-after-fx::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 90px rgba(212,165,68,0.16); background: radial-gradient(58% 55% at 72% 28%, rgba(255,255,255,0.08), transparent 60%); }
+    .ba-after-fx::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 80px rgba(7,13,31,0.5); background: radial-gradient(55% 45% at 70% 22%, rgba(255,255,255,0.12), transparent 55%); }
     .ba-before { position: absolute; inset: 0; z-index: 2; clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
-    .ba-img-before { filter: grayscale(0.55) saturate(0.38) brightness(0.58) contrast(0.92); }
-    /* prominent scratches */
-    .ba-before::before {
-      content: ''; position: absolute; inset: 0; z-index: 1;
-      background:
-        linear-gradient(115deg, transparent 29.6%, rgba(255,255,255,0.20) 30%, transparent 30.4%),
-        linear-gradient(118deg, transparent 51.7%, rgba(0,0,0,0.34) 52%, transparent 52.3%),
-        linear-gradient(108deg, transparent 67.7%, rgba(255,255,255,0.16) 68%, transparent 68.3%),
-        linear-gradient(124deg, transparent 41.7%, rgba(0,0,0,0.25) 42%, transparent 42.3%);
-    }
-    /* haze + oxidation/rust blooms + fine swirl scratches */
+    .ba-img-before { filter: brightness(1.32) saturate(0.95) contrast(0.9); }
+    /* untinted glare */
+    .ba-before::before { content: none; }
     .ba-before::after {
       content: ''; position: absolute; inset: 0; z-index: 1;
       background:
-        repeating-linear-gradient(58deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 18px),
-        repeating-linear-gradient(122deg, rgba(0,0,0,0.20) 0 1px, transparent 1px 28px),
-        radial-gradient(28% 36% at 26% 60%, rgba(150,92,52,0.36), transparent 70%),
-        radial-gradient(24% 30% at 62% 36%, rgba(125,112,92,0.34), transparent 70%),
-        radial-gradient(42% 52% at 46% 72%, rgba(190,188,178,0.20), transparent 72%);
+        radial-gradient(60% 50% at 72% 22%, rgba(255,255,255,0.60), rgba(255,255,255,0.15) 38%, transparent 62%),
+        linear-gradient(180deg, rgba(255,255,255,0.12), transparent 40%);
     }
     .ba-chip { position: absolute; z-index: 2; width: 12px; height: 9px; border-radius: 60% 40% 55% 45%; background: radial-gradient(circle at 40% 40%, #c9c0ae, #57503f 72%); box-shadow: 0 0 0 1px rgba(0,0,0,0.45), inset 0 0 3px rgba(0,0,0,0.6); }
     .ba-chip:nth-of-type(1) { left: 16%; top: 40%; transform: scale(1.4) rotate(-10deg); }
@@ -247,7 +236,7 @@
     .in-view .layer-nano { height: 110px; }
     .layer-nano b { font-family: 'Playfair Display', serif; font-size: 1.15rem; letter-spacing: 0.5px; }
     .layer-clear { height: 16px; background: linear-gradient(180deg, rgba(255,255,255,0.20), rgba(255,255,255,0.04)); color: var(--muted); font-size: 0.66rem; }
-    .layer-paint { height: 92px; background: linear-gradient(180deg, #16233f, #0b1730); color: rgba(245, 243, 238, 0.85); }
+    .layer-paint { height: 92px; background: linear-gradient(180deg, #16233f, #0b1730); color: var(--muted); }
     .xcaption { text-align: center; color: var(--muted); font-size: 0.95rem; margin-top: 1.75rem; }
     .xcaption b { color: var(--gold-deep); }
 
@@ -256,7 +245,7 @@
     .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
     .compare-card { background: var(--navy-soft); border: 1px solid rgba(212, 165, 68, 0.18); padding: 2.5rem; border-radius: 4px; position: relative; transition: transform 0.5s var(--ease-out), border-color 0.5s, box-shadow 0.5s; }
     .compare-card.featured { border-color: var(--gold-deep); box-shadow: 0 30px 80px rgba(212, 165, 68, 0.18); transform: translateY(-4px); }
-    .compare-card.featured::before { content: 'NANOPRO'; position: absolute; top: -12px; left: 2rem; background: var(--gold); color: var(--ink); padding: 0.4rem 0.85rem; font-size: 0.7rem; letter-spacing: 1.5px; font-weight: 700; }
+    .compare-card.featured::before { content: 'PREMIUM'; position: absolute; top: -12px; left: 2rem; background: var(--gold); color: var(--ink); padding: 0.4rem 0.85rem; font-size: 0.7rem; letter-spacing: 1.5px; font-weight: 700; }
     .compare-card h3 { font-family: 'Playfair Display', serif; font-size: 1.6rem; margin-bottom: 0.4rem; }
     .compare-card .compare-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
     .compare-list { list-style: none; }
@@ -369,55 +358,385 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
     }
-  
   </style>
 </head>
 <body>
 
-<!-- Comparison (KEPT) -->
-  <section class="compare" id="compare">
-    <div class="container">
-      <div class="section-head reveal">
-        <span class="section-eyebrow">Why upgrade</span>
-        <h2 class="section-title">NANOPRO vs. traditional PPF.</h2>
-        <p class="section-lede">Same protective DNA — but reinforced with acrylic and applied as a seamless liquid, so there are no edges, seams, or visible lines.</p>
+  <!-- Hero -->
+  <header class="phero">
+    <div class="phero-bg" aria-hidden="true"></div>
+    <div class="phero-overlay" aria-hidden="true"></div>
+    <div class="phero-sweep" aria-hidden="true"></div>
+
+    <div class="phero-inner">
+      <span class="page-eyebrow">Ceramic &amp; carbon options</span>
+      <h1 class="page-title">Window <em>Tint</em></h1>
+      <p class="page-lede">
+        Keep your cabin cooler, cut blinding glare, and block 99% of UV — with a clean, factory-look finish. Choose premium ceramic for the most heat rejection, or budget-friendly carbon.
+      </p>
+      <div class="page-ctas">
+        <a href="sms:+13604631391?&body=I%27m%20interested%20in%20getting%20window%20tint%20for%20my%20car" target="_top" class="btn btn-primary">Get a Quote</a>
       </div>
+      <p class="hero-call">Or call <a href="tel:+13604631391" target="_top">(360)&nbsp;463-1391</a></p>
+      <div class="hero-trust">
+        <span class="hero-chip"><span>☀</span> Blocks Heat</span>
+        <span class="hero-chip"><span>🛡</span> 99% UV Block</span>
+        <span class="hero-chip"><span>♾</span> Lifetime Warranty</span>
+      </div>
+    </div>
+  </header>
 
-      <div class="compare-grid reveal-stagger">
-        <div class="compare-card">
-          <h3>Traditional PPF</h3>
-          <p class="compare-sub">Pre-cut polyurethane film, hand-applied panel by panel.</p>
-          <ul class="compare-list">
-            <li>Strong impact protection from rocks &amp; debris</li>
-            <li>Visible edges where film stops on each panel</li>
-            <li>Seams can collect dirt or lift over time</li>
-            <li>Limited self-healing on minor swirl marks</li>
-            <li>Standard PPF gloss profile</li>
-          </ul>
+  <!-- What is NANOPRO (KEPT) -->
+  <section class="what">
+    <div class="container">
+      <div class="split">
+        <div class="split-image reveal">
+          <img src="https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=900&q=85" alt="Car with ceramic window tint" />
         </div>
-
-        <div class="compare-card featured">
-          <h3>NANOPRO Liquid PPF</h3>
-          <p class="compare-sub">Same chemistry, reinforced with acrylic, applied as a liquid for full coverage.</p>
-          <ul class="compare-list">
-            <li>Stronger impact &amp; abrasion resistance — acrylic-reinforced</li>
-            <li>Seamless, edge-free coverage with no visible lines</li>
-            <li>Bonds as one continuous shell — nothing to lift</li>
-            <li>Hydrophobic finish that sheds water and dirt</li>
-            <li>10-year warranty + free fixes for life</li>
+        <div class="split-content reveal">
+          <span class="section-eyebrow">Why tint</span>
+          <h2 class="section-title">Cooler, clearer, and better looking.</h2>
+          <p>Good tint does far more than look sharp. It rejects solar heat so your AC works less, kills the glare that strains your eyes on a sunny drive, and blocks the UV that fades your interior and ages your skin.</p>
+          <p>We install precision-cut film on every window for a clean, bubble-free, factory finish — in ceramic or carbon, matched to your goals and your budget.</p>
+          <ul>
+            <li>Rejects solar heat — a cooler cabin, less AC strain</li>
+            <li>Cuts blinding glare for safer, easier driving</li>
+            <li>Blocks 99% of UV rays — skin &amp; interior protection</li>
+            <li>Keeps seats &amp; dash from fading and cracking</li>
+            <li>Adds privacy and a clean, finished look</li>
           </ul>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- Before & Afters: slider + gallery -->
+  <section class="effects" id="effects">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">See the difference</span>
+        <h2 class="section-title">Untinted vs. tinted.</h2>
+        <p class="section-lede">Drag the handle. Left is bare glass — full glare, heat, and UV pouring in. Right is the same window with ceramic tint: cooler, calmer, and far easier on your eyes.</p>
+      </div>
+
+      <!-- Feature slider -->
+      <div class="ba reveal" id="baSlider">
+        <img class="ba-img ba-img-after" src="https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=1200&q=85" alt="Car windows with ceramic tint" />
+        <div class="ba-after-fx" aria-hidden="true">
+          <div class="gloss"></div>
+        </div>
+        <div class="ba-before" aria-hidden="true">
+          <img class="ba-img ba-img-before" src="https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=1200&q=85" alt="" />
+        </div>
+        <span class="ba-tag bad">Untinted<small>glare · heat · UV</small></span>
+        <span class="ba-tag good">🕶 Ceramic tint<small>cool · clear · UV-blocked</small></span>
+        <div class="ba-handle"></div>
+        <div class="ba-grip">⟺</div>
+        <input class="ba-range" type="range" min="0" max="100" value="50" aria-label="Drag to compare untinted and tinted glass" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Heat rejection comparison -->
+  <section class="thickness" id="heat">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Stay cool</span>
+        <h2 class="section-title">More heat rejected. Less squinting.</h2>
+        <p class="section-lede">Ceramic rejects significantly more solar heat and infrared than carbon — so your cabin stays cooler and your AC works less.</p>
+      </div>
+
+      <div class="reveal" style="max-width:740px;margin:0 auto;">
+        <div style="margin-bottom:1.6rem;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;"><b style="font-family:'Playfair Display',serif;color:var(--off-white);font-size:1.05rem;">No Tint</b><span style="color:var(--muted);font-size:0.85rem;">Minimal heat rejection</span></div>
+          <div style="height:16px;background:var(--navy-soft);border-radius:10px;overflow:hidden;"><div style="height:100%;width:10%;border-radius:10px;background:rgba(24,40,63,0.22);"></div></div>
+        </div>
+        <div style="margin-bottom:1.6rem;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;"><b style="font-family:'Playfair Display',serif;color:var(--off-white);font-size:1.05rem;">Carbon Tint</b><span style="color:var(--muted);font-size:0.85rem;">Strong heat rejection</span></div>
+          <div style="height:16px;background:var(--navy-soft);border-radius:10px;overflow:hidden;"><div style="height:100%;width:55%;border-radius:10px;background:linear-gradient(90deg,var(--gold-deep),var(--gold));"></div></div>
+        </div>
+        <div style="margin-bottom:0.5rem;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;"><b style="font-family:'Playfair Display',serif;color:var(--off-white);font-size:1.05rem;">Ceramic Tint</b><span style="color:var(--gold-bright);font-size:0.85rem;font-weight:600;">Maximum heat rejection</span></div>
+          <div style="height:16px;background:var(--navy-soft);border-radius:10px;overflow:hidden;"><div style="height:100%;width:100%;border-radius:10px;background:linear-gradient(90deg,var(--gold-deep),var(--gold) 60%,var(--gold-bright));box-shadow:0 0 22px rgba(212,165,68,0.5);"></div></div>
+        </div>
+      </div>
+      <p class="xcaption reveal" style="font-size:0.82rem;font-style:italic;opacity:0.7;">Relative heat rejection — exact figures vary by film and shade. Ask us for the spec on the film you choose.</p>
+    </div>
+  </section>
+
+  <!-- Comparison (KEPT) -->
+  <section class="compare" id="compare">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Choose your film</span>
+        <h2 class="section-title">Ceramic vs. carbon tint.</h2>
+        <p class="section-lede">Both look great and block 99% of UV. Ceramic pulls ahead on heat rejection, clarity, and longevity — which is why it costs a little more.</p>
+      </div>
+
+      <div class="compare-grid reveal-stagger">
+        <div class="compare-card">
+          <h3>Carbon Tint</h3>
+          <p class="compare-sub">Great-looking, budget-friendly heat &amp; UV control.</p>
+          <ul class="compare-list">
+            <li>Solid heat &amp; glare reduction</li>
+            <li>Blocks 99% of UV rays</li>
+            <li>Matte, non-reflective finish</li>
+            <li>Won't fade or turn purple like cheap dyed film</li>
+            <li>More affordable</li>
+          </ul>
+        </div>
+
+        <div class="compare-card featured">
+          <h3>Ceramic Tint</h3>
+          <p class="compare-sub">Top-tier heat rejection, clarity, and longevity.</p>
+          <ul class="compare-list">
+            <li>Maximum heat &amp; infrared rejection</li>
+            <li>Crystal-clear optics — no haze, no signal interference</li>
+            <li>Blocks 99% of UV rays</li>
+            <li>Stays true — won't fade, bubble, or turn purple</li>
+            <li>Longest-lasting — backed for life</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Assurance band (KEPT) -->
+  <section class="assure">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Our promise</span>
+        <h2 class="section-title">Backed, legal, and built to last.</h2>
+      </div>
+      <div class="assure-grid reveal-stagger">
+        <div class="assure-card">
+          <div class="assure-icon">♾</div>
+          <div class="big">Lifetime</div>
+          <h3>Warranty</h3>
+          <p>Ceramic tint is backed for life against bubbling, peeling, cracking, and fading — in writing, from day one.</p>
+        </div>
+        <div class="assure-card">
+          <div class="assure-icon">☀</div>
+          <div class="big">99%</div>
+          <h3>UV Blocked</h3>
+          <p>Both films block 99% of UV rays — protecting your skin and keeping your interior from fading and cracking.</p>
+        </div>
+        <div class="assure-card">
+          <div class="assure-icon">✓</div>
+          <div class="big">Legal</div>
+          <h3>&amp; Compliant</h3>
+          <p>We'll match you to a shade that fits Washington's tint limits for your vehicle, so you're covered on the road.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Benefits strip (SCANNABLE) -->
+  <section class="bstrip-section">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">At a glance</span>
+        <h2 class="section-title">Everything good tint should do.</h2>
+      </div>
+      <div class="bstrip reveal-stagger">
+        <div class="bchip"><span class="ic">☀</span><b>Rejects heat</b></div>
+        <div class="bchip"><span class="ic">🕶</span><b>Cuts glare</b></div>
+        <div class="bchip"><span class="ic">🛡</span><b>Blocks 99% UV</b></div>
+        <div class="bchip"><span class="ic">🪑</span><b>Protects interior</b></div>
+        <div class="bchip"><span class="ic">🔒</span><b>Adds privacy</b></div>
+        <div class="bchip"><span class="ic">♾</span><b>Lifetime warranty</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Process (KEPT) -->
+  <section class="process">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Our process</span>
+        <h2 class="section-title">How we install your tint.</h2>
+        <p class="section-lede">In and out in a few hours, with a clean, bubble-free, factory finish.</p>
+      </div>
+
+      <div class="step-grid reveal-stagger">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Clean &amp; prep</h4>
+            <p>Every window is deep-cleaned and decontaminated so the film bonds flawlessly — no dust or specks trapped under the tint.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Precision cut</h4>
+            <p>Film is computer-cut to your exact glass, so it fits edge-to-edge — no gaps, no peeling corners, no blades near your car.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Apply &amp; squeegee</h4>
+            <p>The film is laid and squeegeed out by hand — no bubbles, no creases, no light gaps. Clean lines on every window.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>Cure</h4>
+            <p>Your tint sets over the next few days. We hand you a simple care sheet so it cures crystal-clear.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing (KEPT) -->
+  <section class="pricing">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Film &amp; coverage</span>
+        <h2 class="section-title">Tint packages.</h2>
+        <p class="section-lede">Pick your film and coverage. Get an exact quote in under 24 hours.</p>
+      </div>
+
+      <div class="price-grid reveal-stagger">
+        <div class="price-card">
+          <div class="tier">Carbon Tint</div>
+          <p class="price-desc">Budget-friendly heat &amp; UV control</p>
+          <ul class="price-list">
+            <li>All side &amp; rear windows</li>
+            <li>Solid heat &amp; glare reduction</li>
+            <li>Blocks 99% of UV rays</li>
+            <li>Matte, non-reflective look</li>
+            <li>Limited warranty</li>
+          </ul>
+          <a href="sms:+13604631391?&body=I%27m%20interested%20in%20getting%20window%20tint%20for%20my%20car" target="_top" class="btn btn-ghost" style="width: 100%; justify-content: center;">Quote me</a>
+        </div>
+
+        <div class="price-card featured">
+          <div class="tier">Ceramic Tint ★</div>
+          <p class="price-desc">Maximum heat rejection &amp; clarity</p>
+          <ul class="price-list">
+            <li>All side &amp; rear windows</li>
+            <li>Top-tier heat &amp; infrared rejection</li>
+            <li>Crystal-clear — no haze, no signal loss</li>
+            <li>Won't fade, bubble, or turn purple</li>
+            <li>Lifetime warranty</li>
+          </ul>
+          <a href="sms:+13604631391?&body=I%27m%20interested%20in%20getting%20window%20tint%20for%20my%20car" target="_top" class="btn btn-primary" style="width: 100%; justify-content: center;">Get my quote</a>
+        </div>
+
+        <div class="price-card">
+          <div class="tier">Ceramic + Windshield</div>
+          <p class="price-desc">Full ceramic, including the windshield</p>
+          <ul class="price-list">
+            <li>Everything in Ceramic</li>
+            <li>Full ceramic windshield film</li>
+            <li>Maximum heat rejection up front</li>
+            <li>Dramatically cooler cabin</li>
+            <li>Lifetime warranty</li>
+          </ul>
+          <a href="sms:+13604631391?&body=I%27m%20interested%20in%20getting%20window%20tint%20for%20my%20car" target="_top" class="btn btn-ghost" style="width: 100%; justify-content: center;">Quote me</a>
+        </div>
+      </div>
+
+      <p style="text-align: center; color: var(--muted); margin-top: 2rem; font-size: 0.85rem;">
+        <em>Washington limits how dark front windows can be — we'll match you to a compliant shade for your vehicle. Final quote depends on your vehicle and film choice.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- FAQ (KEPT) -->
+  <section class="faq">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Common questions</span>
+        <h2 class="section-title">What buyers ask us.</h2>
+      </div>
+
+      <div class="faq-list reveal">
+        <details class="faq-item">
+          <summary class="faq-q">Ceramic or carbon — which should I get?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Ceramic is the premium choice: the most heat and infrared rejection, the clearest optics, and the longest life — backed for life. Carbon is a great value with solid heat and glare reduction and the same 99% UV block. If your car bakes in the sun or you want the best, go ceramic; if budget is the priority, carbon still performs well.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Will tint actually keep my car cooler?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Yes — especially ceramic. It rejects a large share of solar heat and infrared, so your cabin heats up far less and your AC doesn't have to work as hard. Carbon helps too, just not as much as ceramic.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Is window tint legal in Washington?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Washington limits how dark your front side windows can be, while rear and back windows can usually go darker. We'll walk you through a shade that keeps you compliant for your vehicle — no guessing.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Does tint block UV rays?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Both our carbon and ceramic films block 99% of UV rays. That protects your skin on long drives and keeps your seats, dash, and trim from fading and cracking over time.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">How soon can I roll my windows down?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Give the film 3–5 days to cure before rolling the windows down. A little haze or a few water pockets during the first few days is normal — it clears up as the tint dries. We'll send you home with a simple care sheet.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Will it bubble or turn purple?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Not with our films. Bubbling and that purple fade come from cheap dyed tint. Carbon and ceramic stay true to color, and ceramic is backed for life against bubbling, peeling, and fading.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">How long does the install take?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Most vehicles are done in a few hours — usually same day. We'll give you an exact time when we quote your car.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA band (refreshed) -->
+  <section class="cta-band reveal">
+    <h2>Beat the heat and the glare.</h2>
+    <p>Get a tint quote in under 24 hours — tell us your vehicle and how dark you want to go, and we'll match you to the right film.</p>
+    <a href="sms:+13604631391?&body=I%27m%20interested%20in%20getting%20window%20tint%20for%20my%20car" target="_top" class="btn btn-primary">Get my quote →</a>
+    <div class="cta-trust">
+      <span>Ceramic &amp; Carbon</span>
+      <span>99% UV Block</span>
+      <span>Lifetime Warranty</span>
+    </div>
+  </section>
+
   <script>
-    var t=document.querySelector('.menu-toggle'),l=document.getElementById('navLinks');
-    if(t&&l){t.addEventListener('click',function(){l.classList.toggle('open');});}
-    var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in-view');io.unobserve(e.target);}});},{threshold:0.15,rootMargin:'0px 0px -60px 0px'});
-    document.querySelectorAll('.reveal,.reveal-stagger').forEach(function(el){io.observe(el);});
-    var ba=document.getElementById('baSlider');
-    if(ba){var r=ba.querySelector('.ba-range');var sp=function(v){ba.style.setProperty('--pos',v+'%');};r.addEventListener('input',function(){sp(r.value);});sp(r.value);}
+    // Mobile nav
+    const toggle = document.querySelector('.menu-toggle');
+    const links = document.getElementById('navLinks');
+    toggle?.addEventListener('click', () => links.classList.toggle('open'));
+
+    // Reveal-on-scroll
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+    document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => io.observe(el));
+
+    // Before/After slider
+    const ba = document.getElementById('baSlider');
+    if (ba) {
+      const range = ba.querySelector('.ba-range');
+      const setPos = v => ba.style.setProperty('--pos', v + '%');
+      range.addEventListener('input', () => setPos(range.value));
+      setPos(range.value);
+    }
+
+    // Auto-resize: report full page height to the host (e.g. Wix Velo) so the
+    // embed can grow to fit the content instead of scrolling inside a fixed box.
+    function sorcePostHeight() {
+      var h = document.documentElement.scrollHeight;
+      if (window.parent) window.parent.postMessage({ sorceHeight: h }, '*');
+    }
+    window.addEventListener('load', sorcePostHeight);
+    window.addEventListener('resize', sorcePostHeight);
+    setTimeout(sorcePostHeight, 400);
+    setTimeout(sorcePostHeight, 1500);
   </script>
+
 </body>
 </html>

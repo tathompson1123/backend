@@ -29,8 +29,7 @@ const js =
 
 // Ordered comment markers -> output file. Topbar block absorbs the Nav (next comment) up to hero.
 const markers = [
-  { c: '<!-- Topbar -->',                                  slug: '00-header-nav',   title: 'Header + Nav' },
-  { c: '<!-- Redesigned hero -->',                         slug: '01-hero',         title: 'Hero' },
+  { c: '<!-- Hero -->',                                    slug: '01-hero',         title: 'Hero' },
   { c: '<!-- What is NANOPRO (KEPT) -->',                  slug: '02-what-it-is',   title: 'What It Is' },
   { c: '<!-- Protection visual: hydrophobic beading -->',  slug: '03-hydrophobic',  title: 'Hydrophobic' },
   { c: '<!-- Before & Afters: slider + gallery -->',       slug: '04-before-after', title: 'Before & After' },
@@ -42,7 +41,6 @@ const markers = [
   { c: '<!-- Pricing (KEPT) -->',                          slug: '10-packages',     title: 'Packages' },
   { c: '<!-- FAQ (KEPT) -->',                              slug: '11-faq',          title: 'FAQ' },
   { c: '<!-- CTA band (refreshed) -->',                    slug: '12-cta',          title: 'CTA' },
-  { c: '<!-- Footer (KEPT, Gift Cards link kept) -->',     slug: '13-footer',       title: 'Footer' },
 ];
 
 const positions = markers.map(m => {
