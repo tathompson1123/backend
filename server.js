@@ -189,6 +189,17 @@ app.use('/embed.js', express.static(path.join(__dirname, 'public', 'embed.js'), 
 const embedRoutes = require('./routes/embed');
 app.use('/api/embed', embedCors, embedRoutes);
 
+// Embed Forms — standalone embeddable lead forms (inline renderer + public API)
+app.use('/forms.js', express.static(path.join(__dirname, 'public', 'forms.js'), {
+  setHeaders: (res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.set('Cache-Control', 'public, max-age=300');
+  }
+}));
+const embedFormsRoutes = require('./routes/embed-forms');
+app.use('/api/embed-forms', embedCors, embedFormsRoutes);
+
 // External form webhook — open CORS (called from Wix, Squarespace, Zapier etc.)
 const webhookRoutes = require('./routes/webhooks');
 app.use('/api/webhooks', embedCors, webhookRoutes);
