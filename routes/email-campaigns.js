@@ -842,11 +842,25 @@ router.post('/send-now', authenticateToken, async (req, res) => {
       // sendCampaign() now stamps 'sent' as soon as SendGrid confirms, so a stuck 'pending'
       // means emails truly never went out and the user can re-create the draft if needed.
       const draftResult = await pool.query(
-        `SELECT * FROM email_campaigns WHERE id = $1 AND user_id = $2 AND status = 'draft'`,
+        `SELECT * FROM email_campaigns WHERE id = $1 AND user_id = $2`,
         [draftId, req.user.userId]
       );
       if (draftResult.rows.length === 0) return res.status(404).json({ error: 'Draft not found' });
       const draft = draftResult.rows[0];
+      // The draft was flipped out of 'draft' state — typically a previous send that already
+      // delivered ('sent') or stalled mid-send ('pending'/'replaced'). Never blindly re-send
+      // (that risks a duplicate blast to the whole list); tell the client it's stale so it can
+      // pull a fresh draft, and say exactly what happened.
+      if (draft.status !== 'draft') {
+        const alreadySent = draft.status === 'sent';
+        return res.status(409).json({
+          stale: true,
+          alreadySent,
+          error: alreadySent
+            ? 'This campaign already went out — start a fresh draft to send another.'
+            : 'This draft is no longer sendable (a previous send left it in progress). Pulling a fresh draft.',
+        });
+      }
 
       // If usePreview has updated content, use that; otherwise use saved draft content
       if (usePreview && usePreview.subject) {
