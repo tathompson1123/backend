@@ -72,8 +72,14 @@
       '.sorce-fab:hover .sorce-fab-label { opacity: 1; }\n' +
 
       /* Chat bubble (pill shape with avatar + name + status) */
-      '.sorce-chat-bubble { display: flex; align-items: center; gap: 10px; background: ' + tc + '; border-radius: 30px; padding: 8px 16px 8px 8px; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.18); transition: transform 0.2s, box-shadow 0.2s; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; border: none; }\n' +
+      '.sorce-chat-bubble { position: relative; display: flex; align-items: center; gap: 10px; background: ' + tc + '; border-radius: 30px; padding: 8px 16px 8px 8px; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.18); transition: transform 0.2s, box-shadow 0.2s; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; border: none; }\n' +
       '.sorce-chat-bubble:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }\n' +
+      '.sorce-chat-dismiss { position: absolute; top: -8px; right: -8px; width: 20px; height: 20px; border-radius: 50%; background: #1f2937; color: #fff; border: 2px solid #fff; font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.3); z-index: 2; }\n' +
+      '.sorce-chat-dismiss:hover { background: #111827; }\n' +
+      '.sorce-chat-mini { display: none; width: 30px; height: 30px; border-radius: 50%; background: ' + tc + '; color: #fff; border: none; cursor: pointer; font-family: Georgia, "Times New Roman", serif; font-style: italic; font-weight: 700; font-size: 16px; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(0,0,0,0.25); transition: transform 0.2s; }\n' +
+      '.sorce-chat-mini:hover { transform: scale(1.1); }\n' +
+      '#sorce-embed-container.sorce-dismissed .sorce-chat-bubble { display: none; }\n' +
+      '#sorce-embed-container.sorce-dismissed .sorce-chat-mini { display: flex; }\n' +
       '.sorce-chat-avatar { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0; }\n' +
       '.sorce-chat-bubble-info { display: flex; flex-direction: column; line-height: 1.2; }\n' +
       '.sorce-chat-bubble-name { font-weight: 600; font-size: 14px; }\n' +
@@ -226,9 +232,20 @@
     var chatInitial = (config.chat.agentName || 'A').charAt(0).toUpperCase();
     var fab = document.createElement('button');
     fab.className = 'sorce-chat-bubble';
-    fab.innerHTML = '<div class="sorce-chat-avatar">' + chatInitial + '</div><div class="sorce-chat-bubble-info"><span class="sorce-chat-bubble-name">' + chatName + '</span><span class="sorce-chat-bubble-status"><span class="sorce-online-dot"></span> Online now</span></div>';
+    fab.innerHTML = '<span class="sorce-chat-dismiss" role="button" aria-label="Hide chat">×</span><div class="sorce-chat-avatar">' + chatInitial + '</div><div class="sorce-chat-bubble-info"><span class="sorce-chat-bubble-name">' + chatName + '</span><span class="sorce-chat-bubble-status"><span class="sorce-online-dot"></span> Online now</span></div>';
     fab.onclick = toggleChat;
     container.appendChild(fab);
+
+    // Dismiss (X) → collapse the widget to a tiny restore icon
+    var chatDismiss = fab.querySelector('.sorce-chat-dismiss');
+    if (chatDismiss) chatDismiss.addEventListener('click', function(e) { e.stopPropagation(); dismissChat(); });
+    var chatMini = document.createElement('button');
+    chatMini.className = 'sorce-chat-mini';
+    chatMini.setAttribute('aria-label', 'Open chat');
+    chatMini.textContent = 'i';
+    chatMini.onclick = restoreChat;
+    container.appendChild(chatMini);
+    if (sessionStorage.getItem('sorce-chat-dismissed')) container.classList.add('sorce-dismissed');
 
     // Chat window
     var chatWindow = document.createElement('div');
@@ -252,7 +269,7 @@
     // Auto-open after delay
     var delay = (config.chat.autoOpenDelay || 14) * 1000;
     setTimeout(function() {
-      if (!chatOpen && !sessionStorage.getItem('sorce-chat-opened')) {
+      if (!chatOpen && !sessionStorage.getItem('sorce-chat-opened') && !sessionStorage.getItem('sorce-chat-dismissed')) {
         toggleChat();
         addChatMessage(config.chat.greetingMessage, 'agent');
         sessionStorage.setItem('sorce-chat-opened', 'true');
@@ -271,6 +288,21 @@
         win.classList.remove('open');
       }
     }
+  }
+
+  function dismissChat() {
+    chatOpen = false;
+    var win = document.getElementById('sorce-chat-window');
+    if (win) win.classList.remove('open');
+    var c = document.getElementById('sorce-embed-container');
+    if (c) c.classList.add('sorce-dismissed');
+    sessionStorage.setItem('sorce-chat-dismissed', 'true');
+  }
+
+  function restoreChat() {
+    var c = document.getElementById('sorce-embed-container');
+    if (c) c.classList.remove('sorce-dismissed');
+    sessionStorage.removeItem('sorce-chat-dismissed');
   }
 
   function startChatConversation() {
