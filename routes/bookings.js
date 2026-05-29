@@ -115,7 +115,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.post('/create', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { serviceId, bookingDate, startTime, customerInfo, customerNotes, employeeId, groupId, referralSource } = req.body;
+    const { serviceId, bookingDate, startTime, customerInfo, customerNotes, employeeId, groupId, referralSource, price: priceOverride } = req.body;
 
     if (!serviceId || !bookingDate || !startTime || !customerInfo) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -135,8 +135,16 @@ router.post('/create', authenticateToken, async (req, res) => {
     // Fetch user's sales tax rate
     const taxResult = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
     const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
-    const taxAmount = Math.round(parseFloat(service.price) * taxRate * 100) / 100;
-    const totalWithTax = parseFloat(service.price) + taxAmount;
+
+    // Per-booking price override: employee can adjust the catalog price for this booking
+    // only (the service row itself is untouched). Tax is recomputed off the effective price.
+    let effectivePrice = parseFloat(service.price);
+    if (priceOverride !== undefined && priceOverride !== null && priceOverride !== '') {
+      const parsed = parseFloat(priceOverride);
+      if (Number.isFinite(parsed) && parsed >= 0) effectivePrice = parsed;
+    }
+    const taxAmount = Math.round(effectivePrice * taxRate * 100) / 100;
+    const totalWithTax = effectivePrice + taxAmount;
 
     const [startHour, startMin] = startTime.split(':').map(Number);
     const startMinutes = startHour * 60 + startMin;
@@ -199,7 +207,7 @@ router.post('/create', authenticateToken, async (req, res) => {
       RETURNING *`,
       [
         userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
-        service.price, totalWithTax, customerInfo.name, customerInfo.email,
+        effectivePrice, totalWithTax, customerInfo.name, customerInfo.email,
         customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null,
         'manual', (referralSource && String(referralSource).trim()) || null
       ]
@@ -209,11 +217,11 @@ router.post('/create', authenticateToken, async (req, res) => {
 
     await pool.query(
       `INSERT INTO booking_items (
-        booking_id, service_id, service_name, service_duration, 
+        booking_id, service_id, service_name, service_duration,
         service_price, quantity, subtotal
       )
       VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-      [booking.id, serviceId, service.name, service.duration_hours, service.price, service.price]
+      [booking.id, serviceId, service.name, service.duration_hours, effectivePrice, effectivePrice]
     );
 
     await updateCustomerFromBooking(booking, userId);
