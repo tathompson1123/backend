@@ -208,6 +208,10 @@ app.use('/api/webhooks', embedCors, webhookRoutes);
 const adPlatformRoutes = require('./routes/ad-platforms');
 app.use('/api/ad-platforms', adPlatformRoutes);
 
+// Meta Conversions API — server-side Lead events to your Facebook Pixel
+const metaCapiRoutes = require('./routes/meta-capi');
+app.use('/api/meta-capi', metaCapiRoutes);
+
 // Email marketing campaigns
 const emailCampaignRoutes = require('./routes/email-campaigns');
 app.use('/api/email-campaigns', emailCampaignRoutes);

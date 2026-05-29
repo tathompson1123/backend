@@ -23,6 +23,13 @@
     return s.src.replace(/\/forms\.js(\?.*)?$/, '');
   })();
 
+  function readCookie(name) {
+    try {
+      var m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[\\.$?*|{}()[\]\\/+^]/g, '\\$&') + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : '';
+    } catch (e) { return ''; }
+  }
+
   function injectStyles() {
     if (document.getElementById('scf-styles')) return;
     var st = document.createElement('style');
@@ -132,6 +139,14 @@
         payload[key] = (node.type === 'checkbox') ? node.checked : node.value;
       });
       if (consent) payload.sms_consent = consent.checked;
+
+      // Meta CAPI attribution: pass through the visitor's Pixel cookies + landing URL so
+      // the server-side Lead event can be matched to the ad that drove this click.
+      var fbc = readCookie('_fbc');
+      var fbp = readCookie('_fbp');
+      if (fbc) payload.fbc = fbc;
+      if (fbp) payload.fbp = fbp;
+      payload.source_url = location.href;
 
       btn.disabled = true;
       var original = btn.textContent;

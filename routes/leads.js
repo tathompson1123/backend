@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
 const { sendSMS } = require('../utils/twilio');
+const { fireLeadEvent, clientIpFromReq } = require('../utils/metaConversions');
 const sgMail = require('@sendgrid/mail');
 
 if (process.env.SENDGRID_API_KEY) {
@@ -116,10 +117,10 @@ router.get('/public/:userId/info', async (req, res) => {
 
 router.post('/public/:userId', async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
-  
+
   try {
     const { userId } = req.params;
-    const { name, email, phone, service, message, sms_consent, source } = req.body;
+    const { name, email, phone, service, message, sms_consent, source, fbc, fbp, source_url } = req.body;
 
     console.log('📝 Public lead submission:', { userId, name, email, phone, sms_consent, source });
 
@@ -144,6 +145,14 @@ router.post('/public/:userId', async (req, res) => {
 
     const newLead = result.rows[0];
     console.log(`✅ Public lead created: ${name} for user ${userId} (SMS consent: true)`);
+
+    // Fire Meta Conversions API Lead event (no-op if user hasn't configured a pixel).
+    fireLeadEvent(userId, newLead, {
+      fbc, fbp,
+      source_url: source_url || req.headers.referer,
+      client_ip: clientIpFromReq(req),
+      client_ua: req.headers['user-agent'],
+    });
 
     // Trigger Lead Form Agent
     triggerLeadFormAgent(userId, newLead).catch(err =>

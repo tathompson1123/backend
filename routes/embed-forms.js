@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const sgMail = require('@sendgrid/mail');
+const { fireLeadEvent, clientIpFromReq } = require('../utils/metaConversions');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // ── Migration ────────────────────────────────────────────────
@@ -264,6 +265,14 @@ router.post('/public/:publicId/submit', async (req, res) => {
       [form.user_id, name, email, phone, form.source, notes, service, message, smsConsent]
     );
     const lead = insert.rows[0];
+
+    // Fire Meta Conversions API Lead event (no-op if user hasn't configured a pixel).
+    fireLeadEvent(form.user_id, lead, {
+      fbc: body.fbc, fbp: body.fbp,
+      source_url: body.source_url || req.headers.referer,
+      client_ip: clientIpFromReq(req),
+      client_ua: req.headers['user-agent'],
+    });
 
     if (form.sms_followup && phone && smsConsent) {
       scheduleLeadSms(form.user_id, lead).catch(e => console.error('scheduleLeadSms error:', e.message));
