@@ -1538,7 +1538,8 @@ router.post('/bookings', async (req, res) => {
   try {
     const { userId, employeeId } = req.employee;
     const { customerName, customerEmail, customerPhone, customerAddress, customerNotes,
-            serviceId, bookingDate, startTime, endTime, notes, assignedEmployeeId } = req.body;
+            serviceId, bookingDate, startTime, endTime, notes, assignedEmployeeId,
+            price: priceOverride } = req.body;
 
     if (!customerName || !serviceId || !bookingDate || !startTime || !endTime) {
       return res.status(400).json({ error: 'customerName, serviceId, bookingDate, startTime, endTime required' });
@@ -1556,9 +1557,14 @@ router.post('/bookings', async (req, res) => {
     const bnRes = await pool.query('SELECT generate_booking_number() as number');
     const bookingNumber = bnRes.rows[0].number;
 
-    // subtotal is NOT NULL — omitting it (this flow has no tax math, just service price) was
-    // failing every manual booking with "null value in column 'subtotal'". Mirror total_amount.
-    const price = parseFloat(service.price);
+    // Per-booking price override: employee can tweak the service's listed price on the fly
+    // (e.g. customer asked for a little extra). Only used when the body sends a valid number;
+    // otherwise fall back to the service's catalog price. The service row itself is untouched.
+    let price = parseFloat(service.price);
+    if (priceOverride !== undefined && priceOverride !== null && priceOverride !== '') {
+      const parsed = parseFloat(priceOverride);
+      if (Number.isFinite(parsed) && parsed >= 0) price = parsed;
+    }
     const result = await pool.query(
       `INSERT INTO bookings (user_id, employee_id, booking_number, customer_name, customer_email, customer_phone,
         customer_address, customer_notes, booking_date, start_time, end_time, status, subtotal, total_amount, job_notes, source)
@@ -1573,7 +1579,7 @@ router.post('/bookings', async (req, res) => {
     await pool.query(
       `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity)
        VALUES ($1,$2,$3,$4,$5,1)`,
-      [booking.id, service.id, service.name, service.duration_hours, service.price]
+      [booking.id, service.id, service.name, service.duration_hours, price]
     );
 
     res.json({ success: true, booking });
