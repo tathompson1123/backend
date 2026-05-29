@@ -1556,14 +1556,17 @@ router.post('/bookings', async (req, res) => {
     const bnRes = await pool.query('SELECT generate_booking_number() as number');
     const bookingNumber = bnRes.rows[0].number;
 
+    // subtotal is NOT NULL — omitting it (this flow has no tax math, just service price) was
+    // failing every manual booking with "null value in column 'subtotal'". Mirror total_amount.
+    const price = parseFloat(service.price);
     const result = await pool.query(
       `INSERT INTO bookings (user_id, employee_id, booking_number, customer_name, customer_email, customer_phone,
-        customer_address, customer_notes, booking_date, start_time, end_time, status, total_amount, job_notes, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'confirmed',$12,$13,'manual')
+        customer_address, customer_notes, booking_date, start_time, end_time, status, subtotal, total_amount, job_notes, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'confirmed',$12,$13,$14,'manual')
        RETURNING *`,
       [userId, assignTo, bookingNumber, customerName, customerEmail||null, customerPhone||null,
        customerAddress||null, customerNotes||null, bookingDate, startTime, endTime,
-       parseFloat(service.price), notes||null]
+       price, price, notes||null]
     );
     const booking = result.rows[0];
 
