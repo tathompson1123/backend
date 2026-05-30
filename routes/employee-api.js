@@ -1576,10 +1576,12 @@ router.post('/bookings', async (req, res) => {
     );
     const booking = result.rows[0];
 
+    // booking_items.subtotal is NOT NULL too — same omission that bit us on bookings.subtotal.
+    // For a quantity-1 line item subtotal == service_price.
     await pool.query(
-      `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity)
-       VALUES ($1,$2,$3,$4,$5,1)`,
-      [booking.id, service.id, service.name, service.duration_hours, price]
+      `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal)
+       VALUES ($1,$2,$3,$4,$5,1,$6)`,
+      [booking.id, service.id, service.name, service.duration_hours, price, price]
     );
 
     res.json({ success: true, booking });
