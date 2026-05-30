@@ -239,11 +239,14 @@ router.post('/book/:siteKey', async (req, res) => {
        service.price || 0, service.price || 0]
     );
 
-    // Create booking item
+    // Create booking item. Note: column name is service_price, not price, and subtotal is
+    // NOT NULL (same pattern that bit the other create paths). Adding service_duration too
+    // so this line matches what bookings.js / employee-api.js write.
+    const svcPrice = service.price || 0;
     await pool.query(
-      `INSERT INTO booking_items (booking_id, service_id, service_name, price, quantity)
-       VALUES ($1, $2, $3, $4, 1)`,
-      [bookingResult.rows[0].id, service.id, service.name, service.price || 0]
+      `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal)
+       VALUES ($1, $2, $3, $4, $5, 1, $6)`,
+      [bookingResult.rows[0].id, service.id, service.name, service.duration_hours, svcPrice, svcPrice]
     );
 
     // Also create a lead

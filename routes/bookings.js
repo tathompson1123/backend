@@ -306,7 +306,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const { serviceId, additionalServiceIds, bookingDate, startTime, customerInfo, notes, employeeId, groupId, status, sendEmail } = req.body;
+    const { serviceId, additionalServiceIds, bookingDate, startTime, customerInfo, notes, employeeId, groupId, status, sendEmail, price: priceOverride } = req.body;
 
     const serviceResult = await pool.query(
       'SELECT duration_hours, price, name FROM services WHERE id = $1',
@@ -333,7 +333,14 @@ router.put('/:id', authenticateToken, async (req, res) => {
     // Recalculate totals
     const taxResult = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
     const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
-    const primaryPrice = parseFloat(service.price);
+
+    // Per-booking price override applies to the PRIMARY service line only. Add-ons keep
+    // their catalog prices (override one thing, not three). Service catalog rows unchanged.
+    let primaryPrice = parseFloat(service.price);
+    if (priceOverride !== undefined && priceOverride !== null && priceOverride !== '') {
+      const parsed = parseFloat(priceOverride);
+      if (Number.isFinite(parsed) && parsed >= 0) primaryPrice = parsed;
+    }
     const addOnTotal = addOnServices.reduce((sum, s) => sum + parseFloat(s.price), 0);
     const subtotal = primaryPrice + addOnTotal;
     const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
@@ -406,7 +413,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     await pool.query(
       `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal)
        VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-      [id, serviceId, service.name, service.duration_hours, service.price, service.price]
+      [id, serviceId, service.name, service.duration_hours, primaryPrice, primaryPrice]
     );
 
     for (const addOn of addOnServices) {
