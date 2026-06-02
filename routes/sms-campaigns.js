@@ -134,18 +134,13 @@ async function backfillCampaignReplyEmails() {
         [camp.user_id, camp.sent_at]
       );
 
-      const seenNumbers = new Set();
+      const numberToLead = new Map(); // last10 -> leadId (email only the first reply per number)
       for (const r of replies.rows) {
         const last10 = (r.from_number || '').replace(/\D/g, '').slice(-10);
-        // Only email once per number per campaign; flag the rest so they don't requeue.
-        if (seenNumbers.has(last10)) {
-          await pool.query('UPDATE sms_messages SET campaign_reply_emailed = TRUE WHERE id = $1', [r.id]).catch(() => {});
-          continue;
-        }
-        seenNumbers.add(last10);
+        const alreadySeen = numberToLead.has(last10);
 
         // Make sure the reply is represented in the Leads box.
-        let leadId = r.lead_id;
+        let leadId = r.lead_id || numberToLead.get(last10);
         if (!leadId) {
           const existing = await pool.query(
             `SELECT id FROM leads WHERE user_id = $1
@@ -164,17 +159,26 @@ async function backfillCampaignReplyEmails() {
             leadId = ins.rows[0].id;
           }
         }
+        numberToLead.set(last10, leadId);
 
-        await sendSmsCampaignReplyNotification({
-          userId: camp.user_id,
-          leadId,
-          customerName: r.customer_name || null,
-          customerPhone: r.from_number,
-          replyText: r.message,
-          campaignMessage: camp.message,
-        });
-        await pool.query('UPDATE sms_messages SET campaign_reply_emailed = TRUE WHERE id = $1', [r.id]).catch(() => {});
-        emailed++;
+        // Attach the reply to the lead (so it shows in the lead's conversation) and mark
+        // it handled. Only the first reply per number triggers an owner email.
+        await pool.query(
+          'UPDATE sms_messages SET lead_id = COALESCE(lead_id, $1), campaign_reply_emailed = TRUE WHERE id = $2',
+          [leadId, r.id]
+        ).catch(() => {});
+
+        if (!alreadySeen) {
+          await sendSmsCampaignReplyNotification({
+            userId: camp.user_id,
+            leadId,
+            customerName: r.customer_name || null,
+            customerPhone: r.from_number,
+            replyText: r.message,
+            campaignMessage: camp.message,
+          });
+          emailed++;
+        }
       }
     }
     if (emailed > 0) console.log(`📧 Backfill: emailed ${emailed} missed SMS campaign repl${emailed === 1 ? 'y' : 'ies'}`);
