@@ -19,6 +19,11 @@ const SMS_MAX_LENGTH = 320;
 // Campaign sends count against the same monthly pool as agent texts.
 const SMS_PLAN_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
 
+// Accounts exempt from the monthly SMS cap and the per-blast cap. Keyed by email so
+// it survives user-id changes. Lowercase.
+const UNLIMITED_SMS_EMAILS = new Set(['ty@thompsonsautodetailing.com']);
+const isUnlimitedSms = (email) => UNLIMITED_SMS_EMAILS.has(String(email || '').trim().toLowerCase());
+
 // How many outgoing texts this user has sent so far this calendar month.
 async function getMonthlySmsUsage(userId) {
   const r = await pool.query(
@@ -187,8 +192,46 @@ async function backfillCampaignReplyEmails() {
   }
 }
 
+// One-time cleanup: remove leads that exist only because someone texted an opt-out
+// command (STOP/CANCEL/etc.). Scope is tight on purpose — only SMS-sourced leads whose
+// EVERY inbound message is an opt-out keyword and who never genuinely replied. Engaged
+// leads and leads from other channels are left untouched. Idempotent (safe each boot).
+const OPT_OUT_WORDS_SQL = `('STOP','STOPALL','UNSUBSCRIBE','CANCEL','END','QUIT')`;
+const OPT_ANY_WORDS_SQL = `('STOP','STOPALL','UNSUBSCRIBE','CANCEL','END','QUIT','START','UNSTOP','YES','SUBSCRIBE')`;
+async function cleanupOptOutLeads() {
+  try {
+    const targets = await pool.query(
+      `SELECT l.id FROM leads l
+       WHERE l.source IN ('sms_inbound', 'sms_campaign')
+         AND COALESCE(l.status, '') <> 'converted'
+         AND EXISTS (
+           SELECT 1 FROM sms_messages m
+           WHERE m.lead_id = l.id AND m.direction = 'incoming'
+             AND upper(regexp_replace(m.message, '[^A-Za-z]', '', 'g')) IN ${OPT_OUT_WORDS_SQL}
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM sms_messages m2
+           WHERE m2.lead_id = l.id AND m2.direction = 'incoming'
+             AND upper(regexp_replace(m2.message, '[^A-Za-z]', '', 'g')) NOT IN ${OPT_ANY_WORDS_SQL}
+         )`
+    );
+    if (targets.rows.length === 0) return;
+    const ids = targets.rows.map(r => r.id);
+    // Remove their messages first in case sms_messages.lead_id has no cascade.
+    await pool.query('DELETE FROM sms_messages WHERE lead_id = ANY($1)', [ids])
+      .catch(e => console.error('Opt-out lead message delete error:', e.message));
+    const del = await pool.query('DELETE FROM leads WHERE id = ANY($1) RETURNING id', [ids]);
+    console.log(`🧹 Removed ${del.rowCount} opt-out lead(s) from the leads list`);
+  } catch (e) {
+    console.error('Opt-out lead cleanup error:', e.message);
+  }
+}
+
 // Run shortly after boot so the migrations above have applied first.
-setTimeout(() => { backfillCampaignReplyEmails(); }, 15000);
+setTimeout(() => {
+  backfillCampaignReplyEmails();
+  cleanupOptOutLeads();
+}, 15000);
 
 // ── Routes ──────────────────────────────────────────────
 
@@ -209,14 +252,15 @@ router.get('/stats', authenticateToken, async (req, res) => {
     );
 
     const userRow = await pool.query(
-      'SELECT twilio_phone_number, business_name, plan FROM users WHERE id = $1',
+      'SELECT twilio_phone_number, business_name, plan, email FROM users WHERE id = $1',
       [userId]
     );
 
     const plan = userRow.rows[0]?.plan || null;
-    const monthlyLimit = SMS_PLAN_LIMITS[plan] || 0;
+    const unlimited = isUnlimitedSms(userRow.rows[0]?.email);
+    const monthlyLimit = unlimited ? null : (SMS_PLAN_LIMITS[plan] || 0);
     const monthlyUsed = await getMonthlySmsUsage(userId);
-    const monthlyRemaining = Math.max(0, monthlyLimit - monthlyUsed);
+    const monthlyRemaining = unlimited ? null : Math.max(0, monthlyLimit - monthlyUsed);
 
     res.json({
       subscriberCount: parseInt(subsResult.rows[0].count, 10),
@@ -224,6 +268,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
       fromNumber: userRow.rows[0]?.twilio_phone_number || null,
       businessName: userRow.rows[0]?.business_name || '',
       plan,
+      unlimited,
       monthlyLimit,
       monthlyUsed,
       monthlyRemaining,
@@ -316,27 +361,35 @@ router.post('/send-now', authenticateToken, async (req, res) => {
     const { message } = req.body || {};
     if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
 
-    const userRow = await pool.query('SELECT twilio_phone_number, plan FROM users WHERE id = $1', [userId]);
+    const userRow = await pool.query('SELECT twilio_phone_number, plan, email FROM users WHERE id = $1', [userId]);
     if (!userRow.rows[0]?.twilio_phone_number) {
       return res.status(400).json({ error: 'No SMS number is provisioned for your account yet' });
     }
 
+    const plan = userRow.rows[0]?.plan || null;
+    const unlimited = isUnlimitedSms(userRow.rows[0]?.email);
+
     // Enforce the plan's monthly SMS allowance (shared pool with the lead agent). Trim the
     // blast to what's left rather than hard-failing, and report how many were skipped.
-    const plan = userRow.rows[0]?.plan || null;
-    const monthlyLimit = SMS_PLAN_LIMITS[plan] || 0;
-    if (monthlyLimit === 0) {
-      return res.status(403).json({ error: 'Your plan does not include SMS. Upgrade to send text campaigns.' });
+    // Exempt accounts (UNLIMITED_SMS_EMAILS) bypass both the monthly and per-blast caps.
+    let monthlyLimit = null, monthlyRemaining = null, sendCap;
+    if (unlimited) {
+      sendCap = 1000000;
+    } else {
+      monthlyLimit = SMS_PLAN_LIMITS[plan] || 0;
+      if (monthlyLimit === 0) {
+        return res.status(403).json({ error: 'Your plan does not include SMS. Upgrade to send text campaigns.' });
+      }
+      const monthlyUsed = await getMonthlySmsUsage(userId);
+      monthlyRemaining = Math.max(0, monthlyLimit - monthlyUsed);
+      if (monthlyRemaining === 0) {
+        return res.status(403).json({
+          error: `You've used all ${monthlyLimit} texts in your ${plan} plan this month. Upgrade or wait until next month.`,
+          monthlyLimit, monthlyUsed,
+        });
+      }
+      sendCap = Math.min(SMS_SEND_LIMIT, monthlyRemaining);
     }
-    const monthlyUsed = await getMonthlySmsUsage(userId);
-    const monthlyRemaining = Math.max(0, monthlyLimit - monthlyUsed);
-    if (monthlyRemaining === 0) {
-      return res.status(403).json({
-        error: `You've used all ${monthlyLimit} texts in your ${plan} plan this month. Upgrade or wait until next month.`,
-        monthlyLimit, monthlyUsed,
-      });
-    }
-    const sendCap = Math.min(SMS_SEND_LIMIT, monthlyRemaining);
 
     // Record the campaign up front so a mid-send crash still leaves a trail.
     const campaignRow = await pool.query(
@@ -395,15 +448,17 @@ router.post('/send-now', authenticateToken, async (req, res) => {
       [sent > 0 ? 'sent' : 'failed', sent, campaignId]
     );
 
-    const skipped = Math.max(0, reachableTotal - sent);
+    // Without a monthly cap, anything not sent was a per-message failure, not a limit trim.
+    const skipped = unlimited ? 0 : Math.max(0, reachableTotal - sent);
     console.log(`📱 SMS campaign ${campaignId}: ${sent} texts sent for user ${userId}${skipped ? ` (${skipped} skipped — monthly limit ${monthlyLimit})` : ''}`);
     res.json({
       success: true,
       sent,
       skipped,
       reachableTotal,
+      unlimited,
       monthlyLimit,
-      monthlyRemaining: Math.max(0, monthlyRemaining - sent),
+      monthlyRemaining: unlimited ? null : Math.max(0, monthlyRemaining - sent),
       limitReached: skipped > 0,
     });
   } catch (e) {
