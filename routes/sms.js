@@ -3,7 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { sendSMS } = require('../utils/twilio');
 const { sendPushToOwner } = require('../utils/pushNotifications');
-const { sendSmsBookingConfirmationRequest } = require('../utils/bookingEmail');
+const { sendSmsBookingConfirmationRequest, sendSmsCampaignReplyNotification } = require('../utils/bookingEmail');
 const { getBusinessDateTime } = require('../utils/zipToTimezone');
 const twilio = require('twilio');
 
@@ -184,6 +184,76 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
       console.log(`Opt-${optAction} confirmation not sent to ${From}: ${e.message}`);
     }
     console.log(`🔕 Opt-${optAction} from ${From} for user ${user.id} (lead agent skipped)`);
+    return;
+  }
+
+  // ── SMS campaign reply handling ───────────────────────────────────────────
+  // If the most recent thing we texted this number was a marketing-campaign blast
+  // (and it was recent), treat their reply as a campaign reply: drop it into the
+  // Leads box and email the owner with what they said — instead of routing it to a
+  // booking thread or the AI lead agent, so the owner can follow up personally.
+  const replyFromLast10 = (From || '').replace(/\D/g, '').slice(-10);
+  const lastOutbound = await pool.query(
+    `SELECT campaign_id, message, created_at FROM sms_messages
+     WHERE user_id = $1 AND direction = 'outgoing'
+       AND right(regexp_replace(to_number, '\\D', '', 'g'), 10) = $2
+     ORDER BY created_at DESC LIMIT 1`,
+    [user.id, replyFromLast10]
+  );
+  const lastOut = lastOutbound.rows[0];
+  const isCampaignReply = lastOut && lastOut.campaign_id != null &&
+    (Date.now() - new Date(lastOut.created_at).getTime()) <= 14 * 24 * 60 * 60 * 1000;
+
+  if (isCampaignReply) {
+    // Find an existing lead for this number, or create one tagged as a campaign reply.
+    let crLead = await pool.query(
+      'SELECT id, name, email FROM leads WHERE phone = ANY($1) AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
+      [phoneVariants(From), user.id]
+    );
+    let crLeadId;
+    if (crLead.rows.length === 0) {
+      // Pull the contact's name from customers if we have it, so the lead isn't just a number.
+      const cust = await pool.query(
+        `SELECT name FROM customers
+         WHERE user_id = $1 AND right(regexp_replace(phone, '\\D', '', 'g'), 10) = $2
+         LIMIT 1`,
+        [user.id, replyFromLast10]
+      );
+      const inserted = await pool.query(
+        `INSERT INTO leads (user_id, name, phone, source, status, created_at)
+         VALUES ($1, $2, $3, 'sms_campaign', 'replied', CURRENT_TIMESTAMP)
+         RETURNING id, name, email`,
+        [user.id, cust.rows[0]?.name || From, From]
+      );
+      crLeadId = inserted.rows[0].id;
+      crLead = inserted;
+    } else {
+      crLeadId = crLead.rows[0].id;
+    }
+
+    await pool.query(
+      `INSERT INTO sms_messages
+       (lead_id, user_id, direction, from_number, to_number, message, twilio_message_sid, status, created_at)
+       VALUES ($1, $2, 'incoming', $3, $4, $5, $6, 'received', CURRENT_TIMESTAMP)`,
+      [crLeadId, user.id, From, To, Body, MessageSid]
+    );
+    await pool.query(
+      `UPDATE leads SET status = 'replied', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [crLeadId]
+    );
+
+    const crName = crLead.rows[0]?.name || From;
+    sendPushToOwner(user.id, 'SMS Campaign Reply', `${crName}: ${Body.slice(0, 100)}`, { leadId: crLeadId, screen: 'AdminLeads' }).catch(() => {});
+    sendSmsCampaignReplyNotification({
+      userId: user.id,
+      leadId: crLeadId,
+      customerName: crLead.rows[0]?.name || null,
+      customerPhone: From,
+      replyText: Body,
+      campaignMessage: lastOut.message,
+    }).catch(err => console.error('Campaign reply email failed:', err.message));
+
+    console.log(`📣 Campaign reply from ${From} → lead #${crLeadId} (owner emailed, lead agent skipped)`);
     return;
   }
 

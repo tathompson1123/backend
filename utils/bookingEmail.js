@@ -261,4 +261,68 @@ async function sendSmsBookingConfirmationRequest(opts) {
   }
 }
 
-module.exports = { sendBookingEmails, sendSmsBookingConfirmationRequest };
+/**
+ * Notify the business owner that a customer replied to an SMS marketing campaign.
+ * Owner-only email — includes the customer's actual reply and the offer they
+ * replied to, plus a link to the lead in the dashboard. Non-blocking.
+ *
+ * @param {object} opts
+ * @param {number} opts.userId          - Business owner user ID
+ * @param {number} [opts.leadId]        - Lead ID (for the dashboard link)
+ * @param {string} opts.customerName
+ * @param {string} opts.customerPhone
+ * @param {string} opts.replyText       - What the customer texted back
+ * @param {string} [opts.campaignMessage] - The campaign text they replied to
+ */
+async function sendSmsCampaignReplyNotification(opts) {
+  if (!process.env.SENDGRID_API_KEY) {
+    console.warn('📧 SENDGRID_API_KEY not set — skipping SMS campaign reply email');
+    return;
+  }
+
+  try {
+    const userResult = await pool.query(
+      'SELECT business_name, email FROM users WHERE id = $1',
+      [opts.userId]
+    );
+    if (!userResult.rows[0]?.email) return;
+    const { business_name: businessName, email: ownerEmail } = userResult.rows[0];
+
+    const who = [opts.customerName, opts.customerPhone].filter(Boolean).join(' · ') || 'A customer';
+    const dashboardUrl = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/dashboard?view=leads`;
+    const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    await sgMail.send({
+      to: ownerEmail,
+      from: { name: 'SORCE SMS Campaign', email: 'noreply@sorceintegrations.com' },
+      replyTo: { email: ownerEmail },
+      subject: `New reply to your SMS campaign — ${opts.customerName || opts.customerPhone}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+          <div style="background:#16a34a;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
+            <h1 style="color:#fff;margin:0;font-size:1.4rem;">Someone Replied to Your SMS Campaign</h1>
+          </div>
+          <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+            <p style="font-size:1rem;margin-top:0;"><strong>${esc(who)}</strong> replied to your text blast. They've been added to your Leads.</p>
+            <div style="margin:1.25rem 0;padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+              <div style="font-size:11px;font-weight:600;color:#15803d;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Their reply</div>
+              <div style="font-size:15px;color:#1f2937;white-space:pre-wrap;line-height:1.5;">${esc(opts.replyText) || '(no text)'}</div>
+            </div>
+            ${opts.campaignMessage ? `
+              <div style="margin:0 0 1.5rem 0;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+                <div style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">The offer they replied to</div>
+                <div style="font-size:14px;color:#475569;white-space:pre-wrap;line-height:1.45;">${esc(opts.campaignMessage)}</div>
+              </div>` : ''}
+            <a href="${dashboardUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px;">View Lead in Dashboard</a>
+            <p style="color:#6b7280;font-size:0.85rem;margin:1.5rem 0 0 0;">${esc(businessName) || 'Your business'}</p>
+          </div>
+        </div>`,
+    });
+    console.log(`📧 SMS campaign reply email sent for user ${opts.userId} — ${opts.customerName || opts.customerPhone}`);
+  } catch (err) {
+    console.error('📧 SMS campaign reply email error:', err.message);
+    // Never throw — email failure must not break the inbound SMS flow
+  }
+}
+
+module.exports = { sendBookingEmails, sendSmsBookingConfirmationRequest, sendSmsCampaignReplyNotification };

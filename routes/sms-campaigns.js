@@ -70,6 +70,11 @@ pool.query(`
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS sms_unsubscribed BOOLEAN DEFAULT FALSE`)
   .catch(e => console.error('customers sms_unsubscribed migration error:', e.message));
 
+// Tag outgoing campaign texts in sms_messages so the inbound webhook can recognize a
+// reply as a campaign reply (route it to Leads + email the owner) and show what we sent.
+pool.query(`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS campaign_id INTEGER`)
+  .catch(e => console.error('sms_messages campaign_id migration error:', e.message));
+
 // ── Routes ──────────────────────────────────────────────
 
 // GET /api/sms-campaigns/stats — reachable-contact count + sender readiness
@@ -216,9 +221,18 @@ router.post('/send-now', authenticateToken, async (req, res) => {
     for (const contact of contacts.rows) {
       const phone = normalizePhone(contact.phone);
       if (!phone) continue;
+      const body = buildMessageFor(message, contact.name);
       try {
-        await sendSMS(phone, buildMessageFor(message, contact.name), userId);
+        const result = await sendSMS(phone, body, userId);
         sent++;
+        // Log the outgoing campaign text. The campaign_id tag lets the inbound webhook
+        // recognize a reply as a campaign reply, and stores exactly what we sent.
+        await pool.query(
+          `INSERT INTO sms_messages
+           (user_id, campaign_id, direction, to_number, message, twilio_message_sid, status, provider, created_at)
+           VALUES ($1, $2, 'outgoing', $3, $4, $5, 'sent', 'twilio', NOW())`,
+          [userId, campaignId, phone, body, result?.messageSid || null]
+        ).catch(err => console.error('Campaign SMS log insert failed:', err.message));
       } catch (err) {
         console.error(`📵 Campaign SMS failed to ${contact.phone}:`, err.message);
       }
