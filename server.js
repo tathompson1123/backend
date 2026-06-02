@@ -1513,27 +1513,30 @@ cron.schedule('*/30 * * * * *', async () => {
 
     for (const lead of pending.rows) {
       try {
-        // Check monthly SMS limit for this user's plan
-        const planRow = await pool.query('SELECT plan FROM users WHERE id = $1', [lead.user_id]);
+        // Check monthly SMS limit for this user's plan (exempt accounts bypass it entirely)
+        const planRow = await pool.query('SELECT plan, email FROM users WHERE id = $1', [lead.user_id]);
         const userPlan = planRow.rows[0]?.plan;
-        const SMS_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
-        const smsLimit = SMS_LIMITS[userPlan] || 0;
-        if (smsLimit === 0) {
-          // Free plan — no SMS
-          await pool.query("UPDATE leads SET status = 'new' WHERE id = $1", [lead.id]);
-          continue;
-        }
-        const usageRow = await pool.query(
-          `SELECT COUNT(*) FROM sms_messages
-           WHERE user_id = $1 AND direction = 'outgoing'
-           AND created_at >= date_trunc('month', NOW())`,
-          [lead.user_id]
-        );
-        const smsUsed = parseInt(usageRow.rows[0].count, 10);
-        if (smsUsed >= smsLimit) {
-          console.log(`⚠️ SMS limit reached for user ${lead.user_id} (${smsUsed}/${smsLimit} this month)`);
-          await pool.query("UPDATE leads SET status = 'sms_limit_reached' WHERE id = $1", [lead.id]);
-          continue;
+        const unlimited = smsCampaignRoutes.isUnlimitedSms(planRow.rows[0]?.email);
+        if (!unlimited) {
+          const SMS_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
+          const smsLimit = SMS_LIMITS[userPlan] || 0;
+          if (smsLimit === 0) {
+            // Free plan — no SMS
+            await pool.query("UPDATE leads SET status = 'new' WHERE id = $1", [lead.id]);
+            continue;
+          }
+          const usageRow = await pool.query(
+            `SELECT COUNT(*) FROM sms_messages
+             WHERE user_id = $1 AND direction = 'outgoing'
+             AND created_at >= date_trunc('month', NOW())`,
+            [lead.user_id]
+          );
+          const smsUsed = parseInt(usageRow.rows[0].count, 10);
+          if (smsUsed >= smsLimit) {
+            console.log(`⚠️ SMS limit reached for user ${lead.user_id} (${smsUsed}/${smsLimit} this month)`);
+            await pool.query("UPDATE leads SET status = 'sms_limit_reached' WHERE id = $1", [lead.id]);
+            continue;
+          }
         }
 
         // Determine which agent config to use based on lead source
@@ -1654,24 +1657,27 @@ cron.schedule('*/60 * * * * *', async () => {
 
     for (const req of pending.rows) {
       try {
-        // Check monthly SMS limit
-        const planRow = await pool.query('SELECT plan FROM users WHERE id = $1', [req.user_id]);
+        // Check monthly SMS limit (exempt accounts bypass it entirely)
+        const planRow = await pool.query('SELECT plan, email FROM users WHERE id = $1', [req.user_id]);
         const userPlan = planRow.rows[0]?.plan;
-        const SMS_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
-        const smsLimit = SMS_LIMITS[userPlan] || 0;
-        if (smsLimit === 0) {
-          await pool.query("UPDATE review_requests SET status = 'skipped' WHERE id = $1", [req.id]);
-          continue;
-        }
-        const usageRow = await pool.query(
-          `SELECT COUNT(*) FROM sms_messages
-           WHERE user_id = $1 AND direction = 'outgoing'
-           AND created_at >= date_trunc('month', NOW())`,
-          [req.user_id]
-        );
-        if (parseInt(usageRow.rows[0].count, 10) >= smsLimit) {
-          await pool.query("UPDATE review_requests SET status = 'sms_limit_reached' WHERE id = $1", [req.id]);
-          continue;
+        const unlimited = smsCampaignRoutes.isUnlimitedSms(planRow.rows[0]?.email);
+        if (!unlimited) {
+          const SMS_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
+          const smsLimit = SMS_LIMITS[userPlan] || 0;
+          if (smsLimit === 0) {
+            await pool.query("UPDATE review_requests SET status = 'skipped' WHERE id = $1", [req.id]);
+            continue;
+          }
+          const usageRow = await pool.query(
+            `SELECT COUNT(*) FROM sms_messages
+             WHERE user_id = $1 AND direction = 'outgoing'
+             AND created_at >= date_trunc('month', NOW())`,
+            [req.user_id]
+          );
+          if (parseInt(usageRow.rows[0].count, 10) >= smsLimit) {
+            await pool.query("UPDATE review_requests SET status = 'sms_limit_reached' WHERE id = $1", [req.id]);
+            continue;
+          }
         }
 
         // Build message from template

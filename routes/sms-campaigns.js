@@ -468,3 +468,5 @@ router.post('/send-now', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
+// Shared so the lead-agent / review-request crons in server.js apply the same exemption.
+module.exports.isUnlimitedSms = isUnlimitedSms;
