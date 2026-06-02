@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { sendSMS } = require('../utils/twilio');
+const { sendSmsCampaignReplyNotification } = require('../utils/bookingEmail');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logClaudeUsage } = require('../utils/claudeUsage');
 
@@ -11,7 +12,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // Most carriers block well past 1600 chars and long bodies get split into many
 // billed segments — cap the per-message length and the audience size like the
 // email side caps its blast.
-const SMS_SEND_LIMIT = 500;
+const SMS_SEND_LIMIT = 2000;
 const SMS_MAX_LENGTH = 320;
 
 // The compliance footer every campaign text must carry. Kept short so it eats as
@@ -74,6 +75,97 @@ pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS sms_unsubscribed BOOL
 // reply as a campaign reply (route it to Leads + email the owner) and show what we sent.
 pool.query(`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS campaign_id INTEGER`)
   .catch(e => console.error('sms_messages campaign_id migration error:', e.message));
+
+// Marks an inbound campaign reply as already emailed to the owner, so the backfill
+// below (and the live webhook) can't email the same reply twice.
+pool.query(`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS campaign_reply_emailed BOOLEAN DEFAULT FALSE`)
+  .catch(e => console.error('sms_messages campaign_reply_emailed migration error:', e.message));
+
+// One-time catch-up: email the owner about campaign replies that came in before the
+// reply-notification feature existed. A "campaign reply" here is an inbound text from a
+// number on the user's customer list that arrived after one of their sent campaigns
+// (within 14 days) and was never emailed. Idempotent via campaign_reply_emailed, so it's
+// safe to run on every boot — it only ever sends each reply once.
+async function backfillCampaignReplyEmails() {
+  try {
+    const campaigns = await pool.query(
+      `SELECT id, user_id, message, sent_at FROM sms_campaigns
+       WHERE status = 'sent' AND sent_at IS NOT NULL
+         AND sent_at >= NOW() - INTERVAL '14 days'
+       ORDER BY sent_at DESC`
+    );
+    if (campaigns.rows.length === 0) return;
+
+    let emailed = 0;
+    for (const camp of campaigns.rows) {
+      // Inbound replies for this user, after the campaign went out, from a number that's
+      // on their customer list (the blast audience), not yet emailed.
+      const replies = await pool.query(
+        `SELECT m.id, m.from_number, m.message, m.lead_id, c.name AS customer_name
+         FROM sms_messages m
+         JOIN customers c
+           ON c.user_id = m.user_id
+          AND right(regexp_replace(c.phone, '\\D', '', 'g'), 10) =
+              right(regexp_replace(m.from_number, '\\D', '', 'g'), 10)
+         WHERE m.user_id = $1
+           AND m.direction = 'incoming'
+           AND m.created_at >= $2
+           AND (m.campaign_reply_emailed IS NULL OR m.campaign_reply_emailed = FALSE)
+         ORDER BY m.created_at ASC`,
+        [camp.user_id, camp.sent_at]
+      );
+
+      const seenNumbers = new Set();
+      for (const r of replies.rows) {
+        const last10 = (r.from_number || '').replace(/\D/g, '').slice(-10);
+        // Only email once per number per campaign; flag the rest so they don't requeue.
+        if (seenNumbers.has(last10)) {
+          await pool.query('UPDATE sms_messages SET campaign_reply_emailed = TRUE WHERE id = $1', [r.id]).catch(() => {});
+          continue;
+        }
+        seenNumbers.add(last10);
+
+        // Make sure the reply is represented in the Leads box.
+        let leadId = r.lead_id;
+        if (!leadId) {
+          const existing = await pool.query(
+            `SELECT id FROM leads WHERE user_id = $1
+               AND right(regexp_replace(phone, '\\D', '', 'g'), 10) = $2
+             ORDER BY created_at DESC LIMIT 1`,
+            [camp.user_id, last10]
+          );
+          if (existing.rows.length) {
+            leadId = existing.rows[0].id;
+          } else {
+            const ins = await pool.query(
+              `INSERT INTO leads (user_id, name, phone, source, status, created_at)
+               VALUES ($1, $2, $3, 'sms_campaign', 'replied', NOW()) RETURNING id`,
+              [camp.user_id, r.customer_name || r.from_number, r.from_number]
+            );
+            leadId = ins.rows[0].id;
+          }
+        }
+
+        await sendSmsCampaignReplyNotification({
+          userId: camp.user_id,
+          leadId,
+          customerName: r.customer_name || null,
+          customerPhone: r.from_number,
+          replyText: r.message,
+          campaignMessage: camp.message,
+        });
+        await pool.query('UPDATE sms_messages SET campaign_reply_emailed = TRUE WHERE id = $1', [r.id]).catch(() => {});
+        emailed++;
+      }
+    }
+    if (emailed > 0) console.log(`📧 Backfill: emailed ${emailed} missed SMS campaign repl${emailed === 1 ? 'y' : 'ies'}`);
+  } catch (e) {
+    console.error('Campaign reply backfill error:', e.message);
+  }
+}
+
+// Run shortly after boot so the migrations above have applied first.
+setTimeout(() => { backfillCampaignReplyEmails(); }, 15000);
 
 // ── Routes ──────────────────────────────────────────────
 

@@ -231,10 +231,12 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
       crLeadId = crLead.rows[0].id;
     }
 
+    // Flag the row as emailed up front — we fire the owner email below, and this keeps
+    // the one-time backfill from emailing the same reply a second time.
     await pool.query(
       `INSERT INTO sms_messages
-       (lead_id, user_id, direction, from_number, to_number, message, twilio_message_sid, status, created_at)
-       VALUES ($1, $2, 'incoming', $3, $4, $5, $6, 'received', CURRENT_TIMESTAMP)`,
+       (lead_id, user_id, direction, from_number, to_number, message, twilio_message_sid, status, campaign_reply_emailed, created_at)
+       VALUES ($1, $2, 'incoming', $3, $4, $5, $6, 'received', TRUE, CURRENT_TIMESTAMP)`,
       [crLeadId, user.id, From, To, Body, MessageSid]
     );
     await pool.query(
