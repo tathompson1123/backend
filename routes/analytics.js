@@ -9,7 +9,7 @@ const ANALYTICS_PASSWORD = process.env.ANALYTICS_PASSWORD || 'sorce-internal-202
 const DASHBOARD_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 
 const PLAN_REVENUE  = { basic: 29.95, pro: 99.95, expert: 99.95, scale: 175.95 };
-const SMS_COST      = 0.0075;  // per outbound SMS (Twilio/Telnyx avg)
+const SMS_COST      = 0.0075;  // per outbound SMS (Twilio)
 const CHAT_COST     = 0.04;   // per chat conversation (Claude Sonnet 4 estimate)
 const AI_SMS_COST   = 0.003;  // per AI-generated SMS response
 

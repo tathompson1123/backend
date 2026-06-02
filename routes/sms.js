@@ -3,6 +3,8 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { sendSMS } = require('../utils/twilio');
 const { sendPushToOwner } = require('../utils/pushNotifications');
+const { sendSmsBookingConfirmationRequest } = require('../utils/bookingEmail');
+const { getBusinessDateTime } = require('../utils/zipToTimezone');
 const twilio = require('twilio');
 
 // Auto-heal Twilio webhook URL for a phone number (non-blocking, fire-and-forget)
@@ -71,6 +73,18 @@ router.post('/webhook', express.urlencoded({ extended: false }), (req, res) => {
 // Build the set of phone formats we may have stored historically.
 // Twilio gives us E.164 (+1XXXXXXXXXX), but earlier code paths stored
 // 10-digit (XXXXXXXXXX) or 11-digit (1XXXXXXXXXX). Match all three.
+// Carrier-standard opt-out / opt-in keywords. We match the whole trimmed body so a
+// message like "please stop by Tuesday" is NOT treated as an unsubscribe.
+const OPT_OUT_KEYWORDS = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT']);
+const OPT_IN_KEYWORDS = new Set(['START', 'UNSTOP', 'YES', 'SUBSCRIBE']);
+
+function optKeyword(body) {
+  const word = String(body || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
+  if (OPT_OUT_KEYWORDS.has(word)) return 'out';
+  if (OPT_IN_KEYWORDS.has(word)) return 'in';
+  return null;
+}
+
 function phoneVariants(num) {
   if (!num) return [num];
   const digits = num.replace(/\D/g, '');
@@ -124,6 +138,54 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
   }
 
   selfHealWebhook(user.twilio_phone_sid, To);
+
+  // ── Opt-out / opt-in handling ─────────────────────────────────────────────
+  // A bare "STOP" (or START/etc.) is a list-management command, never a lead. Handle
+  // it here and RETURN before the booking match or the lead agent so the AI never
+  // replies to an unsubscribe — we just flip the contact's flag and send the one
+  // confirmation carriers require.
+  const optAction = optKeyword(Body);
+  if (optAction) {
+    const last10 = (From || '').replace(/\D/g, '').slice(-10);
+    const unsub = optAction === 'out';
+    try {
+      await pool.query(
+        `UPDATE customers SET sms_unsubscribed = $1
+         WHERE user_id = $2 AND right(regexp_replace(phone, '\\D', '', 'g'), 10) = $3`,
+        [unsub, user.id, last10]
+      );
+    } catch (e) {
+      console.error('Opt-out flag update failed:', e.message);
+    }
+    // Log the inbound command for the audit trail (no lead_id — it isn't a lead).
+    await pool.query(
+      `INSERT INTO sms_messages
+       (user_id, direction, from_number, to_number, message, twilio_message_sid, status, created_at)
+       VALUES ($1, 'incoming', $2, $3, $4, $5, 'received', NOW())`,
+      [user.id, From, To, Body, MessageSid]
+    ).catch(() => {});
+
+    // Send the required confirmation. Wrapped so it can't throw if the carrier has
+    // already blocked the number (Twilio Advanced Opt-Out), and skipped for generic
+    // "YES" which is too ambiguous to confirm a resubscribe on.
+    const businessName = user.business_name || 'this business';
+    const confirmation = unsub
+      ? `You've been unsubscribed from ${businessName} texts. Reply START to opt back in.`
+      : `You're resubscribed to ${businessName} texts. Reply STOP to unsubscribe.`;
+    try {
+      await sendSMS(From, confirmation, user.id);
+      await pool.query(
+        `INSERT INTO sms_messages
+         (user_id, direction, to_number, message, created_at)
+         VALUES ($1, 'outgoing', $2, $3, NOW())`,
+        [user.id, From, confirmation]
+      ).catch(() => {});
+    } catch (e) {
+      console.log(`Opt-${optAction} confirmation not sent to ${From}: ${e.message}`);
+    }
+    console.log(`🔕 Opt-${optAction} from ${From} for user ${user.id} (lead agent skipped)`);
+    return;
+  }
 
   // If this phone belongs to a booking customer, treat the reply as part of
   // that booking thread — never let the lead agent take over a real customer
@@ -226,20 +288,66 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
   const aiResponse = await generateAIResponse(user.id, leadId, leadResult.rows[0], Body);
   if (!aiResponse) return;
 
+  // The agent emits a hidden BOOKING_REQUEST|service|date|time|name line once the
+  // customer has agreed to a booking. We don't create a booking — we email the owner
+  // to confirm it and add it to the schedule manually. Strip the token before sending.
+  const bookingTokenMatch = aiResponse.match(/BOOKING_REQUEST\|([^|]*)\|([\d-]+)\|([\d:]+)\|([^|\n]+)/);
+  let outgoingMessage = aiResponse.replace(/BOOKING_REQUEST\|[^\n]*\n?/g, '').trim();
+
+  if (bookingTokenMatch) {
+    const [, svcName, bookingDate, startTime, bookedName] = bookingTokenMatch;
+    const customerName = (bookedName || '').trim() || leadResult.rows[0]?.name || From;
+    console.log(`📅 SMS agent booking intent for lead ${leadId}: service="${svcName.trim()}" date=${bookingDate} time=${startTime} name=${customerName}`);
+
+    // Only notify once per lead — guard against the model re-emitting the token.
+    const statusRow = await pool.query('SELECT status FROM leads WHERE id = $1', [leadId]);
+    const alreadyPending = statusRow.rows[0]?.status === 'booking_pending';
+
+    if (!alreadyPending) {
+      await pool.query(
+        `UPDATE leads SET status = 'booking_pending', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [leadId]
+      );
+      sendSmsBookingConfirmationRequest({
+        userId: user.id,
+        leadId,
+        customerName,
+        customerPhone: From,
+        customerEmail: leadResult.rows[0]?.email || null,
+        serviceName: svcName.trim(),
+        bookingDate,
+        startTime,
+      }).catch(err => console.error('SMS booking confirmation email failed:', err.message));
+      sendPushToOwner(
+        user.id,
+        'Booking needs confirmation',
+        `${customerName} wants ${svcName.trim()} on ${bookingDate} at ${startTime}`,
+        { leadId, screen: 'AdminLeads' }
+      ).catch(() => {});
+    } else {
+      console.log(`📅 Lead ${leadId} already booking_pending — skipping duplicate owner email`);
+    }
+
+    // If stripping the token left nothing, give the customer a friendly confirmation.
+    if (!outgoingMessage) {
+      outgoingMessage = `Perfect, you're all set! We'll reach out shortly to confirm the details. Thanks!`;
+    }
+  }
+
   const baseDelay = 15000 + Math.random() * 30000;
-  const typingDelay = aiResponse.length * (25 + Math.random() * 15);
+  const typingDelay = outgoingMessage.length * (25 + Math.random() * 15);
   const totalDelay = baseDelay + typingDelay;
 
   console.log(`⏰ AI will respond in ${Math.round(totalDelay / 1000)}s (read ${Math.round(baseDelay / 1000)}s + type ${Math.round(typingDelay / 1000)}s)`);
 
   setTimeout(async () => {
     try {
-      await sendSMS(From, aiResponse, user.id);
+      await sendSMS(From, outgoingMessage, user.id);
       await pool.query(
         `INSERT INTO sms_messages
          (lead_id, user_id, direction, to_number, message, created_at)
          VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
-        [leadId, user.id, 'outgoing', From, aiResponse]
+        [leadId, user.id, 'outgoing', From, outgoingMessage]
       );
       console.log(`🤖 AI replied to ${From} after ${Math.round(totalDelay / 1000)}s delay`);
     } catch (error) {
@@ -308,10 +416,35 @@ This is your FIRST outgoing reply — the customer reached out before any automa
       ? `\nYou are ${agentName || 'the assistant'} at ${businessName || 'this business'}.`
       : '';
 
+    // Resolve the business timezone so date math is correct (matches the chat agent).
+    const bizInfoResult = await pool.query(
+      `SELECT bi.state, bi.zip_code
+       FROM business_information bi WHERE bi.user_id = $1`,
+      [userId]
+    );
+    const bizDateTime = getBusinessDateTime(
+      bizInfoResult.rows[0]?.state,
+      bizInfoResult.rows[0]?.zip_code
+    );
+    const tz = bizDateTime.timezone;
+
     // Pin today's date so the model never guesses a weekday from training data.
-    const todayLabel = new Date().toLocaleDateString('en-US', {
-      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-    });
+    const todayLabel = bizDateTime.fullDate;
+
+    // Build an explicit 14-day date table — the ONLY source of truth for dates.
+    const dateTable = (() => {
+      const lines = [];
+      const now = new Date();
+      for (let i = 0; i <= 14; i++) {
+        const d = new Date(now);
+        d.setDate(d.getDate() + i);
+        const iso = d.toLocaleDateString('en-CA', { timeZone: tz });
+        const weekday = d.toLocaleDateString('en-US', { timeZone: tz, weekday: 'long' });
+        const label = d.toLocaleDateString('en-US', { timeZone: tz, month: 'long', day: 'numeric' });
+        lines.push(`  ${weekday}, ${label} = ${iso}`);
+      }
+      return lines.join('\n');
+    })();
 
     const systemPrompt = `You are a friendly service business AI assistant responding to customer SMS.${identityLine}
 
@@ -326,6 +459,18 @@ Rules:
 - If you were corrected on something (like a weekday), do not keep apologizing for it in later turns.
 
 NEVER use markdown formatting. No asterisks, no dashes for bullet points, no bold text, no lists. Use plain sentences with commas, periods, exclamations, and question marks only.${firstContactGuidance}
+
+DATES — this table is the ONLY source of truth for dates. Do NOT use your training data or calculate. When the customer says "Thursday" or "next week", find the matching weekday in this table and use that exact YYYY-MM-DD:
+${dateTable}
+
+BOOKING PROTOCOL:
+- When the customer has agreed to a specific service, date, and time, AND you know their name, confirm it to them in a natural sentence (e.g. "Perfect, you're all set for Thursday at 2pm! We'll be in touch to confirm.").
+- On that same reply, add a final line in EXACTLY this format (the customer never sees it — it is stripped out before sending):
+BOOKING_REQUEST|<service name>|<YYYY-MM-DD>|<HH:MM 24-hour>|<customer name>
+- The date MUST be copied exactly from the DATES table above for the weekday you confirmed. The time must be 24-hour (2pm = 14:00).
+- Only emit BOOKING_REQUEST once you have service, date, time, and name. If anything is missing, ask for it instead — do not emit the token.
+- Do not emit BOOKING_REQUEST again for a booking you already confirmed earlier in this conversation. A later "thanks" just gets a brief acknowledgement.
+- Never mention "BOOKING_REQUEST" to the customer.
 
 Services:
 ${services}

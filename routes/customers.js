@@ -162,7 +162,9 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
 
 const ALLOWED_CUSTOMER_FIELDS = new Set([
   'name', 'email', 'phone', 'last_service', 'last_service_date',
-  'notes', 'total_jobs', 'lifetime_value'
+  'notes', 'total_jobs', 'lifetime_value',
+  // Marketing opt-out flags — let owners manually unsubscribe a contact from the dashboard
+  'sms_unsubscribed', 'email_unsubscribed'
 ]);
 
 // PATCH - Update customer field

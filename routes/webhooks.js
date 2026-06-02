@@ -138,11 +138,10 @@ router.post('/google-lsa/:userId', async (req, res) => {
 
 /**
  * POST /api/webhooks/call-recording/:userId
- * Twilio / Telnyx call recording webhook.
- * Configure as the "Recording Status Callback" in Twilio or Telnyx.
+ * Twilio call recording webhook.
+ * Configure as the "Recording Status Callback" in Twilio.
  *
  * Twilio body: RecordingUrl, CallSid, From, To, RecordingDuration
- * Telnyx body: data.payload.recording_urls.mp3, data.payload.from, data.payload.call_duration_secs
  *
  * Flow: download recording → transcribe via OpenAI Whisper → Claude extracts lead info → save lead
  */
@@ -154,16 +153,11 @@ router.post('/call-recording/:userId', async (req, res) => {
     const userRes = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
     if (!userRes.rows[0]) return res.status(404).json({ error: 'User not found' });
 
-    // Normalise Twilio vs Telnyx payloads
-    const isTelnyx = body.data?.event_type?.includes('call');
-    const recordingUrl = isTelnyx
-      ? body.data?.payload?.recording_urls?.mp3
-      : body.RecordingUrl ? `${body.RecordingUrl}.mp3` : null;
-    const callerPhone = isTelnyx ? body.data?.payload?.from : body.From;
-    const callSid = isTelnyx ? body.data?.payload?.call_control_id : body.CallSid;
-    const durationSecs = parseInt(
-      isTelnyx ? body.data?.payload?.call_duration_secs : body.RecordingDuration
-    ) || 0;
+    // Twilio recording payload
+    const recordingUrl = body.RecordingUrl ? `${body.RecordingUrl}.mp3` : null;
+    const callerPhone = body.From;
+    const callSid = body.CallSid;
+    const durationSecs = parseInt(body.RecordingDuration) || 0;
 
     if (!recordingUrl) {
       return res.json({ success: false, reason: 'No recording URL in payload' });

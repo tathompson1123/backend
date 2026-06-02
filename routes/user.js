@@ -8,7 +8,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, email, business_name, plan, base_plan, trial_ends_at, google_review_link,
-              twilio_phone_number, telnyx_phone_number,
+              twilio_phone_number,
               onboarding_completed, onboarding_current_step, onboarding_steps_completed,
               default_tax_rate
        FROM users WHERE id = $1`,
@@ -31,7 +31,6 @@ router.get('/profile', authenticateToken, async (req, res) => {
         trial_ends_at: user.trial_ends_at,
         google_review_link: user.google_review_link,
         twilio_phone_number: user.twilio_phone_number,
-        telnyx_phone_number: user.telnyx_phone_number,
         onboarding_completed: user.onboarding_completed,
         onboarding_current_step: user.onboarding_current_step,
         onboarding_steps_completed: user.onboarding_steps_completed,

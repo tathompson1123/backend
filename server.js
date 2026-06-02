@@ -80,7 +80,6 @@ const websiteRoutes = require('./routes/website');
 const aiAgentRoutes = require('./routes/ai-agents');
 const reviewRoutes = require('./routes/reviews');
 const smsRoutes = require('./routes/sms');
-const smsTelnyxRoutes = require('./routes/sms-telnyx');
 const marketResearchRoutes = require('./routes/market-research');
 const chatRoutes = require('./routes/chat');
 const rewardsRoutes = require('./routes/rewards');
@@ -105,7 +104,6 @@ app.use('/api/website', websiteRoutes);
 app.use('/api/agents', aiAgentRoutes);
 app.use('/api/google-business', reviewRoutes);
 app.use('/api/sms', smsRoutes);
-app.use('/api/sms-telnyx', smsTelnyxRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/market-research', marketResearchRoutes);
 app.use('/api/chat', embedCors, chatRoutes);
@@ -215,6 +213,11 @@ app.use('/api/meta-capi', metaCapiRoutes);
 // Email marketing campaigns
 const emailCampaignRoutes = require('./routes/email-campaigns');
 app.use('/api/email-campaigns', emailCampaignRoutes);
+
+// SMS marketing campaigns (sub-tab of Email Marketing)
+const smsCampaignRoutes = require('./routes/sms-campaigns');
+app.use('/api/sms-campaigns', smsCampaignRoutes);
+
 app.use('/api/rewards', rewardsRoutes);
 
 app.get('/api/groups', (req, res) => {
@@ -245,8 +248,6 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
         END IF;
       END $$;
     `);
-    await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS telnyx_phone_number VARCHAR(20)');
-    await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS telnyx_order_id VARCHAR(100)');
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS processor VARCHAR(20)");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS processor_payment_id VARCHAR(255)");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS notes TEXT");
@@ -254,6 +255,10 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_notes TEXT");
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS source VARCHAR(50)");
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS referral_source TEXT");
+    // booking_items.is_addon tells the edit form which lines came from the "Additional
+    // Services" picker vs the "Main Service" picker — without it, multi-main bookings
+    // round-trip as all-mains and the user loses their add-on grouping.
+    await pool.query("ALTER TABLE booking_items ADD COLUMN IF NOT EXISTS is_addon BOOLEAN DEFAULT FALSE");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS refund_amount NUMERIC(10,2) DEFAULT 0");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS card_brand VARCHAR(50)");
@@ -448,12 +453,12 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_review_requests_booking ON review_requests(booking_id) WHERE booking_id IS NOT NULL`);
     // Backfill timezone for existing users that have a phone number
     const usersToFix = await pool.query(
-      `SELECT id, telnyx_phone_number, twilio_phone_number FROM users
+      `SELECT id, twilio_phone_number FROM users
        WHERE (timezone IS NULL OR timezone = 'America/New_York')
-         AND (telnyx_phone_number IS NOT NULL OR twilio_phone_number IS NOT NULL)`
+         AND twilio_phone_number IS NOT NULL`
     );
     for (const u of usersToFix.rows) {
-      const phone = u.telnyx_phone_number || u.twilio_phone_number;
+      const phone = u.twilio_phone_number;
       const tz = getTimezoneFromPhone(phone);
       if (tz !== 'America/New_York') {
         await pool.query('UPDATE users SET timezone = $1 WHERE id = $2', [tz, u.id]);
@@ -1454,27 +1459,22 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
 
 // ── SMS processing cron job ──────────────────────────────
 // Runs every 30 seconds. Picks up leads in 'sms_pending' status
-// whose sms_scheduled_at has passed, sends the SMS via Twilio or Telnyx,
+// whose sms_scheduled_at has passed, sends the SMS via Twilio,
 // and updates the lead status. Survives server restarts.
 const cron = require('node-cron');
 const { sendSMS } = require('./utils/twilio');
-const { sendSMSTelnyx } = require('./utils/telnyx');
 const { generateAIResponse } = require('./routes/sms');
 
-// Helper: send SMS using whichever provider the user has a number on
+// Helper: send SMS via the user's Twilio number
 async function sendSMSAuto(to, message, userId) {
   const userRow = await pool.query(
-    'SELECT twilio_phone_number, telnyx_phone_number FROM users WHERE id = $1',
+    'SELECT twilio_phone_number FROM users WHERE id = $1',
     [userId]
   );
   const u = userRow.rows[0];
   if (u?.twilio_phone_number) {
     const result = await sendSMS(to, message, userId);
     return { messageSid: result.messageSid, provider: 'twilio', fromNumber: u.twilio_phone_number };
-  }
-  if (u?.telnyx_phone_number) {
-    const result = await sendSMSTelnyx(to, message, u.telnyx_phone_number);
-    return { messageSid: result.messageId, provider: 'telnyx', fromNumber: u.telnyx_phone_number };
   }
   throw new Error(`No SMS phone number assigned to user ${userId}`);
 }
@@ -1501,12 +1501,12 @@ cron.schedule('*/30 * * * * *', async () => {
           WHERE l.status = 'sms_pending'
             AND l.sms_scheduled_at IS NOT NULL
             AND l.sms_scheduled_at <= NOW()
-            AND (u.twilio_phone_number IS NOT NULL OR u.telnyx_phone_number IS NOT NULL)
+            AND u.twilio_phone_number IS NOT NULL
           LIMIT 50
         )
         RETURNING *
       )
-      SELECT c.*, u.twilio_phone_number, u.telnyx_phone_number, u.business_name
+      SELECT c.*, u.twilio_phone_number, u.business_name
       FROM claimed c
       JOIN users u ON u.id = c.user_id
     `);
@@ -1573,7 +1573,8 @@ cron.schedule('*/30 * * * * *', async () => {
             { firstContact: true, businessName: lead.business_name || '', agentName }
           );
           if (aiReply) {
-            personalizedSms = aiReply;
+            // Defensive: strip the internal booking token (handled on inbound replies, not here)
+            personalizedSms = aiReply.replace(/BOOKING_REQUEST\|[^\n]*\n?/g, '').trim();
           } else {
             // AI failed — fall back to canned template so the lead still gets contacted
             personalizedSms = smsTemplate
@@ -1638,7 +1639,7 @@ cron.schedule('*/60 * * * * *', async () => {
       `SELECT rr.id, rr.user_id, rr.customer_id, rr.incentive_code,
               c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email,
               c.last_service AS service_name,
-              u.business_name, u.telnyx_phone_number, u.twilio_phone_number, u.google_review_link,
+              u.business_name, u.twilio_phone_number, u.google_review_link,
               rc.message_template, rc.incentive, rc.incentive_enabled
        FROM review_requests rr
        JOIN users u ON u.id = rr.user_id
@@ -1648,7 +1649,7 @@ cron.schedule('*/60 * * * * *', async () => {
          AND rr.sms_sent = false
          AND c.phone IS NOT NULL
          AND rr.scheduled_send_time <= NOW()
-         AND (u.telnyx_phone_number IS NOT NULL OR u.twilio_phone_number IS NOT NULL)`
+         AND u.twilio_phone_number IS NOT NULL`
     );
 
     for (const req of pending.rows) {

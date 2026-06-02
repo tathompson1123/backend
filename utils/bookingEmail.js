@@ -164,4 +164,101 @@ async function sendBookingEmails(opts) {
   }
 }
 
-module.exports = { sendBookingEmails };
+/**
+ * Notify the business owner that the SMS lead agent reached a booking agreement
+ * with a lead. This does NOT create a booking — it asks the owner to confirm with
+ * the customer and add it to the schedule manually. Owner-only email.
+ *
+ * @param {object} opts
+ * @param {number} opts.userId        - Business owner user ID
+ * @param {number} opts.leadId        - Lead ID (used to pull the SMS transcript)
+ * @param {string} opts.customerName
+ * @param {string} opts.customerPhone
+ * @param {string} [opts.customerEmail]
+ * @param {string} opts.serviceName   - Service the lead asked for (free text)
+ * @param {string} opts.bookingDate   - "YYYY-MM-DD"
+ * @param {string} opts.startTime     - "HH:MM"
+ */
+async function sendSmsBookingConfirmationRequest(opts) {
+  if (!process.env.SENDGRID_API_KEY) {
+    console.warn('📧 SENDGRID_API_KEY not set — skipping SMS booking confirmation email');
+    return;
+  }
+
+  try {
+    const userResult = await pool.query(
+      'SELECT business_name, email FROM users WHERE id = $1',
+      [opts.userId]
+    );
+    if (!userResult.rows[0]?.email) return;
+    const { business_name: businessName, email: ownerEmail } = userResult.rows[0];
+
+    // Pull the SMS transcript so the owner has full context
+    let transcriptHtml = '';
+    if (opts.leadId) {
+      const msgsResult = await pool.query(
+        `SELECT direction, message FROM sms_messages
+         WHERE lead_id = $1 ORDER BY created_at ASC, id ASC`,
+        [opts.leadId]
+      );
+      transcriptHtml = msgsResult.rows.map(m => {
+        const isCustomer = m.direction === 'incoming';
+        const label = isCustomer ? (opts.customerName || 'Customer') : 'SMS Agent';
+        // Strip the internal protocol token before showing the owner
+        const cleanContent = String(m.message || '')
+          .replace(/BOOKING_REQUEST\|[^\n]+\n?/g, '')
+          .trim();
+        if (!cleanContent) return '';
+        const bg = isCustomer ? '#eff6ff' : '#f8fafc';
+        const border = isCustomer ? '#bfdbfe' : '#e2e8f0';
+        const labelColor = isCustomer ? '#1d4ed8' : '#475569';
+        return `
+          <div style="margin:0 0 10px 0;padding:10px 12px;background:${bg};border:1px solid ${border};border-radius:8px;">
+            <div style="font-size:11px;font-weight:600;color:${labelColor};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">${label}</div>
+            <div style="font-size:14px;color:#1f2937;white-space:pre-wrap;line-height:1.45;">${cleanContent}</div>
+          </div>`;
+      }).join('');
+    }
+
+    const formattedDate = opts.bookingDate ? formatDate(opts.bookingDate) : 'Not specified';
+    const formattedTime = opts.startTime ? formatTime(opts.startTime) : 'Not specified';
+    const customerDetails = [opts.customerName, opts.customerPhone, opts.customerEmail].filter(Boolean).join(' | ');
+    const dashboardUrl = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/dashboard?view=leads`;
+
+    await sgMail.send({
+      to: ownerEmail,
+      from: { name: 'SORCE SMS Agent', email: 'noreply@sorceintegrations.com' },
+      replyTo: { email: ownerEmail },
+      subject: `Action needed: confirm a booking from your SMS agent — ${opts.customerName || opts.customerPhone}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#1a1a1a;">
+          <div style="background:#d97706;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
+            <h1 style="color:#fff;margin:0;font-size:1.4rem;">Booking Needs Confirmation</h1>
+          </div>
+          <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+            <p style="font-size:1rem;margin-top:0;">
+              Your SMS lead agent reached a booking agreement with a customer. This is <strong>not yet on your schedule</strong> —
+              reach out to confirm and add it manually.
+            </p>
+            <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
+              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:35%;">Customer</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${customerDetails}</td></tr>
+              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${opts.serviceName || 'Not specified'}</td></tr>
+              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${formattedDate}</td></tr>
+              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;">${formattedTime}</td></tr>
+            </table>
+            <a href="${dashboardUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px;">View Lead in Dashboard</a>
+            ${transcriptHtml ? `
+              <h2 style="font-size:1rem;font-weight:600;color:#1f2937;margin:2rem 0 0.75rem 0;">Conversation Transcript</h2>
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">${transcriptHtml}</div>` : ''}
+            <p style="color:#6b7280;font-size:0.85rem;margin:1.5rem 0 0 0;">${businessName || 'Your business'}</p>
+          </div>
+        </div>`,
+    });
+    console.log(`📧 SMS booking confirmation email sent for user ${opts.userId} — lead: ${opts.customerName || opts.customerPhone}`);
+  } catch (err) {
+    console.error('📧 SMS booking confirmation email error:', err.message);
+    // Never throw — email failure must not break the SMS flow
+  }
+}
+
+module.exports = { sendBookingEmails, sendSmsBookingConfirmationRequest };

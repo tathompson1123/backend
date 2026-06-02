@@ -6,6 +6,7 @@ const { sendPushToEmployee, sendPushToOwner } = require('../utils/pushNotificati
 const { sendBookingEmails } = require('../utils/bookingEmail');
 const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const { normalizeServiceList, resolveBookingServices } = require('../utils/bookingServices');
 
 // Helper: Update customer from booking
 async function updateCustomerFromBooking(booking, userId) {
@@ -64,16 +65,23 @@ router.get('/', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     const { startDate, endDate, status } = req.query;
 
+    // LEFT JOIN + json_agg with a FILTER so bookings with zero items get [] (not [null]).
+    // ORDER BY inside json_agg keeps mains (is_addon=false) ahead of add-ons in the array.
     let query = `
-      SELECT b.*, 
-        json_agg(
-          json_build_object(
-            'service_id', bi.service_id,
-            'service_name', bi.service_name,
-            'duration', bi.service_duration,
-            'price', bi.service_price,
-            'quantity', bi.quantity
-          )
+      SELECT b.*,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', bi.id,
+              'service_id', bi.service_id,
+              'service_name', bi.service_name,
+              'duration', bi.service_duration,
+              'price', bi.service_price,
+              'quantity', bi.quantity,
+              'is_addon', COALESCE(bi.is_addon, false)
+            ) ORDER BY COALESCE(bi.is_addon, false), bi.id
+          ) FILTER (WHERE bi.id IS NOT NULL),
+          '[]'::json
         ) as items
       FROM bookings b
       LEFT JOIN booking_items bi ON b.id = bi.booking_id
@@ -115,52 +123,67 @@ router.get('/', authenticateToken, async (req, res) => {
 router.post('/create', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { serviceId, bookingDate, startTime, customerInfo, customerNotes, employeeId, groupId, referralSource, price: priceOverride } = req.body;
+    const {
+      serviceId, bookingDate, startTime, customerInfo, customerNotes,
+      employeeId, groupId, referralSource,
+      price: priceOverride,
+      // New shape: mainServices/additionalServices may be [{id, price?}] or [id].
+      // Legacy shape (serviceId + price + additionalServiceIds) still works below.
+      mainServices, additionalServices, additionalServiceIds,
+    } = req.body;
 
-    if (!serviceId || !bookingDate || !startTime || !customerInfo) {
+    // Build the unified main/addon lists. Legacy single-service payloads collapse to
+    // mains = [{ id: serviceId, price: priceOverride }] so the rest of the flow is the same.
+    const mains = normalizeServiceList(
+      Array.isArray(mainServices) && mainServices.length > 0
+        ? mainServices
+        : (serviceId ? [{ id: serviceId, price: priceOverride }] : [])
+    );
+    const addons = normalizeServiceList(
+      Array.isArray(additionalServices) && additionalServices.length > 0
+        ? additionalServices
+        : (Array.isArray(additionalServiceIds) ? additionalServiceIds : [])
+    );
+
+    if (mains.length === 0 || !bookingDate || !startTime || !customerInfo) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const serviceResult = await pool.query(
-      'SELECT duration_hours, price, name FROM services WHERE id = $1 AND user_id = $2',
-      [serviceId, userId]
-    );
-
-    if (serviceResult.rows.length === 0) {
+    const resolved = await resolveBookingServices({ userId, mains, addons });
+    const resolvedMains = resolved.filter(s => !s.is_addon);
+    if (resolvedMains.length === 0) {
       return res.status(404).json({ error: 'Service not found' });
     }
-
-    const service = serviceResult.rows[0];
+    // Primary service (first main) drives notification copy + auto-assignment.
+    const primaryService = resolvedMains[0];
 
     // Fetch user's sales tax rate
     const taxResult = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
     const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
 
-    // Per-booking price override: employee can adjust the catalog price for this booking
-    // only (the service row itself is untouched). Tax is recomputed off the effective price.
-    let effectivePrice = parseFloat(service.price);
-    if (priceOverride !== undefined && priceOverride !== null && priceOverride !== '') {
-      const parsed = parseFloat(priceOverride);
-      if (Number.isFinite(parsed) && parsed >= 0) effectivePrice = parsed;
-    }
-    const taxAmount = Math.round(effectivePrice * taxRate * 100) / 100;
-    const totalWithTax = effectivePrice + taxAmount;
+    const subtotal = resolved.reduce((sum, s) => sum + s.price, 0);
+    const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
+    const totalWithTax = subtotal + taxAmount;
 
+    // End time spans the sum of all service durations (mains + add-ons), matching the
+    // "Total Duration" the form shows the user — otherwise multi-service bookings would
+    // wrongly leave the employee marked free for the back half of the appointment.
+    const totalDurationHours = resolved.reduce((sum, s) => sum + (s.duration_hours || 0), 0);
     const [startHour, startMin] = startTime.split(':').map(Number);
     const startMinutes = startHour * 60 + startMin;
-    const endMinutes = startMinutes + (service.duration_hours * 60);
+    const endMinutes = startMinutes + Math.round(totalDurationHours * 60);
     const endHour = Math.floor(endMinutes / 60);
     const endMin = endMinutes % 60;
     const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
 
     let assignedEmployeeId = employeeId;
-    
+
     if (!assignedEmployeeId) {
       const availableEmpResult = await pool.query(
-        `SELECT e.id 
+        `SELECT e.id
          FROM employees e
          LEFT JOIN service_employees se ON e.id = se.employee_id
-         WHERE e.user_id = $1 
+         WHERE e.user_id = $1
          AND e.active = true
          AND (se.service_id = $2 OR NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id))
          AND NOT EXISTS (
@@ -175,7 +198,7 @@ router.post('/create', authenticateToken, async (req, res) => {
            )
          )
          LIMIT 1`,
-        [userId, serviceId, bookingDate, startTime, endTime]
+        [userId, primaryService.id, bookingDate, startTime, endTime]
       );
 
       if (availableEmpResult.rows.length === 0) {
@@ -207,7 +230,7 @@ router.post('/create', authenticateToken, async (req, res) => {
       RETURNING *`,
       [
         userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
-        effectivePrice, totalWithTax, customerInfo.name, customerInfo.email,
+        subtotal, totalWithTax, customerInfo.name, customerInfo.email,
         customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null,
         'manual', (referralSource && String(referralSource).trim()) || null
       ]
@@ -215,18 +238,27 @@ router.post('/create', authenticateToken, async (req, res) => {
 
     const booking = bookingResult.rows[0];
 
-    await pool.query(
-      `INSERT INTO booking_items (
-        booking_id, service_id, service_name, service_duration,
-        service_price, quantity, subtotal
-      )
-      VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-      [booking.id, serviceId, service.name, service.duration_hours, effectivePrice, effectivePrice]
-    );
+    for (const svc of resolved) {
+      await pool.query(
+        `INSERT INTO booking_items (
+          booking_id, service_id, service_name, service_duration,
+          service_price, quantity, subtotal, is_addon
+        )
+        VALUES ($1, $2, $3, $4, $5, 1, $6, $7)`,
+        [booking.id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon]
+      );
+    }
 
     await updateCustomerFromBooking(booking, userId);
 
     const empResult = await pool.query('SELECT name FROM employees WHERE id = $1', [assignedEmployeeId]);
+
+    // Notification copy: lead with the primary service, append "+ N more" only if
+    // there are extra lines so single-service bookings read the same as before.
+    const extraCount = resolved.length - 1;
+    const serviceLabel = extraCount > 0
+      ? `${primaryService.name} + ${extraCount} more`
+      : primaryService.name;
 
     // Send booking confirmation emails (non-blocking)
     sendBookingEmails({
@@ -235,12 +267,12 @@ router.post('/create', authenticateToken, async (req, res) => {
       customerName: customerInfo.name,
       customerEmail: customerInfo.email,
       customerPhone: customerInfo.phone,
-      serviceName: service.name,
+      serviceName: serviceLabel,
       bookingDate,
       startTime,
       endTime,
-      price: service.price,
-      subtotal: parseFloat(service.price),
+      price: subtotal,
+      subtotal,
       taxRate,
       taxAmount,
       total: totalWithTax,
@@ -250,14 +282,14 @@ router.post('/create', authenticateToken, async (req, res) => {
     // Send push notification to assigned employee
     if (assignedEmployeeId) {
       sendPushToEmployee(assignedEmployeeId, 'New Booking Assigned',
-        `${customerInfo.name} - ${service.name} on ${bookingDate} at ${startTime}`,
+        `${customerInfo.name} - ${serviceLabel} on ${bookingDate} at ${startTime}`,
         { bookingId: booking.id, type: 'new_booking' }
       ).catch(err => console.error('Push notification error:', err.message));
     }
 
     // Notify owner/admin
     sendPushToOwner(userId, 'New Booking',
-      `${customerInfo.name} — ${service.name} on ${bookingDate} at ${startTime}`,
+      `${customerInfo.name} — ${serviceLabel} on ${bookingDate} at ${startTime}`,
       { bookingId: booking.id, type: 'new_booking' }
     ).catch(() => {});
 
@@ -306,49 +338,44 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const { serviceId, additionalServiceIds, bookingDate, startTime, customerInfo, notes, employeeId, groupId, status, sendEmail, price: priceOverride } = req.body;
+    const {
+      serviceId, additionalServiceIds, bookingDate, startTime, customerInfo,
+      notes, employeeId, groupId, status, sendEmail,
+      price: priceOverride,
+      mainServices, additionalServices,
+    } = req.body;
 
-    const serviceResult = await pool.query(
-      'SELECT duration_hours, price, name FROM services WHERE id = $1',
-      [serviceId]
+    // Same shape as POST /create: prefer new arrays, fall back to legacy fields.
+    const mains = normalizeServiceList(
+      Array.isArray(mainServices) && mainServices.length > 0
+        ? mainServices
+        : (serviceId ? [{ id: serviceId, price: priceOverride }] : [])
+    );
+    const addons = normalizeServiceList(
+      Array.isArray(additionalServices) && additionalServices.length > 0
+        ? additionalServices
+        : (Array.isArray(additionalServiceIds) ? additionalServiceIds : [])
     );
 
-    if (serviceResult.rows.length === 0) {
+    const resolved = await resolveBookingServices({ userId: null, mains, addons });
+    const resolvedMains = resolved.filter(s => !s.is_addon);
+    if (resolvedMains.length === 0) {
       return res.status(404).json({ error: 'Service not found' });
     }
+    const primaryService = resolvedMains[0];
 
-    const service = serviceResult.rows[0];
-
-    // Fetch add-on service details
-    const addOnIds = Array.isArray(additionalServiceIds) ? additionalServiceIds.filter(Boolean) : [];
-    let addOnServices = [];
-    if (addOnIds.length > 0) {
-      const addOnResult = await pool.query(
-        'SELECT id, duration_hours, price, name FROM services WHERE id = ANY($1::int[])',
-        [addOnIds]
-      );
-      addOnServices = addOnResult.rows;
-    }
-
-    // Recalculate totals
     const taxResult = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
     const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
 
-    // Per-booking price override applies to the PRIMARY service line only. Add-ons keep
-    // their catalog prices (override one thing, not three). Service catalog rows unchanged.
-    let primaryPrice = parseFloat(service.price);
-    if (priceOverride !== undefined && priceOverride !== null && priceOverride !== '') {
-      const parsed = parseFloat(priceOverride);
-      if (Number.isFinite(parsed) && parsed >= 0) primaryPrice = parsed;
-    }
-    const addOnTotal = addOnServices.reduce((sum, s) => sum + parseFloat(s.price), 0);
-    const subtotal = primaryPrice + addOnTotal;
+    const subtotal = resolved.reduce((sum, s) => sum + s.price, 0);
     const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
     const totalAmount = subtotal + taxAmount;
 
+    // end_time spans the sum of all service durations (mains + add-ons) — see POST /create.
+    const totalDurationHours = resolved.reduce((sum, s) => sum + (s.duration_hours || 0), 0);
     const [startHour, startMin] = startTime.split(':').map(Number);
     const startMinutes = startHour * 60 + startMin;
-    const endMinutes = startMinutes + (service.duration_hours * 60);
+    const endMinutes = startMinutes + Math.round(totalDurationHours * 60);
     const endHour = Math.floor(endMinutes / 60);
     const endMin = endMinutes % 60;
     const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
@@ -407,31 +434,29 @@ router.put('/:id', authenticateToken, async (req, res) => {
       );
     }
 
-    // Replace all booking_items: delete then re-insert primary + add-ons
+    // Replace all booking_items: delete then re-insert mains + add-ons.
     await pool.query('DELETE FROM booking_items WHERE booking_id = $1', [id]);
 
-    await pool.query(
-      `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal)
-       VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-      [id, serviceId, service.name, service.duration_hours, primaryPrice, primaryPrice]
-    );
-
-    for (const addOn of addOnServices) {
+    for (const svc of resolved) {
       await pool.query(
-        `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal)
-         VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-        [id, addOn.id, addOn.name, addOn.duration_hours, addOn.price, addOn.price]
+        `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal, is_addon)
+         VALUES ($1, $2, $3, $4, $5, 1, $6, $7)`,
+        [id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon]
       );
     }
 
     if (sendEmail && booking.customer_email) {
+      const extraCount = resolved.length - 1;
+      const serviceLabel = extraCount > 0
+        ? `${primaryService.name} + ${extraCount} more`
+        : primaryService.name;
       sendBookingEmails({
         userId,
         bookingNumber: booking.booking_number,
         customerName: booking.customer_name,
         customerEmail: booking.customer_email,
         customerPhone: booking.customer_phone,
-        serviceName: service.name,
+        serviceName: serviceLabel,
         bookingDate,
         startTime,
         endTime,

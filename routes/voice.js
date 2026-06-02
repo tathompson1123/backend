@@ -18,7 +18,7 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
 
     // Look up user by their SMS Agent Number
     const userResult = await pool.query(
-      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
+      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1',
       [To]
     );
 
@@ -78,9 +78,9 @@ router.post('/status', express.urlencoded({ extended: false }), async (req, res)
     const { CallSid, From, To, DialCallStatus, DialCallDuration } = req.body;
     console.log(`📞 Call status: ${From} → ${To} | DialCallStatus: ${DialCallStatus}`);
 
-    // Find user by their Twilio or Telnyx phone number
+    // Find user by their Twilio phone number
     const userResult = await pool.query(
-      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1 OR telnyx_phone_number = $1',
+      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1',
       [To]
     );
 
@@ -255,12 +255,12 @@ router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) =
 
     // Get user's phone numbers
     const userResult = await pool.query(
-      'SELECT twilio_phone_number, twilio_phone_sid, telnyx_phone_number FROM users WHERE id = $1',
+      'SELECT twilio_phone_number, twilio_phone_sid FROM users WHERE id = $1',
       [userId]
     );
 
     const user = userResult.rows[0];
-    const phoneNumber = user?.twilio_phone_number || user?.telnyx_phone_number;
+    const phoneNumber = user?.twilio_phone_number;
     if (!phoneNumber) {
       return res.status(400).json({
         error: 'No phone number provisioned. Deploy the Lead Form Agent first to get a phone number.'
@@ -303,14 +303,14 @@ router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) =
       await setVoiceWebhook(user.twilio_phone_sid, voiceWebhookUrl);
       console.log(`✅ Missed call text-back deployed with call forwarding for user ${userId}`);
     } else {
-      console.log(`✅ Missed call text-back deployed (SMS only, no call forwarding — Telnyx number) for user ${userId}`);
+      console.log(`✅ Missed call text-back deployed (SMS only, no call forwarding) for user ${userId}`);
     }
 
     res.json({
       success: true,
       message: hasTwilio
         ? 'Missed call text-back is now active with call forwarding'
-        : 'Missed call text-back is now active (SMS text-back enabled). Call forwarding requires a Twilio number — calls to your Telnyx number can still trigger text-backs manually.',
+        : 'Missed call text-back is now active (SMS text-back enabled). Call forwarding requires a provisioned Twilio number.',
       phoneNumber,
       callForwarding: hasTwilio,
       webhookUrl: voiceWebhookUrl
