@@ -8,6 +8,41 @@ const { v2: cloudinary } = require('cloudinary');
 const { sendPushToTeam, sendPushToEmployee } = require('../utils/pushNotifications');
 const { normalizeServiceList, resolveBookingServices } = require('../utils/bookingServices');
 
+// ── Time-tracking schema ─────────────────────────────────
+pool.query(`
+  CREATE TABLE IF NOT EXISTS time_entries (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    clock_in TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    clock_out TIMESTAMPTZ,
+    reminders_sent JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(e => console.error('time_entries migration error:', e.message));
+pool.query(`CREATE INDEX IF NOT EXISTS idx_time_entries_open ON time_entries(employee_id) WHERE clock_out IS NULL`)
+  .catch(() => {});
+pool.query(`
+  CREATE TABLE IF NOT EXISTS time_breaks (
+    id SERIAL PRIMARY KEY,
+    time_entry_id INTEGER NOT NULL REFERENCES time_entries(id) ON DELETE CASCADE,
+    employee_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    break_type VARCHAR(10) NOT NULL DEFAULT 'paid',
+    start_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    end_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(e => console.error('time_breaks migration error:', e.message));
+
+// Break reminder thresholds, measured in WORKED seconds (elapsed minus break time):
+// paid break at 2h, unpaid lunch at 4h, another paid break at 6h.
+const BREAK_REMINDERS = [
+  { key: 'paid1',  type: 'paid',   atSeconds: 2 * 3600, label: 'Time for a paid break.' },
+  { key: 'unpaid', type: 'unpaid', atSeconds: 4 * 3600, label: 'Time for your unpaid lunch break.' },
+  { key: 'paid2',  type: 'paid',   atSeconds: 6 * 3600, label: 'Time for another paid break.' },
+];
+
 const mediaUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
@@ -2272,6 +2307,149 @@ router.put('/admin/members/:id/admin', requireAdmin, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Employee not found' });
     res.json({ success: true, employee: result.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Time tracking ────────────────────────────────────────
+
+// Build the live state for an employee's open shift (or null if clocked out).
+async function buildTimeStatus(employeeId, { fireReminders = false } = {}) {
+  const entryRes = await pool.query(
+    `SELECT * FROM time_entries WHERE employee_id = $1 AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1`,
+    [employeeId]
+  );
+  if (entryRes.rows.length === 0) return { clockedIn: false };
+  const entry = entryRes.rows[0];
+
+  const breaksRes = await pool.query(
+    `SELECT id, break_type, start_at, end_at FROM time_breaks WHERE time_entry_id = $1 ORDER BY start_at ASC`,
+    [entry.id]
+  );
+  const breaks = breaksRes.rows;
+  const now = Date.now();
+  const clockInMs = new Date(entry.clock_in).getTime();
+
+  let breakSeconds = 0;
+  let currentBreak = null;
+  for (const b of breaks) {
+    const s = new Date(b.start_at).getTime();
+    const e = b.end_at ? new Date(b.end_at).getTime() : now;
+    breakSeconds += Math.max(0, (e - s) / 1000);
+    if (!b.end_at) currentBreak = b;
+  }
+  const elapsedSeconds = Math.max(0, (now - clockInMs) / 1000);
+  const workedSeconds = Math.max(0, elapsedSeconds - breakSeconds);
+
+  const sent = Array.isArray(entry.reminders_sent) ? entry.reminders_sent : [];
+  const reminders = BREAK_REMINDERS.map(r => ({
+    key: r.key, type: r.type, label: r.label, atSeconds: r.atSeconds,
+    due: workedSeconds >= r.atSeconds,
+  }));
+
+  // Fire a phone push once per crossed threshold (the in-app banner is driven by `due`).
+  if (fireReminders) {
+    const newlyDue = reminders.filter(r => r.due && !sent.includes(r.key));
+    if (newlyDue.length > 0) {
+      for (const r of newlyDue) {
+        sendPushToEmployee(employeeId, 'Break reminder', r.label, { screen: 'EmployeeHome', reminder: r.key }).catch(() => {});
+      }
+      const merged = [...new Set([...sent, ...newlyDue.map(r => r.key)])];
+      await pool.query('UPDATE time_entries SET reminders_sent = $1 WHERE id = $2', [JSON.stringify(merged), entry.id]).catch(() => {});
+    }
+  }
+
+  return {
+    clockedIn: true,
+    entryId: entry.id,
+    clockInAt: entry.clock_in,
+    onBreak: !!currentBreak,
+    currentBreak: currentBreak ? { id: currentBreak.id, type: currentBreak.break_type, startAt: currentBreak.start_at } : null,
+    breaks: breaks.map(b => ({ id: b.id, type: b.break_type, startAt: b.start_at, endAt: b.end_at })),
+    elapsedSeconds: Math.round(elapsedSeconds),
+    breakSeconds: Math.round(breakSeconds),
+    workedSeconds: Math.round(workedSeconds),
+    reminders,
+  };
+}
+
+// GET /api/employee/time/status — current shift state (also fires due break pushes)
+router.get('/time/status', async (req, res) => {
+  try {
+    const status = await buildTimeStatus(req.employee.employeeId, { fireReminders: true });
+    res.json(status);
+  } catch (e) {
+    console.error('time/status error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/employee/time/clock-in
+router.post('/time/clock-in', async (req, res) => {
+  try {
+    const { employeeId, userId } = req.employee;
+    const open = await pool.query('SELECT id FROM time_entries WHERE employee_id = $1 AND clock_out IS NULL LIMIT 1', [employeeId]);
+    if (open.rows.length > 0) return res.status(400).json({ error: "You're already clocked in" });
+    await pool.query('INSERT INTO time_entries (user_id, employee_id, clock_in) VALUES ($1, $2, NOW())', [userId, employeeId]);
+    res.json({ success: true, status: await buildTimeStatus(employeeId) });
+  } catch (e) {
+    console.error('clock-in error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/employee/time/clock-out
+router.post('/time/clock-out', async (req, res) => {
+  try {
+    const { employeeId } = req.employee;
+    const open = await pool.query('SELECT id FROM time_entries WHERE employee_id = $1 AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1', [employeeId]);
+    if (open.rows.length === 0) return res.status(400).json({ error: "You're not clocked in" });
+    const entryId = open.rows[0].id;
+    // Auto-close any open break so it doesn't run forever.
+    await pool.query('UPDATE time_breaks SET end_at = NOW() WHERE time_entry_id = $1 AND end_at IS NULL', [entryId]);
+    await pool.query('UPDATE time_entries SET clock_out = NOW() WHERE id = $1', [entryId]);
+    res.json({ success: true, status: { clockedIn: false } });
+  } catch (e) {
+    console.error('clock-out error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/employee/time/break/start  body: { type: 'paid' | 'unpaid' }
+router.post('/time/break/start', async (req, res) => {
+  try {
+    const { employeeId, userId } = req.employee;
+    const type = req.body?.type === 'unpaid' ? 'unpaid' : 'paid';
+    const open = await pool.query('SELECT id FROM time_entries WHERE employee_id = $1 AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1', [employeeId]);
+    if (open.rows.length === 0) return res.status(400).json({ error: 'Clock in before taking a break' });
+    const entryId = open.rows[0].id;
+    const onBreak = await pool.query('SELECT id FROM time_breaks WHERE time_entry_id = $1 AND end_at IS NULL LIMIT 1', [entryId]);
+    if (onBreak.rows.length > 0) return res.status(400).json({ error: "You're already on a break" });
+    await pool.query(
+      'INSERT INTO time_breaks (time_entry_id, employee_id, user_id, break_type, start_at) VALUES ($1, $2, $3, $4, NOW())',
+      [entryId, employeeId, userId, type]
+    );
+    res.json({ success: true, status: await buildTimeStatus(employeeId) });
+  } catch (e) {
+    console.error('break/start error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/employee/time/break/end
+router.post('/time/break/end', async (req, res) => {
+  try {
+    const { employeeId } = req.employee;
+    const open = await pool.query('SELECT id FROM time_entries WHERE employee_id = $1 AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1', [employeeId]);
+    if (open.rows.length === 0) return res.status(400).json({ error: "You're not clocked in" });
+    const upd = await pool.query(
+      'UPDATE time_breaks SET end_at = NOW() WHERE time_entry_id = $1 AND end_at IS NULL RETURNING id',
+      [open.rows[0].id]
+    );
+    if (upd.rows.length === 0) return res.status(400).json({ error: "You're not on a break" });
+    res.json({ success: true, status: await buildTimeStatus(employeeId) });
+  } catch (e) {
+    console.error('break/end error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;
