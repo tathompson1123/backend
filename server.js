@@ -1818,8 +1818,18 @@ cron.schedule('*/30 * * * *', async () => {
          AND (u.plan IS NOT NULL)`
     );
 
+    // A single malformed address makes SendGrid 400 the whole send. Screen them out and
+    // mark them done so they don't retry (and re-log) every 30 minutes forever.
+    const isValidEmail = (e) => typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+
     for (const req of pending.rows) {
       try {
+        const toEmail = (req.customer_email || '').trim();
+        if (!isValidEmail(toEmail)) {
+          await pool.query(`UPDATE review_requests SET email_sent = true, email_sent_at = NOW() WHERE id = $1`, [req.id]);
+          console.warn(`⚠️ Cron: Review email skipped for request ${req.id} — invalid address "${req.customer_email}"`);
+          continue;
+        }
         const firstName = (req.customer_name || 'there').split(' ')[0];
         const backendUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
         const reviewLink = req.google_review_link ? `${backendUrl}/api/public/review-click/${req.id}` : null;
@@ -1829,7 +1839,7 @@ cron.schedule('*/30 * * * *', async () => {
           : `We'd love to hear about your experience with <strong>${req.service_name || 'our service'}</strong>. Could you take a moment to leave us a review?`;
 
         await sgMail.send({
-          to: req.customer_email,
+          to: toEmail,
           from: { name: req.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
           replyTo: req.owner_email ? { email: req.owner_email } : undefined,
           subject: `How was your experience? — ${req.business_name || 'Us'}`,
@@ -1855,9 +1865,19 @@ cron.schedule('*/30 * * * *', async () => {
           `UPDATE review_requests SET email_sent = true, email_sent_at = NOW() WHERE id = $1`,
           [req.id]
         );
-        console.log(`📧 Cron: Review follow-up email sent for request ${req.id} to ${req.customer_email}`);
+        console.log(`📧 Cron: Review follow-up email sent for request ${req.id} to ${toEmail}`);
       } catch (emailErr) {
-        console.error(`❌ Cron: Review email failed for request ${req.id}:`, emailErr.message);
+        // SendGrid hides the real reason in response.body.errors; "Bad Request" alone is useless.
+        const sgErrors = emailErr?.response?.body?.errors;
+        const detail = Array.isArray(sgErrors) && sgErrors.length ? sgErrors.map(x => x.message).join('; ') : emailErr.message;
+        const statusCode = emailErr?.code || emailErr?.response?.statusCode;
+        console.error(`❌ Cron: Review email failed for request ${req.id}: ${detail}`);
+        // A 4xx is a permanent rejection (bad address, etc.) — mark done so it doesn't retry
+        // every 30 minutes. Transient 5xx errors are left to retry next run.
+        if (statusCode >= 400 && statusCode < 500) {
+          await pool.query(`UPDATE review_requests SET email_sent = true, email_sent_at = NOW() WHERE id = $1`, [req.id])
+            .catch(() => {});
+        }
       }
     }
   } catch (err) {

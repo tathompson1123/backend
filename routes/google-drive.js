@@ -12,12 +12,13 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const CLIENT_ID = process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.GOOGLE_ADS_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_DRIVE_CLIENT_SECRET || process.env.GOOGLE_ADS_CLIENT_SECRET;
 
-// drive.file is a NON-sensitive scope: the app can only see/edit files it created itself,
-// so Google doesn't require restricted-scope verification. It's enough for the Sheets API
-// to create, read, write and share the spreadsheets SORCE makes. openid/email just let us
-// show which Google account is connected.
+// drive.file  → create/share spreadsheets SORCE makes (non-sensitive).
+// spreadsheets → read the values of ANY sheet the owner opens, so they can IMPORT their
+//                own pre-made tip/payroll sheets (a "sensitive" scope; brand verification,
+//                not the restricted security assessment). openid/email identify the account.
 const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/spreadsheets',
   'openid',
   'email',
   'profile',
@@ -51,6 +52,13 @@ pool.query(`
     created_at TIMESTAMPTZ DEFAULT NOW()
   )
 `).catch(e => console.error('google_sheets migration error:', e.message));
+
+// imported = the owner brought in a pre-made sheet (vs one SORCE created). tab = which
+// worksheet/tab the summary should read (matters for imported sheets with custom names).
+pool.query(`ALTER TABLE google_sheets ADD COLUMN IF NOT EXISTS imported BOOLEAN DEFAULT FALSE`)
+  .catch(e => console.error('google_sheets imported migration error:', e.message));
+pool.query(`ALTER TABLE google_sheets ADD COLUMN IF NOT EXISTS tab TEXT`)
+  .catch(e => console.error('google_sheets tab migration error:', e.message));
 
 // ── Token helpers ────────────────────────────────────────
 
@@ -223,6 +231,8 @@ router.post('/sheets', authenticateToken, async (req, res) => {
     });
     const spreadsheetId = created.data.spreadsheetId;
     const url = created.data.spreadsheetUrl;
+    // The first sheet's id isn't guaranteed to be 0 — read it back for the bold request.
+    const sheetId = created.data.sheets?.[0]?.properties?.sheetId ?? 0;
 
     // Seed the header row + bold it so the manager knows what to type where.
     if (template.headers.length > 0) {
@@ -237,23 +247,78 @@ router.post('/sheets', authenticateToken, async (req, res) => {
         requestBody: {
           requests: [{
             repeatCell: {
-              range: { sheetId: 0, startRowIndex: 0, endRowIndex: 1 },
+              range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
               cell: { userEnteredFormat: { textFormat: { bold: true } } },
               fields: 'userEnteredFormat.textFormat.bold',
             },
           }],
         },
-      });
+      }).catch(e => console.warn('Header bold formatting skipped:', e.message));
     }
 
     const saved = await pool.query(
-      'INSERT INTO google_sheets (user_id, spreadsheet_id, url, title, kind) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [userId, spreadsheetId, url, title.trim(), kind]
+      'INSERT INTO google_sheets (user_id, spreadsheet_id, url, title, kind, tab, imported) VALUES ($1,$2,$3,$4,$5,$6,FALSE) RETURNING *',
+      [userId, spreadsheetId, url, title.trim(), kind, template.tab]
     );
     res.json({ success: true, sheet: saved.rows[0] });
   } catch (e) {
     console.error('Create sheet error:', e.message);
     res.status(500).json({ error: e.message || 'Failed to create sheet' });
+  }
+});
+
+// POST /api/google-drive/sheets/import — link an existing (pre-made) sheet by URL/ID
+router.post('/sheets/import', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { url, kind = 'general', tab } = req.body || {};
+    if (!url?.trim()) return res.status(400).json({ error: 'Paste the Google Sheet link' });
+
+    // Accept a full URL (.../spreadsheets/d/<id>/edit) or a bare spreadsheet ID.
+    const m = String(url).match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    const spreadsheetId = m ? m[1] : (/^[a-zA-Z0-9-_]{20,}$/.test(url.trim()) ? url.trim() : null);
+    if (!spreadsheetId) return res.status(400).json({ error: "That doesn't look like a Google Sheets link" });
+
+    const auth = await getAuthedClient(userId);
+    if (!auth) return res.status(400).json({ error: 'Connect your Google account first' });
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    // Confirm we can actually read it (and grab its title + tab names).
+    let meta;
+    try {
+      meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'properties.title,sheets.properties.title,spreadsheetUrl' });
+    } catch (e) {
+      const msg = /permission|not found|403|404/i.test(e.message)
+        ? "SORCE can't open that sheet. Make sure you're signed in with the Google account that owns it, then reconnect."
+        : e.message;
+      return res.status(400).json({ error: msg });
+    }
+
+    const tabNames = (meta.data.sheets || []).map(s => s.properties?.title).filter(Boolean);
+    const chosenTab = tab && tabNames.includes(tab) ? tab : (tabNames[0] || 'Sheet1');
+    const title = meta.data.properties?.title || 'Imported sheet';
+    const sheetUrl = meta.data.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+
+    // Avoid duplicates for this user.
+    const existing = await pool.query(
+      'SELECT id FROM google_sheets WHERE user_id = $1 AND spreadsheet_id = $2',
+      [userId, spreadsheetId]
+    );
+    if (existing.rows.length > 0) {
+      await pool.query('UPDATE google_sheets SET kind = $1, tab = $2, title = $3 WHERE id = $4',
+        [kind, chosenTab, title, existing.rows[0].id]);
+      const r = await pool.query('SELECT * FROM google_sheets WHERE id = $1', [existing.rows[0].id]);
+      return res.json({ success: true, sheet: r.rows[0], tabs: tabNames, updated: true });
+    }
+
+    const saved = await pool.query(
+      'INSERT INTO google_sheets (user_id, spreadsheet_id, url, title, kind, tab, imported) VALUES ($1,$2,$3,$4,$5,$6,TRUE) RETURNING *',
+      [userId, spreadsheetId, sheetUrl, title, kind, chosenTab]
+    );
+    res.json({ success: true, sheet: saved.rows[0], tabs: tabNames });
+  } catch (e) {
+    console.error('Import sheet error:', e.message);
+    res.status(500).json({ error: e.message || 'Failed to import sheet' });
   }
 });
 
@@ -265,10 +330,15 @@ router.post('/sheets/:id/share', authenticateToken, async (req, res) => {
     if (!email?.trim()) return res.status(400).json({ error: 'A recipient email is required' });
 
     const sheetRow = await pool.query(
-      'SELECT spreadsheet_id FROM google_sheets WHERE id = $1 AND user_id = $2',
+      'SELECT spreadsheet_id, imported FROM google_sheets WHERE id = $1 AND user_id = $2',
       [req.params.id, userId]
     );
     if (sheetRow.rows.length === 0) return res.status(404).json({ error: 'Sheet not found' });
+    // SORCE can only manage sharing on sheets it created; imported sheets are shared from
+    // Google Sheets directly (the owner already has them).
+    if (sheetRow.rows[0].imported) {
+      return res.status(400).json({ error: 'Share imported sheets from Google Sheets directly (the file is already in your Drive).' });
+    }
 
     const auth = await getAuthedClient(userId);
     if (!auth) return res.status(400).json({ error: 'Connect your Google account first' });
@@ -318,7 +388,7 @@ router.get('/summary', authenticateToken, async (req, res) => {
 
     const pick = async (kind) => {
       const r = await pool.query(
-        'SELECT spreadsheet_id, title, url FROM google_sheets WHERE user_id = $1 AND kind = $2 ORDER BY created_at DESC LIMIT 1',
+        'SELECT spreadsheet_id, title, url, tab FROM google_sheets WHERE user_id = $1 AND kind = $2 ORDER BY created_at DESC LIMIT 1',
         [userId, kind]
       );
       return r.rows[0] || null;
@@ -326,12 +396,15 @@ router.get('/summary', authenticateToken, async (req, res) => {
     const tipsSheet = await pick('tips');
     const payrollSheet = await pick('payroll');
 
-    const readRows = async (sheet, tab) => {
+    // Read from the sheet's own tab (imported sheets may have a custom tab name);
+    // fall back to the template tab name for older rows that predate the tab column.
+    const readRows = async (sheet, fallbackTab) => {
       if (!sheet) return [];
+      const tab = sheet.tab || fallbackTab;
       try {
         const r = await sheets.spreadsheets.values.get({
           spreadsheetId: sheet.spreadsheet_id,
-          range: `${tab}!A2:Z`,
+          range: `'${tab}'!A2:Z`,
         });
         return r.data.values || [];
       } catch (e) {
@@ -371,15 +444,19 @@ router.get('/summary', authenticateToken, async (req, res) => {
       payrollByEmployee[emp] = (payrollByEmployee[emp] || 0) + amt;
     }
 
-    // SORCE revenue for the week — non-cancelled bookings in the date range.
+    // Revenue for the week — actual money collected via Square in the date range
+    // (amount minus refunds), matching the Transaction Revenue analytics. created_at is
+    // a timestamp, so include the whole final day with "< end + 1 day".
     const revRow = await pool.query(
-      `SELECT COALESCE(SUM(total_amount), 0) AS revenue
-       FROM bookings
-       WHERE user_id = $1
-         AND booking_date >= $2 AND booking_date <= $3
-         AND COALESCE(status, '') <> 'cancelled'`,
+      `SELECT COALESCE(SUM(p.amount - COALESCE(p.refund_amount, 0)), 0)::numeric AS revenue
+       FROM payments p
+       WHERE p.user_id = $1
+         AND p.processor = 'square'
+         AND p.status IN ('succeeded', 'completed')
+         AND p.created_at >= $2::date
+         AND p.created_at < ($3::date + INTERVAL '1 day')`,
       [userId, start, end]
-    );
+    ).catch(() => ({ rows: [{ revenue: 0 }] }));
     const revenue = parseFloat(revRow.rows[0].revenue) || 0;
 
     res.json({
