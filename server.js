@@ -218,6 +218,10 @@ app.use('/api/email-campaigns', emailCampaignRoutes);
 const smsCampaignRoutes = require('./routes/sms-campaigns');
 app.use('/api/sms-campaigns', smsCampaignRoutes);
 
+// Google Drive / Sheets (Business Setup → tips + payroll tracking)
+const googleDriveRoutes = require('./routes/google-drive');
+app.use('/api/google-drive', googleDriveRoutes);
+
 app.use('/api/rewards', rewardsRoutes);
 
 app.get('/api/groups', (req, res) => {
