@@ -27,6 +27,19 @@ pool.query(`
   )
 `).catch(e => console.error('payroll_actuals migration error:', e.message));
 
+// Owner override of an employee's clocked hours for a week (e.g. a forgotten clock-out).
+pool.query(`
+  CREATE TABLE IF NOT EXISTS payroll_hours (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    week_start DATE NOT NULL,
+    hours NUMERIC NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (employee_id, week_start)
+  )
+`).catch(e => console.error('payroll_hours migration error:', e.message));
+
 // Tiers: [{ min, max, delta }] — efficiency% in [min,max) adjusts hourly by +delta.
 const DEFAULT_TIERS = [
   { min: 0,   max: 90,   delta: -2 },
@@ -107,6 +120,29 @@ router.put('/actual', authenticateToken, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUT /api/payroll/hours — owner override of clocked hours for a week (empty clears it)
+router.put('/hours', authenticateToken, async (req, res) => {
+  try {
+    const { employeeId, weekStart, hours } = req.body || {};
+    if (!employeeId || !weekStart) return res.status(400).json({ error: 'employeeId and weekStart required' });
+    const { start } = weekBounds(weekStart);
+    if (hours === null || hours === undefined || hours === '') {
+      await pool.query('DELETE FROM payroll_hours WHERE user_id = $1 AND employee_id = $2 AND week_start = $3',
+        [req.user.userId, employeeId, start]);
+      return res.json({ success: true, cleared: true });
+    }
+    const h = parseFloat(hours);
+    if (!Number.isFinite(h) || h < 0) return res.status(400).json({ error: 'Enter a valid number of hours' });
+    await pool.query(
+      `INSERT INTO payroll_hours (user_id, employee_id, week_start, hours, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (employee_id, week_start) DO UPDATE SET hours = $4, updated_at = NOW()`,
+      [req.user.userId, employeeId, start, h]
+    );
+    res.json({ success: true, hours: h });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/payroll/summary?weekStart=YYYY-MM-DD
 // Per-employee: clocked hours, budgeted hours earned (completed jobs), efficiency,
 // base + efficiency-adjusted rate, projected payroll, and the manual actual.
@@ -143,6 +179,14 @@ router.get('/summary', authenticateToken, async (req, res) => {
       clockedByEmp[c.employee_id] = Math.max(0, (Number(c.elapsed) - Number(c.break_secs)) / 3600);
     }
 
+    // Owner overrides of clocked hours (forgotten clock-outs, corrections).
+    const hoursOverrides = (await pool.query(
+      'SELECT employee_id, hours FROM payroll_hours WHERE user_id = $1 AND week_start = $2',
+      [userId, start]
+    )).rows;
+    const overrideByEmp = {};
+    for (const h of hoursOverrides) overrideByEmp[h.employee_id] = Number(h.hours);
+
     // Budgeted hours assigned to each employee in the week (their override, else the sum of
     // the job's service durations). Counts every non-cancelled assigned job — so budgeted
     // hours pre-fill as soon as jobs are on the schedule, before anything is marked complete.
@@ -170,7 +214,9 @@ router.get('/summary', authenticateToken, async (req, res) => {
     let totalProjected = 0, totalActual = 0;
     const rows = employees.map(emp => {
       const baseRate = Number(emp.hourly_rate) || 0;
-      const clockedHours = Math.round((clockedByEmp[emp.id] || 0) * 100) / 100;
+      const computedHours = Math.round((clockedByEmp[emp.id] || 0) * 100) / 100;
+      const overridden = overrideByEmp[emp.id] != null;
+      const clockedHours = overridden ? Math.round(overrideByEmp[emp.id] * 100) / 100 : computedHours;
       const budgetedEarned = Math.round((earnedByEmp[emp.id] || 0) * 100) / 100;
       const efficiency = clockedHours > 0 ? Math.round((budgetedEarned / clockedHours) * 1000) / 10 : null;
       const adjustedRate = applyTier(efficiency, baseRate, tiers);
@@ -180,8 +226,8 @@ router.get('/summary', authenticateToken, async (req, res) => {
       totalProjected += projected;
       if (actual != null) totalActual += actual;
       return {
-        id: emp.id, name: emp.name, baseRate, clockedHours, budgetedEarned,
-        efficiency, adjustedRate, projected, adjustedProjected, actual,
+        id: emp.id, name: emp.name, baseRate, clockedHours, computedHours, clockedOverridden: overridden,
+        budgetedEarned, efficiency, adjustedRate, projected, adjustedProjected, actual,
       };
     });
 
