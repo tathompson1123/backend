@@ -396,33 +396,54 @@ router.get('/summary', authenticateToken, async (req, res) => {
     const tipsSheet = await pick('tips');
     const payrollSheet = await pick('payroll');
 
-    // Read the whole sheet (including the header row) from its own tab (imported sheets may
-    // have a custom tab name); fall back to the template tab for older rows.
-    const readSheet = async (sheet, fallbackTab) => {
-      if (!sheet) return { headers: [], rows: [] };
+    // Read every row (including any title/subtitle rows above the headers) from the sheet's
+    // own tab (imported sheets may have a custom tab name); fall back to the template tab.
+    const readAll = async (sheet, fallbackTab) => {
+      if (!sheet) return [];
       const tab = sheet.tab || fallbackTab;
       try {
         const r = await sheets.spreadsheets.values.get({
           spreadsheetId: sheet.spreadsheet_id,
           range: `'${tab}'!A1:Z`,
         });
-        const all = r.data.values || [];
-        return { headers: all[0] || [], rows: all.slice(1) };
+        return r.data.values || [];
       } catch (e) {
         console.warn(`Summary read failed for ${tab}:`, e.message);
-        return { headers: [], rows: [] };
+        return [];
       }
     };
 
-    // Find a column by matching header keywords (so imported sheets with any column order
-    // work). Falls back to a fixed index when the header isn't recognized.
     const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const findCol = (headers, candidates, fallbackIdx) => {
+    const rowHas = (row, cands) => (row || []).some(c => { const h = norm(c); return h && cands.some(k => h.includes(k)); });
+    const findCol = (headers, cands, fb) => {
       for (let i = 0; i < headers.length; i++) {
         const h = norm(headers[i]);
-        if (h && candidates.some(c => h.includes(c))) return i;
+        if (h && cands.some(c => h.includes(c))) return i;
       }
-      return fallbackIdx;
+      return fb;
+    };
+
+    // Locate the real header row — sheets often have a title/subtitle banner above it. Score
+    // the first 15 rows by how many of {date, name, amount} headers they contain; the best
+    // (>=2 matches) is the header, and data starts on the next row. Then map columns by name.
+    const parseTable = (all, dateCands, nameCands, amountCands, fb) => {
+      let headerIdx = -1, best = 0;
+      for (let i = 0; i < Math.min(all.length, 15); i++) {
+        let s = 0;
+        if (rowHas(all[i], dateCands)) s++;
+        if (rowHas(all[i], nameCands)) s++;
+        if (rowHas(all[i], amountCands)) s++;
+        if (s > best) { best = s; headerIdx = i; }
+      }
+      if (best < 2) headerIdx = -1; // no recognizable header — assume data starts at row 1
+      const headers = headerIdx >= 0 ? all[headerIdx] : [];
+      const rows = all.slice(headerIdx + 1);
+      return {
+        headers, rows,
+        dateCol: findCol(headers, dateCands, fb.date),
+        nameCol: findCol(headers, nameCands, fb.name),
+        amountCol: findCol(headers, amountCands, fb.amount),
+      };
     };
 
     // Tips: Date | Detailer | Tip Amount | Notes — sum + group by detailer, filtered to the week.
@@ -440,34 +461,44 @@ router.get('/summary', authenticateToken, async (req, res) => {
       if (Number.isNaN(t)) return true;
       return t >= startMs && t <= endMs;
     };
-    // Tips — detect Date / Detailer / Tip Amount columns by header, sum by detailer.
-    const tipsData = await readSheet(tipsSheet, SHEET_TEMPLATES.tips.tab);
-    const tDate = findCol(tipsData.headers, ['date'], 0);
-    const tName = findCol(tipsData.headers, ['detailer', 'employee', 'name', 'tech', 'staff', 'worker'], 1);
-    const tAmt = findCol(tipsData.headers, ['tipamount', 'tip', 'gratuity', 'amount', 'total', 'paid'], 2);
+    // Tips — find the header row (skipping any title/subtitle banner), then sum by detailer.
+    // "amount" candidates exclude bare 'total' first so a "Detailer Total" column can't
+    // outrank the real "Tip Amount"; findCol picks the leftmost match anyway.
+    const tipsAll = await readAll(tipsSheet, SHEET_TEMPLATES.tips.tab);
+    const tips = parseTable(
+      tipsAll,
+      ['date'],
+      ['detailer', 'employee', 'name', 'tech', 'staff', 'worker'],
+      ['tipamount', 'tip', 'gratuity', 'amount', 'paid'],
+      { date: 0, name: 1, amount: 2 }
+    );
     let tipsTotal = 0;
     const tipsByDetailer = {};
-    for (const row of tipsData.rows) {
-      if (!inWeek(row[tDate])) continue;
-      const name = String(row[tName] || '').trim();
-      const amt = toNumber(row[tAmt]);
+    for (const row of tips.rows) {
+      if (!inWeek(row[tips.dateCol])) continue;
+      const name = String(row[tips.nameCol] || '').trim();
+      const amt = toNumber(row[tips.amountCol]);
       if (amt === 0 && !name) continue;
       const detailer = name || 'Unassigned';
       tipsTotal += amt;
       tipsByDetailer[detailer] = (tipsByDetailer[detailer] || 0) + amt;
     }
 
-    // Payroll — detect Week / Employee / Pay Amount columns by header.
-    const payData = await readSheet(payrollSheet, SHEET_TEMPLATES.payroll.tab);
-    const pDate = findCol(payData.headers, ['weekstarting', 'week', 'date'], 0);
-    const pName = findCol(payData.headers, ['employee', 'name', 'detailer', 'staff', 'worker'], 1);
-    const pAmt = findCol(payData.headers, ['payamount', 'pay', 'wage', 'amount', 'total', 'gross'], 3);
+    // Payroll — same header-aware parsing.
+    const payAll = await readAll(payrollSheet, SHEET_TEMPLATES.payroll.tab);
+    const pay = parseTable(
+      payAll,
+      ['weekstarting', 'week', 'date'],
+      ['employee', 'name', 'detailer', 'staff', 'worker'],
+      ['payamount', 'pay', 'wage', 'gross', 'amount'],
+      { date: 0, name: 1, amount: 3 }
+    );
     let payrollTotal = 0;
     const payrollByEmployee = {};
-    for (const row of payData.rows) {
-      if (!inWeek(row[pDate])) continue;
-      const name = String(row[pName] || '').trim();
-      const amt = toNumber(row[pAmt]);
+    for (const row of pay.rows) {
+      if (!inWeek(row[pay.dateCol])) continue;
+      const name = String(row[pay.nameCol] || '').trim();
+      const amt = toNumber(row[pay.amountCol]);
       if (amt === 0 && !name) continue;
       const emp = name || 'Unassigned';
       payrollTotal += amt;
@@ -497,7 +528,7 @@ router.get('/summary', authenticateToken, async (req, res) => {
         byDetailer: tipsByDetailer,
         sheet: tipsSheet ? { title: tipsSheet.title, url: tipsSheet.url } : null,
         // Which columns we read (helps diagnose a wrong layout).
-        detected: { headers: tipsData.headers, dateCol: tDate, nameCol: tName, amountCol: tAmt },
+        detected: { headers: tips.headers, dateCol: tips.dateCol, nameCol: tips.nameCol, amountCol: tips.amountCol },
       },
       payroll: {
         total: Math.round(payrollTotal * 100) / 100,

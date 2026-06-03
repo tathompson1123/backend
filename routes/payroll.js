@@ -143,13 +143,16 @@ router.get('/summary', authenticateToken, async (req, res) => {
       clockedByEmp[c.employee_id] = Math.max(0, (Number(c.elapsed) - Number(c.break_secs)) / 3600);
     }
 
-    // Budgeted hours earned = completed jobs assigned to the employee in the week.
+    // Budgeted hours assigned to each employee in the week (their override, else the sum of
+    // the job's service durations). Counts every non-cancelled assigned job — so budgeted
+    // hours pre-fill as soon as jobs are on the schedule, before anything is marked complete.
     const earned = (await pool.query(
       `SELECT b.employee_id,
               SUM(COALESCE(b.budgeted_hours, item.total, 0))::numeric AS earned
        FROM bookings b
        LEFT JOIN LATERAL (SELECT SUM(service_duration) AS total FROM booking_items WHERE booking_id = b.id) item ON true
-       WHERE b.user_id = $1 AND b.status = 'completed' AND b.employee_id IS NOT NULL
+       WHERE b.user_id = $1 AND b.employee_id IS NOT NULL
+         AND COALESCE(b.status, '') NOT IN ('cancelled', 'canceled')
          AND b.booking_date >= $2 AND b.booking_date <= $3
        GROUP BY b.employee_id`,
       [userId, start, end]

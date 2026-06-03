@@ -29,7 +29,9 @@ async function authenticateEmployee(req, res, next) {
 
     // Verify employee is still active and load permissions
     const activeCheck = await pool.query(
-      `SELECT e.active, e.permissions FROM employees e
+      `SELECT e.active, e.permissions, e.is_admin, ec.email AS cred_email,
+              (SELECT email FROM users WHERE id = e.user_id) AS owner_email
+       FROM employees e
        JOIN employee_credentials ec ON ec.employee_id = e.id
        WHERE e.id = $1`,
       [decoded.employeeId]
@@ -39,11 +41,17 @@ async function authenticateEmployee(req, res, next) {
       return res.status(403).json({ error: 'Account deactivated or removed' });
     }
 
+    const row = activeCheck.rows[0];
+    const isAdmin = !!row.is_admin || (
+      row.cred_email && row.owner_email && row.cred_email.toLowerCase() === row.owner_email.toLowerCase()
+    );
+
     req.employee = {
       employeeId: decoded.employeeId,
       userId: decoded.userId,
       email: decoded.email,
-      permissions: activeCheck.rows[0].permissions || DEFAULT_PERMISSIONS
+      isAdmin,
+      permissions: row.permissions || DEFAULT_PERMISSIONS
     };
     next();
   } catch (error) {

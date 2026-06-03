@@ -2453,11 +2453,15 @@ router.post('/time/break/end', async (req, res) => {
 });
 
 // ── Budgeted hours (manager-only) ────────────────────────
-// Gated by the manage_budgeted_hours permission so only the manager you grant it to
-// can set/override how long each job should take.
+// Admins always have access; otherwise the manager must hold manage_budgeted_hours.
+// (Owner is treated as admin, so the owner sees it without granting themselves anything.)
+const requireBudgetedAccess = (req, res, next) => {
+  if (req.employee?.isAdmin || req.employee?.permissions?.manage_budgeted_hours) return next();
+  res.status(403).json({ error: 'Permission denied', required: 'manage_budgeted_hours' });
+};
 
 // GET /api/employee/admin/budgeted-hours?from=YYYY-MM-DD&to=YYYY-MM-DD
-router.get('/admin/budgeted-hours', requirePermission('manage_budgeted_hours'), async (req, res) => {
+router.get('/admin/budgeted-hours', requireBudgetedAccess, async (req, res) => {
   try {
     const { userId } = req.employee;
     const today = new Date();
@@ -2492,7 +2496,7 @@ router.get('/admin/budgeted-hours', requirePermission('manage_budgeted_hours'), 
 });
 
 // PUT /api/employee/admin/budgeted-hours/:id  body: { hours }  (null/empty clears the override)
-router.put('/admin/budgeted-hours/:id', requirePermission('manage_budgeted_hours'), async (req, res) => {
+router.put('/admin/budgeted-hours/:id', requireBudgetedAccess, async (req, res) => {
   try {
     const { userId } = req.employee;
     const { hours } = req.body || {};
