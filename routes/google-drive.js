@@ -414,10 +414,19 @@ router.get('/summary', authenticateToken, async (req, res) => {
     };
 
     // Tips: Date | Detailer | Tip Amount | Notes — sum + group by detailer, filtered to the week.
+    // Parse the cell's date tolerantly (ISO "2026-06-03", US "6/3/2026", or a real Date) and
+    // compare to the week. Anything we can't parse is treated as in-week so a stray format
+    // never silently drops the row from the total.
+    const startMs = new Date(start + 'T00:00:00').getTime();
+    const endMs = new Date(end + 'T23:59:59').getTime();
     const inWeek = (d) => {
-      if (!d) return true; // undated rows always count
-      const iso = String(d).trim().slice(0, 10);
-      return iso >= start && iso <= end;
+      if (!d) return true;
+      const raw = String(d).trim();
+      let t = NaN;
+      if (/^\d{4}-\d{2}-\d{2}/.test(raw)) t = new Date(raw.slice(0, 10) + 'T12:00:00').getTime();
+      else { const p = Date.parse(raw); if (!Number.isNaN(p)) t = p; }
+      if (Number.isNaN(t)) return true;
+      return t >= startMs && t <= endMs;
     };
     const tipsRows = await readRows(tipsSheet, SHEET_TEMPLATES.tips.tab);
     let tipsTotal = 0;
