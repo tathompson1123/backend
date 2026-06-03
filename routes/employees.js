@@ -454,7 +454,9 @@ router.delete('/groups/:id', async (req, res) => {
 
 const VALID_PERMISSIONS = [
   'view_bookings', 'manage_bookings', 'view_customers',
-  'view_all_bookings', 'send_messages', 'process_payments', 'view_reports'
+  'view_all_bookings', 'send_messages', 'process_payments', 'view_reports',
+  // Manager-only: set/override budgeted hours per job in the app's admin section.
+  'manage_budgeted_hours'
 ];
 
 // PUT - Update individual employee permissions

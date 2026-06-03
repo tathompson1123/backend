@@ -222,6 +222,10 @@ app.use('/api/sms-campaigns', smsCampaignRoutes);
 const googleDriveRoutes = require('./routes/google-drive');
 app.use('/api/google-drive', googleDriveRoutes);
 
+// Payroll & efficiency (Tips & Payroll tab native panel)
+const payrollRoutes = require('./routes/payroll');
+app.use('/api/payroll', payrollRoutes);
+
 app.use('/api/rewards', rewardsRoutes);
 
 app.get('/api/groups', (req, res) => {
@@ -257,6 +261,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS notes TEXT");
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS job_notes TEXT");
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_notes TEXT");
+    // Manager-set budgeted hours per job. NULL = use the booking's service durations as the default.
+    await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS budgeted_hours NUMERIC");
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS source VARCHAR(50)");
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS referral_source TEXT");
     // booking_items.is_addon tells the edit form which lines came from the "Additional

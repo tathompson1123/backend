@@ -2452,4 +2452,65 @@ router.post('/time/break/end', async (req, res) => {
   }
 });
 
+// ── Budgeted hours (manager-only) ────────────────────────
+// Gated by the manage_budgeted_hours permission so only the manager you grant it to
+// can set/override how long each job should take.
+
+// GET /api/employee/admin/budgeted-hours?from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get('/admin/budgeted-hours', requirePermission('manage_budgeted_hours'), async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const today = new Date();
+    const iso = d => d.toISOString().slice(0, 10);
+    const from = req.query.from || iso(new Date(today.getTime() - 30 * 864e5));
+    const to = req.query.to || iso(new Date(today.getTime() + 30 * 864e5));
+
+    const r = await pool.query(
+      `SELECT b.id, b.customer_name, b.booking_date, b.start_time, b.status,
+              b.employee_id, b.budgeted_hours,
+              e.name AS employee_name,
+              COALESCE((SELECT SUM(service_duration) FROM booking_items WHERE booking_id = b.id), 0) AS default_hours,
+              (SELECT string_agg(service_name, ', ') FROM booking_items WHERE booking_id = b.id) AS services
+       FROM bookings b
+       LEFT JOIN employees e ON e.id = b.employee_id
+       WHERE b.user_id = $1 AND COALESCE(b.status,'') <> 'cancelled'
+         AND b.booking_date >= $2 AND b.booking_date <= $3
+       ORDER BY b.booking_date DESC, b.start_time DESC`,
+      [userId, from, to]
+    );
+
+    const jobs = r.rows.map(j => ({
+      ...j,
+      // What counts for efficiency: the manager's override, else the service-duration default.
+      effective_hours: j.budgeted_hours != null ? parseFloat(j.budgeted_hours) : parseFloat(j.default_hours) || 0,
+    }));
+    res.json({ jobs, from, to });
+  } catch (e) {
+    console.error('budgeted-hours list error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/employee/admin/budgeted-hours/:id  body: { hours }  (null/empty clears the override)
+router.put('/admin/budgeted-hours/:id', requirePermission('manage_budgeted_hours'), async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { hours } = req.body || {};
+    let value = null;
+    if (hours !== null && hours !== undefined && hours !== '') {
+      value = parseFloat(hours);
+      if (!Number.isFinite(value) || value < 0) return res.status(400).json({ error: 'Enter a valid number of hours' });
+    }
+    const r = await pool.query(
+      'UPDATE bookings SET budgeted_hours = $1 WHERE id = $2 AND user_id = $3 RETURNING id, budgeted_hours',
+      [value, req.params.id, userId]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Job not found' });
+    res.json({ success: true, budgeted_hours: r.rows[0].budgeted_hours });
+  } catch (e) {
+    console.error('budgeted-hours update error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
