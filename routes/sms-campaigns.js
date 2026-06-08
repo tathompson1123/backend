@@ -422,48 +422,63 @@ router.post('/send-now', authenticateToken, async (req, res) => {
     );
     const reachableTotal = parseInt(reachableRow.rows[0].count, 10);
 
-    let sent = 0;
-    for (const contact of contacts.rows) {
-      const phone = normalizePhone(contact.phone);
-      if (!phone) continue;
-      const body = buildMessageFor(message, contact.name);
-      try {
-        const result = await sendSMS(phone, body, userId);
-        sent++;
-        // Log the outgoing campaign text. The campaign_id tag lets the inbound webhook
-        // recognize a reply as a campaign reply, and stores exactly what we sent.
-        await pool.query(
-          `INSERT INTO sms_messages
-           (user_id, campaign_id, direction, to_number, message, twilio_message_sid, status, provider, created_at)
-           VALUES ($1, $2, 'outgoing', $3, $4, $5, 'sent', 'twilio', NOW())`,
-          [userId, campaignId, phone, body, result?.messageSid || null]
-        ).catch(err => console.error('Campaign SMS log insert failed:', err.message));
-      } catch (err) {
-        console.error(`📵 Campaign SMS failed to ${contact.phone}:`, err.message);
-      }
-    }
+    // Texting the whole audience can take minutes (one Twilio call per contact),
+    // so we don't make the owner wait on it. Mark the campaign as queued, respond
+    // right away with the audience size, then send in the background. The frontend
+    // shows success immediately and the campaign row flips to 'sent' when done.
+    const queued = contacts.rows.length;
+    const skipped = unlimited ? 0 : Math.max(0, reachableTotal - queued);
 
-    await pool.query(
-      `UPDATE sms_campaigns SET status = $1, recipient_count = $2, sent_at = NOW() WHERE id = $3`,
-      [sent > 0 ? 'sent' : 'failed', sent, campaignId]
-    );
+    await pool.query(`UPDATE sms_campaigns SET status = 'sending', recipient_count = $1 WHERE id = $2`, [queued, campaignId]);
 
-    // Without a monthly cap, anything not sent was a per-message failure, not a limit trim.
-    const skipped = unlimited ? 0 : Math.max(0, reachableTotal - sent);
-    console.log(`📱 SMS campaign ${campaignId}: ${sent} texts sent for user ${userId}${skipped ? ` (${skipped} skipped — monthly limit ${monthlyLimit})` : ''}`);
     res.json({
       success: true,
-      sent,
+      started: true,
+      queued,
       skipped,
       reachableTotal,
       unlimited,
       monthlyLimit,
-      monthlyRemaining: unlimited ? null : Math.max(0, monthlyRemaining - sent),
+      monthlyRemaining: unlimited ? null : Math.max(0, monthlyRemaining - queued),
       limitReached: skipped > 0,
     });
+
+    // ── Background send (not awaited) ──────────────────────────
+    (async () => {
+      let sent = 0;
+      for (const contact of contacts.rows) {
+        const phone = normalizePhone(contact.phone);
+        if (!phone) continue;
+        const body = buildMessageFor(message, contact.name);
+        try {
+          const result = await sendSMS(phone, body, userId);
+          sent++;
+          // Log the outgoing campaign text. The campaign_id tag lets the inbound webhook
+          // recognize a reply as a campaign reply, and stores exactly what we sent.
+          await pool.query(
+            `INSERT INTO sms_messages
+             (user_id, campaign_id, direction, to_number, message, twilio_message_sid, status, provider, created_at)
+             VALUES ($1, $2, 'outgoing', $3, $4, $5, 'sent', 'twilio', NOW())`,
+            [userId, campaignId, phone, body, result?.messageSid || null]
+          ).catch(err => console.error('Campaign SMS log insert failed:', err.message));
+        } catch (err) {
+          console.error(`📵 Campaign SMS failed to ${contact.phone}:`, err.message);
+        }
+        // Keep the running tally visible to the dashboard as the blast progresses.
+        await pool.query(`UPDATE sms_campaigns SET recipient_count = $1 WHERE id = $2`, [sent, campaignId])
+          .catch(() => {});
+      }
+
+      await pool.query(
+        `UPDATE sms_campaigns SET status = $1, recipient_count = $2, sent_at = NOW() WHERE id = $3`,
+        [sent > 0 ? 'sent' : 'failed', sent, campaignId]
+      ).catch(err => console.error('Campaign finalize update failed:', err.message));
+
+      console.log(`📱 SMS campaign ${campaignId}: ${sent}/${queued} texts sent for user ${userId}${skipped ? ` (${skipped} skipped — monthly limit ${monthlyLimit})` : ''}`);
+    })().catch(e => console.error('Background SMS campaign send error:', e.message));
   } catch (e) {
     console.error('SMS send-now error:', e.message);
-    res.status(500).json({ error: e.message || 'Failed to send SMS campaign' });
+    if (!res.headersSent) res.status(500).json({ error: e.message || 'Failed to send SMS campaign' });
   }
 });
 
