@@ -78,10 +78,51 @@ router.post('/webhook', express.urlencoded({ extended: false }), (req, res) => {
 const OPT_OUT_KEYWORDS = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT']);
 const OPT_IN_KEYWORDS = new Set(['START', 'UNSTOP', 'YES', 'SUBSCRIBE']);
 
+// Natural-language opt-outs beyond the bare carrier keywords. Customers say
+// "don't text me", "lose my number", "stop replying", "take me off your list".
+// Patterns run against a normalized body (lowercased, apostrophes removed,
+// punctuation → spaces). Tuned to require the negation/verb to sit right next to
+// the contact word so "don't forget to text me the address" does NOT match.
+const OPT_OUT_PHRASES = [
+  /\bstop\s+(text|messag|call|contact|email|repl|reach|send|bother)/,
+  /\bquit\s+(text|messag|call|contact|email|repl|reach|send|bother)/,
+  /\b(dont|do not|never)\s+(ever\s+|keep\s+|you\s+|gotta\s+)?(text|messag|call|contact|email|reach|bother|hit)/,
+  /\bno\s+more\s+(text|messag|call|email|offer|promo)/,
+  /\b(lose|delete|remove|drop|ditch)\s+(my\s+)?(number|info|contact)/,
+  /\b(take|get)\s+me\s+off\b/,
+  /\b(remove|unsubscribe|delete)\s+me\b/,
+  /\bleave\s+me\s+alone\b/,
+];
+
+function normalizeForOptOut(body) {
+  return String(body || '')
+    .toLowerCase()
+    .replace(/['’]/g, '')               // don't -> dont
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function optKeyword(body) {
-  const word = String(body || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
-  if (OPT_OUT_KEYWORDS.has(word)) return 'out';
-  if (OPT_IN_KEYWORDS.has(word)) return 'in';
+  const trimmed = String(body || '').trim();
+  const wholeWord = trimmed.toUpperCase().replace(/[^A-Z]/g, '');
+
+  // Opt-in stays strict — the message must be just the keyword, so a casual
+  // "yes please book me" reply doesn't silently resubscribe someone.
+  if (OPT_IN_KEYWORDS.has(wholeWord)) return 'in';
+  if (OPT_OUT_KEYWORDS.has(wholeWord)) return 'out';
+
+  // Opt-out is lenient on trailing text: customers (and carriers) routinely
+  // write "Stop. I moved" or "STOP texting me". If the FIRST word is an opt-out
+  // keyword, honor it. A keyword later in the sentence is ignored on purpose so
+  // "please stop by Tuesday" (first word PLEASE) is NOT an unsubscribe.
+  const firstWord = (trimmed.toUpperCase().match(/[A-Z]+/) || [''])[0];
+  if (OPT_OUT_KEYWORDS.has(firstWord)) return 'out';
+
+  // Natural-language opt-out phrases anywhere in the message.
+  const norm = normalizeForOptOut(body);
+  if (OPT_OUT_PHRASES.some(re => re.test(norm))) return 'out';
+
   return null;
 }
 

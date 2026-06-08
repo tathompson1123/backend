@@ -1697,6 +1697,7 @@ cron.schedule('*/60 * * * * *', async () => {
        WHERE rr.status = 'pending'
          AND rr.sms_sent = false
          AND c.phone IS NOT NULL
+         AND (c.sms_unsubscribed IS NULL OR c.sms_unsubscribed = FALSE)
          AND rr.scheduled_send_time <= NOW()
          AND u.twilio_phone_number IS NOT NULL`
     );

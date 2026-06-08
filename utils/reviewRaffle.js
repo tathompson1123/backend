@@ -114,6 +114,7 @@ async function selectPoolRows(userId, period) {
      WHERE rr.user_id = $1
        AND rr.link_clicked = true
        AND c.phone IS NOT NULL
+       AND (c.sms_unsubscribed IS NULL OR c.sms_unsubscribed = FALSE)
        AND rr.raffle_period IS NULL
        AND COALESCE(rr.link_clicked_at, rr.actual_send_time, rr.created_at) >= to_date($2, 'YYYY-MM')
        AND COALESCE(rr.link_clicked_at, rr.actual_send_time, rr.created_at) <  (to_date($2, 'YYYY-MM') + INTERVAL '1 month')
