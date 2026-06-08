@@ -1108,7 +1108,8 @@ router.get('/review-click/:id', async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      `UPDATE review_requests SET link_clicked = true
+      `UPDATE review_requests SET link_clicked = true,
+              link_clicked_at = COALESCE(review_requests.link_clicked_at, NOW())
        FROM users u
        WHERE review_requests.id = $1
          AND u.id = review_requests.user_id

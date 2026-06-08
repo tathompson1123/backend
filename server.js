@@ -415,6 +415,10 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
   try {
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS send_trigger VARCHAR(30) DEFAULT 'booking_completed'`);
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS send_delay INTEGER DEFAULT 24`);
+    // Monthly review raffle settings
+    await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS raffle_enabled BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS raffle_consolation TEXT DEFAULT '$50 off any Full Detail'`);
+    await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS raffle_require_verified BOOLEAN DEFAULT false`);
     await pool.query(`CREATE TABLE IF NOT EXISTS contact_sales_requests (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -615,9 +619,41 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Monthly review raffle tracking on each request
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS link_clicked_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS review_verified BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS review_verified_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS raffle_status VARCHAR(20)`); // 'won' | 'lost' | null
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS raffle_period VARCHAR(7)`); // 'YYYY-MM'
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS raffle_notified_at TIMESTAMP`);
     console.log('✅ Review requests table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify review_requests table:', e.message);
+  }
+
+  // Monthly review raffle draws (one row per user per month)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS review_raffles (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        period VARCHAR(7) NOT NULL,
+        winner_request_id INTEGER REFERENCES review_requests(id) ON DELETE SET NULL,
+        winner_name VARCHAR(255),
+        winner_phone VARCHAR(50),
+        reward TEXT,
+        consolation TEXT,
+        pool_size INTEGER DEFAULT 0,
+        texts_sent INTEGER DEFAULT 0,
+        status VARCHAR(30) DEFAULT 'completed',
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, period)
+      )
+    `);
+    console.log('✅ Review raffles table verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify review_raffles table:', e.message);
   }
 
   // Employee credentials table (for employee mobile app auth)
@@ -2202,6 +2238,12 @@ cron.schedule('*/15 * * * *', async () => {
 // Scans recent conversations for errors & frustration, auto-improves agent prompts.
 const { runChatLearningAgent } = require('./utils/chatLearningAgent');
 cron.schedule('0 */4 * * *', () => runChatLearningAgent());
+
+// ── Monthly Google review raffle — runs at 9am on the 1st of each month ───────
+// Draws one winner from the prior month's review-link clickers and texts the
+// whole pool (winner gets the GBP incentive reward; everyone else a consolation).
+const { runMonthlyRaffles } = require('./utils/reviewRaffle');
+cron.schedule('0 9 1 * *', () => runMonthlyRaffles(), { timezone: 'America/New_York' });
 
 // ── Ad platform spend sync — runs daily at 3am ───────────────────────────────
 const { syncGoogleAds, syncGoogleLSA, syncMeta } = require('./routes/ad-platforms');

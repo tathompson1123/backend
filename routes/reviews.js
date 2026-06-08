@@ -345,4 +345,60 @@ Generate ONLY the reply text, no quotes or labels.`;
   }
 });
 
+// ============================================
+// MONTHLY REVIEW RAFFLE
+// ============================================
+const reviewRaffle = require('../utils/reviewRaffle');
+
+// GET - Raffle history (past monthly draws)
+router.get('/raffles', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, period, winner_name, winner_phone, reward, consolation,
+              pool_size, texts_sent, status, notes, created_at
+       FROM review_raffles
+       WHERE user_id = $1
+       ORDER BY period DESC, created_at DESC
+       LIMIT 36`,
+      [req.user.userId]
+    );
+    res.json({ success: true, raffles: result.rows });
+  } catch (error) {
+    console.error('Error fetching raffles:', error.message);
+    res.json({ success: true, raffles: [] });
+  }
+});
+
+// GET - Current month's raffle pool (preview, no draw)
+router.get('/raffle/pool', authenticateToken, async (req, res) => {
+  try {
+    const period = req.query.period || reviewRaffle.periodOf();
+    const pool_ = await reviewRaffle.previewPool(req.user.userId, period);
+    res.json({
+      success: true,
+      period,
+      poolSize: pool_.length,
+      verifiedCount: pool_.filter(p => p.verified).length,
+      pool: pool_
+    });
+  } catch (error) {
+    console.error('Error previewing raffle pool:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to load raffle pool' });
+  }
+});
+
+// POST - Manually draw a raffle now (defaults to previous month).
+// Pass { dryRun: true } to preview the winner without sending texts.
+router.post('/raffle/run', authenticateToken, async (req, res) => {
+  try {
+    const period = req.body.period || reviewRaffle.previousPeriod();
+    const dryRun = !!req.body.dryRun;
+    const result = await reviewRaffle.runRaffleForUser(req.user.userId, period, { dryRun });
+    res.json({ success: true, result });
+  } catch (error) {
+    console.error('Error running raffle:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to run raffle' });
+  }
+});
+
 module.exports = router;

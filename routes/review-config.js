@@ -21,7 +21,10 @@ router.get('/', authenticateToken, async (req, res) => {
           incentive_enabled: true,
           auto_send_enabled: true,
           send_delay: 24,
-          send_trigger: 'booking_completed'
+          send_trigger: 'booking_completed',
+          raffle_enabled: false,
+          raffle_consolation: '$50 off any Full Detail',
+          raffle_require_verified: false
         }
       });
     }
@@ -36,13 +39,21 @@ router.get('/', authenticateToken, async (req, res) => {
 // POST - Save review configuration
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay, sendTrigger } = req.body;
+    const {
+      messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay, sendTrigger,
+      raffleEnabled, raffleConsolation, raffleRequireVerified
+    } = req.body;
     const trigger = sendTrigger === 'service_duration' ? 'service_duration' : 'booking_completed';
+    const consolation = (raffleConsolation && String(raffleConsolation).trim())
+      ? String(raffleConsolation).trim()
+      : '$50 off any Full Detail';
 
     // Upsert - insert or update on conflict
     await pool.query(
-      `INSERT INTO review_configs (user_id, message_template, incentive, incentive_enabled, auto_send_enabled, send_delay, send_trigger, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+      `INSERT INTO review_configs
+         (user_id, message_template, incentive, incentive_enabled, auto_send_enabled, send_delay, send_trigger,
+          raffle_enabled, raffle_consolation, raffle_require_verified, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
        ON CONFLICT (user_id)
        DO UPDATE SET
          message_template = $2,
@@ -51,8 +62,12 @@ router.post('/', authenticateToken, async (req, res) => {
          auto_send_enabled = $5,
          send_delay = $6,
          send_trigger = $7,
+         raffle_enabled = $8,
+         raffle_consolation = $9,
+         raffle_require_verified = $10,
          updated_at = CURRENT_TIMESTAMP`,
-      [req.user.userId, messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay, trigger]
+      [req.user.userId, messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay, trigger,
+       !!raffleEnabled, consolation, !!raffleRequireVerified]
     );
 
     console.log(`✅ Review config saved for user ${req.user.userId}`);
