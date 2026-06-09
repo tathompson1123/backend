@@ -184,7 +184,7 @@ async function previewPool(userId, period = periodOf()) {
 async function runRaffleForUser(userId, period, { dryRun = false } = {}) {
   // Load config + business identity
   const cfgRes = await pool.query(
-    `SELECT rc.incentive, rc.incentive_enabled, rc.raffle_enabled,
+    `SELECT rc.raffle_reward, rc.raffle_enabled,
             rc.raffle_consolation, rc.raffle_require_verified,
             u.business_name, u.twilio_phone_number
      FROM users u
@@ -197,8 +197,10 @@ async function runRaffleForUser(userId, period, { dryRun = false } = {}) {
 
   if (!cfg.raffle_enabled) return { status: 'skipped', notes: 'raffle disabled' };
 
-  const reward = (cfg.incentive_enabled && cfg.incentive) ? cfg.incentive : null;
-  if (!reward) return { status: 'skipped', notes: 'no incentive/reward configured' };
+  // The prize is the raffle's OWN field — never `incentive` (that's the review-request
+  // enticement). This keeps "you won …" phrasing out of every review request.
+  const reward = (cfg.raffle_reward && cfg.raffle_reward.trim()) ? cfg.raffle_reward.trim() : null;
+  if (!reward) return { status: 'skipped', notes: 'no raffle reward configured' };
 
   const consolation = cfg.raffle_consolation || '$50 off any Full Detail';
   const businessName = cfg.business_name || 'us';
@@ -312,8 +314,8 @@ async function runMonthlyRaffles() {
   try {
     const users = await pool.query(
       `SELECT user_id FROM review_configs
-       WHERE raffle_enabled = true AND incentive_enabled = true
-         AND incentive IS NOT NULL AND incentive <> ''`
+       WHERE raffle_enabled = true
+         AND raffle_reward IS NOT NULL AND raffle_reward <> ''`
     );
     console.log(`🎁 Monthly raffle run for ${period}: ${users.rows.length} enabled business(es)`);
     for (const { user_id } of users.rows) {

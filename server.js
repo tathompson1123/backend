@@ -419,6 +419,10 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS raffle_enabled BOOLEAN DEFAULT false`);
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS raffle_consolation TEXT DEFAULT '$50 off any Full Detail'`);
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS raffle_require_verified BOOLEAN DEFAULT false`);
+    // The raffle prize is its OWN field, kept separate from `incentive` (which is the
+    // enticement appended to review-request texts) so a winner-style phrase can never
+    // leak into every review request.
+    await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS raffle_reward TEXT`);
     await pool.query(`CREATE TABLE IF NOT EXISTS contact_sales_requests (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
