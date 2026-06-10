@@ -257,4 +257,111 @@ router.get('/summary', authenticateToken, async (req, res) => {
   }
 });
 
+// ── Individual clock in/out entries (view + edit) ────────────
+// These let the owner see and correct the raw punches behind the weekly
+// "Clocked" total. Note: a weekly override in payroll_hours still supersedes
+// these in the summary until it's cleared.
+
+// GET /api/payroll/time-entries?employeeId=&weekStart=
+router.get('/time-entries', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const employeeId = parseInt(req.query.employeeId, 10);
+    if (!employeeId) return res.status(400).json({ error: 'employeeId required' });
+    const { start, end } = weekBounds(req.query.weekStart);
+
+    const emp = await pool.query('SELECT id FROM employees WHERE id = $1 AND user_id = $2', [employeeId, userId]);
+    if (emp.rows.length === 0) return res.status(404).json({ error: 'Employee not found' });
+
+    const entries = (await pool.query(
+      `SELECT te.id, te.clock_in, te.clock_out,
+              COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (COALESCE(tb.end_at, NOW()) - tb.start_at)))
+                        FROM time_breaks tb WHERE tb.time_entry_id = te.id), 0)::numeric AS break_secs
+       FROM time_entries te
+       WHERE te.user_id = $1 AND te.employee_id = $2
+         AND te.clock_in >= $3::date AND te.clock_in < ($4::date + INTERVAL '1 day')
+       ORDER BY te.clock_in ASC`,
+      [userId, employeeId, start, end]
+    )).rows;
+
+    const rows = entries.map(e => {
+      const elapsed = (new Date(e.clock_out || Date.now()).getTime() - new Date(e.clock_in).getTime()) / 1000;
+      const worked = Math.max(0, (elapsed - Number(e.break_secs)) / 3600);
+      return {
+        id: e.id,
+        clockIn: e.clock_in,
+        clockOut: e.clock_out,
+        breakHours: Math.round((Number(e.break_secs) / 3600) * 100) / 100,
+        workedHours: Math.round(worked * 100) / 100,
+        open: !e.clock_out,
+      };
+    });
+    const totalWorked = Math.round(rows.reduce((s, r) => s + r.workedHours, 0) * 100) / 100;
+    res.json({ employeeId, weekStart: start, weekEnd: end, entries: rows, totalWorked });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Shared validation for a clock-in/out pair. Returns { in, out } Dates or an error string.
+function parsePunch(clockIn, clockOut, existing = {}) {
+  const inDate = clockIn != null ? new Date(clockIn) : (existing.clock_in ? new Date(existing.clock_in) : null);
+  if (!inDate || isNaN(inDate.getTime())) return { error: 'Invalid clock-in time' };
+  let outDate;
+  if (clockOut === null || clockOut === '') outDate = null;              // explicitly cleared
+  else if (clockOut != null) outDate = new Date(clockOut);              // provided
+  else outDate = existing.clock_out ? new Date(existing.clock_out) : null; // unchanged
+  if (outDate && isNaN(outDate.getTime())) return { error: 'Invalid clock-out time' };
+  if (outDate && outDate <= inDate) return { error: 'Clock-out must be after clock-in' };
+  if (inDate > new Date(Date.now() + 60 * 1000)) return { error: 'Clock-in cannot be in the future' };
+  return { in: inDate, out: outDate };
+}
+
+// PUT /api/payroll/time-entries/:id  { clockIn?, clockOut? }
+router.put('/time-entries/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const id = parseInt(req.params.id, 10);
+    const cur = await pool.query('SELECT clock_in, clock_out FROM time_entries WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (cur.rows.length === 0) return res.status(404).json({ error: 'Time entry not found' });
+
+    const { clockIn, clockOut } = req.body || {};
+    const p = parsePunch(clockIn, clockOut, cur.rows[0]);
+    if (p.error) return res.status(400).json({ error: p.error });
+
+    await pool.query('UPDATE time_entries SET clock_in = $1, clock_out = $2 WHERE id = $3 AND user_id = $4',
+      [p.in.toISOString(), p.out ? p.out.toISOString() : null, id, userId]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/payroll/time-entries  { employeeId, clockIn, clockOut? }
+router.post('/time-entries', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { employeeId, clockIn, clockOut } = req.body || {};
+    if (!employeeId || !clockIn) return res.status(400).json({ error: 'employeeId and clockIn required' });
+
+    const emp = await pool.query('SELECT id FROM employees WHERE id = $1 AND user_id = $2', [employeeId, userId]);
+    if (emp.rows.length === 0) return res.status(404).json({ error: 'Employee not found' });
+
+    const p = parsePunch(clockIn, clockOut === undefined ? null : clockOut);
+    if (p.error) return res.status(400).json({ error: p.error });
+
+    const ins = await pool.query(
+      'INSERT INTO time_entries (user_id, employee_id, clock_in, clock_out) VALUES ($1, $2, $3, $4) RETURNING id',
+      [userId, employeeId, p.in.toISOString(), p.out ? p.out.toISOString() : null]
+    );
+    res.json({ success: true, id: ins.rows[0].id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/payroll/time-entries/:id
+router.delete('/time-entries/:id', authenticateToken, async (req, res) => {
+  try {
+    const r = await pool.query('DELETE FROM time_entries WHERE id = $1 AND user_id = $2 RETURNING id',
+      [parseInt(req.params.id, 10), req.user.userId]);
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Time entry not found' });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
