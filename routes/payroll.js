@@ -274,26 +274,42 @@ router.get('/time-entries', authenticateToken, async (req, res) => {
     if (emp.rows.length === 0) return res.status(404).json({ error: 'Employee not found' });
 
     const entries = (await pool.query(
-      `SELECT te.id, te.clock_in, te.clock_out,
-              COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (COALESCE(tb.end_at, NOW()) - tb.start_at)))
-                        FROM time_breaks tb WHERE tb.time_entry_id = te.id), 0)::numeric AS break_secs
-       FROM time_entries te
-       WHERE te.user_id = $1 AND te.employee_id = $2
-         AND te.clock_in >= $3::date AND te.clock_in < ($4::date + INTERVAL '1 day')
-       ORDER BY te.clock_in ASC`,
+      `SELECT id, clock_in, clock_out FROM time_entries
+       WHERE user_id = $1 AND employee_id = $2
+         AND clock_in >= $3::date AND clock_in < ($4::date + INTERVAL '1 day')
+       ORDER BY clock_in ASC`,
       [userId, employeeId, start, end]
     )).rows;
 
+    // Pull every break for these entries and group by entry.
+    const ids = entries.map(e => e.id);
+    const breaksByEntry = {};
+    if (ids.length) {
+      const brs = (await pool.query(
+        `SELECT id, time_entry_id, break_type, start_at, end_at
+         FROM time_breaks WHERE time_entry_id = ANY($1) ORDER BY start_at ASC`,
+        [ids]
+      )).rows;
+      for (const b of brs) (breaksByEntry[b.time_entry_id] ||= []).push(b);
+    }
+
+    const secsBetween = (a, b) => Math.max(0, (new Date(b || Date.now()).getTime() - new Date(a).getTime()) / 1000);
+
     const rows = entries.map(e => {
-      const elapsed = (new Date(e.clock_out || Date.now()).getTime() - new Date(e.clock_in).getTime()) / 1000;
-      const worked = Math.max(0, (elapsed - Number(e.break_secs)) / 3600);
+      const brs = breaksByEntry[e.id] || [];
+      const breakSecs = brs.reduce((s, b) => s + secsBetween(b.start_at, b.end_at), 0);
+      const elapsed = secsBetween(e.clock_in, e.clock_out);
+      const worked = Math.max(0, (elapsed - breakSecs) / 3600);
       return {
         id: e.id,
         clockIn: e.clock_in,
         clockOut: e.clock_out,
-        breakHours: Math.round((Number(e.break_secs) / 3600) * 100) / 100,
+        breakHours: Math.round((breakSecs / 3600) * 100) / 100,
         workedHours: Math.round(worked * 100) / 100,
         open: !e.clock_out,
+        breaks: brs.map(b => ({
+          id: b.id, breakType: b.break_type, startAt: b.start_at, endAt: b.end_at, open: !b.end_at,
+        })),
       };
     });
     const totalWorked = Math.round(rows.reduce((s, r) => s + r.workedHours, 0) * 100) / 100;
@@ -360,6 +376,72 @@ router.delete('/time-entries/:id', authenticateToken, async (req, res) => {
     const r = await pool.query('DELETE FROM time_entries WHERE id = $1 AND user_id = $2 RETURNING id',
       [parseInt(req.params.id, 10), req.user.userId]);
     if (r.rows.length === 0) return res.status(404).json({ error: 'Time entry not found' });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Breaks within a time entry (view via /time-entries, edit here) ───────────
+// Note: every break (paid or unpaid) currently subtracts from worked hours.
+function parseBreak(startAt, endAt, breakType, existing = {}) {
+  const s = startAt != null ? new Date(startAt) : (existing.start_at ? new Date(existing.start_at) : null);
+  if (!s || isNaN(s.getTime())) return { error: 'Invalid break start time' };
+  let e;
+  if (endAt === null || endAt === '') e = null;                          // explicitly cleared / still on break
+  else if (endAt != null) e = new Date(endAt);                          // provided
+  else e = existing.end_at ? new Date(existing.end_at) : null;          // unchanged
+  if (e && isNaN(e.getTime())) return { error: 'Invalid break end time' };
+  if (e && e <= s) return { error: 'Break end must be after its start' };
+  let type = breakType != null ? String(breakType) : (existing.break_type || 'paid');
+  if (!['paid', 'unpaid'].includes(type)) type = 'paid';
+  return { start: s, end: e, type };
+}
+
+// POST /api/payroll/time-entries/:entryId/breaks  { startAt, endAt?, breakType? }
+router.post('/time-entries/:entryId/breaks', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const entryId = parseInt(req.params.entryId, 10);
+    const entry = await pool.query('SELECT id, employee_id FROM time_entries WHERE id = $1 AND user_id = $2', [entryId, userId]);
+    if (entry.rows.length === 0) return res.status(404).json({ error: 'Time entry not found' });
+
+    const { startAt, endAt, breakType } = req.body || {};
+    if (!startAt) return res.status(400).json({ error: 'startAt required' });
+    const p = parseBreak(startAt, endAt === undefined ? null : endAt, breakType);
+    if (p.error) return res.status(400).json({ error: p.error });
+
+    const ins = await pool.query(
+      `INSERT INTO time_breaks (time_entry_id, employee_id, user_id, break_type, start_at, end_at)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [entryId, entry.rows[0].employee_id, userId, p.type, p.start.toISOString(), p.end ? p.end.toISOString() : null]
+    );
+    res.json({ success: true, id: ins.rows[0].id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/payroll/breaks/:id  { startAt?, endAt?, breakType? }
+router.put('/breaks/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const id = parseInt(req.params.id, 10);
+    const cur = await pool.query('SELECT start_at, end_at, break_type FROM time_breaks WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (cur.rows.length === 0) return res.status(404).json({ error: 'Break not found' });
+
+    const { startAt, endAt, breakType } = req.body || {};
+    const p = parseBreak(startAt, endAt, breakType, cur.rows[0]);
+    if (p.error) return res.status(400).json({ error: p.error });
+
+    await pool.query('UPDATE time_breaks SET start_at = $1, end_at = $2, break_type = $3 WHERE id = $4 AND user_id = $5',
+      [p.start.toISOString(), p.end ? p.end.toISOString() : null, p.type, id, userId]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/payroll/breaks/:id
+router.delete('/breaks/:id', authenticateToken, async (req, res) => {
+  try {
+    const r = await pool.query('DELETE FROM time_breaks WHERE id = $1 AND user_id = $2 RETURNING id',
+      [parseInt(req.params.id, 10), req.user.userId]);
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Break not found' });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
