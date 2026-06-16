@@ -586,6 +586,38 @@ router.put('/:id/notes', authenticateToken, async (req, res) => {
   }
 });
 
+// PUT - Set/override budgeted hours for a job. Owner-side mirror of the app's
+// /api/employee/admin/budgeted-hours endpoint. Sending null/empty hours clears the
+// override so efficiency reporting falls back to the service-duration default.
+router.put('/:id/budgeted-hours', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { hours } = req.body || {};
+
+    let value = null;
+    if (hours !== null && hours !== undefined && hours !== '') {
+      value = parseFloat(hours);
+      if (!Number.isFinite(value) || value < 0) {
+        return res.status(400).json({ error: 'Enter a valid number of hours' });
+      }
+    }
+
+    const result = await pool.query(
+      `UPDATE bookings SET budgeted_hours = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND user_id = $3
+       RETURNING id, budgeted_hours`,
+      [value, id, userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+
+    res.json({ success: true, budgeted_hours: result.rows[0].budgeted_hours });
+  } catch (error) {
+    console.error('Error updating budgeted hours:', error.message);
+    res.status(500).json({ error: 'Failed to update budgeted hours' });
+  }
+});
+
 // PATCH - Update booking status only
 router.patch('/:id/status', authenticateToken, async (req, res) => {
   try {
