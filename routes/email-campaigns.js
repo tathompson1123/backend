@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logClaudeUsage } = require('../utils/claudeUsage');
+const { isUnlimitedAccount } = require('../utils/unlimitedAccounts');
 const { fetchPexelsImages, fetchPexelsByQuery } = require('../utils/fetchPexelsImages');
 const sgMail = require('@sendgrid/mail');
 const jwt = require('jsonwebtoken');
@@ -356,15 +357,19 @@ async function sendCampaign(userId, config, campaignId) {
   const fromName = config.from_name || 'Your Business';
   const ownerReplyEmail = config.from_email;
 
-  // ── Email send (up to 2000, deduplicated by email) ────────────────────────────
+  // Comped accounts have no per-campaign recipient cap; everyone else is capped at 2000.
+  const ownerRow = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
+  const sendLimit = isUnlimitedAccount(ownerRow.rows[0]?.email) ? null : EMAIL_SEND_LIMIT;
+
+  // ── Email send (deduplicated by email; capped unless the account is comped) ────────────
   const emailCustomers = await pool.query(
     `SELECT DISTINCT ON (LOWER(TRIM(email))) name, email
      FROM customers
      WHERE user_id = $1 AND email IS NOT NULL AND email != ''
      AND (email_unsubscribed IS NULL OR email_unsubscribed = FALSE)
      ORDER BY LOWER(TRIM(email)), created_at ASC
-     LIMIT $2`,
-    [userId, EMAIL_SEND_LIMIT]
+     ${sendLimit != null ? 'LIMIT $2' : ''}`,
+    sendLimit != null ? [userId, sendLimit] : [userId]
   );
 
   let emailSent = 0;

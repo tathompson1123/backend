@@ -3,6 +3,7 @@ const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { authenticateToken } = require('../config/middleware');
 const { pool } = require('../config/database');
+const { isUnlimitedAccount } = require('../utils/unlimitedAccounts');
 
 // Plan hierarchy for upgrade/downgrade detection
 const PLAN_ORDER = { basic: 1, pro: 2, scale: 3 };
@@ -421,7 +422,7 @@ router.get('/usage', authenticateToken, async (req, res) => {
         [userId, monthStart]
       ),
       pool.query(
-        'SELECT plan, base_plan, trial_ends_at, stripe_subscription_id FROM users WHERE id = $1',
+        'SELECT plan, base_plan, trial_ends_at, stripe_subscription_id, email FROM users WHERE id = $1',
         [userId]
       ),
       pool.query(
@@ -432,6 +433,7 @@ router.get('/usage', authenticateToken, async (req, res) => {
 
     const plan = userRow.rows[0]?.plan;
     const basePlan = userRow.rows[0]?.base_plan || plan;
+    const unlimited = isUnlimitedAccount(userRow.rows[0]?.email);
     const SMS_LIMITS = { free: 0, basic: 100, pro: 100, scale: 500, expert: 200 };
     const CHAT_LIMITS = { free: 0, basic: 200, pro: 500, scale: 99999, expert: 500 };
     // Monthly AI chat API cost limits by plan (in USD)
@@ -440,12 +442,13 @@ router.get('/usage', authenticateToken, async (req, res) => {
     res.json({
       plan,
       basePlan,
+      unlimited,
       smsUsed: parseInt(smsRow.rows[0].count, 10),
-      smsLimit: SMS_LIMITS[plan] || 0,
+      smsLimit: unlimited ? null : (SMS_LIMITS[plan] || 0),
       chatUsed: parseInt(chatRow.rows[0].count, 10),
-      chatLimit: CHAT_LIMITS[plan] || 0,
+      chatLimit: unlimited ? null : (CHAT_LIMITS[plan] || 0),
       claudeCostMonth: parseFloat(claudeRow.rows[0].total) || 0,
-      chatCostLimit: CHAT_COST_LIMITS[plan] ?? null,
+      chatCostLimit: unlimited ? null : (CHAT_COST_LIMITS[plan] ?? null),
       monthStart: monthStart.toISOString(),
     });
   } catch (error) {

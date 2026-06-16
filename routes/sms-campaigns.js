@@ -19,10 +19,10 @@ const SMS_MAX_LENGTH = 320;
 // Campaign sends count against the same monthly pool as agent texts.
 const SMS_PLAN_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
 
-// Accounts exempt from the monthly SMS cap and the per-blast cap. Keyed by email so
-// it survives user-id changes. Lowercase.
-const UNLIMITED_SMS_EMAILS = new Set(['ty@thompsonsautodetailing.com']);
-const isUnlimitedSms = (email) => UNLIMITED_SMS_EMAILS.has(String(email || '').trim().toLowerCase());
+// Accounts exempt from the monthly SMS cap and the per-blast cap — shared with the chat
+// and email exemptions (single source of truth in utils/unlimitedAccounts).
+const { isUnlimitedAccount } = require('../utils/unlimitedAccounts');
+const isUnlimitedSms = isUnlimitedAccount;
 
 // How many outgoing texts this user has sent so far this calendar month.
 async function getMonthlySmsUsage(userId) {

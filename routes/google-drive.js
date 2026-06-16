@@ -505,11 +505,11 @@ router.get('/summary', authenticateToken, async (req, res) => {
       payrollByEmployee[emp] = (payrollByEmployee[emp] || 0) + amt;
     }
 
-    // Revenue for the week — actual money collected via Square in the date range
-    // (amount minus refunds), matching the Transaction Revenue analytics. created_at is
-    // a timestamp, so include the whole final day with "< end + 1 day".
+    // Revenue for the week — money collected via Square in the date range, minus refunds and
+    // minus collected sales tax (tax passes through to the state, so it's not real revenue).
+    // created_at is a timestamp, so include the whole final day with "< end + 1 day".
     const revRow = await pool.query(
-      `SELECT COALESCE(SUM(p.amount - COALESCE(p.refund_amount, 0)), 0)::numeric AS revenue
+      `SELECT COALESCE(SUM(p.amount - COALESCE(p.refund_amount, 0) - COALESCE(p.tax_amount, 0)), 0)::numeric AS revenue
        FROM payments p
        WHERE p.user_id = $1
          AND p.processor = 'square'

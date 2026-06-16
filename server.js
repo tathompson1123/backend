@@ -958,6 +958,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL');
     await pool.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL');
     await pool.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL');
+    // Tax collected on the payment (from Square order tax), so revenue can be shown net of tax.
+    await pool.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS tax_amount DECIMAL(10,2) DEFAULT 0');
     await pool.query('CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id)');
     await pool.query('CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments(invoice_id)');
     await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_processor_payment_id ON payments(processor_payment_id) WHERE processor_payment_id IS NOT NULL');

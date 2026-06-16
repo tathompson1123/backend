@@ -27,6 +27,19 @@ pool.query(`
   )
 `).catch(e => console.error('payroll_actuals migration error:', e.message));
 
+// Owner-entered single payroll total for a week. When set, it drives the
+// payroll-to-revenue % instead of the sum of per-employee actuals — lets the owner
+// just type one number (e.g. straight from their payroll provider).
+pool.query(`
+  CREATE TABLE IF NOT EXISTS payroll_week_totals (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    week_start DATE NOT NULL,
+    amount NUMERIC NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (user_id, week_start)
+  )
+`).catch(e => console.error('payroll_week_totals migration error:', e.message));
+
 // Owner override of an employee's clocked hours for a week (e.g. a forgotten clock-out).
 pool.query(`
   CREATE TABLE IF NOT EXISTS payroll_hours (
@@ -117,6 +130,30 @@ router.put('/actual', authenticateToken, async (req, res) => {
       [req.user.userId, employeeId, start, amt]
     );
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/payroll/total — owner-entered total payroll for a week (empty clears it).
+// When set, the summary uses this for the payroll-to-revenue %.
+router.put('/total', authenticateToken, async (req, res) => {
+  try {
+    const { weekStart, amount } = req.body || {};
+    if (!weekStart) return res.status(400).json({ error: 'weekStart required' });
+    const { start } = weekBounds(weekStart);
+    if (amount === null || amount === undefined || amount === '') {
+      await pool.query('DELETE FROM payroll_week_totals WHERE user_id = $1 AND week_start = $2',
+        [req.user.userId, start]);
+      return res.json({ success: true, cleared: true });
+    }
+    const amt = parseFloat(amount);
+    if (!Number.isFinite(amt) || amt < 0) return res.status(400).json({ error: 'Enter a valid amount' });
+    await pool.query(
+      `INSERT INTO payroll_week_totals (user_id, week_start, amount, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (user_id, week_start) DO UPDATE SET amount = $3, updated_at = NOW()`,
+      [req.user.userId, start, amt]
+    );
+    res.json({ success: true, amount: amt });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -231,9 +268,10 @@ router.get('/summary', authenticateToken, async (req, res) => {
       };
     });
 
-    // Square revenue for the week (collected, minus refunds) to compare against payroll.
+    // Square revenue for the week (collected, minus refunds and minus collected tax) to
+    // compare against payroll — taxes pass through to the state, so they aren't real revenue.
     const revRow = await pool.query(
-      `SELECT COALESCE(SUM(p.amount - COALESCE(p.refund_amount, 0)), 0)::numeric AS revenue
+      `SELECT COALESCE(SUM(p.amount - COALESCE(p.refund_amount, 0) - COALESCE(p.tax_amount, 0)), 0)::numeric AS revenue
        FROM payments p
        WHERE p.user_id = $1 AND p.processor = 'square' AND p.status IN ('succeeded','completed')
          AND p.created_at >= $2::date AND p.created_at < ($3::date + INTERVAL '1 day')`,
@@ -241,14 +279,27 @@ router.get('/summary', authenticateToken, async (req, res) => {
     ).catch(() => ({ rows: [{ revenue: 0 }] }));
     const revenue = parseFloat(revRow.rows[0].revenue) || 0;
 
+    // Owner-entered single payroll total for the week (overrides the sum of actuals for the %).
+    const manualRow = await pool.query(
+      'SELECT amount FROM payroll_week_totals WHERE user_id = $1 AND week_start = $2',
+      [userId, start]
+    );
+    const manualTotal = manualRow.rows.length ? parseFloat(manualRow.rows[0].amount) : null;
+
+    // The payroll figure used for the % of revenue: the owner's manual total when set,
+    // otherwise the sum of per-employee actuals.
+    const effectivePayroll = manualTotal != null ? manualTotal : totalActual;
+
     res.json({
       weekStart: start, weekEnd: end, tiers,
       employees: rows,
       totals: {
         projected: Math.round(totalProjected * 100) / 100,
         actual: Math.round(totalActual * 100) / 100,
+        manualTotal: manualTotal != null ? Math.round(manualTotal * 100) / 100 : null,
+        payroll: Math.round(effectivePayroll * 100) / 100,
         revenue,
-        actualPctOfRevenue: revenue > 0 ? Math.round((totalActual / revenue) * 1000) / 10 : null,
+        actualPctOfRevenue: revenue > 0 ? Math.round((effectivePayroll / revenue) * 1000) / 10 : null,
       },
     });
   } catch (e) {

@@ -13,21 +13,52 @@ async function syncSquarePayments(userId, accessToken, pool) {
   const { result } = await client.paymentsApi.listPayments(beginTime);
   const squarePayments = result.payments || [];
 
+  // Square Payment.amountMoney is the total charged including tax; the tax breakdown lives on
+  // the order. Batch-retrieve the orders so we can store each payment's tax portion (prorated
+  // by the payment's share of the order total when an order has multiple payments).
+  const orderIds = [...new Set(squarePayments.map(p => p.orderId).filter(Boolean))];
+  const orderTax = {}; // orderId -> { tax (cents), total (cents) }
+  for (let i = 0; i < orderIds.length; i += 100) {
+    const chunk = orderIds.slice(i, i + 100);
+    try {
+      const { result: or } = await client.ordersApi.batchRetrieveOrders({ orderIds: chunk });
+      for (const o of (or.orders || [])) {
+        orderTax[o.id] = {
+          tax: o.totalTaxMoney ? Number(o.totalTaxMoney.amount) : 0,
+          total: o.totalMoney ? Number(o.totalMoney.amount) : 0,
+        };
+      }
+    } catch (e) {
+      console.warn('Square batchRetrieveOrders failed:', e.message);
+    }
+  }
+
   let synced = 0;
   for (const p of squarePayments) {
-    const amount = p.amountMoney ? Number(p.amountMoney.amount) / 100 : 0;
+    const amountCents = p.amountMoney ? Number(p.amountMoney.amount) : 0;
+    const amount = amountCents / 100;
     const refundAmount = p.refundedMoney ? Number(p.refundedMoney.amount) / 100 : 0;
     const status = p.status === 'COMPLETED' ? 'completed' : p.status.toLowerCase();
     const cardBrand = p.cardDetails?.card?.cardBrand?.toLowerCase() || null;
     const cardLast4 = p.cardDetails?.card?.last4 || null;
 
+    // Tax for this payment: the order's tax, prorated by the payment's share of the order
+    // total (handles split payments). Falls back to 0 when the order/tax isn't available.
+    const ot = p.orderId ? orderTax[p.orderId] : null;
+    let taxAmount = 0;
+    if (ot && ot.tax > 0) {
+      const share = ot.total > 0 ? Math.min(1, amountCents / ot.total) : 1;
+      taxAmount = Math.round(ot.tax * share) / 100;
+    }
+
     await pool.query(
       `INSERT INTO payments (user_id, processor, processor_payment_id, amount, refund_amount,
-         status, card_brand, card_last_four, payment_method, metadata, created_at, updated_at)
-       VALUES ($1, 'square', $2, $3, $4, $5, $6, $7, 'card', $8, $9, NOW())
+         tax_amount, status, card_brand, card_last_four, payment_method, metadata, created_at, updated_at)
+       VALUES ($1, 'square', $2, $3, $4, $5, $6, $7, $8, 'card', $9, $10, NOW())
        ON CONFLICT (processor_payment_id) WHERE processor_payment_id IS NOT NULL
-       DO UPDATE SET status = EXCLUDED.status, refund_amount = EXCLUDED.refund_amount, updated_at = NOW()`,
-      [userId, p.id, amount, refundAmount, status, cardBrand, cardLast4,
+       DO UPDATE SET status = EXCLUDED.status, refund_amount = EXCLUDED.refund_amount,
+         tax_amount = EXCLUDED.tax_amount, updated_at = NOW()`,
+      [userId, p.id, amount, refundAmount, taxAmount, status, cardBrand, cardLast4,
        JSON.stringify({ sourceType: p.sourceType, locationId: p.locationId, orderId: p.orderId }),
        p.createdAt]
     );

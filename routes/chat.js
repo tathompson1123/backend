@@ -6,6 +6,7 @@ const { authenticateToken } = require('../config/middleware');
 const { sendBookingEmails } = require('../utils/bookingEmail');
 const { sendPushToOwner } = require('../utils/pushNotifications');
 const { logClaudeUsage } = require('../utils/claudeUsage');
+const { isUnlimitedAccount } = require('../utils/unlimitedAccounts');
 const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
@@ -541,7 +542,7 @@ router.post('/message', async (req, res) => {
     );
     const ownerRow = planRow.rows[0] || {};
     const userPlan = ownerRow.plan;
-    const unlimited = ownerRow.ai_chat_unlimited === true;
+    const unlimited = ownerRow.ai_chat_unlimited === true || isUnlimitedAccount(ownerRow.email);
     const costLimit = unlimited ? null : CHAT_COST_LIMITS[userPlan];
     if (costLimit != null) {
       const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
