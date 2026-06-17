@@ -422,7 +422,7 @@ router.get('/usage', authenticateToken, async (req, res) => {
         [userId, monthStart]
       ),
       pool.query(
-        'SELECT plan, base_plan, trial_ends_at, stripe_subscription_id, email FROM users WHERE id = $1',
+        'SELECT plan, base_plan, trial_ends_at, stripe_subscription_id, email, ai_chat_unlimited FROM users WHERE id = $1',
         [userId]
       ),
       pool.query(
@@ -434,6 +434,9 @@ router.get('/usage', authenticateToken, async (req, res) => {
     const plan = userRow.rows[0]?.plan;
     const basePlan = userRow.rows[0]?.base_plan || plan;
     const unlimited = isUnlimitedAccount(userRow.rows[0]?.email);
+    // Chat comp can also be granted per-account via the ai_chat_unlimited DB flag
+    // (mirrors the enforcement in routes/chat.js so the dashboard matches reality).
+    const chatUnlimited = unlimited || userRow.rows[0]?.ai_chat_unlimited === true;
     const SMS_LIMITS = { free: 0, basic: 100, pro: 100, scale: 500, expert: 200 };
     const CHAT_LIMITS = { free: 0, basic: 200, pro: 500, scale: 99999, expert: 500 };
     // Monthly AI chat API cost limits by plan (in USD)
@@ -446,9 +449,9 @@ router.get('/usage', authenticateToken, async (req, res) => {
       smsUsed: parseInt(smsRow.rows[0].count, 10),
       smsLimit: unlimited ? null : (SMS_LIMITS[plan] || 0),
       chatUsed: parseInt(chatRow.rows[0].count, 10),
-      chatLimit: unlimited ? null : (CHAT_LIMITS[plan] || 0),
+      chatLimit: chatUnlimited ? null : (CHAT_LIMITS[plan] || 0),
       claudeCostMonth: parseFloat(claudeRow.rows[0].total) || 0,
-      chatCostLimit: unlimited ? null : (CHAT_COST_LIMITS[plan] ?? null),
+      chatCostLimit: chatUnlimited ? null : (CHAT_COST_LIMITS[plan] ?? null),
       monthStart: monthStart.toISOString(),
     });
   } catch (error) {

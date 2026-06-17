@@ -545,6 +545,12 @@ router.post('/bookings/create', async (req, res) => {
       return sum + Math.round((s.duration_hours || 1) * 60);
     }, 0);
 
+    // Duration of the main service only (add-ons don't count toward business-hours fit)
+    const mainService = servicesResult.rows.find(s => s.id === Number(serviceId));
+    const mainServiceDurationMinutes = variantRow && variantRow.duration_hours
+      ? Math.round(parseFloat(variantRow.duration_hours) * 60)
+      : Math.round((mainService?.duration_hours || 1) * 60);
+
     // Validate business hours for the booking date
     const bookingDateObj = new Date(bookingDate + 'T12:00:00');
     const bookingDayOfWeek = bookingDateObj.getDay();
@@ -556,8 +562,16 @@ router.post('/bookings/create', async (req, res) => {
       return res.status(400).json({ error: 'We are closed on that day. Please choose a different date.' });
     }
     const bizHours = hoursCheck.rows[0];
-    if (startTime < bizHours.open_time || startTime >= bizHours.close_time) {
+    // Compare in minutes — startTime is "HH:MM" but open/close_time come back as "HH:MM:SS"
+    const openMin = timeToMinutes(bizHours.open_time);
+    const closeMin = timeToMinutes(bizHours.close_time);
+    const startMin = timeToMinutes(startTime);
+    if (startMin < openMin || startMin >= closeMin) {
       return res.status(400).json({ error: 'The selected time is outside our business hours. Please choose a different time.' });
+    }
+    // The service must finish by closing time (add-ons excluded from this check)
+    if (startMin + mainServiceDurationMinutes > closeMin) {
+      return res.status(400).json({ error: 'This service would end after closing time. Please choose an earlier time.' });
     }
 
     // Calculate end time
