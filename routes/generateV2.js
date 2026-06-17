@@ -111,13 +111,13 @@ async function generateWebsite(req, res)
     // ==========================================
     console.log('🤖 Calling Claude API for content schema...');
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 8192,
       messages: [
         { role: 'user', content: prompt }
       ],
     });
-    logClaudeUsage(userId, 'claude-sonnet-4-20250514', message.usage, 'website_gen');
+    logClaudeUsage(userId, 'claude-sonnet-4-6', message.usage, 'website_gen');
 
     // ==========================================
     // STEP 3: Parse JSON response
@@ -364,11 +364,11 @@ async function generatePreview(req, res) {
 
     console.log('🤖 [Preview] Calling Claude API...');
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 8192,
       messages: [{ role: 'user', content: prompt }],
     });
-    logClaudeUsage(userId, 'claude-sonnet-4-20250514', message.usage, 'website_gen');
+    logClaudeUsage(userId, 'claude-sonnet-4-6', message.usage, 'website_gen');
 
     // STEP 3: Parse JSON
     let rawText = message.content[0].text.trim();

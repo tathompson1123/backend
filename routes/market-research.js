@@ -119,7 +119,7 @@ router.post('/competitors', async (req, res) => {
       : 'Unknown';
 
     const aiResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 6000,
       messages: [{
         role: 'user',
@@ -156,7 +156,7 @@ Return ONLY valid JSON in this exact format:
       }]
     });
 
-    logClaudeUsage(userId, 'claude-sonnet-4-20250514', aiResponse.usage, 'market_research');
+    logClaudeUsage(userId, 'claude-sonnet-4-6', aiResponse.usage, 'market_research');
     const aiText = aiResponse.content[0].text.trim();
     let aiAnalysis;
     try {
@@ -255,7 +255,7 @@ router.post('/upsells', async (req, res) => {
     }
 
     const aiResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 6000,
       messages: [{
         role: 'user',
@@ -293,7 +293,7 @@ Return ONLY valid JSON:
       }]
     });
 
-    logClaudeUsage(userId, 'claude-sonnet-4-20250514', aiResponse.usage, 'market_research');
+    logClaudeUsage(userId, 'claude-sonnet-4-6', aiResponse.usage, 'market_research');
     const aiText = aiResponse.content[0].text.trim();
     let analysis;
     try {

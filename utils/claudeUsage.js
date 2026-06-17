@@ -8,7 +8,8 @@ const { pool } = require('../config/database');
 
 // Current Anthropic pricing — update if pricing changes (per million tokens)
 const PRICING = {
-  'claude-sonnet-4-20250514': { input: 3.00,  output: 15.00 },
+  'claude-sonnet-4-6':        { input: 3.00,  output: 15.00 },
+  'claude-sonnet-4-20250514': { input: 3.00,  output: 15.00 }, // retired 2026-06-15; kept for historical cost calc
   'claude-sonnet-4-5':        { input: 3.00,  output: 15.00 },
   'claude-haiku-4-5-20251001':{ input: 0.80,  output: 4.00  },
   'claude-haiku-4-20240307':  { input: 0.25,  output: 1.25  },
@@ -16,7 +17,7 @@ const PRICING = {
 };
 
 function calcCost(model, inputTokens, outputTokens) {
-  const p = PRICING[model] || PRICING['claude-sonnet-4-20250514'];
+  const p = PRICING[model] || PRICING['claude-sonnet-4-6'];
   return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
 }
 

@@ -895,12 +895,12 @@ ${config.autoBookingEnabled ? 'If they mention a date/time, confirm booking deta
     const anthropic = new Anthropic();
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 300,
       system: systemPrompt,
       messages: messages
     });
-    logClaudeUsage(userId, 'claude-sonnet-4-20250514', response.usage, 'preview_chat');
+    logClaudeUsage(userId, 'claude-sonnet-4-6', response.usage, 'preview_chat');
 
     let reply = response.content[0]?.text || "I'm here to help! How can I assist you today?";
 
@@ -1138,12 +1138,12 @@ IMPORTANT: Only include fields in suggestedConfig that you are CHANGING. Set sug
     ];
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 600,
       system: systemPrompt,
       messages: messages
     });
-    logClaudeUsage(userId, 'claude-sonnet-4-20250514', response.usage, 'preview_chat');
+    logClaudeUsage(userId, 'claude-sonnet-4-6', response.usage, 'preview_chat');
 
     const responseText = response.content[0]?.text || '';
 

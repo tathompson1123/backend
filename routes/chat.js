@@ -768,13 +768,13 @@ REAL-TIME AVAILABILITY:
 
     while (iterations++ < MAX_ITERATIONS) {
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: systemPrompt,
         tools,
         messages: loopMessages
       });
-      logClaudeUsage(userId, 'claude-sonnet-4-20250514', response.usage, 'chat');
+      logClaudeUsage(userId, 'claude-sonnet-4-6', response.usage, 'chat');
 
       if (response.stop_reason === 'tool_use') {
         // Append assistant message with tool_use blocks

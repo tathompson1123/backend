@@ -317,12 +317,12 @@ Guidelines:
 Generate ONLY the reply text, no quotes or labels.`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 300,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    logClaudeUsage(req.user.userId, 'claude-sonnet-4-20250514', message.usage, 'review_reply');
+    logClaudeUsage(req.user.userId, 'claude-sonnet-4-6', message.usage, 'review_reply');
     const reply = message.content[0].text.trim();
 
     // Log the reply generation
