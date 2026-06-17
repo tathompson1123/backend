@@ -1,8 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const Anthropic = require('@anthropic-ai/sdk');
 const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
-const { setVoiceWebhook } = require('../utils/twilio');
+const { setVoiceWebhook, getClient } = require('../utils/twilio');
+const { logClaudeUsage } = require('../utils/claudeUsage');
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const BACKEND_URL = process.env.BACKEND_URL
   || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : 'http://localhost:3001');
@@ -56,10 +60,23 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     const statusUrl = `${BACKEND_URL}/api/voice/status`;
     console.log(`📲 Ringing ${ringToNumber} for user ${user.id} (timeout: ${ringTimeout}s)`);
 
+    // Optional call recording (for AI summaries of answered calls). Off unless the
+    // owner opts in via config.recordCalls, since recording carries legal/consent
+    // obligations. When on, announce it before connecting (two-party consent) and
+    // record from answer; the /recording callback transcribes + summarizes.
+    const recordCalls = config?.recordCalls === true;
+    const recordingUrl = `${BACKEND_URL}/api/voice/recording`;
+    const announcement = recordCalls
+      ? '  <Say voice="alice">This call may be monitored or recorded for quality and training purposes.</Say>\n'
+      : '';
+    const recordAttrs = recordCalls
+      ? ` record="record-from-answer-dual" recordingStatusCallback="${recordingUrl}" recordingStatusCallbackEvent="completed"`
+      : '';
+
     res.type('text/xml');
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial action="${statusUrl}" timeout="${ringTimeout}" answerOnBridge="true">
+${announcement}  <Dial action="${statusUrl}" timeout="${ringTimeout}" answerOnBridge="true"${recordAttrs}>
     <Number>${ringToNumber}</Number>
   </Dial>
 </Response>`);
@@ -100,13 +117,35 @@ router.post('/status', express.urlencoded({ extended: false }), async (req, res)
     const forwardedTo = config?.forwardingNumber || null;
 
     if (DialCallStatus === 'completed') {
-      // Call was answered — log it and done
-      await pool.query(
-        `INSERT INTO missed_calls (user_id, caller_phone, called_number, call_sid, call_status, call_duration, forwarded_to, created_at)
-         VALUES ($1, $2, $3, $4, 'answered', $5, $6, NOW())`,
-        [user.id, From, To, CallSid, parseInt(DialCallDuration) || 0, forwardedTo]
+      // Call was answered — still capture the caller as a phone lead so they
+      // can be remarketed to later if they don't end up booking. No SMS consent
+      // is implied by answering a call, so sms_consent stays false and no
+      // text-back is scheduled (unlike the missed-call path below).
+      let leadResult = await pool.query(
+        'SELECT id FROM leads WHERE phone = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
+        [From, user.id]
       );
-      console.log(`✅ Call answered: ${From} → ${To}`);
+      let leadId;
+      if (leadResult.rows.length === 0) {
+        const newLead = await pool.query(
+          `INSERT INTO leads (user_id, name, phone, source, status, sms_consent, created_at)
+           VALUES ($1, $2, $3, 'phone_call', 'new', false, NOW())
+           RETURNING id`,
+          [user.id, From, From]
+        );
+        leadId = newLead.rows[0].id;
+        console.log(`📝 New phone lead ${leadId} from answered call ${From}`);
+      } else {
+        // Existing lead — keep its original source for attribution; just link the call.
+        leadId = leadResult.rows[0].id;
+      }
+
+      await pool.query(
+        `INSERT INTO missed_calls (user_id, caller_phone, called_number, call_sid, call_status, call_duration, forwarded_to, lead_id, created_at)
+         VALUES ($1, $2, $3, $4, 'answered', $5, $6, $7, NOW())`,
+        [user.id, From, To, CallSid, parseInt(DialCallDuration) || 0, forwardedTo, leadId]
+      );
+      console.log(`✅ Call answered: ${From} → ${To} (lead ${leadId})`);
       res.type('text/xml');
       return res.send('<?xml version="1.0" encoding="UTF-8"?><Response/>');
     }
@@ -173,6 +212,113 @@ router.post('/status', express.urlencoded({ extended: false }), async (req, res)
 });
 
 // ============================================
+// POST /recording — Twilio recording-ready callback (public)
+// Stores the recording on the lead and kicks off transcription.
+// ============================================
+router.post('/recording', express.urlencoded({ extended: false }), async (req, res) => {
+  // Respond immediately; do the work async (Twilio doesn't need a body here).
+  res.sendStatus(204);
+  try {
+    const { CallSid, RecordingSid, RecordingUrl, RecordingDuration, RecordingStatus } = req.body;
+    if (RecordingStatus && RecordingStatus !== 'completed') return;
+    if (!CallSid || !RecordingSid) return;
+
+    // The answered-call branch already created a lead and linked it to missed_calls.
+    const mcRes = await pool.query(
+      'SELECT lead_id, user_id FROM missed_calls WHERE call_sid = $1 ORDER BY created_at DESC LIMIT 1',
+      [CallSid]
+    );
+    const leadId = mcRes.rows[0]?.lead_id;
+    if (!leadId) {
+      console.log(`⚠️ Recording ${RecordingSid} has no matching lead (call ${CallSid})`);
+      return;
+    }
+
+    await pool.query(
+      `UPDATE leads SET call_recording_url = $1, call_duration = $2 WHERE id = $3`,
+      [RecordingUrl ? `${RecordingUrl}.mp3` : null, parseInt(RecordingDuration) || 0, leadId]
+    );
+    console.log(`🎙️ Recording stored on lead ${leadId} (${RecordingDuration}s)`);
+
+    // Transcribe via Twilio Voice Intelligence (requires a configured service).
+    const serviceSid = process.env.TWILIO_INTELLIGENCE_SERVICE_SID;
+    if (!serviceSid) {
+      console.log('ℹ️ TWILIO_INTELLIGENCE_SERVICE_SID not set — skipping transcription/summary');
+      return;
+    }
+    const twilioClient = getClient();
+    const transcript = await twilioClient.intelligence.v2.transcripts.create({
+      serviceSid,
+      channel: { media_properties: { source_sid: RecordingSid } },
+      customerKey: String(leadId), // echoed back so /transcript can find the lead
+    });
+    console.log(`📝 Transcription started ${transcript.sid} for lead ${leadId}`);
+  } catch (err) {
+    console.error('❌ Voice recording callback error:', err.message);
+  }
+});
+
+// ============================================
+// POST /transcript — Twilio Voice Intelligence webhook (public)
+// Fires when a transcript completes. Summarizes the call via Claude
+// and writes the summary to the lead.
+// ============================================
+router.post('/transcript', express.urlencoded({ extended: false }), async (req, res) => {
+  res.sendStatus(204);
+  try {
+    const transcriptSid = req.body.transcript_sid || req.body.TranscriptSid;
+    if (!transcriptSid) return;
+    const twilioClient = getClient();
+
+    const transcript = await twilioClient.intelligence.v2.transcripts(transcriptSid).fetch();
+    if (transcript.status !== 'completed') return;
+
+    const leadId = parseInt(transcript.customerKey, 10);
+    if (!leadId) return;
+
+    const leadRes = await pool.query('SELECT user_id FROM leads WHERE id = $1', [leadId]);
+    const userId = leadRes.rows[0]?.user_id;
+    if (!userId) return;
+
+    // Assemble the transcript text with speaker labels.
+    const sentences = await twilioClient.intelligence.v2
+      .transcripts(transcriptSid).sentences.list({ limit: 1000 });
+    if (!sentences.length) return;
+    const text = sentences
+      .map(s => `[Speaker ${s.mediaChannel}] ${s.transcript}`)
+      .join('\n');
+
+    await pool.query('UPDATE leads SET call_transcript = $1 WHERE id = $2', [text, leadId]);
+
+    // Summarize + judge whether a booking was made on the call.
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      system: 'You summarize a phone call between a local service business and a potential customer. ' +
+        'Reply with exactly two parts:\n' +
+        'Summary: 2-3 sentences on what the caller wanted and the outcome.\n' +
+        'Booked: yes, no, or unclear — whether the caller booked/scheduled a service on this call.',
+      messages: [{ role: 'user', content: `Call transcript:\n\n${text}` }],
+    });
+    logClaudeUsage(userId, 'claude-haiku-4-5-20251001', response.usage, 'call_summary');
+    const summary = (response.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    if (!summary) return;
+
+    // Prepend the summary to notes so it's visible in the lead view.
+    await pool.query(
+      `UPDATE leads
+         SET notes = CASE WHEN notes IS NULL OR notes = '' THEN $1
+                          ELSE $1 || E'\n\n---\n' || notes END
+       WHERE id = $2`,
+      [`📞 Call summary (${new Date().toLocaleDateString('en-US')}):\n${summary}`, leadId]
+    );
+    console.log(`✅ Call summary written to lead ${leadId}`);
+  } catch (err) {
+    console.error('❌ Voice transcript webhook error:', err.message);
+  }
+});
+
+// ============================================
 // GET /config — Get missed call agent config (protected)
 // ============================================
 router.get('/config', authenticateToken, async (req, res) => {
@@ -187,6 +333,7 @@ router.get('/config', authenticateToken, async (req, res) => {
         config: {
           enabled: false,
           smsEnabled: true,
+          recordCalls: false,
           ringToNumber: '',
           ringTimeout: 20,
           delayMin: 30,
@@ -220,7 +367,7 @@ router.post('/config', authenticateToken, async (req, res) => {
     const { config, smsTemplate } = req.body;
 
     // Whitelist config fields
-    const allowedFields = ['enabled', 'smsEnabled', 'ringToNumber', 'ringTimeout', 'delayMin', 'delayMax', 'training'];
+    const allowedFields = ['enabled', 'smsEnabled', 'recordCalls', 'ringToNumber', 'ringTimeout', 'delayMin', 'delayMax', 'training'];
     const safeConfig = {};
     for (const key of allowedFields) {
       if (config[key] !== undefined) safeConfig[key] = config[key];
@@ -247,7 +394,7 @@ router.post('/config', authenticateToken, async (req, res) => {
 router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { ringToNumber, ringTimeout, smsTemplate, training } = req.body;
+    const { ringToNumber, ringTimeout, smsTemplate, training, recordCalls } = req.body;
 
     if (!ringToNumber) {
       return res.status(400).json({ error: 'Your phone number (where calls ring to) is required.' });
@@ -273,6 +420,7 @@ router.post('/deploy', authenticateToken, requirePlan('pro'), async (req, res) =
     const config = {
       enabled: true,
       smsEnabled: true,
+      recordCalls: recordCalls === true,
       ringToNumber,
       ringTimeout: ringTimeout || 20,
       delayMin: req.body.delayMin || 30,
