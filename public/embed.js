@@ -137,9 +137,9 @@
       '.sorce-replaced-form { max-width: 520px; padding: 24px; background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }\n' +
 
       /* Booking widget (multi-step) */
-      '#sorce-booking-overlay{display:none;position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}\n' +
+      '#sorce-booking-overlay{display:none;position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}\n' +
       '#sorce-booking-overlay.open{display:flex!important}\n' +
-      '#sorce-booking-modal{position:relative;width:95%;max-width:560px;max-height:90vh;overflow-y:auto;background:#fff;border-radius:16px;box-shadow:0 25px 60px rgba(0,0,0,.3);padding:0;animation:sbkSlideUp .25s ease}\n' +
+      '#sorce-booking-modal{position:relative;width:95%;max-width:560px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin:auto;background:#fff;border-radius:16px;box-shadow:0 25px 60px rgba(0,0,0,.3);padding:0;animation:sbkSlideUp .25s ease}\n' +
       '@keyframes sbkSlideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}\n' +
       '.sbk-step{display:none}.sbk-step.active{display:block}\n' +
       '.sbk-title{font-size:22px;font-weight:700;color:#111;margin:0 0 6px}\n' +
@@ -215,7 +215,8 @@
       '@media (max-width: 480px) {\n' +
       '  .sorce-chat-window { width: calc(100vw - 40px); height: calc(100vh - 120px); }\n' +
       '  .sorce-modal { max-width: 100%; margin: 0 12px; padding: 24px; }\n' +
-      '  #sorce-booking-modal { width: 100%; max-width: 100%; border-radius: 12px; }\n' +
+      '  #sorce-booking-overlay { padding: 0; align-items: stretch; }\n' +
+      '  #sorce-booking-modal { width: 100%; max-width: 100%; border-radius: 12px; max-height: 100dvh; min-height: 100dvh; margin: 0; }\n' +
       '}\n';
 
     var style = document.createElement('style');
@@ -1635,7 +1636,7 @@
   var FIELD_DEFAULTS = {
     name:    { label: 'Name',               placeholder: 'Your name',                     type: 'text',     required: true },
     email:   { label: 'Email',              placeholder: 'your@email.com',                type: 'email',    required: true },
-    phone:   { label: 'Phone',              placeholder: '(555) 123-4567',                type: 'tel',      required: false },
+    phone:   { label: 'Phone',              placeholder: '(555) 123-4567',                type: 'tel',      required: true },
     service: { label: 'Service Interested In', placeholder: 'What service are you looking for?', type: 'text', required: false },
     message: { label: 'Message',            placeholder: 'Tell us about what you need...', type: 'textarea', required: false }
   };

@@ -15,6 +15,12 @@ const pool = new Pool({
   // Keep TCP alive so Railway's proxy doesn't drop idle connections out from under us
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
+  // Don't let a single slow/hung query pin a pooled client forever. With ~8 crons
+  // sharing max:10, one stuck query during a DB slowdown can starve everything else,
+  // which is what turns a brief blip into a flood of acquire-timeout errors.
+  statement_timeout: 30000,  // Postgres cancels a query running >30s
+  query_timeout: 30000,      // client-side guard so a query that never responds is released
+  application_name: 'sorce-backend', // shows up in pg_stat_activity for debugging
 });
 
 // Without this listener, an error event on an idle pooled client (e.g. when Railway's
