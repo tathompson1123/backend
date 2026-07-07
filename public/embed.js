@@ -159,7 +159,7 @@
       // height and is centered with margin:auto. A fixed-height inner scroller
       // (overflow:auto + max-height) combined with body-scroll-lock is what freezes
       // scrolling on mobile Safari, so we deliberately avoid it.
-      '#sorce-booking-overlay{display:none;position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}\n' +
+      '#sorce-booking-overlay{display:none;position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:20px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}\n' +
       '#sorce-booking-overlay.open{display:flex!important}\n' +
       '#sorce-booking-modal{position:relative;width:100%;max-width:560px;margin:auto;background:#fff;border-radius:16px;box-shadow:0 25px 60px rgba(0,0,0,.3);padding:0;animation:sbkSlideUp .25s ease}\n' +
       '@keyframes sbkSlideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}\n' +
