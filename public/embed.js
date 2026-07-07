@@ -482,7 +482,9 @@
       _touchStartScroll = bkOverlay.scrollTop;
     }, { passive: true });
     bkOverlay.addEventListener('touchmove', function(e) {
-      var target = bkOverlay.scrollTop - (e.touches[0].clientY - _touchStartY);
+      // Position relative to where the drag STARTED (not the live scrollTop) so movement
+      // is exactly 1:1 with the finger — using live scrollTop double-counts and accelerates.
+      var target = _touchStartScroll - (e.touches[0].clientY - _touchStartY);
       var maxScroll = bkOverlay.scrollHeight - bkOverlay.clientHeight;
       if (maxScroll <= 0) return; // nothing to scroll
       var clamped = Math.max(0, Math.min(maxScroll, target));
