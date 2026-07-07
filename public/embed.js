@@ -36,6 +36,24 @@
   // Hijack booking buttons immediately (before config loads) so fast clicks are caught
   scanBookingButtons();
 
+  // Safety net for fast clicks: a document-level CAPTURE listener catches booking
+  // clicks even if the button hasn't been individually hijacked yet (Wix/SPA hydrate
+  // the button late) or config is still loading. Per-element hijacking races against
+  // page hydration; this does not. openBookingModal() waits for config on its own.
+  document.addEventListener('click', function(e) {
+    // If config is known and booking is off, never interfere with the host site.
+    if (config && !config.bookingEnabled) return;
+    var el = e.target && e.target.closest ? e.target.closest('a,button,[role="button"]') : null;
+    if (!el) return;
+    if (el.closest('#sorce-embed-container') || el.closest('.sorce-modal-overlay') || el.closest('#sorce-booking-overlay')) return;
+    var text = (el.textContent || '').trim();
+    if (!text || text.length > 40) return;
+    if (!bookingPatterns.test(text)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openBookingModal();
+  }, true);
+
   function init() {
     console.log('SORCE Embed: fetching config...');
     fetch(API_BASE + '/api/embed/config/' + SITE_KEY)
@@ -431,6 +449,7 @@
 
   function openBookingModal() {
     if (bookingModalOpen) return;
+    if (config && config.bookingEnabled === false) return; // booking disabled — don't show an empty modal
     if (!config) {
       var waitInterval = setInterval(function() {
         if (config) { clearInterval(waitInterval); openBookingModal(); }

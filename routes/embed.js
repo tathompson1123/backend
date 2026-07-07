@@ -61,6 +61,10 @@ router.get('/config/:siteKey', async (req, res) => {
       };
     }
 
+    // Cache briefly so repeat page loads don't re-hit the DB on every visit (and so a
+    // slow/unavailable DB doesn't block the widget on navigations). Config changes take
+    // effect within a minute.
+    res.set('Cache-Control', 'public, max-age=60');
     res.json(response);
   } catch (error) {
     console.error('Embed config error:', error.message);
