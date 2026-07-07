@@ -137,9 +137,11 @@
       '.sorce-replaced-form { max-width: 520px; padding: 24px; background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }\n' +
 
       /* Booking widget (multi-step) */
-      '#sorce-booking-overlay{display:none;position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}\n' +
+      '#sorce-booking-overlay{display:none;position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}\n' +
       '#sorce-booking-overlay.open{display:flex!important}\n' +
-      '#sorce-booking-modal{position:relative;width:95%;max-width:560px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin:auto;background:#fff;border-radius:16px;box-shadow:0 25px 60px rgba(0,0,0,.3);padding:0;animation:sbkSlideUp .25s ease}\n' +
+      // The modal is the ONE scroll container. The overlay must NOT also be scrollable —
+      // nested -webkit-overflow-scrolling:touch containers break scrolling on iOS.
+      '#sorce-booking-modal{position:relative;width:95%;max-width:560px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:#fff;border-radius:16px;box-shadow:0 25px 60px rgba(0,0,0,.3);padding:0;animation:sbkSlideUp .25s ease}\n' +
       '@keyframes sbkSlideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}\n' +
       '.sbk-step{display:none}.sbk-step.active{display:block}\n' +
       '.sbk-title{font-size:22px;font-weight:700;color:#111;margin:0 0 6px}\n' +
@@ -215,8 +217,8 @@
       '@media (max-width: 480px) {\n' +
       '  .sorce-chat-window { width: calc(100vw - 40px); height: calc(100vh - 120px); }\n' +
       '  .sorce-modal { max-width: 100%; margin: 0 12px; padding: 24px; }\n' +
-      '  #sorce-booking-overlay { padding: 0; align-items: stretch; }\n' +
-      '  #sorce-booking-modal { width: 100%; max-width: 100%; border-radius: 12px; max-height: 100dvh; min-height: 100dvh; margin: 0; }\n' +
+      '  #sorce-booking-overlay { align-items: stretch; backdrop-filter: none; }\n' +
+      '  #sorce-booking-modal { width: 100%; max-width: 100%; height: 100vh; height: 100dvh; max-height: 100dvh; border-radius: 0; }\n' +
       '}\n';
 
     var style = document.createElement('style');
