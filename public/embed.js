@@ -470,6 +470,29 @@
 
     document.getElementById('sorce-booking-close').onclick = closeBookingModal;
     bkOverlay.addEventListener('click', function(e) { if (e.target === bkOverlay) closeBookingModal(); });
+
+    // Manual touch scrolling. Host pages (notably Wix) attach global touch handlers that
+    // preventDefault, which kills native finger-scrolling inside our fixed overlay even
+    // though it is programmatically scrollable. We drive scrollTop ourselves so scrolling
+    // works regardless of what the host page does with touch events. Fixed input elements
+    // (contact step) don't need internal scroll, so overriding touch here is safe.
+    var _touchStartY = 0, _touchStartScroll = 0;
+    bkOverlay.addEventListener('touchstart', function(e) {
+      _touchStartY = e.touches[0].clientY;
+      _touchStartScroll = bkOverlay.scrollTop;
+    }, { passive: true });
+    bkOverlay.addEventListener('touchmove', function(e) {
+      var target = bkOverlay.scrollTop - (e.touches[0].clientY - _touchStartY);
+      var maxScroll = bkOverlay.scrollHeight - bkOverlay.clientHeight;
+      if (maxScroll <= 0) return; // nothing to scroll
+      var clamped = Math.max(0, Math.min(maxScroll, target));
+      if (clamped !== bkOverlay.scrollTop) {
+        bkOverlay.scrollTop = clamped;
+        e.preventDefault();     // take over from native/host so only our scroll applies
+        e.stopPropagation();
+      }
+    }, { passive: false });
+
     bkOverlay.classList.add('open');
     document.body.style.overflow = 'hidden';
 
