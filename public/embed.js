@@ -220,7 +220,12 @@
       '  .sorce-chat-window { width: calc(100vw - 40px); height: calc(100vh - 120px); }\n' +
       '  .sorce-modal { max-width: 100%; margin: 0 12px; padding: 24px; }\n' +
       '  #sorce-booking-overlay { padding: 0; }\n' +
-      '  #sorce-booking-modal { max-width: 100%; min-height: 100%; border-radius: 0; margin: 0; }\n' +
+      // margin:auto (not margin:0) is critical: with the overlay as a flex container,
+      // margin:0 lets align-items:stretch pin the modal to viewport height, so tall
+      // content overflows the flex item WITHOUT extending the scroll area on iOS Safari
+      // (nothing scrolls). margin:auto disables the stretch so the modal grows to its
+      // content height and the overlay scrolls normally. Verified via headless repro.
+      '  #sorce-booking-modal { max-width: 100%; min-height: 100%; border-radius: 0; margin: auto; }\n' +
       '}\n';
 
     var style = document.createElement('style');
