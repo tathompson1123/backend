@@ -471,29 +471,55 @@
     document.getElementById('sorce-booking-close').onclick = closeBookingModal;
     bkOverlay.addEventListener('click', function(e) { if (e.target === bkOverlay) closeBookingModal(); });
 
-    // Manual touch scrolling. Host pages (notably Wix) attach global touch handlers that
-    // preventDefault, which kills native finger-scrolling inside our fixed overlay even
-    // though it is programmatically scrollable. We drive scrollTop ourselves so scrolling
-    // works regardless of what the host page does with touch events. Fixed input elements
-    // (contact step) don't need internal scroll, so overriding touch here is safe.
-    var _touchStartY = 0, _touchStartScroll = 0;
+    // Manual touch scrolling with inertia. Host pages (notably Wix) attach global touch
+    // handlers that preventDefault, which kills native finger-scrolling inside our fixed
+    // overlay even though it is programmatically scrollable. We drive scrollTop ourselves
+    // (1:1 with the finger) and add a short momentum glide on release so it feels native.
+    var _tsY = 0, _tsScroll = 0, _lastY = 0, _lastT = 0, _vel = 0, _momRAF = null;
+    function bkStopMomentum() { if (_momRAF) { cancelAnimationFrame(_momRAF); _momRAF = null; } }
     bkOverlay.addEventListener('touchstart', function(e) {
-      _touchStartY = e.touches[0].clientY;
-      _touchStartScroll = bkOverlay.scrollTop;
+      bkStopMomentum();
+      _tsY = _lastY = e.touches[0].clientY;
+      _tsScroll = bkOverlay.scrollTop;
+      _lastT = e.timeStamp || Date.now();
+      _vel = 0;
     }, { passive: true });
     bkOverlay.addEventListener('touchmove', function(e) {
-      // Position relative to where the drag STARTED (not the live scrollTop) so movement
-      // is exactly 1:1 with the finger — using live scrollTop double-counts and accelerates.
-      var target = _touchStartScroll - (e.touches[0].clientY - _touchStartY);
       var maxScroll = bkOverlay.scrollHeight - bkOverlay.clientHeight;
       if (maxScroll <= 0) return; // nothing to scroll
-      var clamped = Math.max(0, Math.min(maxScroll, target));
+      var y = e.touches[0].clientY;
+      // Position relative to where the drag STARTED so movement is exactly 1:1 with the
+      // finger (using live scrollTop would double-count and accelerate).
+      var clamped = Math.max(0, Math.min(maxScroll, _tsScroll - (y - _tsY)));
+      var now = e.timeStamp || Date.now();
+      var dt = now - _lastT;
+      if (dt > 0) _vel = 0.7 * ((_lastY - y) / dt) + 0.3 * _vel; // px/ms, smoothed
+      _lastY = y; _lastT = now;
       if (clamped !== bkOverlay.scrollTop) {
         bkOverlay.scrollTop = clamped;
         e.preventDefault();     // take over from native/host so only our scroll applies
         e.stopPropagation();
       }
     }, { passive: false });
+    bkOverlay.addEventListener('touchend', function(e) {
+      var maxScroll = bkOverlay.scrollHeight - bkOverlay.clientHeight;
+      if (maxScroll <= 0) return;
+      var now = e.timeStamp || Date.now();
+      if (now - _lastT > 90) return;           // finger paused before lifting -> no fling
+      var v = Math.max(-45, Math.min(45, _vel * 16)); // px/ms -> px/frame, clamp runaway
+      if (Math.abs(v) < 0.6) return;           // too weak to bother
+      var pos = bkOverlay.scrollTop;
+      function step() {
+        v *= 0.94;                             // friction -> a small amount of momentum
+        pos += v;
+        if (pos <= 0) { bkOverlay.scrollTop = 0; _momRAF = null; return; }
+        if (pos >= maxScroll) { bkOverlay.scrollTop = maxScroll; _momRAF = null; return; }
+        bkOverlay.scrollTop = pos;
+        if (Math.abs(v) < 0.3) { _momRAF = null; return; }
+        _momRAF = requestAnimationFrame(step);
+      }
+      _momRAF = requestAnimationFrame(step);
+    }, { passive: true });
 
     bkOverlay.classList.add('open');
     document.body.style.overflow = 'hidden';
