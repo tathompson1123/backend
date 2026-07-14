@@ -205,6 +205,60 @@ router.patch('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// GET - Fetch bookings for a specific customer.
+// The deduped customer list and booking rows don't reliably share a customer_id
+// (each booking historically inserts its own customer row), so we match on
+// email OR phone — the same approach the lead-detail endpoint uses.
+router.get('/:id/bookings', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    // Demo rows use string ids like 'demo-1'; skip the DB lookup for those.
+    if (!/^\d+$/.test(String(id))) {
+      return res.json({ bookings: [] });
+    }
+
+    const custRes = await pool.query(
+      'SELECT email, phone FROM customers WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (custRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const { email, phone } = custRes.rows[0];
+
+    // Nothing to match on — return empty rather than every booking.
+    if (!email && !phone) {
+      return res.json({ bookings: [] });
+    }
+
+    const bookingsRes = await pool.query(
+      `SELECT b.id, b.booking_number, b.booking_date, b.start_time, b.end_time,
+              b.status, b.total_amount, b.source, b.customer_name, b.customer_email,
+              b.customer_phone, b.payment_status, b.job_notes, b.customer_notes,
+              COALESCE(
+                STRING_AGG(bi.service_name, ', ' ORDER BY COALESCE(bi.is_addon, false), bi.id),
+                ''
+              ) AS services
+       FROM bookings b
+       LEFT JOIN booking_items bi ON bi.booking_id = b.id
+       WHERE b.user_id = $1 AND (
+         ($2 <> '' AND LOWER(b.customer_email) = LOWER($2)) OR
+         ($3 <> '' AND REGEXP_REPLACE(b.customer_phone, '[^0-9]', '', 'g') = REGEXP_REPLACE($3, '[^0-9]', '', 'g'))
+       )
+       GROUP BY b.id
+       ORDER BY b.booking_date DESC, b.start_time DESC`,
+      [userId, email || '', phone || '']
+    );
+
+    res.json({ bookings: bookingsRes.rows });
+  } catch (error) {
+    console.error('Error fetching customer bookings:', error.message);
+    res.status(500).json({ error: 'Failed to fetch customer bookings' });
+  }
+});
+
 // DELETE - Delete customer
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
