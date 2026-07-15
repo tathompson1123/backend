@@ -236,7 +236,7 @@ router.get('/:id/bookings', authenticateToken, async (req, res) => {
     const bookingsRes = await pool.query(
       `SELECT b.id, b.booking_number, b.booking_date, b.start_time, b.end_time,
               b.status, b.total_amount, b.source, b.customer_name, b.customer_email,
-              b.customer_phone, b.payment_status, b.job_notes, b.customer_notes,
+              b.customer_phone, b.payment_status, b.job_notes, b.customer_notes, b.created_at,
               COALESCE(
                 STRING_AGG(bi.service_name, ', ' ORDER BY COALESCE(bi.is_addon, false), bi.id),
                 ''
