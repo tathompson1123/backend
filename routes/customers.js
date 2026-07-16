@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
+const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
 
 // GET - Fetch all customers (deduped: one record per unique email/name)
 router.get('/', authenticateToken, async (req, res) => {
@@ -252,7 +253,16 @@ router.get('/:id/bookings', authenticateToken, async (req, res) => {
       [userId, email || '', phone || '']
     );
 
-    res.json({ bookings: bookingsRes.rows });
+    let timezone = 'America/New_York';
+    try {
+      const bizRes = await pool.query('SELECT state, zip_code FROM business_information WHERE user_id = $1', [userId]);
+      const { state, zip_code } = bizRes.rows[0] || {};
+      timezone = getTimezoneForBusiness(state, zip_code);
+    } catch (e) {
+      console.error('Customer bookings timezone lookup failed:', e.message);
+    }
+
+    res.json({ bookings: bookingsRes.rows, timezone });
   } catch (error) {
     console.error('Error fetching customer bookings:', error.message);
     res.status(500).json({ error: 'Failed to fetch customer bookings' });

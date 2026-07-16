@@ -7,6 +7,21 @@ const { sendBookingEmails } = require('../utils/bookingEmail');
 const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const { normalizeServiceList, resolveBookingServices } = require('../utils/bookingServices');
+const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
+
+// Resolve the business's IANA timezone from their saved location (state + zip).
+// Used so the dashboard can render booking timestamps (created_at) in the owner's
+// local time instead of UTC. Falls back to Eastern when location is missing.
+async function businessTimezone(userId) {
+  try {
+    const r = await pool.query('SELECT state, zip_code FROM business_information WHERE user_id = $1', [userId]);
+    const { state, zip_code } = r.rows[0] || {};
+    return getTimezoneForBusiness(state, zip_code);
+  } catch (e) {
+    console.error('businessTimezone lookup failed:', e.message);
+    return 'America/New_York';
+  }
+}
 
 // Helper: Update customer from booking
 async function updateCustomerFromBooking(booking, userId) {
@@ -112,7 +127,8 @@ router.get('/', authenticateToken, async (req, res) => {
     query += ` GROUP BY b.id ORDER BY b.booking_date, b.start_time`;
 
     const result = await pool.query(query, params);
-    res.json({ bookings: result.rows });
+    const timezone = await businessTimezone(userId);
+    res.json({ bookings: result.rows, timezone });
   } catch (error) {
     console.error('Error fetching bookings:', error.message);
     res.status(500).json({ error: 'Failed to fetch bookings' });
