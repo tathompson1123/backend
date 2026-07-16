@@ -26,12 +26,17 @@ pool.query(`
     submit_text TEXT DEFAULT 'Submit',
     success_message TEXT DEFAULT 'Thanks! We''ll be in touch shortly.',
     theme_color TEXT DEFAULT '#d97706',
+    field_color TEXT DEFAULT '#d1d5db',
     sms_followup BOOLEAN DEFAULT TRUE,
     fields JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
   )
 `).catch(e => console.error('embed_forms migration error:', e.message));
+
+// Backfill field_color on tables created before it existed (accent for input borders).
+pool.query(`ALTER TABLE embed_forms ADD COLUMN IF NOT EXISTS field_color TEXT DEFAULT '#d1d5db'`)
+  .catch(e => console.error('embed_forms field_color migration error:', e.message));
 
 const STANDARD_KEYS = ['name', 'email', 'phone', 'service', 'message'];
 
@@ -131,8 +136,8 @@ router.post('/', authenticateToken, async (req, res) => {
     const name = String(b.name || 'Untitled Form').slice(0, 120);
     const source = slugify(b.source || name);
     const result = await pool.query(
-      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, sms_followup, fields)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, field_color, sms_followup, fields)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
         genPublicId(), req.user.userId, name, source,
         String(b.title || 'Get in touch').slice(0, 160),
@@ -140,6 +145,7 @@ router.post('/', authenticateToken, async (req, res) => {
         String(b.submit_text || 'Submit').slice(0, 60),
         String(b.success_message || "Thanks! We'll be in touch shortly.").slice(0, 300),
         String(b.theme_color || '#d97706').slice(0, 20),
+        String(b.field_color || '#d1d5db').slice(0, 20),
         b.sms_followup !== false,
         JSON.stringify(sanitizeFields(b.fields)),
       ]
@@ -159,8 +165,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `UPDATE embed_forms SET
          name=$1, source=$2, title=$3, description=$4, submit_text=$5,
-         success_message=$6, theme_color=$7, sms_followup=$8, fields=$9, updated_at=NOW()
-       WHERE id=$10 AND user_id=$11 RETURNING *`,
+         success_message=$6, theme_color=$7, field_color=$8, sms_followup=$9, fields=$10, updated_at=NOW()
+       WHERE id=$11 AND user_id=$12 RETURNING *`,
       [
         name, source,
         String(b.title || 'Get in touch').slice(0, 160),
@@ -168,6 +174,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         String(b.submit_text || 'Submit').slice(0, 60),
         String(b.success_message || "Thanks! We'll be in touch shortly.").slice(0, 300),
         String(b.theme_color || '#d97706').slice(0, 20),
+        String(b.field_color || '#d1d5db').slice(0, 20),
         b.sms_followup !== false,
         JSON.stringify(sanitizeFields(b.fields)),
         req.params.id, req.user.userId,
@@ -178,6 +185,39 @@ router.put('/:id', authenticateToken, async (req, res) => {
   } catch (e) {
     console.error('Error updating embed form:', e.message);
     res.status(500).json({ error: 'Failed to update form' });
+  }
+});
+
+// Duplicate an existing form → new public_id + distinct source, everything else copied.
+router.post('/:id/duplicate', authenticateToken, async (req, res) => {
+  try {
+    const src = await pool.query('SELECT * FROM embed_forms WHERE id=$1 AND user_id=$2', [req.params.id, req.user.userId]);
+    if (src.rows.length === 0) return res.status(404).json({ error: 'Form not found' });
+    const f = src.rows[0];
+
+    const name = String(f.name || 'Untitled Form').slice(0, 116) + ' (Copy)';
+
+    // Keep the source tag distinct so the copy tracks as its own lead source.
+    const existing = await pool.query('SELECT source FROM embed_forms WHERE user_id=$1', [req.user.userId]);
+    const taken = new Set(existing.rows.map(r => r.source));
+    const base = slugify(`${f.source}_copy`);
+    let source = base;
+    let n = 2;
+    while (taken.has(source)) source = `${base}_${n++}`.slice(0, 40);
+
+    const result = await pool.query(
+      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, field_color, sms_followup, fields)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [
+        genPublicId(), req.user.userId, name, source,
+        f.title, f.description, f.submit_text, f.success_message, f.theme_color, f.field_color, f.sms_followup,
+        JSON.stringify(Array.isArray(f.fields) ? f.fields : []),
+      ]
+    );
+    res.json({ form: result.rows[0] });
+  } catch (e) {
+    console.error('Error duplicating embed form:', e.message);
+    res.status(500).json({ error: 'Failed to duplicate form' });
   }
 });
 
@@ -212,6 +252,7 @@ router.get('/public/:publicId', async (req, res) => {
       submitText: f.submit_text,
       successMessage: f.success_message,
       themeColor: f.theme_color,
+      fieldColor: f.field_color,
       smsFollowup: f.sms_followup,
       fields: f.fields || [],
       businessName: owner.rows[0]?.business_name || 'us',

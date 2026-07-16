@@ -42,7 +42,7 @@
       '.scf-field{margin-bottom:14px;}',
       '.scf-label{display:block;font-size:.8rem;font-weight:600;margin-bottom:5px;color:#374151;}',
       '.scf-req{color:#ef4444;margin-left:2px;}',
-      '.scf-input,.scf-textarea,.scf-select{width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.92rem;background:#fff;color:#1f2937;}',
+      '.scf-input,.scf-textarea,.scf-select{width:100%;padding:10px 12px;border:1.5px solid var(--scf-field,#d1d5db);border-radius:8px;font-size:.92rem;background:#fff;color:#1f2937;}',
       '.scf-textarea{resize:vertical;min-height:84px;}',
       '.scf-input:focus,.scf-textarea:focus,.scf-select:focus{outline:none;border-color:var(--scf-accent,#d97706);}',
       '.scf-check{display:flex;align-items:flex-start;gap:8px;font-size:.78rem;color:#6b7280;margin-bottom:14px;line-height:1.4;}',
@@ -102,6 +102,7 @@
     container.innerHTML = '';
     var form = el('form', { class: 'scf-form', novalidate: 'true' });
     form.style.setProperty('--scf-accent', cfg.themeColor || '#d97706');
+    form.style.setProperty('--scf-field', cfg.fieldColor || '#d1d5db');
 
     if (cfg.title) form.appendChild(el('h3', { class: 'scf-title' }, cfg.title));
     if (cfg.description) form.appendChild(el('p', { class: 'scf-desc' }, cfg.description));
