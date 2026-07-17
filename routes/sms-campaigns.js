@@ -91,6 +91,12 @@ pool.query(`
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS sms_unsubscribed BOOLEAN DEFAULT FALSE`)
   .catch(e => console.error('customers sms_unsubscribed migration error:', e.message));
 
+// Records that the owner certified their audience is opted in for this specific blast.
+// Stored per-campaign (with created_at as the timestamp) so there's an audit trail of the
+// attestation behind every send.
+pool.query(`ALTER TABLE sms_campaigns ADD COLUMN IF NOT EXISTS consent_certified BOOLEAN DEFAULT FALSE`)
+  .catch(e => console.error('sms_campaigns consent_certified migration error:', e.message));
+
 // Tag outgoing campaign texts in sms_messages so the inbound webhook can recognize a
 // reply as a campaign reply (route it to Leads + email the owner) and show what we sent.
 pool.query(`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS campaign_id INTEGER`)
@@ -358,8 +364,16 @@ router.post('/test-send', authenticateToken, async (req, res) => {
 router.post('/send-now', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { message } = req.body || {};
+    const { message, certified } = req.body || {};
     if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
+
+    // Gate the blast on the owner attesting their audience is opted in. This is an
+    // affirmative certification (must be exactly true), recorded on the campaign row.
+    if (certified !== true) {
+      return res.status(400).json({
+        error: 'Please certify that your contacts have opted in to receive text messages before sending.',
+      });
+    }
 
     const userRow = await pool.query('SELECT twilio_phone_number, plan, email FROM users WHERE id = $1', [userId]);
     if (!userRow.rows[0]?.twilio_phone_number) {
@@ -392,9 +406,10 @@ router.post('/send-now', authenticateToken, async (req, res) => {
     }
 
     // Record the campaign up front so a mid-send crash still leaves a trail.
+    // consent_certified captures the owner's opt-in attestation for this blast.
     const campaignRow = await pool.query(
-      `INSERT INTO sms_campaigns (user_id, message, status, created_at)
-       VALUES ($1, $2, 'pending', NOW()) RETURNING id`,
+      `INSERT INTO sms_campaigns (user_id, message, status, consent_certified, created_at)
+       VALUES ($1, $2, 'pending', TRUE, NOW()) RETURNING id`,
       [userId, message.trim()]
     );
     const campaignId = campaignRow.rows[0].id;
