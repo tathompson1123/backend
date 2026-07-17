@@ -148,6 +148,22 @@ async function sendSMS(to, message, userId, mediaUrl) {
   }
 }
 
+// Normalize a US phone number to E.164 (+1XXXXXXXXXX) for use in TwiML <Number>/Dial.
+// Business phones are stored free-form (e.g. "(555) 123-4567"), so coerce before dialing.
+// Returns null when the value can't be turned into a plausible number.
+function toE164US(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (s.startsWith('+')) {
+    const d = s.slice(1).replace(/\D/g, '');
+    return d.length >= 10 && d.length <= 15 ? '+' + d : null;
+  }
+  const d = s.replace(/\D/g, '');
+  if (d.length === 10) return '+1' + d;
+  if (d.length === 11 && d[0] === '1') return '+' + d;
+  return null;
+}
+
 // Set voice webhook URL on a phone number (for missed call text-back)
 async function setVoiceWebhook(phoneSid, voiceUrl) {
   try {
@@ -191,5 +207,6 @@ module.exports = {
   purchasePhoneNumber,
   sendSMS,
   setVoiceWebhook,
-  releasePhoneNumber
+  releasePhoneNumber,
+  toE164US
 };

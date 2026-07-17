@@ -3,7 +3,7 @@ const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
-const { setVoiceWebhook, getClient } = require('../utils/twilio');
+const { setVoiceWebhook, getClient, toE164US } = require('../utils/twilio');
 const { logClaudeUsage } = require('../utils/claudeUsage');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -20,9 +20,14 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     const { From, To, CallSid } = req.body;
     console.log(`📞 Incoming call: ${From} → ${To} (CallSid: ${CallSid})`);
 
-    // Look up user by their SMS Agent Number
+    // Look up the business by their Twilio number, plus the business phone from
+    // Business Information — the fallback ring-to target so every provisioned
+    // number forwards to the business even without the missed-call agent set up.
     const userResult = await pool.query(
-      'SELECT id, business_name FROM users WHERE twilio_phone_number = $1',
+      `SELECT u.id, u.business_name, bi.phone AS business_phone
+       FROM users u
+       LEFT JOIN business_information bi ON bi.user_id = u.id
+       WHERE u.twilio_phone_number = $1`,
       [To]
     );
 
@@ -39,22 +44,36 @@ router.post('/webhook', express.urlencoded({ extended: false }), async (req, res
     );
 
     const config = configResult.rows[0]?.config;
+    const agentEnabled = !!config?.enabled;
 
-    if (!config?.enabled) {
-      console.log(`⚠️ Missed call agent not enabled for user ${user.id}`);
-      res.type('text/xml');
-      return res.send(hangupXml);
-    }
-
-    const ringToNumber = config?.ringToNumber;
+    // Where to ring: the missed-call agent's configured ring-to number when present,
+    // otherwise the saved business phone. Both are stored free-form, so normalize.
+    const ringToNumber = toE164US(config?.ringToNumber) || toE164US(user.business_phone);
     if (!ringToNumber) {
-      // No ring-to number configured — hang up and treat as missed immediately
-      console.log(`⚠️ No ringToNumber set for user ${user.id}, hanging up`);
+      // Nothing to route to (no ring-to number and no business phone on file).
+      console.log(`⚠️ No forwarding number for user ${user.id} (ringToNumber + business phone both empty), hanging up`);
       res.type('text/xml');
       return res.send(hangupXml);
     }
 
-    // Ring through to the business owner's phone.
+    // Guard against forwarding the Twilio number to itself (would loop forever).
+    if (ringToNumber === toE164US(To)) {
+      console.log(`⚠️ Forwarding number equals the Twilio number for user ${user.id}, hanging up to avoid a loop`);
+      res.type('text/xml');
+      return res.send(hangupXml);
+    }
+
+    // Missed-call agent off → plain call forwarding to the business, no lead/text-back.
+    if (!agentEnabled) {
+      console.log(`📲 Forwarding ${From} → business ${ringToNumber} for user ${user.id} (missed-call agent off)`);
+      res.type('text/xml');
+      return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial answerOnBridge="true"><Number>${ringToNumber}</Number></Dial>
+</Response>`);
+    }
+
+    // Agent on → ring the business with missed/answered tracking (+ optional recording).
     // The /status callback fires when the call ends and handles missed vs. answered.
     const ringTimeout = config?.ringTimeout || 20;
     const statusUrl = `${BACKEND_URL}/api/voice/status`;
@@ -603,6 +622,42 @@ router.post('/fix-webhook', authenticateToken, async (req, res) => {
     res.json({ success: true, number: user.twilio_phone_number, webhookUrl: voiceWebhookUrl });
   } catch (err) {
     console.error('Error fixing voice webhook:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// POST /sync-webhooks — Backfill: point every provisioned number's voice webhook
+// at our handler so ALL business numbers route inbound calls to the business.
+// Admin-only (ADMIN_SECRET), one-off/maintenance. New numbers already get the
+// webhook at purchase time; this covers any legacy numbers that predate it.
+// ============================================
+router.post('/sync-webhooks', express.json(), async (req, res) => {
+  const expectedSecret = process.env.ADMIN_SECRET;
+  if (!expectedSecret || req.body?.adminSecret !== expectedSecret) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, twilio_phone_number, twilio_phone_sid
+       FROM users
+       WHERE twilio_phone_sid IS NOT NULL AND twilio_phone_sid <> ''`
+    );
+    const voiceWebhookUrl = `${BACKEND_URL}/api/voice/webhook`;
+    const results = [];
+    for (const u of rows) {
+      try {
+        await setVoiceWebhook(u.twilio_phone_sid, voiceWebhookUrl);
+        results.push({ userId: u.id, number: u.twilio_phone_number, ok: true });
+      } catch (e) {
+        results.push({ userId: u.id, number: u.twilio_phone_number, ok: false, error: e.message });
+      }
+    }
+    const updated = results.filter(r => r.ok).length;
+    console.log(`🔁 Voice webhook sync: ${updated}/${results.length} numbers set to ${voiceWebhookUrl}`);
+    res.json({ total: results.length, updated, failed: results.length - updated, webhookUrl: voiceWebhookUrl, results });
+  } catch (err) {
+    console.error('Error syncing voice webhooks:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
