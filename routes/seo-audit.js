@@ -10,6 +10,29 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // In-memory rate limit map: userId -> timestamp of last audit
 const auditRateLimits = new Map();
 
+// Validate/repair the AI-generated SEO head block before we hand it over for pasting.
+// Swaps any leaked "SITE_URL" placeholder for the real site URL (or strips it when we
+// don't have one), then drops any <script type="application/ld+json"> block whose JSON
+// doesn't parse — so a malformed block never ships as broken structured data.
+function sanitizeHeadCode(html, siteUrl) {
+  if (!html || typeof html !== 'string') return html || '';
+  let out = html;
+  if (siteUrl) {
+    out = out.replace(/SITE_URL/g, siteUrl);
+  } else {
+    // No known URL — remove any `"url": "SITE_URL"` line rather than ship a placeholder.
+    out = out.replace(/["']url["']\s*:\s*["']SITE_URL["']\s*,?\s*/g, '');
+  }
+  out = out.replace(
+    /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+    (full, json) => {
+      try { JSON.parse(json.trim()); return full; }
+      catch { console.warn('[seo/generate-code] dropped an invalid JSON-LD block'); return ''; }
+    }
+  );
+  return out;
+}
+
 // ─── POST /api/seo-audit/run ─────────────────────────────────
 router.post('/run', authenticateToken, async (req, res) => {
   const userId = req.user.userId;
@@ -275,9 +298,29 @@ router.post('/plan', authenticateToken, async (req, res) => {
   };
   const platformLabel = PLATFORM_LABELS[platform] || platform || 'their website platform';
 
+  // Load the business's real details so any schema/code step can be handed over already
+  // filled in and ready to paste — instead of telling the owner to assemble the code.
+  let bizDetails = { name: '', url: audit.url || '', type: audit.businessType || 'local service business', phone: '', email: '', address: '', city: '', state: '', zip: '' };
+  try {
+    const [bizRes, userRes] = await Promise.all([
+      pool.query('SELECT phone, email, address, city, state, zip_code FROM business_information WHERE user_id = $1', [userId]),
+      pool.query('SELECT business_name FROM users WHERE id = $1', [userId]),
+    ]);
+    const b = bizRes.rows[0] || {};
+    bizDetails = {
+      ...bizDetails,
+      name: userRes.rows[0]?.business_name || '',
+      phone: b.phone || '', email: b.email || '',
+      address: b.address || '', city: b.city || '', state: b.state || '', zip: b.zip_code || '',
+    };
+  } catch (e) {
+    console.warn('[seo/plan] business info load failed:', e.message);
+  }
+
   const systemPrompt = `You are an expert SEO consultant creating detailed implementation plans for small local service businesses.
-You write clear, specific, step-by-step instructions that a non-technical business owner or their web developer can follow.
+You write clear, specific, step-by-step instructions that a COMPLETE BEGINNER with no technical background can follow — plain language, no jargon, spell out every click.
 Every instruction must reference exact menu names, settings panels, button labels, and navigation paths for the specific platform the user is on.
+When a step requires pasting code, you provide the complete, ready-to-paste code already filled in with the business's real details — the owner should never have to write or assemble code themselves.
 You always respond with ONLY valid JSON — no markdown, no explanation, no code blocks.`;
 
   const userMessage = `Based on this SEO audit, create a detailed step-by-step SEO optimization plan.
@@ -289,6 +332,9 @@ AUDIT SUMMARY:
 URL: ${audit.url}
 Business Type: ${audit.businessType}
 Overall Score: ${audit.score}/100
+
+BUSINESS DETAILS (use these EXACT values to pre-fill any code or schema you generate — never leave placeholders like "your business name" or "your city"; if a value is blank, omit that field rather than inventing one — and NEVER invent latitude/longitude):
+${JSON.stringify(bizDetails, null, 2)}
 
 CATEGORY SCORES AND ISSUES:
 ${Object.entries(audit.categories).map(([key, cat]) => `
@@ -323,7 +369,8 @@ Return ONLY a valid JSON object with this exact structure:
             "Exact instruction 2",
             "Exact instruction 3"
           ],
-          "expectedImpact": "What improvement this will make to SEO"
+          "expectedImpact": "What improvement this will make to SEO",
+          "code": "<ONLY if this step requires pasting code (schema/JSON-LD, meta tags, etc.): the COMPLETE, ready-to-paste code with the BUSINESS DETAILS already filled in. Otherwise an empty string. Escape it as valid JSON.>"
         }
       ]
     }
@@ -333,7 +380,14 @@ Return ONLY a valid JSON object with this exact structure:
 Create 3 phases ordered by priority (critical fixes first, then high impact, then polish).
 Each phase should have 2-4 steps. Each step should have 3-4 specific instructions.
 All instructions must name the exact location in ${platformLabel} — never say "go to your settings", always say the full path for ${platformLabel}.
-Do NOT pad with generic advice.`;
+Do NOT pad with generic advice.
+
+Write for a COMPLETE BEGINNER: plain language, no jargon, spell out every click.
+When a step involves adding code (FAQPage schema, LocalBusiness/${bizDetails.type} schema, meta tags, etc.), you MUST:
+ - Put the FULL, ready-to-paste code in that step's "code" field, with the BUSINESS DETAILS already filled in (real name, url, phone, address, city, state) — never placeholders and never invented latitude/longitude.
+ - Wrap JSON-LD in <script type="application/ld+json"> ... </script> and make sure it is valid JSON.
+ - In "instructions", simply tell them where to click and to copy the code shown below and paste it — do NOT ask them to write, edit, or assemble any code themselves, and do NOT describe the code in prose.
+ - For a FAQPage step, write 4-5 real question/answer pairs that ${bizDetails.type} customers in ${bizDetails.city || 'the area'} actually ask, using the business details, and put the finished FAQPage JSON-LD in the "code" field.`;
 
   try {
     const message = await anthropic.messages.create({
@@ -500,8 +554,8 @@ Rules for headCode — include ALL of the following in order:
 3. SPEAKABLE JSON-LD block (separate script tag):
    - @type: SpeakableSpecification inside a WebPage wrapper
    - This tells Google AI Mode which content to read aloud and cite
-   - Structure:
-     { "@context": "https://schema.org", "@type": "WebPage", "name": "BusinessName - City, State", "url": "SITE_URL",
+   - Structure (fill "name" with the real business name + city/state, and "url" with the real business URL from BUSINESS INFO — never output the literal text SITE_URL; if no URL is available, omit the "url" field entirely):
+     { "@context": "https://schema.org", "@type": "WebPage", "name": "<Real Business Name> - <City>, <State>", "url": "<real business url>",
        "speakable": { "@type": "SpeakableSpecification", "cssSelector": ["h1", "h2", ".hero-text", "p:first-of-type"] } }
 
 4. FAQPAGE JSON-LD block (separate script tag):
@@ -546,6 +600,12 @@ The llms.txt should be written so that if an AI reads it, it will cite THIS busi
     return res.status(500).json({ error: `Failed to generate SEO code: ${err.message}` });
   }
 
+  // Sanitize the AI-generated block before we ship it for pasting:
+  //  1) swap any leaked "SITE_URL" placeholder for the real site URL (or strip it), and
+  //  2) drop any <script type="application/ld+json"> block whose JSON doesn't parse,
+  //     so we never hand the user broken structured data.
+  const cleanHead = sanitizeHeadCode(seoCode.headCode, siteUrl);
+
   // Inject tracking pixel before closing comment.
   // Must be a publicly reachable URL — never localhost in production (visitor browsers can't reach it).
   const backendUrl = (
@@ -554,9 +614,9 @@ The llms.txt should be written so that if an AI reads it, it will cite THIS busi
     'https://backend-production-ab50.up.railway.app'
   ).replace(/\/$/, '');
   const trackingPixel = `<script>(function(){try{var p=new Image();p.src='${backendUrl}/api/track/${userId}?r='+encodeURIComponent(document.referrer)+'&u='+encodeURIComponent(location.pathname);}catch(e){}})();</script>`;
-  const headCode = seoCode.headCode.includes('<!-- End SORCE SEO -->')
-    ? seoCode.headCode.replace('<!-- End SORCE SEO -->', `${trackingPixel}\n<!-- End SORCE SEO -->`)
-    : seoCode.headCode + '\n' + trackingPixel;
+  const headCode = cleanHead.includes('<!-- End SORCE SEO -->')
+    ? cleanHead.replace('<!-- End SORCE SEO -->', `${trackingPixel}\n<!-- End SORCE SEO -->`)
+    : cleanHead + '\n' + trackingPixel;
 
   // Save generated code + timestamp to the most recent audit row
   pool.query(
