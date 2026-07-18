@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logClaudeUsage } = require('../utils/claudeUsage');
+const { buildLocalBusinessSchema, buildFaqSchema } = require('../utils/seoSchema');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -419,6 +420,23 @@ When a step involves adding code (FAQPage schema, LocalBusiness/${bizDetails.typ
       } else {
         throw parseErr;
       }
+    }
+
+    // Reliability pass: overwrite the code for schema/FAQ steps with deterministic,
+    // always-valid JSON-LD built from the business record — don't trust the model to
+    // hand-write valid schema. (Other code steps, e.g. meta tags, keep the model's code.)
+    try {
+      const localBizCode = buildLocalBusinessSchema(bizDetails);
+      const faqCode = buildFaqSchema(bizDetails);
+      for (const phase of (plan.phases || [])) {
+        for (const step of (phase.steps || [])) {
+          const hay = `${step.title || ''} ${step.category || ''} ${(step.instructions || []).join(' ')}`.toLowerCase();
+          if (/\bfaq/.test(hay)) step.code = faqCode;
+          else if (/schema|json-?ld|structured data|localbusiness|rich result/.test(hay)) step.code = localBizCode;
+        }
+      }
+    } catch (e) {
+      console.warn('[seo/plan] deterministic schema injection failed:', e.message);
     }
 
     // Save plan to the most recent audit record for this user
