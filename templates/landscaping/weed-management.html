@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<!--
+  Weed Management — benefit-driven landing page (embed / Wix HTML block).
+  Same structure & animation system as the Thompson's PPF / window-tint v2 pages,
+  recolored to a botanical green palette. No header/footer — just a big hero + content.
+
+  BEFORE YOU PUBLISH:
+   • Replace the phone number (555) 123-4567 and the SMS link +15551234567 everywhere
+     with the real business number.
+   • Swap the Unsplash placeholder images for your OWN before/after job photos — real
+     weedy-vs-treated lawn photos convert far better than stock.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weed Management | Protect Your Lawn, Plants &amp; Soil</title>
+  <meta name="description" content="Professional weed management that protects your plants, restores your soil, and keeps your yard healthy. See what weeds really do to your landscape — and why homeowners should act early." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* Light botanical theme — cream backgrounds, deep-green text, garden-green accents */
+      --panel: #ffffff;           /* section backgrounds */
+      --cream: #f5f3ea;           /* page / deepest panels */
+      --soft: #e7ece0;            /* cards / soft panels / bar tracks */
+      --green: #4c8b3f;           /* green fills (buttons, bars, icons) */
+      --green-bright: #6bb257;    /* hover / brightest green */
+      --green-deep: #2c6124;      /* green accent TEXT (readable on light) */
+      --ink: #1d2a18;             /* primary text (deep green-charcoal) */
+      --on-green: #f4fbef;        /* text on green fills */
+      --muted: rgba(29, 42, 24, 0.66);
+      --clay: #b45a2b;            /* warning / "damage" accent */
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      color: var(--ink); background: var(--cream);
+      line-height: 1.6; overflow-x: hidden;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ---------- Shared buttons / type ---------- */
+    .btn { display: inline-flex; align-items: center; gap: 0.6rem; padding: 1.1rem 2.4rem; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; border: 2px solid transparent; border-radius: 3px; cursor: pointer; transition: transform 0.3s, background 0.3s, color 0.3s, box-shadow 0.3s; }
+    .btn-primary { background: var(--green); color: var(--on-green); }
+    .btn-primary:hover { background: var(--green-bright); transform: translateY(-3px); box-shadow: 0 16px 40px rgba(76, 139, 63, 0.4); }
+    .btn-ghost { color: var(--ink); border-color: rgba(29, 42, 24, 0.28); }
+    .btn-ghost:hover { background: var(--ink); color: var(--cream); border-color: var(--ink); transform: translateY(-3px); }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ---------- Cinematic hero ---------- */
+    .phero { position: relative; min-height: 640px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 6.5rem 2rem; overflow: hidden; isolation: isolate; }
+    .phero-bg {
+      position: absolute; inset: -6%; z-index: -3;
+      background: url('https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1920&q=85') center/cover no-repeat;
+      animation: kenBurns 26s ease-in-out infinite alternate; will-change: transform;
+    }
+    @keyframes kenBurns { 0% { transform: scale(1) translate(0, 0); } 100% { transform: scale(1.14) translate(-1.5%, -2%); } }
+    .phero-overlay {
+      position: absolute; inset: 0; z-index: -2;
+      background:
+        radial-gradient(circle at 50% 26%, rgba(76, 139, 63, 0.18) 0%, transparent 55%),
+        linear-gradient(180deg, rgba(245, 243, 234, 0.84) 0%, rgba(245, 243, 234, 0.70) 42%, rgba(245, 243, 234, 0.96) 100%);
+    }
+    .phero-sweep { position: absolute; top: 0; bottom: 0; left: -30%; width: 22%; z-index: -1; background: linear-gradient(105deg, transparent, rgba(107, 178, 87, 0.18), transparent); transform: rotate(7deg); animation: pheroSweep 8s ease-in-out 1.6s infinite; }
+    @keyframes pheroSweep { 0% { left: -30%; } 55%, 100% { left: 130%; } }
+
+    .phero-inner { position: relative; z-index: 1; max-width: 940px; }
+    .page-eyebrow { display: inline-block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--green-deep); font-weight: 600; margin-bottom: 1.75rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 0.3s forwards; }
+    .page-eyebrow::before, .page-eyebrow::after { content: ''; display: inline-block; width: 30px; height: 1px; background: var(--green); vertical-align: middle; margin: 0 0.85rem; }
+    .page-title { font-family: 'Playfair Display', serif; font-size: clamp(2.6rem, 6.5vw, 5.2rem); font-weight: 900; line-height: 1.04; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 1s var(--ease-out) 0.5s forwards; }
+    .page-title em { font-style: normal; background: linear-gradient(120deg, var(--green) 0%, var(--green-bright) 50%, var(--green) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .page-lede { font-size: clamp(1.05rem, 1.5vw, 1.3rem); color: var(--ink); max-width: 760px; margin: 0 auto 2.5rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 0.8s forwards; }
+    .page-ctas { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; opacity: 0; animation: fadeUp 0.8s var(--ease-spring) 1.05s forwards; }
+    .hero-call { margin-top: 1.1rem; font-size: 0.98rem; color: var(--muted); opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.2s forwards; }
+    .hero-call a { color: var(--green-deep); font-weight: 700; border-bottom: 1px solid rgba(76, 139, 63, 0.4); transition: color 0.3s; }
+    .hero-call a:hover { color: var(--green-bright); }
+    .hero-trust { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 2.25rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.3s forwards; }
+    .hero-chip { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase; font-weight: 600; color: var(--ink); border: 1px solid rgba(76, 139, 63, 0.5); border-radius: 100px; padding: 0.5rem 1.1rem; background: rgba(255, 255, 255, 0.72); backdrop-filter: blur(6px); }
+    .hero-chip span { color: var(--green-deep); }
+
+    /* ---------- Reveal-on-scroll ---------- */
+    .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.8s var(--ease-out), transform 0.8s var(--ease-out); }
+    .reveal.in-view { opacity: 1; transform: translateY(0); }
+    .reveal-stagger > * { opacity: 0; transform: translateY(30px); transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out); }
+    .reveal-stagger.in-view > *:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0s; }
+    .reveal-stagger.in-view > *:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.1s; }
+    .reveal-stagger.in-view > *:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.2s; }
+    .reveal-stagger.in-view > *:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 0.3s; }
+    .reveal-stagger.in-view > *:nth-child(5) { opacity: 1; transform: translateY(0); transition-delay: 0.4s; }
+    .reveal-stagger.in-view > *:nth-child(6) { opacity: 1; transform: translateY(0); transition-delay: 0.5s; }
+
+    /* ---------- Common section styles ---------- */
+    section { padding: 6rem 2rem; }
+    .container { max-width: 1280px; margin: 0 auto; }
+    .section-eyebrow { display: block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--green-deep); font-weight: 600; margin-bottom: 1rem; }
+    .section-title { font-family: 'Playfair Display', serif; font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; line-height: 1.15; margin-bottom: 1rem; }
+    .section-lede { color: var(--muted); max-width: 640px; font-size: 1.02rem; }
+    .section-head { text-align: center; margin: 0 auto 4rem; max-width: 760px; }
+    .section-head .section-lede { margin: 0 auto; }
+
+    /* ---------- Split (image + content) ---------- */
+    .what { background: var(--panel); }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center; }
+    .split.flip .split-image { order: 2; }
+    .split-image { position: relative; aspect-ratio: 4/5; border-radius: 6px; overflow: hidden; box-shadow: 0 30px 60px rgba(29, 42, 24, 0.28); }
+    .split-image img { width: 100%; height: 100%; object-fit: cover; }
+    .split-image::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 60%, rgba(29, 42, 24, 0.4) 100%); }
+    .split-content h2 { margin-bottom: 1.5rem; }
+    .split-content p { color: var(--muted); margin-bottom: 1rem; font-size: 1.05rem; }
+    .split-content ul { list-style: none; margin-top: 1.5rem; }
+    .split-content li { padding: 0.75rem 0 0.75rem 2rem; position: relative; color: var(--ink); border-bottom: 1px solid rgba(76, 139, 63, 0.16); }
+    .split-content li::before { content: '✓'; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; background: var(--green); color: var(--on-green); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; }
+
+    /* ---------- Damage cards (plants / soil / awareness) ---------- */
+    .damage { background: var(--cream); }
+    .damage.alt { background: linear-gradient(180deg, var(--panel), var(--cream)); }
+    .card-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+    .card-grid.three { grid-template-columns: repeat(3, 1fr); }
+    .dcard { text-align: left; padding: 2.25rem 1.75rem; border: 1px solid rgba(76, 139, 63, 0.2); border-radius: 10px; background: var(--panel); position: relative; overflow: hidden; transition: transform 0.4s var(--ease-out), border-color 0.4s, box-shadow 0.4s; }
+    .dcard:hover { transform: translateY(-6px); border-color: var(--green-deep); box-shadow: 0 26px 60px rgba(29, 42, 24, 0.14); }
+    .dcard .ic { width: 60px; height: 60px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.7rem; color: var(--green-deep); background: rgba(76, 139, 63, 0.12); border: 1px solid var(--green); margin-bottom: 1.25rem; }
+    .dcard.warn .ic { color: var(--clay); background: rgba(180, 90, 43, 0.1); border-color: rgba(180, 90, 43, 0.5); }
+    .dcard h3 { font-family: 'Playfair Display', serif; font-size: 1.35rem; margin-bottom: 0.5rem; line-height: 1.2; }
+    .dcard p { color: var(--muted); font-size: 0.96rem; }
+
+    /* ---------- Soil split with layered visual ---------- */
+    .soil { background: var(--panel); }
+    .soilfig { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid rgba(76, 139, 63, 0.22); box-shadow: 0 30px 70px rgba(29, 42, 24, 0.2); background: var(--cream); }
+    .soil-band { position: relative; display: flex; align-items: center; padding: 1.1rem 1.5rem; font-weight: 600; font-size: 0.9rem; }
+    .soil-turf { height: 120px; background: linear-gradient(180deg, #6bb257, #3f7d34); color: var(--on-green); }
+    .soil-turf.weedy { background: linear-gradient(180deg, #9aa14b, #6f7a34); }
+    .soil-root { height: 22px; background: linear-gradient(180deg, rgba(76,139,63,0.25), rgba(76,139,63,0.05)); color: var(--muted); font-size: 0.72rem; }
+    .soil-dirt { height: 150px; background: linear-gradient(180deg, #5b4632, #3c2e20); color: rgba(255,255,255,0.72); }
+    .soil-dirt.depleted { background: linear-gradient(180deg, #7a6a58, #574a3a); }
+    .soil-tag { position: absolute; top: 0.9rem; right: 0.9rem; font-size: 0.66rem; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; padding: 0.3rem 0.7rem; border-radius: 4px; }
+    .soil-tag.bad { background: rgba(180, 90, 43, 0.9); color: #fff; }
+    .soil-tag.good { background: rgba(76, 139, 63, 0.92); color: #fff; }
+    .soil-two { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .soil-cap { text-align: center; font-size: 0.78rem; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600; margin-top: 0.85rem; color: var(--muted); }
+
+    /* ---------- Before / After slider ---------- */
+    .effects { background: linear-gradient(180deg, var(--cream), var(--panel)); }
+    .ba {
+      --pos: 50%; position: relative; max-width: 1040px; margin: 0 auto;
+      height: 0; padding-top: 56.25%; border-radius: 10px; overflow: hidden;
+      border: 1px solid rgba(76, 139, 63, 0.28); box-shadow: 0 40px 90px rgba(29, 42, 24, 0.35);
+      user-select: none; touch-action: pan-y; background: var(--soft);
+    }
+    .ba-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .ba-before { position: absolute; inset: 0; z-index: 2; clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
+    .ba-tag { position: absolute; top: 1.1rem; z-index: 4; padding: 0.5rem 0.9rem; border-radius: 4px; font-size: 0.72rem; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; backdrop-filter: blur(4px); }
+    .ba-tag small { display: block; font-weight: 400; letter-spacing: 0.5px; text-transform: none; font-size: 0.68rem; opacity: 0.9; margin-top: 2px; }
+    .ba-tag.bad { left: 1.1rem; background: rgba(120, 70, 35, 0.66); color: #ffe6d4; border: 1px solid rgba(220, 140, 90, 0.55); }
+    .ba-tag.good { right: 1.1rem; text-align: right; background: rgba(76, 139, 63, 0.28); color: #eafbe2; border: 1px solid rgba(107, 178, 87, 0.7); }
+    .ba-handle { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 2px; background: var(--green-bright); transform: translateX(-50%); z-index: 5; pointer-events: none; box-shadow: 0 0 22px rgba(107, 178, 87, 0.7); }
+    .ba-grip { position: absolute; top: 50%; left: var(--pos); transform: translate(-50%, -50%); z-index: 6; width: 50px; height: 50px; border-radius: 50%; background: var(--green); color: var(--on-green); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700; pointer-events: none; box-shadow: 0 6px 22px rgba(29, 42, 24, 0.5); }
+    .ba-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; z-index: 7; }
+    .ba-caption { text-align: center; color: var(--muted); font-size: 0.92rem; margin-top: 1.5rem; }
+    .ba-caption b { color: var(--green-deep); }
+
+    /* ---------- Cost bars ---------- */
+    .cost { background: var(--cream); }
+    .bar-wrap { max-width: 760px; margin: 0 auto; }
+    .bar-row { margin-bottom: 1.6rem; }
+    .bar-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+    .bar-head b { font-family: 'Playfair Display', serif; color: var(--ink); font-size: 1.05rem; }
+    .bar-head span { color: var(--muted); font-size: 0.85rem; }
+    .bar-track { height: 16px; background: var(--soft); border-radius: 10px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 10px; background: linear-gradient(90deg, var(--clay), #d98a4f); width: 0; transition: width 1.4s var(--ease-out); }
+    .bar-fill.good { background: linear-gradient(90deg, var(--green-deep), var(--green) 60%, var(--green-bright)); box-shadow: 0 0 20px rgba(76, 139, 63, 0.45); }
+    .in-view .bar-fill { width: var(--w); }
+
+    /* ---------- Comparison ---------- */
+    .compare { background: linear-gradient(180deg, var(--panel), var(--cream)); }
+    .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    .compare-card { background: var(--panel); border: 1px solid rgba(76, 139, 63, 0.18); padding: 2.5rem; border-radius: 8px; position: relative; transition: transform 0.5s var(--ease-out), border-color 0.5s, box-shadow 0.5s; }
+    .compare-card.featured { border-color: var(--green-deep); box-shadow: 0 30px 80px rgba(76, 139, 63, 0.18); transform: translateY(-4px); }
+    .compare-card.featured::before { content: 'RECOMMENDED'; position: absolute; top: -12px; left: 2rem; background: var(--green); color: var(--on-green); padding: 0.4rem 0.85rem; font-size: 0.68rem; letter-spacing: 1.5px; font-weight: 700; border-radius: 3px; }
+    .compare-card h3 { font-family: 'Playfair Display', serif; font-size: 1.6rem; margin-bottom: 0.4rem; }
+    .compare-card .compare-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .compare-list { list-style: none; }
+    .compare-list li { padding: 0.85rem 0; border-bottom: 1px solid rgba(29, 42, 24, 0.08); display: flex; gap: 0.75rem; align-items: flex-start; color: var(--muted); }
+    .compare-list li::before { content: '✕'; color: rgba(180, 90, 43, 0.7); flex-shrink: 0; font-weight: 700; }
+    .compare-card.featured .compare-list li::before { content: '✓'; color: var(--green-deep); font-weight: 700; }
+    .compare-card.featured .compare-list li { color: var(--ink); }
+
+    /* ---------- Assurance band ---------- */
+    .assure { background: var(--panel); }
+    .assure-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
+    .assure-card { text-align: center; padding: 2.75rem 1.75rem; border: 1px solid rgba(76, 139, 63, 0.22); border-radius: 12px; background: linear-gradient(180deg, var(--soft), var(--cream)); position: relative; overflow: hidden; transition: transform 0.4s var(--ease-out), border-color 0.4s, box-shadow 0.4s; }
+    .assure-card:hover { transform: translateY(-6px); border-color: var(--green-deep); box-shadow: 0 30px 70px rgba(29, 42, 24, 0.18); }
+    .assure-card::after { content: ''; position: absolute; top: -60%; left: -40%; width: 50%; height: 220%; background: linear-gradient(105deg, transparent, rgba(107, 178, 87, 0.12), transparent); transform: rotate(8deg); transition: left 0.8s var(--ease-out); }
+    .assure-card:hover::after { left: 140%; }
+    .assure-icon { width: 78px; height: 78px; border-radius: 50%; margin: 0 auto 1.4rem; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--green-deep); background: rgba(76, 139, 63, 0.12); border: 1px solid var(--green); }
+    .assure-card .big { font-family: 'Playfair Display', serif; font-size: 2.4rem; color: var(--green-deep); line-height: 1; margin-bottom: 0.3rem; }
+    .assure-card h3 { font-family: 'Playfair Display', serif; font-size: 1.45rem; margin-bottom: 0.5rem; }
+    .assure-card p { color: var(--muted); font-size: 0.97rem; }
+
+    /* ---------- Benefits strip ---------- */
+    .bstrip-section { background: var(--cream); }
+    .bstrip { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; max-width: 1040px; margin: 0 auto; }
+    .bchip { display: flex; align-items: center; gap: 0.85rem; background: var(--panel); border: 1px solid rgba(76, 139, 63, 0.2); border-radius: 100px; padding: 0.85rem 1.5rem; transition: border-color 0.3s, transform 0.3s; }
+    .bchip:hover { border-color: var(--green-deep); transform: translateY(-3px); }
+    .bchip .ic { width: 38px; height: 38px; border-radius: 50%; background: rgba(76, 139, 63, 0.12); border: 1px solid var(--green); color: var(--green-deep); display: flex; align-items: center; justify-content: center; font-size: 1.05rem; flex-shrink: 0; }
+    .bchip b { font-size: 0.95rem; color: var(--ink); font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; }
+
+    /* ---------- Process ---------- */
+    .process { background: var(--panel); position: relative; overflow: hidden; }
+    .process::before { content: ''; position: absolute; left: 50%; top: 8rem; bottom: 5rem; width: 1px; background: linear-gradient(180deg, transparent, var(--green), transparent); transform: translateX(-50%); opacity: 0.4; }
+    .step-grid { display: flex; flex-direction: column; gap: 4rem; }
+    .step { display: grid; grid-template-columns: 1fr 60px 1fr; gap: 2rem; align-items: start; }
+    .step-num { width: 56px; height: 56px; border-radius: 50%; background: var(--green); color: var(--on-green); display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 700; box-shadow: 0 0 0 6px var(--panel), 0 0 0 7px rgba(76, 139, 63, 0.4); grid-column: 2; justify-self: center; align-self: start; margin-top: -0.9rem; }
+    .step:nth-child(odd) .step-content { grid-column: 1; text-align: right; }
+    .step:nth-child(even) .step-content { grid-column: 3; }
+    .step-content h4 { font-family: 'Playfair Display', serif; font-size: 1.4rem; line-height: 1.2; margin-bottom: 0.5rem; color: var(--ink); }
+    .step-content p { color: var(--muted); font-size: 0.97rem; }
+
+    /* ---------- Pricing ---------- */
+    .pricing { background: var(--cream); }
+    .price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
+    .price-card { background: var(--panel); border: 1px solid rgba(76, 139, 63, 0.18); padding: 2.5rem 2rem; border-radius: 8px; text-align: center; transition: transform 0.4s, border-color 0.4s, box-shadow 0.4s; }
+    .price-card:hover { transform: translateY(-6px); border-color: var(--green-deep); box-shadow: 0 30px 60px rgba(29, 42, 24, 0.18); }
+    .price-card.featured { border-color: var(--green-deep); box-shadow: 0 20px 50px rgba(76, 139, 63, 0.2); }
+    .price-card .tier { font-size: 0.78rem; letter-spacing: 3px; text-transform: uppercase; color: var(--green-deep); margin-bottom: 1rem; }
+    .price-card .price-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .price-list { list-style: none; text-align: left; margin-bottom: 2rem; }
+    .price-list li { padding: 0.6rem 0 0.6rem 1.75rem; position: relative; color: var(--muted); font-size: 0.92rem; border-bottom: 1px solid rgba(29, 42, 24, 0.06); }
+    .price-list li::before { content: '✓'; position: absolute; left: 0; color: var(--green-deep); font-weight: 700; }
+
+    /* ---------- FAQ ---------- */
+    .faq { background: var(--panel); }
+    .faq-list { max-width: 820px; margin: 0 auto; }
+    .faq-item { border-bottom: 1px solid rgba(76, 139, 63, 0.18); padding: 1.5rem 0; }
+    .faq-q { display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 1rem; font-family: 'Playfair Display', serif; font-size: 1.2rem; color: var(--ink); }
+    .faq-toggle { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--green); display: flex; align-items: center; justify-content: center; color: var(--green-deep); transition: transform 0.4s var(--ease-out); }
+    .faq-item[open] .faq-toggle { transform: rotate(45deg); background: var(--green); color: var(--on-green); }
+    .faq-a { color: var(--muted); padding-top: 1rem; font-size: 0.97rem; }
+    .faq-q::-webkit-details-marker { display: none; }
+
+    /* ---------- CTA band ---------- */
+    .cta-band { background: linear-gradient(120deg, #26401f 0%, #3f6a32 50%, #26401f 100%); text-align: center; padding: 6rem 2rem; position: relative; overflow: hidden; color: var(--on-green); }
+    .cta-band::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(107, 178, 87, 0.28) 0%, transparent 60%); }
+    .cta-band > * { position: relative; z-index: 1; }
+    .cta-band h2 { font-family: 'Playfair Display', serif; font-size: clamp(2rem, 4vw, 3rem); margin-bottom: 1rem; }
+    .cta-band p { color: rgba(244, 251, 239, 0.85); margin-bottom: 2rem; font-size: 1.05rem; max-width: 640px; margin-left: auto; margin-right: auto; }
+    .cta-band .btn-primary { background: var(--on-green); color: var(--green-deep); }
+    .cta-band .btn-primary:hover { background: #ffffff; }
+    .cta-trust { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
+    .cta-trust span { font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase; color: #d4ecc9; font-weight: 600; }
+    .cta-trust span + span::before { content: '·'; margin-right: 0.75rem; color: rgba(244,251,239,0.5); }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 900px) {
+      .split, .split.flip .split-image { grid-template-columns: 1fr; gap: 2rem; }
+      .split.flip .split-image { order: 0; }
+      .card-grid, .card-grid.three, .compare-grid, .assure-grid, .price-grid, .soil-two { grid-template-columns: 1fr; gap: 1.5rem; }
+      .ba { padding-top: 72%; }
+      .ba-tag { font-size: 0.6rem; padding: 0.35rem 0.55rem; max-width: 46%; }
+      .ba-tag small { display: none; }
+      .ba-grip { width: 40px; height: 40px; font-size: 0.95rem; }
+      .step { grid-template-columns: 60px 1fr; gap: 1.25rem; }
+      .step-num { grid-column: 1; }
+      .step:nth-child(odd) .step-content,
+      .step:nth-child(even) .step-content { grid-column: 2; text-align: left; }
+      .process::before { left: 28px; transform: none; }
+      section { padding: 4.5rem 1.5rem; }
+      .phero { min-height: 500px; padding: 4rem 1.5rem 4.5rem; }
+    }
+    @media (max-width: 640px) {
+      .card-grid { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ HERO ============ -->
+  <header class="phero">
+    <div class="phero-bg" aria-hidden="true"></div>
+    <div class="phero-overlay" aria-hidden="true"></div>
+    <div class="phero-sweep" aria-hidden="true"></div>
+
+    <div class="phero-inner">
+      <span class="page-eyebrow">Professional weed management</span>
+      <h1 class="page-title">Win the War on <em>Weeds</em></h1>
+      <p class="page-lede">
+        Weeds don't just make a yard look unkept — they quietly steal water, nutrients, and light from the
+        plants you love and break down the soil underneath. We stop them at the root and keep your
+        landscape healthy, thick, and thriving all season long.
+      </p>
+      <div class="page-ctas">
+        <a href="sms:+15551234567?&body=I%27m%20interested%20in%20weed%20management%20for%20my%20yard" target="_top" class="btn btn-primary">Get a Free Quote</a>
+      </div>
+      <p class="hero-call">Or call <a href="tel:+15551234567" target="_top">(555)&nbsp;123-4567</a></p>
+      <div class="hero-trust">
+        <span class="hero-chip"><span>🌱</span> Protects your plants</span>
+        <span class="hero-chip"><span>🪱</span> Healthier soil</span>
+        <span class="hero-chip"><span>🗓</span> Season-long control</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ WHY WEEDS MATTER (split) ============ -->
+  <section class="what">
+    <div class="container">
+      <div class="split">
+        <div class="split-image reveal">
+          <img src="https://images.unsplash.com/photo-1592419044706-39796d40f98c?w=900&q=85" alt="Weeds invading a garden bed" />
+        </div>
+        <div class="split-content reveal">
+          <span class="section-eyebrow">Why it matters</span>
+          <h2 class="section-title">Weeds aren't just an eyesore.</h2>
+          <p>Every weed in your yard is a competitor. It's fighting your grass, flowers, shrubs, and trees for the exact same water, nutrients, and sunlight — and weeds are built to win. They grow faster, seed by the thousands, and root aggressively.</p>
+          <p>Left alone, a few weeds become a takeover. The lawn thins, beds get patchy, and the plants you paid for start losing ground. Managing weeds early protects everything else in your landscape.</p>
+          <ul>
+            <li>Stops weeds from stealing water &amp; nutrients from your plants</li>
+            <li>Keeps grass thick so weeds can't find bare soil to invade</li>
+            <li>Protects the soil biology your plants depend on</li>
+            <li>Saves you money — early control is far cheaper than a rescue</li>
+            <li>Keeps your yard looking cared-for and boosts curb appeal</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WHAT WEEDS DO TO YOUR PLANTS ============ -->
+  <section class="damage">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">The hidden damage</span>
+        <h2 class="section-title">What weeds do to your plants.</h2>
+        <p class="section-lede">A weed isn't a neutral neighbor — it's actively taking resources away from the plants you want. Here's what's really happening below the surface.</p>
+      </div>
+      <div class="card-grid reveal-stagger">
+        <div class="dcard warn">
+          <div class="ic">💧</div>
+          <h3>They steal water</h3>
+          <p>Weeds have thirsty, fast-spreading roots that soak up moisture before it reaches your grass and flowers — leaving your plants stressed and drought-prone even when you water.</p>
+        </div>
+        <div class="dcard warn">
+          <div class="ic">🌿</div>
+          <h3>They rob nutrients</h3>
+          <p>Nitrogen, phosphorus, potassium — the same fertilizer feeding your lawn feeds the weeds first. Aggressive weeds pull nutrients out of the ground faster than your desirable plants can.</p>
+        </div>
+        <div class="dcard warn">
+          <div class="ic">☀️</div>
+          <h3>They block sunlight</h3>
+          <p>Tall, broadleaf weeds shade out low-growing grass and young plants. Starved of light, your lawn thins — which opens up even more bare ground for the next wave of weeds.</p>
+        </div>
+        <div class="dcard warn">
+          <div class="ic">🐛</div>
+          <h3>They harbor pests &amp; disease</h3>
+          <p>Weeds are a hideout and host for insects, fungus, and lawn disease. A weedy yard invites the very pests that go on to attack your healthy plants, too.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WHAT WEEDS DO TO YOUR SOIL (split + figure) ============ -->
+  <section class="soil">
+    <div class="container">
+      <div class="split flip">
+        <div class="split-image reveal" style="aspect-ratio:auto;box-shadow:none;background:transparent;">
+          <div class="soilfig">
+            <div class="soil-two">
+              <div>
+                <div class="soil-band soil-turf weedy" style="border-radius:10px 0 0 0;"><span>Weedy turf</span><span class="soil-tag bad">Struggling</span></div>
+                <div class="soil-band soil-root">Shallow, crowded roots</div>
+                <div class="soil-band soil-dirt depleted" style="border-radius:0 0 0 10px;">Depleted, compacted soil</div>
+              </div>
+              <div>
+                <div class="soil-band soil-turf" style="border-radius:0 10px 0 0;"><span>Managed turf</span><span class="soil-tag good">Thriving</span></div>
+                <div class="soil-band soil-root">Deep, healthy roots</div>
+                <div class="soil-band soil-dirt" style="border-radius:0 0 10px 0;">Rich, living soil</div>
+              </div>
+            </div>
+          </div>
+          <p class="soil-cap">Same yard, two futures — it starts in the soil</p>
+        </div>
+        <div class="split-content reveal">
+          <span class="section-eyebrow">Below the surface</span>
+          <h2 class="section-title">What weeds do to your soil.</h2>
+          <p>The real battle happens underground. Weeds don't just take from your plants — they degrade the soil that every plant depends on, and that damage compounds season after season.</p>
+          <ul>
+            <li><b>Nutrient depletion</b> — heavy weed growth mines the soil, leaving less behind for your grass and beds.</li>
+            <li><b>Chemical warfare</b> — some weeds release natural compounds (allelopathy) that stunt or poison nearby plants.</li>
+            <li><b>Compaction &amp; competition</b> — dense weed roots crowd the root zone and squeeze out beneficial growth.</li>
+            <li><b>Erosion &amp; bare spots</b> — when annual weeds die back, they leave gaps where topsoil washes away.</li>
+            <li><b>Disrupted soil life</b> — a weed-choked lawn undermines the microbes and structure that keep soil fertile.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BEFORE / AFTER ============ -->
+  <section class="effects" id="effects">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">See the difference</span>
+        <h2 class="section-title">Weed-choked vs. managed.</h2>
+        <p class="section-lede">Drag the handle. Left is a lawn losing the fight — patchy, invaded, and thinning. Right is the same yard under a weed-management program: thick, even, and green.</p>
+      </div>
+
+      <div class="ba reveal" id="baSlider">
+        <img class="ba-img" src="https://images.unsplash.com/photo-1560749003-f4b1e17e2dfd?w=1200&q=85" alt="Lush, weed-free lawn" />
+        <div class="ba-before" aria-hidden="true">
+          <img class="ba-img" src="https://images.unsplash.com/photo-1591857177580-dc82b9ac4e1e?w=1200&q=85" alt="" />
+        </div>
+        <span class="ba-tag bad">Neglected<small>weeds · thinning · bare spots</small></span>
+        <span class="ba-tag good">🌱 Managed<small>thick · even · healthy</small></span>
+        <div class="ba-handle"></div>
+        <div class="ba-grip">⟺</div>
+        <input class="ba-range" type="range" min="0" max="100" value="50" aria-label="Drag to compare a weedy lawn and a managed lawn" />
+      </div>
+      <p class="ba-caption reveal">A managed lawn crowds weeds out on its own — <b>thick, healthy turf is the best weed control there is.</b></p>
+    </div>
+  </section>
+
+  <!-- ============ THE COST OF WAITING (bars) ============ -->
+  <section class="cost">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Why act now</span>
+        <h2 class="section-title">Weeds only get more expensive.</h2>
+        <p class="section-lede">Every season you wait, weeds spread further and go deeper — and the cost and effort to fix it climb with them. Early management is the cheapest it will ever be.</p>
+      </div>
+      <div class="bar-wrap reveal">
+        <div class="bar-row">
+          <div class="bar-head"><b>Catch it early</b><span>A few spot treatments</span></div>
+          <div class="bar-track"><div class="bar-fill good" style="--w:22%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><b>Let it spread a season</b><span>More product, more visits</span></div>
+          <div class="bar-track"><div class="bar-fill" style="--w:58%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><b>Full takeover</b><span>Renovation &amp; reseeding</span></div>
+          <div class="bar-track"><div class="bar-fill" style="--w:100%"></div></div>
+        </div>
+      </div>
+      <p class="ba-caption reveal" style="font-size:0.82rem;font-style:italic;opacity:0.7;">Relative effort &amp; cost — the longer weeds establish, the harder they are to remove.</p>
+    </div>
+  </section>
+
+  <!-- ============ WHY HOMEOWNERS SHOULD BE AWARE ============ -->
+  <section class="damage alt">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">What most homeowners miss</span>
+        <h2 class="section-title">Why you should be aware of weeds.</h2>
+        <p class="section-lede">By the time weeds are obvious, they've already been working for weeks. Knowing what they cost you helps you stay ahead of them.</p>
+      </div>
+      <div class="card-grid three reveal-stagger">
+        <div class="dcard">
+          <div class="ic">🌬️</div>
+          <h3>They spread fast — and travel</h3>
+          <p>A single weed can drop thousands of seeds that blow across your yard and your neighbors'. What looks like "just a few" today is next year's infestation if it isn't stopped.</p>
+        </div>
+        <div class="dcard">
+          <div class="ic">🏡</div>
+          <h3>They lower your property's value</h3>
+          <p>A weedy, patchy yard is the first thing buyers and neighbors notice. A healthy, weed-free landscape signals a well-cared-for home and protects your curb appeal.</p>
+        </div>
+        <div class="dcard">
+          <div class="ic">🤧</div>
+          <h3>They affect your family</h3>
+          <p>Many common weeds are major allergy triggers, and some are toxic or irritating to kids and pets. Managing them makes your yard a healthier place to actually enjoy.</p>
+        </div>
+        <div class="dcard">
+          <div class="ic">🌾</div>
+          <h3>Timing is everything</h3>
+          <p>The best time to stop weeds is before you see them — with a pre-emergent barrier. Miss the window and you're stuck fighting them all season. Awareness is what keeps you ahead.</p>
+        </div>
+        <div class="dcard">
+          <div class="ic">🔁</div>
+          <h3>They come back stronger</h3>
+          <p>Pulling the top does nothing if the root and seed bank remain. Without a real plan, weeds rebound quickly — often thicker than before.</p>
+        </div>
+        <div class="dcard">
+          <div class="ic">💪</div>
+          <h3>A thick lawn is your defense</h3>
+          <p>Healthy, dense turf simply leaves weeds nowhere to grow. Real weed management builds your lawn up so it fights weeds for you between visits.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DIY vs PROFESSIONAL (comparison) ============ -->
+  <section class="compare" id="compare">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Your options</span>
+        <h2 class="section-title">Store-bought spraying vs. a real program.</h2>
+        <p class="section-lede">A jug from the hardware store kills what you see today. A weed-management program stops what's coming and rebuilds your lawn so it stays ahead.</p>
+      </div>
+      <div class="compare-grid reveal-stagger">
+        <div class="compare-card">
+          <h3>DIY Spraying</h3>
+          <p class="compare-sub">Reactive, guesswork, and temporary.</p>
+          <ul class="compare-list">
+            <li>Only kills weeds you can already see</li>
+            <li>Wrong product or timing can scorch your lawn</li>
+            <li>No pre-emergent — next wave still comes</li>
+            <li>Roots &amp; seed bank left behind</li>
+            <li>Weeds return in weeks, often thicker</li>
+          </ul>
+        </div>
+        <div class="compare-card featured">
+          <h3>Managed Program</h3>
+          <p class="compare-sub">Proactive, targeted, and lasting.</p>
+          <ul class="compare-list">
+            <li>Pre-emergent barrier stops weeds before they sprout</li>
+            <li>Weeds identified and spot-treated the right way</li>
+            <li>Feeds and thickens turf so weeds get crowded out</li>
+            <li>Safe, correctly-dosed products for your yard</li>
+            <li>Ongoing visits keep weeds gone season after season</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ASSURANCE ============ -->
+  <section class="assure">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Our promise</span>
+        <h2 class="section-title">Effective, safe, and dependable.</h2>
+      </div>
+      <div class="assure-grid reveal-stagger">
+        <div class="assure-card">
+          <div class="assure-icon">🗓</div>
+          <div class="big">Season</div>
+          <h3>Long Control</h3>
+          <p>Our program covers the whole growing season — not a one-time spray. We stay ahead of every weed cycle so your yard stays clean.</p>
+        </div>
+        <div class="assure-card">
+          <div class="assure-icon">🐾</div>
+          <div class="big">Safe</div>
+          <h3>For Pets &amp; Kids</h3>
+          <p>We use the right product, at the right rate, applied by trained pros — so your family and plants stay protected while the weeds don't.</p>
+        </div>
+        <div class="assure-card">
+          <div class="assure-icon">✅</div>
+          <div class="big">Licensed</div>
+          <h3>Applicators</h3>
+          <p>Treatments are handled by licensed, insured technicians who know local weeds and how to beat them — no guessing, no gambling with your lawn.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BENEFITS STRIP ============ -->
+  <section class="bstrip-section">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">At a glance</span>
+        <h2 class="section-title">What weed management does for you.</h2>
+      </div>
+      <div class="bstrip reveal-stagger">
+        <div class="bchip"><span class="ic">🌱</span><b>Protects your plants</b></div>
+        <div class="bchip"><span class="ic">🪱</span><b>Restores soil health</b></div>
+        <div class="bchip"><span class="ic">🌾</span><b>Thicker, greener lawn</b></div>
+        <div class="bchip"><span class="ic">🚫</span><b>Stops the spread</b></div>
+        <div class="bchip"><span class="ic">🏡</span><b>Boosts curb appeal</b></div>
+        <div class="bchip"><span class="ic">🤧</span><b>Fewer allergens</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PROCESS ============ -->
+  <section class="process">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">How it works</span>
+        <h2 class="section-title">Our weed-management program.</h2>
+        <p class="section-lede">A simple, proven cycle that stops today's weeds and prevents tomorrow's.</p>
+      </div>
+      <div class="step-grid reveal-stagger">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Inspect &amp; identify</h4>
+            <p>We walk your property, identify the weeds you have, and pinpoint the bare or stressed spots where they're taking hold.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Targeted treatment</h4>
+            <p>Existing weeds get spot-treated with the right product for the job — knocking them down without harming the plants you want.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Pre-emergent barrier</h4>
+            <p>We lay down a pre-emergent that stops the next generation of weed seeds from ever sprouting — the step DIY sprays skip.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>Feed &amp; thicken</h4>
+            <p>We build up your turf and soil so healthy grass crowds weeds out on its own — your best long-term defense.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <h4>Monitor all season</h4>
+            <p>We come back through the season to catch anything new early, so your yard stays clean and you never have to think about it.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PRICING ============ -->
+  <section class="pricing">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Get started</span>
+        <h2 class="section-title">Weed-management plans.</h2>
+        <p class="section-lede">Pick the level of coverage that fits your yard. We'll confirm an exact quote after a quick look at your property.</p>
+      </div>
+      <div class="price-grid reveal-stagger">
+        <div class="price-card">
+          <div class="tier">One-Time Knockdown</div>
+          <p class="price-desc">Get an overgrown yard back under control</p>
+          <ul class="price-list">
+            <li>Full-property weed treatment</li>
+            <li>Targeted spot control</li>
+            <li>Weed identification &amp; advice</li>
+            <li>Great starting point before a program</li>
+          </ul>
+          <a href="sms:+15551234567?&body=I%27m%20interested%20in%20a%20one-time%20weed%20treatment" target="_top" class="btn btn-ghost" style="width: 100%; justify-content: center;">Quote me</a>
+        </div>
+        <div class="price-card featured">
+          <div class="tier">Season-Long Program ★</div>
+          <p class="price-desc">Stay weed-free all year — best value</p>
+          <ul class="price-list">
+            <li>Everything in Knockdown</li>
+            <li>Pre-emergent barrier applications</li>
+            <li>Scheduled visits through the season</li>
+            <li>Turf feeding to crowd weeds out</li>
+            <li>Ongoing monitoring &amp; touch-ups</li>
+          </ul>
+          <a href="sms:+15551234567?&body=I%27m%20interested%20in%20the%20season-long%20weed%20program" target="_top" class="btn btn-primary" style="width: 100%; justify-content: center;">Get my quote</a>
+        </div>
+        <div class="price-card">
+          <div class="tier">Full Lawn &amp; Weed</div>
+          <p class="price-desc">Weed control plus complete lawn care</p>
+          <ul class="price-list">
+            <li>Everything in the Season Program</li>
+            <li>Fertilization &amp; soil health</li>
+            <li>Mowing &amp; bed maintenance options</li>
+            <li>One team for your whole yard</li>
+          </ul>
+          <a href="sms:+15551234567?&body=I%27m%20interested%20in%20full%20lawn%20and%20weed%20care" target="_top" class="btn btn-ghost" style="width: 100%; justify-content: center;">Quote me</a>
+        </div>
+      </div>
+      <p style="text-align: center; color: var(--muted); margin-top: 2rem; font-size: 0.85rem;">
+        <em>Final quote depends on your yard size and weed pressure — we'll confirm after a quick walkthrough.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section class="faq">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="section-eyebrow">Common questions</span>
+        <h2 class="section-title">What homeowners ask us.</h2>
+      </div>
+      <div class="faq-list reveal">
+        <details class="faq-item">
+          <summary class="faq-q">Why not just pull weeds or spray them myself?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">You can — but pulling leaves roots and seeds behind, and store sprays only hit what's already visible. Without a pre-emergent and healthy turf, the next wave comes right back. Our program stops weeds before they sprout and builds the lawn up so it fights them for you.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Are the treatments safe for my kids and pets?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Yes. Treatments are applied by trained, licensed technicians using the right product at the correct rate. We'll let you know the short window to stay off the treated area, and after that your yard is a safer, healthier place to enjoy.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">How soon will I see results?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Existing weeds typically start browning and dying back within days to a couple of weeks. The bigger win comes over the season as the pre-emergent blocks new weeds and your lawn thickens up to crowd out the rest.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Will weed control hurt my grass, flowers, or shrubs?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">No — that's the whole point of professional application. We use selective, targeted products and know which plants to protect, so we take out the weeds while your desirable plants keep thriving.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">What's the best time to start?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">The sooner the better. The most powerful step — the pre-emergent barrier — works before weeds germinate, so getting on a schedule early keeps you ahead of them all season. If weeds are already up, we knock them down first, then get you on the program.</p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Do weeds really damage my soil, or just look bad?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">They genuinely damage it. Heavy weed growth depletes nutrients, compacts the root zone, and some weeds even release compounds that stunt nearby plants. When weeds die back they can leave bare spots where topsoil erodes. Managing weeds protects the soil your whole landscape depends on.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="cta-band reveal">
+    <h2>Take back your yard.</h2>
+    <p>Get a free quote in under 24 hours — tell us about your yard and we'll build a weed-management plan that protects your plants, your soil, and your curb appeal.</p>
+    <a href="sms:+15551234567?&body=I%27m%20interested%20in%20weed%20management%20for%20my%20yard" target="_top" class="btn btn-primary">Get my free quote →</a>
+    <div class="cta-trust">
+      <span>Protects your plants</span>
+      <span>Healthier soil</span>
+      <span>Season-long control</span>
+    </div>
+  </section>
+
+  <script>
+    // Reveal-on-scroll
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+    document.querySelectorAll('.reveal, .reveal-stagger, .bar-wrap').forEach(el => io.observe(el));
+
+    // Before/After slider
+    const ba = document.getElementById('baSlider');
+    if (ba) {
+      const range = ba.querySelector('.ba-range');
+      const setPos = v => ba.style.setProperty('--pos', v + '%');
+      range.addEventListener('input', () => setPos(range.value));
+      setPos(range.value);
+    }
+
+    // Auto-resize: report full page height to the host (e.g. Wix Velo) so the
+    // embed grows to fit the content instead of scrolling inside a fixed box.
+    function sorcePostHeight() {
+      var h = document.documentElement.scrollHeight;
+      if (window.parent) window.parent.postMessage({ sorceHeight: h }, '*');
+    }
+    window.addEventListener('load', sorcePostHeight);
+    window.addEventListener('resize', sorcePostHeight);
+    setTimeout(sorcePostHeight, 400);
+    setTimeout(sorcePostHeight, 1500);
+  </script>
+
+</body>
+</html>
