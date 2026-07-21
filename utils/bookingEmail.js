@@ -97,6 +97,27 @@ async function sendBookingEmails(opts) {
         ${opts.notes ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Notes</td><td style="padding:10px 12px;">${opts.notes}</td></tr>` : ''}
       </table>`;
 
+    // Plain-text version of the details — a text/html multipart email is far less
+    // likely to be filtered to spam than an HTML-only one.
+    const detailsText = [
+      `Booking #: ${opts.bookingNumber}`,
+      `Service: ${opts.serviceName}`,
+      `Date: ${formattedDate}`,
+      `Time: ${timeDisplay}`,
+      location ? `Place: ${location}` : null,
+      hasTax ? `Subtotal: $${subtotal.toFixed(2)}` : null,
+      hasTax ? `Tax${taxPct ? ` (${taxPct}%)` : ''}: $${taxAmount.toFixed(2)}` : null,
+      total > 0 ? `Total: $${total.toFixed(2)}` : null,
+      opts.notes ? `Notes: ${opts.notes}` : null,
+    ].filter(Boolean).join('\n');
+
+    // Booking confirmations are transactional — no marketing links to track, and the
+    // tracking pixel/link-rewrapping only adds spam-filter signals here. Turn it off.
+    const trackingSettings = {
+      clickTracking: { enable: false, enableText: false },
+      openTracking: { enable: false },
+    };
+
     const isUpdated = opts.type === 'updated';
     const emails = [];
 
@@ -106,9 +127,17 @@ async function sendBookingEmails(opts) {
         to: opts.customerEmail,
         from: { name: businessName || 'Your Service Provider', email: fromEmail },
         replyTo: ownerEmail ? { name: businessName || '', email: ownerEmail } : undefined,
+        trackingSettings,
         subject: isUpdated
           ? `Booking Updated — ${opts.serviceName} on ${formattedDate}`
           : `Booking Confirmed — ${opts.serviceName} on ${formattedDate}`,
+        text: `Hi ${opts.customerName},\n\n`
+          + (isUpdated
+              ? `Your booking with ${businessName || 'us'} has been updated. Here are your new details:`
+              : `Your booking with ${businessName || 'us'} is confirmed. Here are your details:`)
+          + `\n\n${detailsText}\n\n`
+          + `If you need to reschedule or have questions, please contact us directly.\n`
+          + `Thank you for your business!\n\n${businessName || ''}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
             <div style="background:${isUpdated ? '#d97706' : '#1d4ed8'};padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
@@ -138,9 +167,12 @@ async function sendBookingEmails(opts) {
         to: ownerEmail,
         from: { name: 'SORCE Bookings', email: fromEmail },
         replyTo: ownerEmail ? { email: ownerEmail } : undefined,
+        trackingSettings,
         subject: isUpdated
           ? `Booking Updated: ${opts.serviceName} — ${opts.customerName}`
           : `New Booking: ${opts.serviceName} — ${opts.customerName}`,
+        text: `${isUpdated ? 'Booking Updated' : 'New Booking Received'}\n\n`
+          + `Customer: ${customerDetails}\n\n${detailsText}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
             <div style="background:${isUpdated ? '#d97706' : '#16a34a'};padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
