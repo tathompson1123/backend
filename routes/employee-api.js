@@ -1760,6 +1760,34 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
   }
 });
 
+// DELETE /api/employee/my-bookings/:id - Admin-only booking deletion.
+// Mirrors the web delete (booking_items + sms_messages cleanup), gated to admins.
+// requireAdmin is a hoisted function declaration below, so referencing it here is fine.
+router.delete('/my-bookings/:id', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const { id } = req.params;
+
+    // Confirm the booking belongs to this business before deleting any related rows.
+    const owns = await pool.query('SELECT id FROM bookings WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (owns.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+
+    await pool.query('DELETE FROM booking_items WHERE booking_id = $1', [id]);
+    await pool.query('UPDATE sms_messages SET booking_id = NULL WHERE booking_id = $1', [id]);
+    const result = await pool.query(
+      'DELETE FROM bookings WHERE id = $1 AND user_id = $2 RETURNING booking_number',
+      [id, userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+
+    console.log(`🗑️  Booking #${result.rows[0].booking_number} deleted by admin (user ${userId})`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting employee booking:', error.message);
+    res.status(500).json({ error: 'Failed to delete booking' });
+  }
+});
+
 // Middleware to check admin
 async function requireAdmin(req, res, next) {
   try {
