@@ -4,6 +4,11 @@ const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 
+// Archiving (soft delete) instead of hard-deleting preserves an employee's clock/payroll
+// history — their time_entries would otherwise be cascade-deleted with the employee row.
+pool.query('ALTER TABLE employees ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ')
+  .catch(e => console.error('employees archived_at migration error:', e.message));
+
 // Validation helpers
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
@@ -16,13 +21,15 @@ router.use(authenticateToken);
 router.get('/', async (req, res) => {
   try {
     const userId = req.user.userId;
+    // Archived employees are hidden from the default roster; pass ?includeArchived=1 to see them.
+    const includeArchived = req.query.includeArchived === 'true' || req.query.includeArchived === '1';
 
     const result = await pool.query(
-      `SELECT e.*, 
+      `SELECT e.*,
         (SELECT json_agg(se.service_id) FROM service_employees se WHERE se.employee_id = e.id) as service_ids
        FROM employees e
-       WHERE e.user_id = $1
-       ORDER BY e.name`,
+       WHERE e.user_id = $1 ${includeArchived ? '' : 'AND e.archived_at IS NULL'}
+       ORDER BY e.archived_at IS NOT NULL, e.name`,
       [userId]
     );
 
@@ -173,7 +180,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE - Delete employee
+// DELETE - Archive employee (soft delete). Their time entries, breaks, and payroll history
+// are preserved and stay viewable; use POST /:id/restore to bring them back.
 router.delete('/:id', async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -184,25 +192,63 @@ router.delete('/:id', async (req, res) => {
     }
 
     const bookingsCheck = await pool.query(
-      `SELECT COUNT(*) as count FROM bookings 
-       WHERE employee_id = $1 
-       AND booking_date >= CURRENT_DATE 
+      `SELECT COUNT(*) as count FROM bookings
+       WHERE employee_id = $1
+       AND booking_date >= CURRENT_DATE
        AND status NOT IN ('cancelled', 'completed')`,
       [id]
     );
 
     if (parseInt(bookingsCheck.rows[0].count) > 0) {
-      return res.status(400).json({ 
-        error: 'Cannot delete employee with active bookings',
+      return res.status(400).json({
+        error: 'Cannot remove an employee with upcoming bookings. Reassign or cancel them first.',
         activeBookings: bookingsCheck.rows[0].count
       });
     }
 
-    await pool.query('DELETE FROM employees WHERE id = $1 AND user_id = $2', [id, userId]);
-    res.json({ success: true, message: 'Employee deleted' });
+    const result = await pool.query(
+      `UPDATE employees SET active = false, archived_at = NOW()
+       WHERE id = $1 AND user_id = $2 RETURNING id`,
+      [id, userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Revoke app access so an archived employee can't keep logging in.
+    await pool.query('DELETE FROM employee_credentials WHERE employee_id = $1', [id]).catch(() => {});
+    await pool.query("UPDATE employees SET invite_status = 'none' WHERE id = $1", [id]);
+
+    res.json({ success: true, message: 'Employee archived' });
   } catch (error) {
-    console.error('Error deleting employee:', error.message);
-    res.status(500).json({ error: 'Failed to delete employee' });
+    console.error('Error archiving employee:', error.message);
+    res.status(500).json({ error: 'Failed to archive employee' });
+  }
+});
+
+// POST - Restore a previously archived employee
+router.post('/:id/restore', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({ error: 'Invalid employee ID' });
+    }
+
+    const result = await pool.query(
+      `UPDATE employees SET active = true, archived_at = NULL
+       WHERE id = $1 AND user_id = $2 RETURNING *`,
+      [id, userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    res.json({ success: true, employee: result.rows[0] });
+  } catch (error) {
+    console.error('Error restoring employee:', error.message);
+    res.status(500).json({ error: 'Failed to restore employee' });
   }
 });
 
@@ -648,6 +694,28 @@ router.put('/:id/admin', async (req, res) => {
   } catch (error) {
     console.error('Error updating admin status:', error.message);
     res.status(500).json({ error: 'Failed to update admin status' });
+  }
+});
+
+// GET /api/employees/team-chat - Recent team chat messages (the shared feed employees
+// post to from the app), surfaced on the owner's dashboard Overview. Read-only here.
+router.get('/team-chat', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const result = await pool.query(
+      `SELECT id, employee_name, employee_color, body, created_at
+       FROM employee_messages
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+    // Return oldest → newest so the feed reads top-to-bottom like a chat.
+    res.json({ messages: result.rows.reverse() });
+  } catch (error) {
+    console.error('Error fetching team chat:', error.message);
+    res.status(500).json({ error: 'Failed to fetch team chat' });
   }
 });
 
