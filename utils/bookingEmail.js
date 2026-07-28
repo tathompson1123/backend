@@ -125,7 +125,10 @@ async function sendBookingEmails(opts) {
     if (opts.customerEmail && !opts.skipCustomerEmail) {
       emails.push({
         to: opts.customerEmail,
-        from: { name: businessName || 'Your Service Provider', email: fromEmail },
+        // "{Business} via SORCE" reads as a platform sending on the business's behalf,
+        // which is less spoof-like to inbox filters than the business name alone coming
+        // from a shared sorceintegrations.com address.
+        from: { name: businessName ? `${businessName} via SORCE` : 'Your Service Provider', email: fromEmail },
         replyTo: ownerEmail ? { name: businessName || '', email: ownerEmail } : undefined,
         trackingSettings,
         subject: isUpdated
