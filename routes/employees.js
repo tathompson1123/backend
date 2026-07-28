@@ -711,8 +711,8 @@ router.get('/team-chat', async (req, res) => {
        LIMIT $2`,
       [userId, limit]
     );
-    // Return oldest → newest so the feed reads top-to-bottom like a chat.
-    res.json({ messages: result.rows.reverse() });
+    // Newest first — the dashboard feed shows the most recent message at the top.
+    res.json({ messages: result.rows });
   } catch (error) {
     console.error('Error fetching team chat:', error.message);
     res.status(500).json({ error: 'Failed to fetch team chat' });
