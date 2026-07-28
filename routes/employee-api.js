@@ -860,19 +860,38 @@ router.get('/contacts', requirePermission('view_customers'), async (req, res) =>
       return res.status(400).json({ error: 'Search query too long' });
     }
 
-    let query = `
-      SELECT id, name, email, phone, last_service, last_service_date, total_jobs, lifetime_value, notes
-      FROM customers
-      WHERE user_id = $1
-    `;
+    // Search existing customers AND leads, so booking lookups also find people who
+    // haven't been booked yet. Leads that are already saved as customers (matched by
+    // email or last-10-digits of phone) are de-duplicated out.
     const params = [userId];
-
+    let custSearch = '', leadSearch = '';
     if (search && search.trim()) {
-      query += ` AND (name ILIKE $2 OR phone ILIKE $2 OR email ILIKE $2)`;
       params.push(`%${search.trim()}%`);
+      custSearch = ' AND (c.name ILIKE $2 OR c.phone ILIKE $2 OR c.email ILIKE $2)';
+      leadSearch = ' AND (l.name ILIKE $2 OR l.phone ILIKE $2 OR l.email ILIKE $2)';
     }
 
-    query += ' ORDER BY name';
+    const query = `
+      SELECT c.id, c.name, c.email, c.phone, c.last_service, c.last_service_date,
+             c.total_jobs, c.lifetime_value, c.notes, 'customer' AS contact_type
+      FROM customers c
+      WHERE c.user_id = $1${custSearch}
+      UNION ALL
+      SELECT l.id, l.name, l.email, l.phone, NULL AS last_service, NULL AS last_service_date,
+             NULL AS total_jobs, NULL AS lifetime_value, l.notes, 'lead' AS contact_type
+      FROM leads l
+      WHERE l.user_id = $1${leadSearch}
+        AND COALESCE(NULLIF(l.name,''), NULLIF(l.email,''), NULLIF(l.phone,'')) IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM customers c2
+          WHERE c2.user_id = l.user_id AND (
+            (NULLIF(l.email,'') IS NOT NULL AND lower(c2.email) = lower(l.email)) OR
+            (length(regexp_replace(COALESCE(l.phone,''), '\\D', '', 'g')) >= 10 AND
+             right(regexp_replace(c2.phone, '\\D', '', 'g'), 10) = right(regexp_replace(l.phone, '\\D', '', 'g'), 10))
+          )
+        )
+      ORDER BY name
+    `;
 
     const result = await pool.query(query, params);
     res.json({ customers: result.rows });
