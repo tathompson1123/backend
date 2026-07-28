@@ -70,7 +70,9 @@ async function sendBookingEmails(opts) {
 
     // Use provided location, or fall back to the business address
     const location = opts.location || businessAddress;
-    const fromEmail = 'noreply@sorceintegrations.com';
+    // Send from a real, monitored, verified address rather than noreply@ — inbox filters
+    // slightly favor senders that can receive replies, and help@ is domain-authenticated.
+    const fromEmail = 'help@sorceintegrations.com';
 
     const formattedDate = formatDate(opts.bookingDate);
     const formattedStart = formatTime(opts.startTime);
@@ -140,7 +142,7 @@ async function sendBookingEmails(opts) {
               : `Your booking with ${businessName || 'us'} is confirmed. Here are your details:`)
           + `\n\n${detailsText}\n\n`
           + `If you need to reschedule or have questions, please contact us directly.\n`
-          + `Thank you for your business!\n\n${businessName || ''}`,
+          + `Thank you for your business!\n\n${businessName || ''}${businessAddress ? `\n${businessAddress}` : ''}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
             <div style="background:${isUpdated ? '#d97706' : '#1d4ed8'};padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
@@ -158,6 +160,7 @@ async function sendBookingEmails(opts) {
                 Thank you for your business!
               </p>
               <p style="color:#6b7280;font-size:0.9rem;margin:0;">${businessName || ''}</p>
+              ${businessAddress ? `<p style="color:#9ca3af;font-size:0.8rem;margin:0.25rem 0 0;">${businessAddress}</p>` : ''}
             </div>
           </div>`,
       });
