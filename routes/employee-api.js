@@ -7,6 +7,7 @@ const multer = require('multer');
 const { v2: cloudinary } = require('cloudinary');
 const { sendPushToTeam, sendPushToEmployee } = require('../utils/pushNotifications');
 const { normalizeServiceList, resolveBookingServices } = require('../utils/bookingServices');
+const { sendBookingEmails } = require('../utils/bookingEmail');
 
 // ── Time-tracking schema ─────────────────────────────────
 pool.query(`
@@ -1654,6 +1655,29 @@ router.post('/bookings', async (req, res) => {
         [booking.id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon]
       );
     }
+
+    // Send booking confirmation emails (non-blocking) — mirrors the web create path so
+    // bookings made from the employee app notify the customer too. Was missing, so
+    // app-created bookings never emailed the customer.
+    const extraCount = resolved.length - 1;
+    const serviceLabel = extraCount > 0
+      ? `${resolvedMains[0].name} + ${extraCount} more`
+      : resolvedMains[0].name;
+    sendBookingEmails({
+      userId,
+      bookingNumber,
+      customerName,
+      customerEmail,
+      customerPhone,
+      serviceName: serviceLabel,
+      bookingDate,
+      startTime,
+      endTime,
+      price: subtotal,
+      subtotal,
+      total: subtotal,
+      notes: customerNotes,
+    }).catch(() => {});
 
     res.json({ success: true, booking });
   } catch (error) {
