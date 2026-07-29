@@ -1696,7 +1696,7 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
       customerName, customerEmail, customerPhone, customerAddress, customerNotes,
       bookingDate, startTime, endTime, notes, status, assignedEmployeeId,
       serviceId, price: priceOverride,
-      mainServices, additionalServices,
+      mainServices, additionalServices, sendEmail,
     } = req.body;
 
     // Same shape as POST: prefer arrays, fall back to legacy single-service payload.
@@ -1794,6 +1794,33 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
          VALUES ($1,$2,$3,$4,$5,1,$6,$7)`,
         [id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon]
       );
+    }
+
+    // Only email the customer a "Booking Updated" notice when the caller opted in (the
+    // "Email the customer about this update" checkbox). Mirrors the web PUT's sendEmail flag.
+    if (sendEmail && booking.customer_email) {
+      const extraCount = resolved.length - 1;
+      const serviceLabel = extraCount > 0
+        ? `${primaryService.name} + ${extraCount} more`
+        : primaryService.name;
+      sendBookingEmails({
+        userId,
+        type: 'updated',
+        bookingNumber: booking.booking_number,
+        customerName: booking.customer_name,
+        customerEmail: booking.customer_email,
+        customerPhone: booking.customer_phone,
+        serviceName: serviceLabel,
+        bookingDate,
+        startTime,
+        endTime: computedEndTime,
+        price: subtotal,
+        subtotal,
+        taxRate,
+        taxAmount,
+        total: totalAmount,
+        notes: customerNotes,
+      }).catch(() => {});
     }
 
     res.json({ success: true, booking });
