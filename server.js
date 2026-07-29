@@ -431,6 +431,14 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     // Tag SMS rows that belong to a Google Review conversation so the dashboard can show
     // the full opener + reply thread in its own sub-tab.
     await pool.query(`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS review_request_id INTEGER`);
+    // Backfill: the old one-way review texts embedded /review-click/{id} in the body —
+    // recover the review_request_id from it so they appear in the Google Review SMS tab.
+    await pool.query(`
+      UPDATE sms_messages
+      SET review_request_id = (substring(message from 'review-click/([0-9]+)'))::int
+      WHERE review_request_id IS NULL
+        AND message ~ 'review-click/[0-9]+'
+    `);
     await pool.query(`CREATE TABLE IF NOT EXISTS contact_sales_requests (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,

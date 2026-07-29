@@ -401,4 +401,50 @@ router.post('/raffle/run', authenticateToken, async (req, res) => {
   }
 });
 
+// GET - list Google Review SMS conversations (grouped by review_request)
+router.get('/review-sms-conversations', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT rr.id AS review_request_id,
+              COALESCE(NULLIF(rr.customer_name, ''), c.name) AS customer_name,
+              COALESCE(NULLIF(rr.customer_phone, ''), c.phone) AS customer_phone,
+              rr.status,
+              COUNT(s.id)::int AS message_count,
+              MAX(s.created_at) AS last_message_at,
+              (SELECT s2.message FROM sms_messages s2 WHERE s2.review_request_id = rr.id ORDER BY s2.created_at DESC LIMIT 1) AS last_message,
+              (SELECT s2.direction FROM sms_messages s2 WHERE s2.review_request_id = rr.id ORDER BY s2.created_at DESC LIMIT 1) AS last_direction
+       FROM review_requests rr
+       JOIN sms_messages s ON s.review_request_id = rr.id
+       LEFT JOIN customers c ON c.id = rr.customer_id
+       WHERE rr.user_id = $1
+       GROUP BY rr.id, rr.customer_name, c.name, rr.customer_phone, c.phone, rr.status
+       ORDER BY MAX(s.created_at) DESC`,
+      [req.user.userId]
+    );
+    res.json({ success: true, conversations: result.rows });
+  } catch (error) {
+    console.error('Error fetching review SMS conversations:', error.message);
+    res.status(500).json({ error: 'Failed to fetch review conversations' });
+  }
+});
+
+// GET - full thread for one review conversation
+router.get('/review-sms-conversation/:id', authenticateToken, async (req, res) => {
+  try {
+    const own = await pool.query('SELECT id FROM review_requests WHERE id = $1 AND user_id = $2', [req.params.id, req.user.userId]);
+    if (own.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+    const messages = await pool.query(
+      `SELECT direction, to_number, from_number, message, created_at
+       FROM sms_messages
+       WHERE review_request_id = $1 AND user_id = $2
+       ORDER BY created_at ASC`,
+      [req.params.id, req.user.userId]
+    );
+    res.json({ success: true, messages: messages.rows });
+  } catch (error) {
+    console.error('Error fetching review SMS conversation:', error.message);
+    res.status(500).json({ error: 'Failed to fetch conversation' });
+  }
+});
+
 module.exports = router;
