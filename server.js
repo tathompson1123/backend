@@ -423,6 +423,14 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     // enticement appended to review-request texts) so a winner-style phrase can never
     // leak into every review request.
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS raffle_reward TEXT`);
+    // Google Review SMS conversational flow: the "this is ___" rep name on the opener,
+    // plus the AI 1-10 rating (and tip) of the owner's incentive shown in setup.
+    await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS rep_name VARCHAR(100)`);
+    await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS incentive_score INTEGER`);
+    await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS incentive_tip TEXT`);
+    // Tag SMS rows that belong to a Google Review conversation so the dashboard can show
+    // the full opener + reply thread in its own sub-tab.
+    await pool.query(`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS review_request_id INTEGER`);
     await pool.query(`CREATE TABLE IF NOT EXISTS contact_sales_requests (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -1695,7 +1703,7 @@ cron.schedule('*/60 * * * * *', async () => {
               c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email,
               c.last_service AS service_name,
               u.business_name, u.twilio_phone_number, u.google_review_link,
-              rc.message_template, rc.incentive, rc.incentive_enabled
+              rc.message_template, rc.incentive, rc.incentive_enabled, rc.rep_name
        FROM review_requests rr
        JOIN users u ON u.id = rr.user_id
        JOIN customers c ON c.id = rr.customer_id
@@ -1733,41 +1741,35 @@ cron.schedule('*/60 * * * * *', async () => {
           }
         }
 
-        // Build message from template
-        const defaultTemplate = "Hi {name}! Thank you for choosing {business}. We'd love to hear about your experience with {service}! Could you take a moment to leave us a review?";
+        // Conversational opener — just the question. The incentive + review link are sent
+        // later, and ONLY if the customer replies positively (see the review branch in
+        // routes/sms.js). Claude shortens the service name the way a customer would say it.
+        const { shortenServiceName } = require('./utils/reviewAI');
         const reviewFirstName = (req.customer_name || 'there').split(' ')[0];
-        let message = (req.message_template || defaultTemplate)
-          .replace(/\{name\}/g, reviewFirstName)
-          .replace(/\{business\}/g, req.business_name || 'us')
-          .replace(/\{service\}/g, req.service_name || 'our service');
-
-        if (req.incentive_enabled && req.incentive) {
-          if (!/[.!?]$/.test(message.trimEnd())) message = message.trimEnd() + '.';
-          message += ` ${req.incentive}`;
-        }
-        if (req.google_review_link) {
-          const backendUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
-          const trackedUrl = `${backendUrl}/api/public/review-click/${req.id}`;
-          if (!/[.!?]$/.test(message.trimEnd())) message = message.trimEnd() + '.';
-          message += ` Leave your review here: ${trackedUrl}`;
-        }
+        const repName = (req.rep_name || '').trim();
+        const shortService = await shortenServiceName(req.service_name, req.user_id);
+        const message = repName
+          ? `Hey ${reviewFirstName}, this is ${repName} with ${req.business_name || 'us'}. How did the ${shortService} go?`
+          : `Hey ${reviewFirstName}, it's ${req.business_name || 'us'} — how did the ${shortService} go?`;
 
         // Format phone number for sending
         const toPhone = req.customer_phone.startsWith('+') ? req.customer_phone : `+1${req.customer_phone.replace(/\D/g, '')}`;
         const smsResult = await sendSMSAuto(toPhone, message, req.user_id);
 
         await pool.query(
-          `INSERT INTO sms_messages (user_id, direction, to_number, from_number, provider, message, twilio_message_sid, created_at)
-           VALUES ($1, 'outgoing', $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
-          [req.user_id, toPhone, smsResult.fromNumber, smsResult.provider, message, smsResult.messageSid]
+          `INSERT INTO sms_messages (user_id, direction, to_number, from_number, provider, message, twilio_message_sid, review_request_id, created_at)
+           VALUES ($1, 'outgoing', $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+          [req.user_id, toPhone, smsResult.fromNumber, smsResult.provider, message, smsResult.messageSid, req.id]
         );
 
+        // Opener sent → now waiting for the customer's reply, which the inbound webhook
+        // classifies (positive → incentive+link, negative → escalate to owner).
         await pool.query(
-          `UPDATE review_requests SET sms_sent = true, sms_sent_at = NOW(), actual_send_time = NOW(), status = 'sent' WHERE id = $1`,
+          `UPDATE review_requests SET sms_sent = true, sms_sent_at = NOW(), actual_send_time = NOW(), status = 'awaiting_reply' WHERE id = $1`,
           [req.id]
         );
 
-        console.log(`✅ Cron: Review SMS sent for request ${req.id} to ${toPhone} via ${smsResult.provider}`);
+        console.log(`✅ Cron: Review opener sent for request ${req.id} to ${toPhone} via ${smsResult.provider}`);
       } catch (sendErr) {
         console.error(`❌ Cron: Review SMS failed for request ${req.id}:`, sendErr.message);
         await pool.query("UPDATE review_requests SET status = 'sms_failed', sms_error = $2 WHERE id = $1", [req.id, sendErr.message]);

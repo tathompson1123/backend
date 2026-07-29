@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { sendSMS } = require('../utils/twilio');
+const { classifyReplySentiment, composePositiveReply } = require('../utils/reviewAI');
 const { sendPushToOwner } = require('../utils/pushNotifications');
 const { sendSmsBookingConfirmationRequest, sendSmsCampaignReplyNotification } = require('../utils/bookingEmail');
 const { getBusinessDateTime } = require('../utils/zipToTimezone');
@@ -226,6 +227,106 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
     }
     console.log(`🔕 Opt-${optAction} from ${From} for user ${user.id} (lead agent skipped)`);
     return;
+  }
+
+  // ── Google Review SMS reply handling ──────────────────────────────────────
+  // If we're awaiting this customer's reply to a review opener, classify it and branch:
+  // positive/neutral → thank + incentive + review link; negative → escalate to the owner.
+  // Checked before the campaign/lead paths so a review reply isn't mistaken for a new lead.
+  try {
+    const last10rev = (From || '').replace(/\D/g, '').slice(-10);
+    if (last10rev) {
+      const revRes = await pool.query(
+        `SELECT rr.id, rr.customer_name, c.name AS c_name,
+                u.email AS owner_email, u.business_name, u.google_review_link,
+                rc.incentive, rc.incentive_enabled
+         FROM review_requests rr
+         JOIN users u ON u.id = rr.user_id
+         LEFT JOIN customers c ON c.id = rr.customer_id
+         LEFT JOIN review_configs rc ON rc.user_id = rr.user_id
+         WHERE rr.user_id = $1
+           AND rr.status = 'awaiting_reply'
+           AND right(regexp_replace(COALESCE(c.phone, rr.customer_phone, ''), '\\D', '', 'g'), 10) = $2
+         ORDER BY rr.created_at DESC
+         LIMIT 1`,
+        [user.id, last10rev]
+      );
+
+      if (revRes.rows.length > 0) {
+        const rr = revRes.rows[0];
+        const firstName = ((rr.customer_name || rr.c_name || '').split(' ')[0]) || 'there';
+
+        // Log the customer's reply against the review conversation.
+        await pool.query(
+          `INSERT INTO sms_messages
+           (user_id, direction, from_number, to_number, message, twilio_message_sid, status, review_request_id, created_at)
+           VALUES ($1, 'incoming', $2, $3, $4, $5, 'received', $6, NOW())`,
+          [user.id, From, To, Body, MessageSid, rr.id]
+        ).catch(() => {});
+
+        const sentiment = await classifyReplySentiment(Body, user.id);
+
+        if (sentiment === 'negative') {
+          const escalation = `Thanks for the honest feedback, ${firstName} — I'm escalating this to our manager so we can look into it and make it right. We'll be in touch.`;
+          try {
+            await sendSMS(From, escalation, user.id);
+            await pool.query(
+              `INSERT INTO sms_messages (user_id, direction, to_number, message, review_request_id, created_at)
+               VALUES ($1, 'outgoing', $2, $3, $4, NOW())`,
+              [user.id, From, escalation, rr.id]
+            ).catch(() => {});
+          } catch (e) { console.log(`Review escalation SMS not sent to ${From}: ${e.message}`); }
+
+          await pool.query(`UPDATE review_requests SET status = 'replied_negative' WHERE id = $1`, [rr.id]);
+
+          // Email the owner so they can act on the unhappy customer.
+          if (rr.owner_email) {
+            try {
+              const sgMail = require('@sendgrid/mail');
+              sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+              await sgMail.send({
+                to: rr.owner_email,
+                from: { name: `${rr.business_name || 'SORCE'} via SORCE`, email: 'help@sorceintegrations.com' },
+                replyTo: rr.owner_email,
+                subject: `⚠️ Unhappy customer — ${firstName}`,
+                text: `${rr.customer_name || rr.c_name || 'A customer'} replied negatively to your review request.\n\n`
+                  + `Their message:\n"${Body}"\n\n`
+                  + `We replied that you're escalating it to your manager. Reach out at ${From} if you want to act on it.`,
+              });
+            } catch (e) { console.log(`Owner escalation email failed: ${e.message}`); }
+          }
+          console.log(`🟠 Review reply NEGATIVE from ${From} (request ${rr.id}) — owner notified`);
+        } else {
+          // positive or neutral → send the review ask with the incentive woven in.
+          const backendUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
+          const trackedUrl = rr.google_review_link ? `${backendUrl}/api/public/review-click/${rr.id}` : '';
+          const reply = await composePositiveReply({
+            firstName,
+            businessName: rr.business_name,
+            incentive: rr.incentive,
+            incentiveEnabled: rr.incentive_enabled,
+            reviewLink: trackedUrl,
+          }, user.id);
+          try {
+            await sendSMS(From, reply, user.id);
+            await pool.query(
+              `INSERT INTO sms_messages (user_id, direction, to_number, message, review_request_id, created_at)
+               VALUES ($1, 'outgoing', $2, $3, $4, NOW())`,
+              [user.id, From, reply, rr.id]
+            ).catch(() => {});
+          } catch (e) { console.log(`Review positive SMS not sent to ${From}: ${e.message}`); }
+
+          await pool.query(
+            `UPDATE review_requests SET status = $2 WHERE id = $1`,
+            [rr.id, sentiment === 'neutral' ? 'replied_neutral' : 'replied_positive']
+          );
+          console.log(`🟢 Review reply ${sentiment.toUpperCase()} from ${From} (request ${rr.id}) — review ask sent`);
+        }
+        return;
+      }
+    }
+  } catch (e) {
+    console.error('Review reply handling error:', e.message);
   }
 
   // ── SMS campaign reply handling ───────────────────────────────────────────

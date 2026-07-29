@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
+const { rateIncentive } = require('../utils/reviewAI');
 
 // GET - Get review configuration
 router.get('/', authenticateToken, async (req, res) => {
@@ -25,7 +26,10 @@ router.get('/', authenticateToken, async (req, res) => {
           raffle_enabled: false,
           raffle_reward: '',
           raffle_consolation: '$50 off any Full Detail',
-          raffle_require_verified: false
+          raffle_require_verified: false,
+          rep_name: '',
+          incentive_score: null,
+          incentive_tip: ''
         }
       });
     }
@@ -42,20 +46,27 @@ router.post('/', authenticateToken, async (req, res) => {
   try {
     const {
       messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay, sendTrigger,
-      raffleEnabled, raffleReward, raffleConsolation, raffleRequireVerified
+      raffleEnabled, raffleReward, raffleConsolation, raffleRequireVerified, repName
     } = req.body;
     const trigger = sendTrigger === 'service_duration' ? 'service_duration' : 'booking_completed';
     const consolation = (raffleConsolation && String(raffleConsolation).trim())
       ? String(raffleConsolation).trim()
       : '$50 off any Full Detail';
     const reward = raffleReward != null ? String(raffleReward).trim() : null;
+    const rep = repName != null ? String(repName).trim().slice(0, 100) : null;
+
+    // Rate the incentive (1-10) so the owner sees how compelling it is. Non-fatal.
+    let score = null, tip = '';
+    if (incentiveEnabled && incentive && String(incentive).trim()) {
+      try { ({ score, tip } = await rateIncentive(incentive, req.user.userId)); } catch {}
+    }
 
     // Upsert - insert or update on conflict
     await pool.query(
       `INSERT INTO review_configs
          (user_id, message_template, incentive, incentive_enabled, auto_send_enabled, send_delay, send_trigger,
-          raffle_enabled, raffle_reward, raffle_consolation, raffle_require_verified, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+          raffle_enabled, raffle_reward, raffle_consolation, raffle_require_verified, rep_name, incentive_score, incentive_tip, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
        ON CONFLICT (user_id)
        DO UPDATE SET
          message_template = $2,
@@ -68,16 +79,31 @@ router.post('/', authenticateToken, async (req, res) => {
          raffle_reward = $9,
          raffle_consolation = $10,
          raffle_require_verified = $11,
+         rep_name = $12,
+         incentive_score = $13,
+         incentive_tip = $14,
          updated_at = CURRENT_TIMESTAMP`,
       [req.user.userId, messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay, trigger,
-       !!raffleEnabled, reward, consolation, !!raffleRequireVerified]
+       !!raffleEnabled, reward, consolation, !!raffleRequireVerified, rep, score, tip]
     );
 
     console.log(`✅ Review config saved for user ${req.user.userId}`);
-    res.json({ success: true, message: 'Review config saved successfully' });
+    res.json({ success: true, message: 'Review config saved successfully', incentiveScore: score, incentiveTip: tip });
   } catch (error) {
     console.error('Error saving review config:', error.message);
     res.status(500).json({ success: false, error: 'Failed to save config' });
+  }
+});
+
+// POST - Live-rate an incentive (1-10) without saving, for the setup UI.
+router.post('/rate-incentive', authenticateToken, async (req, res) => {
+  try {
+    const { incentive } = req.body;
+    const { score, tip } = await rateIncentive(incentive, req.user.userId);
+    res.json({ success: true, score, tip });
+  } catch (error) {
+    console.error('Error rating incentive:', error.message);
+    res.json({ success: true, score: null, tip: '' });
   }
 });
 
