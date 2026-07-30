@@ -661,6 +661,13 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS raffle_status VARCHAR(20)`); // 'won' | 'lost' | null
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS raffle_period VARCHAR(7)`); // 'YYYY-MM'
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS raffle_notified_at TIMESTAMP`);
+    // These are in the CREATE TABLE but were never added to tables created by an older
+    // schema (CREATE TABLE IF NOT EXISTS won't add columns). The conversation list + the
+    // inbound-reply webhook reference them, so a missing column 500s those queries.
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255)`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(50)`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS service_name VARCHAR(255)`);
     console.log('✅ Review requests table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify review_requests table:', e.message);

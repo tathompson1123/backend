@@ -447,29 +447,4 @@ router.get('/review-sms-conversation/:id', authenticateToken, async (req, res) =
   }
 });
 
-// TEMP diagnostic (remove after) — run the EXACT list query for user 3.
-router.get('/_revdiag4', async (req, res) => {
-  if (req.query.k !== 'rvd_9f3k2x7q') return res.status(404).end();
-  try {
-    const r = await pool.query(
-      `SELECT rr.id AS review_request_id,
-              COALESCE(NULLIF(rr.customer_name, ''), c.name) AS customer_name,
-              COALESCE(NULLIF(rr.customer_phone, ''), c.phone) AS customer_phone,
-              rr.status,
-              COUNT(s.id)::int AS message_count,
-              MAX(s.created_at) AS last_message_at,
-              (SELECT s2.message FROM sms_messages s2 WHERE s2.review_request_id = rr.id ORDER BY s2.created_at DESC LIMIT 1) AS last_message,
-              (SELECT s2.direction FROM sms_messages s2 WHERE s2.review_request_id = rr.id ORDER BY s2.created_at DESC LIMIT 1) AS last_direction
-       FROM review_requests rr
-       JOIN sms_messages s ON s.review_request_id = rr.id
-       LEFT JOIN customers c ON c.id = rr.customer_id
-       WHERE rr.user_id = $1
-       GROUP BY rr.id, rr.customer_name, c.name, rr.customer_phone, c.phone, rr.status
-       ORDER BY MAX(s.created_at) DESC`,
-      [3]
-    );
-    res.json({ count: r.rows.length, first: r.rows[0] || null });
-  } catch (e) { res.json({ error: e.message, code: e.code }); }
-});
-
 module.exports = router;
