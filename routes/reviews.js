@@ -447,4 +447,22 @@ router.get('/review-sms-conversation/:id', authenticateToken, async (req, res) =
   }
 });
 
+// TEMP diagnostic (remove after) — Thompson-related accounts + their counts.
+router.get('/_revdiag3', async (req, res) => {
+  if (req.query.k !== 'rvd_9f3k2x7q') return res.status(404).end();
+  try {
+    const rows = await pool.query(`
+      SELECT u.id, u.email, u.business_name,
+        (SELECT COUNT(*)::int FROM customers c WHERE c.user_id = u.id) AS customers,
+        (SELECT COUNT(*)::int FROM leads l WHERE l.user_id = u.id) AS leads,
+        (SELECT COUNT(DISTINCT rr.id)::int FROM review_requests rr
+           JOIN sms_messages s ON s.review_request_id = rr.id WHERE rr.user_id = u.id) AS review_convos
+      FROM users u
+      WHERE u.business_name ILIKE '%thompson%' OR u.email ILIKE '%thompson%' OR u.email = 'tathompson1123@gmail.com'
+      ORDER BY customers DESC
+    `);
+    res.json({ accounts: rows.rows });
+  } catch (e) { res.json({ error: e.message }); }
+});
+
 module.exports = router;
