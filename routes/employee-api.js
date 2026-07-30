@@ -35,6 +35,18 @@ pool.query(`
     created_at TIMESTAMPTZ DEFAULT NOW()
   )
 `).catch(e => console.error('time_breaks migration error:', e.message));
+// ── Employee time off ────────────────────────────────────
+pool.query(`
+  CREATE TABLE IF NOT EXISTS employee_time_off (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    reason VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(e => console.error('employee_time_off migration error:', e.message));
 
 // Break reminder thresholds, measured in WORKED seconds (elapsed minus break time):
 // paid break at 2h, unpaid lunch at 4h, another paid break at 6h.
@@ -844,7 +856,26 @@ router.get('/my-schedule', async (req, res) => {
       params
     );
 
-    res.json({ date: targetDate, bookings: result.rows });
+    // Time off overlapping the window (same My/All scope as bookings). Non-fatal so a
+    // missing table can't break the schedule.
+    let timeOffRows = [];
+    try {
+      const toParams = isRange ? [userId, startDate, endDate] : [userId, targetDate, targetDate];
+      let toEmpFilter = '';
+      if (showAll !== 'true') { toParams.push(employeeId); toEmpFilter = `AND t.employee_id = $${toParams.length}`; }
+      const timeOff = await pool.query(
+        `SELECT t.id, t.employee_id, t.start_date, t.end_date, t.reason,
+                e.name AS employee_name, e.color AS employee_color
+         FROM employee_time_off t
+         LEFT JOIN employees e ON e.id = t.employee_id
+         WHERE t.user_id = $1 AND t.start_date <= $3 AND t.end_date >= $2 ${toEmpFilter}
+         ORDER BY t.start_date`,
+        toParams
+      );
+      timeOffRows = timeOff.rows;
+    } catch (e) { /* table may not exist yet */ }
+
+    res.json({ date: targetDate, bookings: result.rows, timeOff: timeOffRows });
   } catch (error) {
     console.error('Error fetching schedule:', error.message);
     res.status(500).json({ error: 'Failed to fetch schedule' });
