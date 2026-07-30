@@ -1825,13 +1825,11 @@ cron.schedule('*/60 * * * * *', async () => {
 cron.schedule('*/5 * * * *', async () => {
   try {
     const eligible = await pool.query(
-      `SELECT DISTINCT ON (b.id)
-              b.id AS booking_id, b.user_id, b.customer_id,
+      `SELECT b.id AS booking_id, b.user_id, b.customer_id,
               rc.send_delay, rc.incentive_enabled, rc.send_trigger
        FROM bookings b
        JOIN users u ON u.id = b.user_id
        JOIN review_configs rc ON rc.user_id = b.user_id
-       LEFT JOIN booking_items bi ON bi.booking_id = b.id
        WHERE rc.auto_send_enabled = true
          AND b.customer_id IS NOT NULL
          AND b.status NOT IN ('cancelled')
@@ -1840,11 +1838,12 @@ cron.schedule('*/5 * * * *', async () => {
            WHERE rr.booking_id = b.id
          )
          AND (
-           -- Automatic: service has ended + delay (timezone-aware)
+           -- Automatic: fires send_delay hours after the booking's END time (timezone-aware).
+           -- Uses end_time directly rather than start_time + per-item service_duration — a
+           -- 0-duration add-on item was making the join fire this hours early.
            (rc.send_trigger = 'service_duration'
-            AND (b.booking_date || ' ' || b.start_time)::timestamp
+            AND (b.booking_date || ' ' || COALESCE(b.end_time, b.start_time))::timestamp
                   AT TIME ZONE COALESCE(u.timezone, 'America/New_York')
-                + COALESCE(bi.service_duration, 1) * INTERVAL '1 hour'
                 + COALESCE(rc.send_delay, 1) * INTERVAL '1 hour'
                 <= NOW())
            OR
@@ -1852,8 +1851,7 @@ cron.schedule('*/5 * * * *', async () => {
            (rc.send_trigger = 'booking_completed'
             AND b.status = 'completed'
             AND b.updated_at + COALESCE(rc.send_delay, 1) * INTERVAL '1 hour' <= NOW())
-         )
-       ORDER BY b.id, bi.id`
+         )`
     );
 
     for (const row of eligible.rows) {

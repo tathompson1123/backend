@@ -447,24 +447,4 @@ router.get('/review-sms-conversation/:id', authenticateToken, async (req, res) =
   }
 });
 
-// TEMP diagnostic (remove after) — Cathy's booking timing + business timezone.
-router.get('/_revdiag5', async (req, res) => {
-  if (req.query.k !== 'rvd_9f3k2x7q') return res.status(404).end();
-  try {
-    const q = (s, p = []) => pool.query(s, p).then(r => r.rows);
-    res.json({
-      userTz: await q(`SELECT id, timezone FROM users WHERE id = 3`),
-      config: await q(`SELECT send_trigger, send_delay FROM review_configs WHERE user_id = 3`),
-      cathy: await q(`
-        SELECT b.id, b.booking_date, b.start_time, b.end_time, b.status,
-               (SELECT bi.service_duration FROM booking_items bi WHERE bi.booking_id = b.id ORDER BY bi.id LIMIT 1) AS first_svc_duration,
-               rr.actual_send_time
-        FROM bookings b
-        JOIN review_requests rr ON rr.booking_id = b.id
-        WHERE b.user_id = 3 AND b.customer_name ILIKE '%cathy%'
-        ORDER BY rr.actual_send_time DESC NULLS LAST LIMIT 3`),
-    });
-  } catch (e) { res.json({ error: e.message }); }
-});
-
 module.exports = router;
