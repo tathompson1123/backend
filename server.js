@@ -439,6 +439,21 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
       WHERE review_request_id IS NULL
         AND message ~ 'review-click/[0-9]+'
     `);
+    // Older texts (pre-tracking) carried the raw google link with no id — match those
+    // outbound "leave your review" texts to a review_request by the customer's phone.
+    await pool.query(`
+      UPDATE sms_messages s
+      SET review_request_id = rr.id
+      FROM review_requests rr
+      JOIN customers c ON c.id = rr.customer_id
+      WHERE s.review_request_id IS NULL
+        AND s.direction = 'outgoing'
+        AND s.user_id = rr.user_id
+        AND s.message ILIKE '%leave your review%'
+        AND length(right(regexp_replace(coalesce(s.to_number,''), '\\D', '', 'g'), 10)) = 10
+        AND right(regexp_replace(coalesce(s.to_number,''), '\\D', '', 'g'), 10)
+            = right(regexp_replace(coalesce(c.phone,''), '\\D', '', 'g'), 10)
+    `);
     await pool.query(`CREATE TABLE IF NOT EXISTS contact_sales_requests (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,

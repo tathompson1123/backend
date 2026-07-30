@@ -447,4 +447,20 @@ router.get('/review-sms-conversation/:id', authenticateToken, async (req, res) =
   }
 });
 
+// TEMP diagnostic (remove after): aggregate counts only, keyed. Tells us whether review
+// texts exist / got tagged and under which user, without exposing message content.
+router.get('/_revdiag', async (req, res) => {
+  if (req.query.k !== 'rvd_9f3k2x7q') return res.status(404).end();
+  try {
+    const q = (sql) => pool.query(sql).then(r => r.rows);
+    res.json({
+      msgsWithTrackedLink: (await q("SELECT COUNT(*)::int c FROM sms_messages WHERE message ~ 'review-click/[0-9]+'"))[0].c,
+      msgsLeaveYourReview: (await q("SELECT COUNT(*)::int c FROM sms_messages WHERE message ILIKE '%leave your review%'"))[0].c,
+      taggedMsgs: (await q("SELECT COUNT(*)::int c FROM sms_messages WHERE review_request_id IS NOT NULL"))[0].c,
+      reviewRequestsByUser: await q("SELECT user_id, COUNT(*)::int c FROM review_requests GROUP BY user_id ORDER BY c DESC LIMIT 10"),
+      taggedMsgsByUser: await q("SELECT user_id, COUNT(*)::int c FROM sms_messages WHERE review_request_id IS NOT NULL GROUP BY user_id ORDER BY c DESC LIMIT 10"),
+    });
+  } catch (e) { res.json({ error: e.message }); }
+});
+
 module.exports = router;
