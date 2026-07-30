@@ -298,8 +298,10 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
           console.log(`🟠 Review reply NEGATIVE from ${From} (request ${rr.id}) — owner notified`);
         } else {
           // positive or neutral → send the review ask with the incentive woven in.
-          const backendUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
-          const trackedUrl = rr.google_review_link ? `${backendUrl}/api/public/review-click/${rr.id}` : '';
+          // Clean, branded short link (redirects through the site → tracker → Google) so the
+          // text doesn't show the raw backend/api URL.
+          const linkBase = (process.env.REVIEW_LINK_BASE || 'https://sorceintegrations.com').replace(/\/$/, '');
+          const trackedUrl = rr.google_review_link ? `${linkBase}/r/${rr.id}` : '';
           const reply = await composePositiveReply({
             firstName,
             businessName: rr.business_name,

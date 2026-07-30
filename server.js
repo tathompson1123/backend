@@ -1917,8 +1917,8 @@ cron.schedule('*/30 * * * *', async () => {
           continue;
         }
         const firstName = (req.customer_name || 'there').split(' ')[0];
-        const backendUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
-        const reviewLink = req.google_review_link ? `${backendUrl}/api/public/review-click/${req.id}` : null;
+        const linkBase = (process.env.REVIEW_LINK_BASE || 'https://sorceintegrations.com').replace(/\/$/, '');
+        const reviewLink = req.google_review_link ? `${linkBase}/r/${req.id}` : null;
 
         let bodyText = req.incentive_enabled && req.incentive
           ? `We'd love to hear about your experience! Could you take a moment to share a review? As a thank you, here's a special offer: <strong>${req.incentive}</strong>`
