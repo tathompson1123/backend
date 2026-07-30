@@ -725,7 +725,7 @@ const TIME_OFF_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 router.get('/time-off', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT t.id, t.employee_id, t.start_date, t.end_date, t.reason, t.created_at, e.name AS employee_name
+      `SELECT t.id, t.employee_id, t.start_date, t.end_date, t.reason, t.show_on_schedule, t.created_at, e.name AS employee_name
        FROM employee_time_off t
        LEFT JOIN employees e ON e.id = t.employee_id
        WHERE t.user_id = $1
@@ -741,7 +741,7 @@ router.get('/time-off', async (req, res) => {
 
 router.post('/time-off', async (req, res) => {
   try {
-    const { employeeId, startDate, endDate, reason } = req.body;
+    const { employeeId, startDate, endDate, reason, showOnSchedule } = req.body;
     if (!employeeId || !startDate || !endDate) {
       return res.status(400).json({ error: 'employeeId, startDate and endDate are required' });
     }
@@ -755,14 +755,45 @@ router.post('/time-off', async (req, res) => {
     if (owns.rows.length === 0) return res.status(404).json({ error: 'Employee not found' });
 
     const result = await pool.query(
-      `INSERT INTO employee_time_off (user_id, employee_id, start_date, end_date, reason)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [req.user.userId, employeeId, startDate, endDate, (reason || '').trim() || null]
+      `INSERT INTO employee_time_off (user_id, employee_id, start_date, end_date, reason, show_on_schedule)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [req.user.userId, employeeId, startDate, endDate, (reason || '').trim() || null, showOnSchedule !== false]
     );
     res.json({ success: true, timeOff: result.rows[0] });
   } catch (error) {
     console.error('Error creating time off:', error.message);
     res.status(500).json({ error: 'Failed to create time off' });
+  }
+});
+
+router.put('/time-off/:id', async (req, res) => {
+  try {
+    const { employeeId, startDate, endDate, reason, showOnSchedule } = req.body;
+    if (startDate && !TIME_OFF_DATE_RE.test(startDate)) return res.status(400).json({ error: 'startDate must be YYYY-MM-DD' });
+    if (endDate && !TIME_OFF_DATE_RE.test(endDate)) return res.status(400).json({ error: 'endDate must be YYYY-MM-DD' });
+    if (employeeId) {
+      const owns = await pool.query('SELECT id FROM employees WHERE id = $1 AND user_id = $2', [employeeId, req.user.userId]);
+      if (owns.rows.length === 0) return res.status(404).json({ error: 'Employee not found' });
+    }
+    const result = await pool.query(
+      `UPDATE employee_time_off
+       SET employee_id = COALESCE($1, employee_id),
+           start_date = COALESCE($2, start_date),
+           end_date = COALESCE($3, end_date),
+           reason = COALESCE($4, reason),
+           show_on_schedule = COALESCE($5, show_on_schedule)
+       WHERE id = $6 AND user_id = $7
+       RETURNING *`,
+      [employeeId || null, startDate || null, endDate || null,
+       reason !== undefined ? ((reason || '').trim() || null) : null,
+       typeof showOnSchedule === 'boolean' ? showOnSchedule : null,
+       req.params.id, req.user.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, timeOff: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating time off:', error.message);
+    res.status(500).json({ error: 'Failed to update time off' });
   }
 });
 

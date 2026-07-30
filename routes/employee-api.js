@@ -47,6 +47,7 @@ pool.query(`
     created_at TIMESTAMPTZ DEFAULT NOW()
   )
 `).catch(e => console.error('employee_time_off migration error:', e.message));
+pool.query(`ALTER TABLE employee_time_off ADD COLUMN IF NOT EXISTS show_on_schedule BOOLEAN DEFAULT true`).catch(() => {});
 
 // Break reminder thresholds, measured in WORKED seconds (elapsed minus break time):
 // paid break at 2h, unpaid lunch at 4h, another paid break at 6h.
@@ -868,7 +869,7 @@ router.get('/my-schedule', async (req, res) => {
                 e.name AS employee_name, e.color AS employee_color
          FROM employee_time_off t
          LEFT JOIN employees e ON e.id = t.employee_id
-         WHERE t.user_id = $1 AND t.start_date <= $3 AND t.end_date >= $2 ${toEmpFilter}
+         WHERE t.user_id = $1 AND t.show_on_schedule = true AND t.start_date <= $3 AND t.end_date >= $2 ${toEmpFilter}
          ORDER BY t.start_date`,
         toParams
       );
