@@ -447,20 +447,4 @@ router.get('/review-sms-conversation/:id', authenticateToken, async (req, res) =
   }
 });
 
-// TEMP diagnostic (remove after) — user 3 review flow state.
-router.get('/_revdiag2', async (req, res) => {
-  if (req.query.k !== 'rvd_9f3k2x7q') return res.status(404).end();
-  try {
-    const uid = 3;
-    const q = (sql, p = []) => pool.query(sql, p).then(r => r.rows);
-    res.json({
-      listCount: (await q(`SELECT COUNT(DISTINCT rr.id)::int c FROM review_requests rr JOIN sms_messages s ON s.review_request_id = rr.id WHERE rr.user_id = $1`, [uid]))[0].c,
-      reqByStatus: await q(`SELECT status, COUNT(*)::int c FROM review_requests WHERE user_id = $1 GROUP BY status ORDER BY c DESC`, [uid]),
-      config: await q(`SELECT auto_send_enabled, send_trigger, send_delay, rep_name, incentive_enabled FROM review_configs WHERE user_id = $1`, [uid]),
-      newestTexts: await q(`SELECT left(message, 90) msg, created_at FROM sms_messages WHERE review_request_id IS NOT NULL AND user_id = $1 ORDER BY created_at DESC LIMIT 3`, [uid]),
-      openerLike: await q(`SELECT left(message, 90) msg, created_at FROM sms_messages WHERE user_id = $1 AND message ILIKE '%how did%' ORDER BY created_at DESC LIMIT 3`, [uid]),
-    });
-  } catch (e) { res.json({ error: e.message }); }
-});
-
 module.exports = router;

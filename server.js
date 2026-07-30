@@ -1724,7 +1724,12 @@ cron.schedule('*/60 * * * * *', async () => {
     const pending = await pool.query(
       `SELECT rr.id, rr.user_id, rr.customer_id, rr.incentive_code,
               c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email,
-              c.last_service AS service_name,
+              COALESCE(
+                (SELECT bi.service_name FROM booking_items bi
+                  WHERE bi.booking_id = rr.booking_id AND bi.is_addon = false
+                  ORDER BY bi.id LIMIT 1),
+                c.last_service
+              ) AS service_name,
               u.business_name, u.twilio_phone_number, u.google_review_link,
               rc.message_template, rc.incentive, rc.incentive_enabled, rc.rep_name
        FROM review_requests rr
