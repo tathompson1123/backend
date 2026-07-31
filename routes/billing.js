@@ -131,16 +131,37 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
 // Stripe Webhook - Handle successful payments
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  let event;
+  // Live and sandbox are separate endpoints with separate signing secrets. One
+  // deploy serves both, so try each — a signature either verifies or it doesn't,
+  // and this way switching to live doesn't cost us sandbox testing.
+  const secrets = [
+    process.env.STRIPE_WEBHOOK_SECRET,
+    process.env.STRIPE_WEBHOOK_SECRET_TEST,
+  ].filter(Boolean);
 
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-  } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+  if (secrets.length === 0) {
+    console.error('⚠️ No STRIPE_WEBHOOK_SECRET configured — rejecting webhook');
+    return res.status(400).send('Webhook Error: no signing secret configured');
   }
+
+  let event = null;
+  let lastError = null;
+  for (const secret of secrets) {
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, secret);
+      break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (!event) {
+    console.error('Webhook signature verification failed:', lastError?.message);
+    return res.status(400).send(`Webhook Error: ${lastError?.message}`);
+  }
+
+  console.log(`📨 Stripe billing webhook: ${event.type}${event.livemode ? '' : ' (sandbox)'}`);
 
   // Handle the event
   if (event.type === 'checkout.session.completed') {
