@@ -69,6 +69,7 @@ app.get('/api/health', (req, res) => {
 // Import routes
 const authRoutes = require('./routes/auth');
 const analyticsRoutes = require('./routes/analytics');
+const { router: discoveryRoutes } = require('./routes/discovery');
 const bookingRoutes = require('./routes/bookings');
 const customerRoutes = require('./routes/customers');
 const leadRoutes = require('./routes/leads');
@@ -96,6 +97,7 @@ app.use('/api/public', embedCors, publicRoutes);
 app.use('/api/leads/public', embedCors); // CORS for embed form submissions
 app.use('/api/leads', leadRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/discovery', discoveryRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/service-categories', serviceCategoryRoutes);
 app.use('/api/booking-widget-config', bookingWidgetConfigRoutes);
@@ -429,6 +431,56 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS incentive_score INTEGER`);
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS incentive_tip TEXT`);
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS review_link_base VARCHAR(255)`);
+    // SORCE's own internal CRM: who can log into /analytics, and the discovery calls
+    // we book with prospects signing up for SORCE.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sorce_team_members (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(120) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        title VARCHAR(120),
+        phone VARCHAR(30),
+        photo_url TEXT,
+        bio TEXT,
+        role VARCHAR(20) DEFAULT 'member',
+        password_hash TEXT,
+        invite_token TEXT,
+        invite_token_expires TIMESTAMPTZ,
+        invite_accepted_at TIMESTAMPTZ,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS discovery_calls (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(160) NOT NULL,
+        email VARCHAR(255),
+        phone VARCHAR(30),
+        company VARCHAR(160),
+        scheduled_at TIMESTAMPTZ NOT NULL,
+        duration_minutes INTEGER DEFAULT 30,
+        timezone VARCHAR(64) DEFAULT 'America/New_York',
+        status VARCHAR(24) DEFAULT 'scheduled',
+        assigned_to INTEGER REFERENCES sorce_team_members(id) ON DELETE SET NULL,
+        source VARCHAR(24) DEFAULT 'manual',
+        notes TEXT,
+        outcome VARCHAR(40),
+        confirmation_sms_sent BOOLEAN DEFAULT false,
+        confirmation_email_sent BOOLEAN DEFAULT false,
+        reminder_24h_sent BOOLEAN DEFAULT false,
+        reminder_2h_sent BOOLEAN DEFAULT false,
+        created_by INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_discovery_calls_scheduled ON discovery_calls(scheduled_at)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS discovery_availability (
+        id SERIAL PRIMARY KEY,
+        day_of_week INTEGER NOT NULL,
+        start_time TIME NOT NULL,
+        end_time TIME NOT NULL
+      )`);
     // Tag SMS rows that belong to a Google Review conversation so the dashboard can show
     // the full opener + reply thread in its own sub-tab.
     await pool.query(`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS review_request_id INTEGER`);
@@ -2289,6 +2341,43 @@ cron.schedule('0 */4 * * *', () => runChatLearningAgent());
 // whole pool (winner gets the GBP incentive reward; everyone else a consolation).
 const { runMonthlyRaffles } = require('./utils/reviewRaffle');
 cron.schedule('0 9 1 * *', () => runMonthlyRaffles(), { timezone: 'America/New_York' });
+
+// ── Discovery call reminders — 24 hours and 2 hours out ──────────────────────
+// Each window is one-shot per call via its own flag, so a late run or a restart
+// can't double-text a prospect. Rescheduling clears the flags to re-arm them.
+cron.schedule('*/10 * * * *', async () => {
+  const { sendDiscoverySMS, reminder24hSMS, reminder2hSMS } = require('./utils/discoveryNotify');
+  const windows = [
+    { flag: 'reminder_24h_sent', low: '23 hours', high: '25 hours', build: reminder24hSMS, label: '24h' },
+    { flag: 'reminder_2h_sent',  low: '90 minutes', high: '150 minutes', build: reminder2hSMS, label: '2h' },
+  ];
+
+  for (const w of windows) {
+    try {
+      const due = await pool.query(
+        `SELECT dc.*, tm.name AS rep_name
+         FROM discovery_calls dc
+         LEFT JOIN sorce_team_members tm ON tm.id = dc.assigned_to
+         WHERE dc.status = 'scheduled'
+           AND dc.${w.flag} = false
+           AND dc.phone IS NOT NULL
+           AND dc.scheduled_at BETWEEN NOW() + INTERVAL '${w.low}' AND NOW() + INTERVAL '${w.high}'`
+      );
+      for (const call of due.rows) {
+        try {
+          await sendDiscoverySMS(call.phone, w.build(call, { name: call.rep_name }));
+          await pool.query(`UPDATE discovery_calls SET ${w.flag} = true WHERE id = $1`, [call.id]);
+          console.log(`📅 Discovery ${w.label} reminder sent → ${call.name} (call ${call.id})`);
+        } catch (err) {
+          // Flag stays false so the next tick retries while still inside the window.
+          console.error(`⚠️ Discovery ${w.label} reminder failed (call ${call.id}):`, err.message);
+        }
+      }
+    } catch (err) {
+      console.error(`Discovery ${w.label} reminder sweep error:`, err.message);
+    }
+  }
+});
 
 // ── Ad platform spend sync — runs daily at 3am ───────────────────────────────
 const { syncGoogleAds, syncGoogleLSA, syncMeta } = require('./routes/ad-platforms');

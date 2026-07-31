@@ -1178,4 +1178,65 @@ router.get('/review-click/:id', async (req, res) => {
   }
 });
 
+// ── Discovery calls: public self-booking on sorceintegrations.com ──
+
+// GET /api/public/discovery/slots?date=YYYY-MM-DD
+router.get('/discovery/slots', async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ error: 'A date is required' });
+    const { slotsForDate } = require('./discovery');
+    res.json({ success: true, date, slots: await slotsForDate(date) });
+  } catch (err) {
+    console.error('Discovery slots error:', err.message);
+    res.status(500).json({ error: 'Failed to load available times' });
+  }
+});
+
+// POST /api/public/discovery/book — a prospect books themselves
+router.post('/discovery/book', async (req, res) => {
+  try {
+    const { name, email, phone, company, scheduledAt, timezone, notes } = req.body;
+    if (!name?.trim())  return res.status(400).json({ error: 'Please enter your name' });
+    if (!email?.trim()) return res.status(400).json({ error: 'Please enter your email' });
+    if (!phone?.trim()) return res.status(400).json({ error: 'Please enter your phone number' });
+    if (!scheduledAt)   return res.status(400).json({ error: 'Please pick a time' });
+
+    const { slotsForDate, dispatchConfirmations, DEFAULT_SLOT_MINUTES } = require('./discovery');
+
+    // Re-check the slot server-side so two prospects can't grab the same time.
+    const dateStr = new Date(scheduledAt).toISOString().slice(0, 10);
+    const open = await slotsForDate(dateStr);
+    const wanted = new Date(scheduledAt).getTime();
+    if (!open.some(s => new Date(s.iso).getTime() === wanted)) {
+      return res.status(409).json({ error: 'Sorry, that time was just taken. Please pick another.' });
+    }
+
+    // Round-robin onto whoever has the fewest upcoming calls, so it lands on a real person.
+    const rep = await pool.query(
+      `SELECT tm.id FROM sorce_team_members tm
+       LEFT JOIN discovery_calls dc
+         ON dc.assigned_to = tm.id AND dc.scheduled_at > NOW() AND dc.status = 'scheduled'
+       WHERE tm.active = true AND tm.password_hash IS NOT NULL
+       GROUP BY tm.id ORDER BY COUNT(dc.id), tm.id LIMIT 1`
+    );
+
+    const created = await pool.query(
+      `INSERT INTO discovery_calls
+         (name, email, phone, company, scheduled_at, duration_minutes, timezone, assigned_to, notes, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'public') RETURNING *`,
+      [name.trim(), email.trim().toLowerCase(), phone.trim(), company?.trim() || null,
+       scheduledAt, DEFAULT_SLOT_MINUTES, timezone || 'America/New_York',
+       rep.rows[0]?.id || null, notes?.trim() || null]
+    );
+
+    const call = created.rows[0];
+    const delivery = await dispatchConfirmations(call);
+    res.json({ success: true, call: { id: call.id, scheduled_at: call.scheduled_at }, delivery });
+  } catch (err) {
+    console.error('Discovery booking error:', err.message);
+    res.status(500).json({ error: 'Could not book that call. Please try again.' });
+  }
+});
+
 module.exports = router;

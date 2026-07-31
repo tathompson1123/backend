@@ -27,12 +27,43 @@ const requireAnalytics = (req, res, next) => {
 };
 
 // ── POST /api/analytics/login ─────────────────────────────────
-router.post('/login', (req, res) => {
-  const { password } = req.body;
-  if (!password || password !== ANALYTICS_PASSWORD) {
+// Two ways in: an invited team member's own email + password, or the legacy shared
+// password (kept so nobody is locked out before team accounts are set up).
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!password) return res.status(401).json({ error: 'Password is required' });
+
+  if (email) {
+    try {
+      const found = await pool.query(
+        `SELECT id, name, email, role, password_hash, active
+         FROM sorce_team_members WHERE email = $1`,
+        [String(email).trim().toLowerCase()]
+      );
+      const member = found.rows[0];
+      if (!member || !member.active || !member.password_hash) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+      const bcrypt = require('bcrypt');
+      if (!(await bcrypt.compare(password, member.password_hash))) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+      const token = jwt.sign(
+        { analytics: true, tm: member.id, name: member.name, email: member.email, role: member.role },
+        process.env.JWT_SECRET,
+        { expiresIn: '12h' }
+      );
+      return res.json({ token, member: { name: member.name, email: member.email, role: member.role } });
+    } catch (err) {
+      console.error('Team login error:', err.message);
+      return res.status(500).json({ error: 'Login failed' });
+    }
+  }
+
+  if (password !== ANALYTICS_PASSWORD) {
     return res.status(401).json({ error: 'Invalid password' });
   }
-  const token = jwt.sign({ analytics: true }, process.env.JWT_SECRET, { expiresIn: '12h' });
+  const token = jwt.sign({ analytics: true, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '12h' });
   res.json({ token });
 });
 
