@@ -152,6 +152,9 @@ router.get('/data', requireAnalytics, requireAdmin, async (req, res) => {
       // failing card keeps the plan set for the whole dunning window.
       const status     = u.subscription_status || (u.plan ? 'unknown' : 'none');
       const isPaying   = status === 'active';
+      // Money that isn't MRR — a front end offer, say. It shouldn't count toward
+      // recurring revenue, but "nothing paid" is wrong when they've paid us.
+      const hasOneOff  = !isPaying && !!u.last_payment_at;
       const isPastDue  = status === 'past_due' || status === 'unpaid' || status === 'incomplete';
       const revenue    = isPaying ? (PLAN_REVENUE[u.plan] || 0) : 0;
       const smsCost      = u.sms_sent_month * SMS_COST;
@@ -174,6 +177,7 @@ router.get('/data', requireAnalytics, requireAdmin, async (req, res) => {
         subscription_status:    status,
         is_paying:              isPaying,
         is_past_due:            isPastDue,
+        has_one_off_payment:    hasOneOff,
         last_payment_at:        u.last_payment_at,
         last_payment_amount:    u.last_payment_amount != null ? u.last_payment_amount / 100 : null,
         last_payment_failed_at: u.last_payment_failed_at,

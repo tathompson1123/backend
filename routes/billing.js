@@ -207,6 +207,31 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       return res.json({ received: true });
     }
 
+    // A one-off charge — a front end offer with no plan attached. It creates no
+    // subscription, so there's nothing to activate and, critically, nothing to
+    // overwrite: writing the empty plan through here wipes whatever they were on.
+    // Record the money and stop.
+    if (!plan || session.mode === 'payment') {
+      try {
+        await pool.query(
+          `UPDATE users SET stripe_customer_id = COALESCE($1, stripe_customer_id),
+                            last_payment_at = NOW(),
+                            last_payment_amount = $2,
+                            last_payment_failed_at = NULL
+           WHERE id = $3`,
+          [session.customer, session.amount_total || 0, userId]
+        );
+        console.log(
+          `💰 One-off payment recorded for user ${userId} — ` +
+          `$${((session.amount_total || 0) / 100).toFixed(2)}` +
+          `${session.metadata?.offer ? ` (${session.metadata.offer})` : ''}. No subscription created.`
+        );
+      } catch (error) {
+        console.error('Error recording one-off payment:', error.message);
+      }
+      return res.json({ received: true });
+    }
+
     // Basic is no longer sold; anything unrecognised still lands on its own plan.
     const effectivePlan = plan === 'basic' ? 'pro' : plan;
     const trialEnds = (plan === 'pro' || plan === 'scale')
