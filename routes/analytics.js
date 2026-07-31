@@ -232,6 +232,84 @@ router.get('/data', requireAnalytics, requireAdmin, async (req, res) => {
   }
 });
 
+// ── GET /api/analytics/review-diagnostics ─────────────────────
+// Why a given booking did or didn't get its review text. Walks the same gates the
+// two crons apply and says which one it fell out of, so this doesn't need a SQL
+// client and a memory of the pipeline.
+router.get('/review-diagnostics', requireAnalytics, requireAdmin, async (req, res) => {
+  try {
+    const { email, userId, days = 30 } = req.query;
+
+    let uid = userId ? parseInt(userId, 10) : null;
+    if (!uid && email) {
+      const found = await pool.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+      uid = found.rows[0]?.id;
+    }
+    if (!uid) return res.status(400).json({ error: 'Pass ?email= or ?userId= for the business' });
+
+    const cfg = (await pool.query(
+      `SELECT auto_send_enabled, send_trigger, send_delay FROM review_configs WHERE user_id = $1`,
+      [uid]
+    )).rows[0] || null;
+
+    const account = (await pool.query(
+      `SELECT business_name, plan, twilio_phone_number, google_review_link FROM users WHERE id = $1`,
+      [uid]
+    )).rows[0];
+
+    const rows = (await pool.query(
+      `SELECT b.id AS booking_id, b.status AS booking_status, b.booking_date,
+              b.start_time, b.end_time, b.updated_at, b.customer_id,
+              c.name AS customer_name, c.phone AS customer_phone, c.sms_unsubscribed,
+              rr.id AS review_request_id, rr.status AS rr_status, rr.sms_sent,
+              rr.scheduled_send_time, rr.actual_send_time
+       FROM bookings b
+       LEFT JOIN customers c ON c.id = b.customer_id
+       LEFT JOIN review_requests rr ON rr.booking_id = b.id
+       WHERE b.user_id = $1 AND b.booking_date >= CURRENT_DATE - ($2::int)
+       ORDER BY b.booking_date DESC, b.start_time DESC`,
+      [uid, parseInt(days, 10)]
+    )).rows;
+
+    // Walk the gates in the order the crons apply them.
+    const bookings = rows.map(b => {
+      let verdict;
+      if (!cfg?.auto_send_enabled) verdict = 'Auto-send is off for this account';
+      else if (b.booking_status === 'cancelled') verdict = 'Booking is cancelled';
+      else if (!b.customer_id) verdict = 'No customer linked to the booking — nothing to text';
+      else if (!b.review_request_id) {
+        verdict = cfg.send_trigger === 'booking_completed'
+          ? (b.booking_status === 'completed'
+              ? 'Marked completed — waiting for the delay to elapse'
+              : `Not queued: trigger is "booking completed" and this booking is "${b.booking_status}"`)
+          : 'Not queued yet — the service end time plus your delay has not passed';
+      }
+      else if (b.sms_sent) verdict = 'Sent';
+      else if (!b.customer_phone) verdict = 'Queued, but the customer has no phone number';
+      else if (b.sms_unsubscribed) verdict = 'Customer has opted out of texts (replied STOP)';
+      else if (b.rr_status === 'sms_limit_reached') verdict = 'Blocked — monthly SMS limit reached';
+      else if (b.rr_status === 'skipped') verdict = 'Skipped — the plan has no SMS allowance';
+      else if (b.scheduled_send_time && new Date(b.scheduled_send_time) > new Date()) {
+        verdict = `Queued, sends at ${new Date(b.scheduled_send_time).toISOString()}`;
+      }
+      else verdict = `Queued but unsent (status "${b.rr_status}") — check the cron logs`;
+
+      return { ...b, verdict };
+    });
+
+    res.json({
+      success: true,
+      account: { userId: uid, ...account },
+      config: cfg,
+      bookingCount: bookings.length,
+      bookings,
+    });
+  } catch (error) {
+    console.error('Review diagnostics error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ── POST /api/analytics/backfill-stripe ───────────────────────
 // Repairs accounts that paid while no live webhook endpoint existed. Defaults to a
 // dry run — pass { apply: true } once the report looks right.
