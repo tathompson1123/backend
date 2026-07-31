@@ -839,5 +839,64 @@ router.post('/fix-webhook', async (req, res) => {
   }
 });
 
+// ── Inbound to SORCE's own number ────────────────────────────────────────────
+// The discovery reminders invite a reply ("Need to move it? Just reply here"), but
+// this number belongs to no customer account, so the main webhook would look it up,
+// find no owner and drop the message. Point the number here instead: the reply gets
+// forwarded on with enough context to act on, and is written to the call's notes so
+// it shows up in the CRM rather than only on somebody's phone.
+router.post('/sorce-inbound', express.urlencoded({ extended: false }), async (req, res) => {
+  // Answer Twilio immediately; nothing below should hold up the webhook.
+  res.type('text/xml').send('<Response></Response>');
+
+  const from = req.body.From;
+  const body = (req.body.Body || '').trim();
+  if (!from) return;
+
+  try {
+    const last10 = from.replace(/\D/g, '').slice(-10);
+
+    const match = await pool.query(
+      `SELECT dc.id, dc.name, dc.company, dc.scheduled_at, dc.notes, tm.name AS rep_name
+       FROM discovery_calls dc
+       LEFT JOIN sorce_team_members tm ON tm.id = dc.assigned_to
+       WHERE right(regexp_replace(dc.phone, '\\D', '', 'g'), 10) = $1
+       ORDER BY dc.scheduled_at DESC LIMIT 1`,
+      [last10]
+    );
+    const call = match.rows[0];
+
+    if (call) {
+      const stamp = new Date().toLocaleString('en-US', {
+        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+      });
+      await pool.query(
+        `UPDATE discovery_calls
+         SET notes = COALESCE(notes || E'\\n\\n', '') || $1, updated_at = NOW()
+         WHERE id = $2`,
+        [`[Reply ${stamp}] ${body}`, call.id]
+      );
+    }
+
+    const forwardTo = process.env.SORCE_SMS_FORWARD_TO;
+    if (!forwardTo) {
+      console.warn(`⚠️ Reply to the SORCE number from ${from} — SORCE_SMS_FORWARD_TO not set, so nobody was told: "${body}"`);
+      return;
+    }
+
+    const who = call
+      ? `${call.name}${call.company ? ` (${call.company})` : ''}` +
+        `, call ${new Date(call.scheduled_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` +
+        `${call.rep_name ? ` with ${call.rep_name}` : ''}`
+      : `${from} (no discovery call on file)`;
+
+    const { sendDiscoverySMS } = require('../utils/discoveryNotify');
+    await sendDiscoverySMS(forwardTo, `SORCE reply — ${who}:\n"${body}"\n\nReply to them on ${from}`);
+    console.log(`📨 Forwarded SORCE reply from ${from} to ${forwardTo}`);
+  } catch (err) {
+    console.error('SORCE inbound forward failed:', err.message);
+  }
+});
+
 module.exports = router;
 module.exports.generateAIResponse = generateAIResponse;
