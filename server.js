@@ -2439,7 +2439,38 @@ app.listen(PORT, () => {
   console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected'}`);
   console.log(`📱 Twilio: ${process.env.TWILIO_ACCOUNT_SID ? 'Ready' : 'Not configured'}`);
   console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'Ready' : 'Not configured'}`);
-  console.log(`💳 Stripe: ${process.env.STRIPE_SECRET_KEY ? 'Ready' : 'Not configured'}`);
+  // Mode mismatches between the API key and the webhook secrets are silent and
+  // brutal: a test key produces test-mode events, which a live signing secret
+  // rejects, so checkouts appear to work while nothing is ever recorded. Say so.
+  (() => {
+    const key = process.env.STRIPE_SECRET_KEY || '';
+    if (!key) return console.log('💳 Stripe: Not configured');
+
+    const mode = key.startsWith('sk_live_') ? 'LIVE' : key.startsWith('sk_test_') ? 'TEST' : 'UNKNOWN';
+    console.log(`💳 Stripe: Ready — API key is ${mode}`);
+
+    if (mode === 'TEST') {
+      console.warn(
+        '⚠️ STRIPE_SECRET_KEY is a TEST key. Checkout sessions, customers and ' +
+        'subscriptions are all test-mode — no real money will be collected, and ' +
+        'this applies to customer Connect payments too.'
+      );
+    }
+    if (mode === 'TEST' && !process.env.STRIPE_WEBHOOK_SECRET_TEST) {
+      console.warn(
+        '⚠️ Running a TEST key with no STRIPE_WEBHOOK_SECRET_TEST. Test-mode events ' +
+        'are signed by the sandbox endpoint, so they will fail signature verification ' +
+        'and every billing webhook will 400.'
+      );
+    }
+    const pk = process.env.STRIPE_PUBLIC_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
+    if (pk && mode !== 'UNKNOWN') {
+      const pkMode = pk.startsWith('pk_live_') ? 'LIVE' : pk.startsWith('pk_test_') ? 'TEST' : 'UNKNOWN';
+      if (pkMode !== 'UNKNOWN' && pkMode !== mode) {
+        console.warn(`⚠️ Stripe key mismatch: secret key is ${mode} but publishable key is ${pkMode}.`);
+      }
+    }
+  })();
 });
 
 module.exports = app;
