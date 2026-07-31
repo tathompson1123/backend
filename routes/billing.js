@@ -217,9 +217,11 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
           `UPDATE users SET stripe_customer_id = COALESCE($1, stripe_customer_id),
                             last_payment_at = NOW(),
                             last_payment_amount = $2,
+                            last_payment_description = $3,
                             last_payment_failed_at = NULL
-           WHERE id = $3`,
-          [session.customer, session.amount_total || 0, userId]
+           WHERE id = $4`,
+          [session.customer, session.amount_total || 0,
+           session.metadata?.offer || 'One-off charge', userId]
         );
         console.log(
           `💰 One-off payment recorded for user ${userId} — ` +
@@ -290,10 +292,19 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         `UPDATE users
          SET last_payment_at = to_timestamp($1),
              last_payment_amount = $2,
+             last_payment_description = $3,
              last_payment_failed_at = NULL,
              subscription_status = 'active'
-         WHERE stripe_customer_id = $3`,
-        [invoice.created, invoice.amount_paid, invoice.customer]
+         WHERE stripe_customer_id = $4`,
+        [
+          invoice.created,
+          invoice.amount_paid,
+          // Every line on the invoice, so a plan billed alongside a front end offer
+          // reads as both rather than just the subscription.
+          (invoice.lines?.data || []).map(l => l.description).filter(Boolean).join(' + ')
+            || 'Subscription payment',
+          invoice.customer,
+        ]
       );
       console.log(`💰 Payment succeeded for customer ${invoice.customer} — $${(invoice.amount_paid / 100).toFixed(2)}`);
 

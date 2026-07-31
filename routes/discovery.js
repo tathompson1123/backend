@@ -238,16 +238,34 @@ router.get('/calls', requireAnalytics, async (req, res) => {
     if (to) { params.push(to); clauses.push(`dc.scheduled_at <= $${params.length}`); }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
+    // Match the prospect to a SORCE account by email so the card can show whether
+    // they've actually paid, and for what.
     const result = await pool.query(
-      `SELECT dc.*, tm.name AS rep_name, tm.title AS rep_title, tm.photo_url AS rep_photo
+      `SELECT dc.*,
+              tm.name AS rep_name, tm.title AS rep_title, tm.photo_url AS rep_photo,
+              u.id                       AS customer_user_id,
+              u.plan                     AS customer_plan,
+              u.subscription_status      AS customer_status,
+              u.last_payment_at          AS customer_last_payment_at,
+              u.last_payment_amount      AS customer_last_payment_amount,
+              u.last_payment_description AS customer_last_payment_description
        FROM discovery_calls dc
        LEFT JOIN sorce_team_members tm ON tm.id = dc.assigned_to
+       LEFT JOIN users u ON dc.email IS NOT NULL AND LOWER(u.email) = LOWER(dc.email)
        ${where}
        ORDER BY dc.scheduled_at DESC
        LIMIT 500`,
       params
     );
-    res.json({ success: true, calls: result.rows });
+    const calls = result.rows.map(c => ({
+      ...c,
+      customer_last_payment_amount:
+        c.customer_last_payment_amount != null ? c.customer_last_payment_amount / 100 : null,
+      // Paid means money cleared — an active subscription or a recorded one-off.
+      has_paid: !!c.customer_last_payment_at || c.customer_status === 'active',
+      is_subscribed: c.customer_status === 'active',
+    }));
+    res.json({ success: true, calls });
   } catch (err) {
     console.error('Discovery calls list error:', err.message);
     res.status(500).json({ error: 'Failed to load discovery calls' });

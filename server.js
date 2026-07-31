@@ -1347,6 +1347,9 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_payment_failed_at TIMESTAMPTZ");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_synced_at TIMESTAMPTZ");
+    // What the last payment was actually for, so the discovery call card can say
+    // "Website build — $500" rather than just showing an amount.
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_payment_description TEXT");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS questionnaire_completed BOOLEAN DEFAULT false");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS leads_per_week VARCHAR(20)");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS revenue_range VARCHAR(30)");
