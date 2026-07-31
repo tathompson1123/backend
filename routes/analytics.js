@@ -228,6 +228,20 @@ router.get('/data', requireAnalytics, requireAdmin, async (req, res) => {
   }
 });
 
+// ── POST /api/analytics/backfill-stripe ───────────────────────
+// Repairs accounts that paid while no live webhook endpoint existed. Defaults to a
+// dry run — pass { apply: true } once the report looks right.
+router.post('/backfill-stripe', requireAnalytics, requireAdmin, async (req, res) => {
+  try {
+    const { backfillFromStripe } = require('../utils/stripeReconcile');
+    const report = await backfillFromStripe({ dryRun: !req.body?.apply });
+    res.json({ success: true, dryRun: !req.body?.apply, report });
+  } catch (error) {
+    console.error('Stripe backfill error:', error.message);
+    res.status(500).json({ error: error.message || 'Backfill failed' });
+  }
+});
+
 // ── POST /api/analytics/sync-stripe ───────────────────────────
 // Pull payment state straight from Stripe. Runs nightly too, but this is here for
 // when you need the numbers to be right now — after a refund, say.
