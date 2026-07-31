@@ -239,7 +239,7 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
       const revRes = await pool.query(
         `SELECT rr.id, rr.customer_name, c.name AS c_name,
                 u.email AS owner_email, u.business_name, u.google_review_link,
-                rc.incentive, rc.incentive_enabled
+                rc.incentive, rc.incentive_enabled, rc.review_link_base
          FROM review_requests rr
          JOIN users u ON u.id = rr.user_id
          LEFT JOIN customers c ON c.id = rr.customer_id
@@ -300,8 +300,12 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
           // positive or neutral → send the review ask with the incentive woven in.
           // Clean, branded short link (redirects through the site → tracker → Google) so the
           // text doesn't show the raw backend/api URL.
-          const linkBase = (process.env.REVIEW_LINK_BASE || 'https://sorceintegrations.com').replace(/\/$/, '');
-          const trackedUrl = rr.google_review_link ? `${linkBase}/r/${rr.id}` : '';
+          // Branded per-business base (e.g. theirdomain.com/googlereview/<id>) if set,
+          // else the SORCE short link. Both redirect through our click tracker → Google.
+          const trackedUrl = !rr.google_review_link ? ''
+            : rr.review_link_base
+              ? `${rr.review_link_base}/${rr.id}`
+              : `${(process.env.REVIEW_LINK_BASE || 'https://sorceintegrations.com').replace(/\/$/, '')}/r/${rr.id}`;
           const reply = await composePositiveReply({
             firstName,
             businessName: rr.business_name,

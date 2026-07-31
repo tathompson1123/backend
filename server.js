@@ -428,6 +428,7 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS rep_name VARCHAR(100)`);
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS incentive_score INTEGER`);
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS incentive_tip TEXT`);
+    await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS review_link_base VARCHAR(255)`);
     // Tag SMS rows that belong to a Google Review conversation so the dashboard can show
     // the full opener + reply thread in its own sub-tab.
     await pool.query(`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS review_request_id INTEGER`);
@@ -1889,7 +1890,7 @@ cron.schedule('*/30 * * * *', async () => {
       `SELECT rr.id, rr.user_id, rr.customer_id, rr.incentive_code,
               c.name AS customer_name, c.email AS customer_email, c.last_service AS service_name,
               u.business_name, u.email AS owner_email, u.google_review_link,
-              rc.message_template, rc.incentive, rc.incentive_enabled
+              rc.message_template, rc.incentive, rc.incentive_enabled, rc.review_link_base
        FROM review_requests rr
        JOIN users u ON u.id = rr.user_id
        JOIN customers c ON c.id = rr.customer_id
@@ -1915,8 +1916,10 @@ cron.schedule('*/30 * * * *', async () => {
           continue;
         }
         const firstName = (req.customer_name || 'there').split(' ')[0];
-        const linkBase = (process.env.REVIEW_LINK_BASE || 'https://sorceintegrations.com').replace(/\/$/, '');
-        const reviewLink = req.google_review_link ? `${linkBase}/r/${req.id}` : null;
+        const reviewLink = !req.google_review_link ? null
+          : req.review_link_base
+            ? `${req.review_link_base}/${req.id}`
+            : `${(process.env.REVIEW_LINK_BASE || 'https://sorceintegrations.com').replace(/\/$/, '')}/r/${req.id}`;
 
         let bodyText = req.incentive_enabled && req.incentive
           ? `We'd love to hear about your experience! Could you take a moment to share a review? As a thank you, here's a special offer: <strong>${req.incentive}</strong>`

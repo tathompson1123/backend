@@ -29,7 +29,8 @@ router.get('/', authenticateToken, async (req, res) => {
           raffle_require_verified: false,
           rep_name: '',
           incentive_score: null,
-          incentive_tip: ''
+          incentive_tip: '',
+          review_link_base: ''
         }
       });
     }
@@ -46,7 +47,7 @@ router.post('/', authenticateToken, async (req, res) => {
   try {
     const {
       messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay, sendTrigger,
-      raffleEnabled, raffleReward, raffleConsolation, raffleRequireVerified, repName
+      raffleEnabled, raffleReward, raffleConsolation, raffleRequireVerified, repName, reviewLinkBase
     } = req.body;
     const trigger = sendTrigger === 'service_duration' ? 'service_duration' : 'booking_completed';
     const consolation = (raffleConsolation && String(raffleConsolation).trim())
@@ -54,6 +55,11 @@ router.post('/', authenticateToken, async (req, res) => {
       : '$50 off any Full Detail';
     const reward = raffleReward != null ? String(raffleReward).trim() : null;
     const rep = repName != null ? String(repName).trim().slice(0, 100) : null;
+    // Custom branded review link base (e.g. https://theirdomain.com/googlereview). Stored
+    // clean (no trailing slash); empty → null so we fall back to the SORCE short link.
+    const linkBase = (reviewLinkBase != null && String(reviewLinkBase).trim())
+      ? String(reviewLinkBase).trim().replace(/\/+$/, '').slice(0, 255)
+      : null;
 
     // Rate the incentive (1-10) so the owner sees how compelling it is. Non-fatal.
     let score = null, tip = '';
@@ -65,8 +71,8 @@ router.post('/', authenticateToken, async (req, res) => {
     await pool.query(
       `INSERT INTO review_configs
          (user_id, message_template, incentive, incentive_enabled, auto_send_enabled, send_delay, send_trigger,
-          raffle_enabled, raffle_reward, raffle_consolation, raffle_require_verified, rep_name, incentive_score, incentive_tip, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
+          raffle_enabled, raffle_reward, raffle_consolation, raffle_require_verified, rep_name, incentive_score, incentive_tip, review_link_base, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP)
        ON CONFLICT (user_id)
        DO UPDATE SET
          message_template = $2,
@@ -82,9 +88,10 @@ router.post('/', authenticateToken, async (req, res) => {
          rep_name = $12,
          incentive_score = $13,
          incentive_tip = $14,
+         review_link_base = $15,
          updated_at = CURRENT_TIMESTAMP`,
       [req.user.userId, messageTemplate, incentive, incentiveEnabled, autoSendEnabled, sendDelay, trigger,
-       !!raffleEnabled, reward, consolation, !!raffleRequireVerified, rep, score, tip]
+       !!raffleEnabled, reward, consolation, !!raffleRequireVerified, rep, score, tip, linkBase]
     );
 
     console.log(`✅ Review config saved for user ${req.user.userId}`);
