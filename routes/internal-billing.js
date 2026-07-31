@@ -22,9 +22,8 @@ const SITE_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 // Price ids per plan. Falls back to building the price inline so this works before
 // the ids are configured, though real Stripe Prices are tidier in reporting.
 const PLAN_PRICES = {
-  pro:   { env: 'STRIPE_PRICE_PRO',   amount: parseInt(process.env.PLAN_AMOUNT_PRO || '9900', 10),   label: 'SORCE Pro' },
-  scale: { env: 'STRIPE_PRICE_SCALE', amount: parseInt(process.env.PLAN_AMOUNT_SCALE || '17500', 10), label: 'SORCE Scale' },
-
+  pro:   { env: 'STRIPE_PRICE_PRO',   amount: parseInt(process.env.PLAN_AMOUNT_PRO   || '9995',  10), label: 'SORCE Pro' },
+  scale: { env: 'STRIPE_PRICE_SCALE', amount: parseInt(process.env.PLAN_AMOUNT_SCALE || '17595', 10), label: 'SORCE Scale' },
 };
 
 const requireAnalytics = (req, res, next) => {

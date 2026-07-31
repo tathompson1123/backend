@@ -13,8 +13,8 @@ const PLAN_ORDER = { basic: 1, pro: 2, scale: 3 };
 // prices exactly — the webhook maps a subscription's amount back to a plan name,
 // so a mismatch leaves the plan unset.
 const PLAN_AMOUNTS = {
-  pro:   parseInt(process.env.PLAN_AMOUNT_PRO   || '9900', 10),
-  scale: parseInt(process.env.PLAN_AMOUNT_SCALE || '17500', 10),
+  pro:   parseInt(process.env.PLAN_AMOUNT_PRO   || '9995', 10),
+  scale: parseInt(process.env.PLAN_AMOUNT_SCALE || '17595', 10),
 };
 
 // Maps a Stripe subscription's price back to a plan name. Tolerant of the older
