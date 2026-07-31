@@ -168,6 +168,50 @@ router.post('/team/accept-invite', async (req, res) => {
   }
 });
 
+// PATCH /api/discovery/team/:id/role — promote to admin or drop back to member
+router.patch('/team/:id/role', requireAnalytics, requireAdmin, async (req, res) => {
+  try {
+    const role = req.body.role === 'admin' ? 'admin' : 'member';
+
+    // Don't allow the last admin to demote themselves out of the dashboard.
+    if (role === 'member') {
+      const admins = await pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM sorce_team_members
+         WHERE role = 'admin' AND active = true AND id <> $1`,
+        [req.params.id]
+      );
+      if (admins.rows[0].cnt === 0) {
+        return res.status(400).json({
+          error: 'That would leave nobody as admin. Promote someone else first.',
+        });
+      }
+    }
+
+    const result = await pool.query(
+      `UPDATE sorce_team_members SET role = $1 WHERE id = $2
+       RETURNING id, name, email, role`,
+      [role, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Team member not found' });
+    res.json({ success: true, member: result.rows[0] });
+  } catch (err) {
+    console.error('Role change error:', err.message);
+    res.status(500).json({ error: 'Could not change that role' });
+  }
+});
+
+// GET /api/discovery/me — what this session is allowed to see
+router.get('/me', requireAnalytics, (req, res) => {
+  const isAdmin = !req.analytics?.tm || req.analytics.role === 'admin';
+  res.json({
+    success: true,
+    isAdmin,
+    name: req.analytics?.name || null,
+    email: req.analytics?.email || null,
+    role: isAdmin ? 'admin' : 'member',
+  });
+});
+
 // DELETE /api/discovery/team/:id — revoke access
 router.delete('/team/:id', requireAnalytics, requireAdmin, async (req, res) => {
   try {

@@ -71,6 +71,7 @@ const authRoutes = require('./routes/auth');
 const analyticsRoutes = require('./routes/analytics');
 const { router: discoveryRoutes } = require('./routes/discovery');
 const { buildReviewLink } = require('./utils/reviewLink');
+const internalBillingRoutes = require('./routes/internal-billing');
 const bookingRoutes = require('./routes/bookings');
 const customerRoutes = require('./routes/customers');
 const leadRoutes = require('./routes/leads');
@@ -99,6 +100,7 @@ app.use('/api/leads/public', embedCors); // CORS for embed form submissions
 app.use('/api/leads', leadRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/discovery', discoveryRoutes);
+app.use('/api/internal-billing', internalBillingRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/service-categories', serviceCategoryRoutes);
 app.use('/api/booking-widget-config', bookingWidgetConfigRoutes);

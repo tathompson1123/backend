@@ -20,10 +20,19 @@ const requireAnalytics = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (!decoded.analytics) return res.status(403).json({ error: 'Forbidden' });
+    req.analytics = decoded;
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+};
+
+// Revenue, billing and team management are admin-only. Invited members get the
+// discovery call calendar and nothing else. A master-password session has no `tm`
+// and is treated as admin.
+const requireAdmin = (req, res, next) => {
+  if (!req.analytics?.tm || req.analytics.role === 'admin') return next();
+  return res.status(403).json({ error: 'Admin access required' });
 };
 
 // ── POST /api/analytics/login ─────────────────────────────────
@@ -68,7 +77,7 @@ router.post('/login', async (req, res) => {
 });
 
 // ── GET /api/analytics/data ───────────────────────────────────
-router.get('/data', requireAnalytics, async (req, res) => {
+router.get('/data', requireAnalytics, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
@@ -222,7 +231,7 @@ router.get('/data', requireAnalytics, async (req, res) => {
 // ── POST /api/analytics/sync-stripe ───────────────────────────
 // Pull payment state straight from Stripe. Runs nightly too, but this is here for
 // when you need the numbers to be right now — after a refund, say.
-router.post('/sync-stripe', requireAnalytics, async (req, res) => {
+router.post('/sync-stripe', requireAnalytics, requireAdmin, async (req, res) => {
   try {
     const { reconcileAllSubscriptions } = require('../utils/stripeReconcile');
     const result = await reconcileAllSubscriptions();
@@ -238,7 +247,7 @@ router.post('/sync-stripe', requireAnalytics, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════
 
 // GET /verification-requests — list all pending + recent
-router.get('/verification-requests', requireAnalytics, async (req, res) => {
+router.get('/verification-requests', requireAnalytics, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT r.id, r.user_id, r.platform, r.email, r.status, r.requested_at, r.verified_at,
@@ -254,7 +263,7 @@ router.get('/verification-requests', requireAnalytics, async (req, res) => {
 });
 
 // POST /verification-requests/:id/approve — mark verified & email user
-router.post('/verification-requests/:id/approve', requireAnalytics, async (req, res) => {
+router.post('/verification-requests/:id/approve', requireAnalytics, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(`
@@ -306,7 +315,7 @@ router.post('/verification-requests/:id/approve', requireAnalytics, async (req, 
 });
 
 // POST /verification-requests/:id/reject — mark rejected
-router.post('/verification-requests/:id/reject', requireAnalytics, async (req, res) => {
+router.post('/verification-requests/:id/reject', requireAnalytics, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { notes } = req.body;
