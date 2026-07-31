@@ -79,6 +79,11 @@ const result = await pool.query(
 
     console.log('✅ New user signed up:', email);
 
+    // Tell the internal team someone signed up. Fire and forget — a notification
+    // problem must never make a real signup fail.
+    notifyTeamOfSignup({ email, businessName, fullName, userId: user.id })
+      .catch(err => console.error('⚠️ Signup team notification failed:', err.message));
+
     res.json({
       success: true,
       token,
@@ -496,5 +501,64 @@ router.post('/admin/test-email', async (req, res) => {
     });
   }
 });
+
+// Email everyone who has an /analytics login when a new business signs up, so the
+// team can pick the lead up straight away. Goes to accepted team members and to
+// anyone still holding an unaccepted invite.
+async function notifyTeamOfSignup({ email, businessName, fullName, userId }) {
+  if (!process.env.SENDGRID_API_KEY) return;
+
+  let recipients = [];
+  try {
+    const result = await pool.query(
+      `SELECT email FROM sorce_team_members WHERE active = true AND email IS NOT NULL`
+    );
+    recipients = result.rows.map(r => r.email);
+  } catch (err) {
+    // Table won't exist until the discovery migration has run — not worth failing over.
+    console.warn('⚠️ Could not load team for signup notification:', err.message);
+    return;
+  }
+
+  const fallback = process.env.SIGNUP_NOTIFY_EMAIL;
+  if (recipients.length === 0 && fallback) recipients = [fallback];
+  if (recipients.length === 0) return;
+
+  const siteUrl = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
+  const when = new Date().toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+
+  await sgMail.sendMultiple({
+    to: recipients,
+    from: FROM_EMAIL,
+    subject: `New SORCE signup: ${businessName || email}`,
+    html: `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;padding:28px 24px;">
+        <p style="margin:0 0 4px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;">New signup</p>
+        <h1 style="margin:0 0 20px;font-size:22px;color:#111827;">${businessName || 'A new business'}</h1>
+        <table style="width:100%;border-collapse:collapse;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;">
+          ${[
+            ['Business', businessName || '—'],
+            ['Contact', fullName || '—'],
+            ['Email', email],
+            ['Signed up', when],
+          ].map(([label, value]) => `
+          <tr>
+            <td style="padding:10px 16px;font-size:13px;color:#6b7280;width:110px;">${label}</td>
+            <td style="padding:10px 16px;font-size:14px;color:#111827;font-weight:600;">${value}</td>
+          </tr>`).join('')}
+        </table>
+        <div style="margin:24px 0;">
+          <a href="${siteUrl}/analytics" style="background:#d97706;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:15px;">Open the dashboard</a>
+        </div>
+        <p style="color:#6b7280;font-size:13px;margin:0;">
+          They haven't verified their email yet. Worth booking a discovery call if they go quiet.
+        </p>
+        <p style="color:#9ca3af;font-size:12px;margin-top:20px;">User #${userId} · SORCE internal</p>
+      </div>`,
+  });
+  console.log(`📨 Signup notification sent to ${recipients.length} team member(s)`);
+}
 
 module.exports = router;

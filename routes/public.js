@@ -1178,6 +1178,30 @@ router.get('/review-click/:id', async (req, res) => {
   }
 });
 
+// GET /api/public/rc/:token
+// Token-based version of the tracked review redirect. The public URL that points
+// here is sorceintegrations.com/r/<business-slug>/<token>, so the customer sees the
+// name of the business they actually dealt with rather than a bare link.
+router.get('/rc/:token', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE review_requests SET link_clicked = true,
+              link_clicked_at = COALESCE(review_requests.link_clicked_at, NOW())
+       FROM users u
+       WHERE review_requests.click_token = $1
+         AND u.id = review_requests.user_id
+       RETURNING u.google_review_link`,
+      [req.params.token]
+    );
+    const googleLink = result.rows[0]?.google_review_link;
+    if (googleLink) return res.redirect(302, googleLink);
+    res.redirect(302, 'https://www.google.com/maps');
+  } catch (err) {
+    console.error('Review click (token) error:', err.message);
+    res.redirect(302, 'https://www.google.com/maps');
+  }
+});
+
 // ── Discovery calls: public self-booking on sorceintegrations.com ──
 
 // GET /api/public/discovery/slots?date=YYYY-MM-DD

@@ -300,12 +300,15 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
           // positive or neutral → send the review ask with the incentive woven in.
           // Clean, branded short link (redirects through the site → tracker → Google) so the
           // text doesn't show the raw backend/api URL.
-          // Branded per-business base (e.g. theirdomain.com/googlereview/<id>) if set,
-          // else the SORCE short link. Both redirect through our click tracker → Google.
-          const trackedUrl = !rr.google_review_link ? ''
-            : rr.review_link_base
-              ? `${rr.review_link_base}/${rr.id}`
-              : `${(process.env.REVIEW_LINK_BASE || 'https://sorceintegrations.com').replace(/\/$/, '')}/r/${rr.id}`;
+          // sorceintegrations.com/r/<business-slug>/<token> — carries the business's own
+          // name so the customer recognises it, and needs nothing set up on their domain.
+          const { buildReviewLink } = require('../utils/reviewLink');
+          const trackedUrl = (await buildReviewLink(pool, {
+            reviewRequestId: rr.id,
+            userId: user.id,
+            customBase: rr.review_link_base,
+            hasGoogleLink: !!rr.google_review_link,
+          })) || '';
           const reply = await composePositiveReply({
             firstName,
             businessName: rr.business_name,

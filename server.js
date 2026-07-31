@@ -70,6 +70,7 @@ app.get('/api/health', (req, res) => {
 const authRoutes = require('./routes/auth');
 const analyticsRoutes = require('./routes/analytics');
 const { router: discoveryRoutes } = require('./routes/discovery');
+const { buildReviewLink } = require('./utils/reviewLink');
 const bookingRoutes = require('./routes/bookings');
 const customerRoutes = require('./routes/customers');
 const leadRoutes = require('./routes/leads');
@@ -431,6 +432,13 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS incentive_score INTEGER`);
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS incentive_tip TEXT`);
     await pool.query(`ALTER TABLE review_configs ADD COLUMN IF NOT EXISTS review_link_base VARCHAR(255)`);
+    // Branded review links: sorceintegrations.com/r/<business-slug>/<token>. The slug
+    // makes the text recognisable to the customer; the token means the URLs aren't
+    // sequential ids anyone could walk. Both are filled in lazily on first send.
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS review_slug VARCHAR(60)`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_review_slug ON users(review_slug) WHERE review_slug IS NOT NULL`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS click_token VARCHAR(12)`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_review_requests_click_token ON review_requests(click_token) WHERE click_token IS NOT NULL`);
     // SORCE's own internal CRM: who can log into /analytics, and the discovery calls
     // we book with prospects signing up for SORCE.
     await pool.query(`
@@ -1968,10 +1976,12 @@ cron.schedule('*/30 * * * *', async () => {
           continue;
         }
         const firstName = (req.customer_name || 'there').split(' ')[0];
-        const reviewLink = !req.google_review_link ? null
-          : req.review_link_base
-            ? `${req.review_link_base}/${req.id}`
-            : `${(process.env.REVIEW_LINK_BASE || 'https://sorceintegrations.com').replace(/\/$/, '')}/r/${req.id}`;
+        const reviewLink = await buildReviewLink(pool, {
+          reviewRequestId: req.id,
+          userId: req.user_id,
+          customBase: req.review_link_base,
+          hasGoogleLink: !!req.google_review_link,
+        });
 
         let bodyText = req.incentive_enabled && req.incentive
           ? `We'd love to hear about your experience! Could you take a moment to share a review? As a thank you, here's a special offer: <strong>${req.incentive}</strong>`
