@@ -265,10 +265,17 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     // Keep the real Stripe status alongside the plan, so the internal dashboard can
     // tell an active payer from a trial or a card that's failing.
     try {
+      // Stripe moved current_period_end off the subscription and onto its items in
+      // the 2025-03-31 (Basil) API version, so read whichever shape arrived —
+      // otherwise a newer webhook API version silently nulls the renewal date.
+      const periodEnd = subscription.current_period_end
+        ?? subscription.items?.data?.[0]?.current_period_end
+        ?? null;
       await pool.query(
-        `UPDATE users SET subscription_status = $1, current_period_end = to_timestamp($2)
+        `UPDATE users SET subscription_status = $1,
+                          current_period_end = COALESCE(to_timestamp($2), current_period_end)
          WHERE stripe_subscription_id = $3`,
-        [subscription.status, subscription.current_period_end, subscription.id]
+        [subscription.status, periodEnd, subscription.id]
       );
     } catch (error) {
       console.error('Error syncing subscription status:', error.message);

@@ -62,10 +62,16 @@ async function reconcileUser(user) {
     console.warn(`⚠️ Could not list invoices for ${subscription.customer}:`, err.message);
   }
 
+  // Basil (2025-03-31) moved current_period_end onto the subscription items, so
+  // accept either shape rather than depending on the pinned API version.
+  const periodEnd = subscription.current_period_end
+    ?? subscription.items?.data?.[0]?.current_period_end
+    ?? null;
+
   await pool.query(
     `UPDATE users SET
        subscription_status = $1,
-       current_period_end  = to_timestamp($2),
+       current_period_end  = COALESCE(to_timestamp($2), current_period_end),
        stripe_subscription_id = $3,
        last_payment_at     = COALESCE(to_timestamp($4), last_payment_at),
        last_payment_amount = COALESCE($5, last_payment_amount),
@@ -74,7 +80,7 @@ async function reconcileUser(user) {
                                      ELSE NULL END,
        stripe_synced_at    = NOW()
      WHERE id = $6`,
-    [subscription.status, subscription.current_period_end, subscription.id,
+    [subscription.status, periodEnd, subscription.id,
      lastPaidAt, lastPaidAmount, user.id]
   );
 
