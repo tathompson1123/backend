@@ -261,24 +261,21 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       );
       const userData = userRow.rows[0];
 
-      // Trials sit on the shared number; a dedicated one is bought on first real
-      // payment instead. A number costs money every month whether or not the trial
-      // converts, so buying up front spends on people who never become customers.
-      const onTrial = !!trialEnds;
-
-      if (!userData?.twilio_phone_number && onTrial) {
+      // Everyone starts on the shared number. A dedicated one is only ever bought
+      // once money has actually cleared, which is handled by invoice.payment_succeeded
+      // — checkout completing is not the same as being paid, and a trial hasn't paid
+      // at all. Nothing here spends money.
+      if (!userData?.twilio_phone_number) {
         const sharedNumber = process.env.TWILIO_SHARED_TRIAL_NUMBER;
         if (sharedNumber) {
           await pool.query(
             'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = NULL WHERE id = $2',
             [sharedNumber, userId]
           );
-          console.log(`✅ Assigned shared trial number ${sharedNumber} to user ${userId} (${plan} trial)`);
+          console.log(`✅ Assigned shared number ${sharedNumber} to user ${userId} (${plan}) — dedicated number follows first payment`);
         } else {
-          console.warn(`⚠️ TWILIO_SHARED_TRIAL_NUMBER not set — user ${userId} has no number during their trial`);
+          console.warn(`⚠️ TWILIO_SHARED_TRIAL_NUMBER not set — user ${userId} has no number at all`);
         }
-      } else if (!userData?.twilio_phone_number && !onTrial) {
-        await provisionDedicatedNumber(userId, plan, userData?.zip_code);
       }
     } catch (provisionError) {
       console.error(`⚠️ Could not auto-provision phone for user ${userId}:`, provisionError.message);
@@ -300,20 +297,25 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       );
       console.log(`💰 Payment succeeded for customer ${invoice.customer} — $${(invoice.amount_paid / 100).toFixed(2)}`);
 
-      // First real payment is when a trial becomes a customer, so this is the point
-      // the dedicated number is worth buying. twilio_phone_sid is null while they're
-      // on the shared number, which is how we tell the two apart.
-      if (invoice.amount_paid > 0) {
+      // The only place a number is ever bought. Requires all of: money actually
+      // cleared, an active paid subscription (a trial invoices at $0 and is excluded
+      // by amount_paid), a plan that includes a dedicated number, and no dedicated
+      // number already — twilio_phone_sid is null while they sit on the shared one.
+      if (invoice.amount_paid > 0 && invoice.subscription) {
         const converted = await pool.query(
-          `SELECT u.id, u.plan, u.twilio_phone_sid, bi.zip_code
+          `SELECT u.id, u.plan, u.subscription_status, u.twilio_phone_sid, bi.zip_code
            FROM users u
            LEFT JOIN business_information bi ON bi.user_id = u.id
            WHERE u.stripe_customer_id = $1`,
           [invoice.customer]
         );
         const u = converted.rows[0];
-        if (u && !u.twilio_phone_sid && (u.plan === 'pro' || u.plan === 'scale')) {
+        const paidPlan = u?.plan === 'pro' || u?.plan === 'scale';
+
+        if (u && paidPlan && !u.twilio_phone_sid) {
           await provisionDedicatedNumber(u.id, u.plan, u.zip_code);
+        } else if (u && !paidPlan) {
+          console.log(`ℹ️ No dedicated number for user ${u.id} — plan "${u.plan || 'none'}" doesn't include one`);
         }
       }
     } catch (error) {
@@ -739,15 +741,21 @@ async function provisionDedicatedNumber(userId, plan, zipCode) {
     return null;
   }
   try {
-    const { purchasePhoneNumber } = require('../utils/twilio');
-    const result = await purchasePhoneNumber({ zipCode, userId });
+    const { purchasePhoneNumber, claimSpareNumber } = require('../utils/twilio');
+
+    // Spend nothing if we already own a number nobody is using.
+    let result = await claimSpareNumber(userId).catch(err => {
+      console.warn('⚠️ Could not check for a spare number, buying instead:', err.message);
+      return null;
+    });
+    if (!result) result = await purchasePhoneNumber({ zipCode, userId });
     const { getTimezoneFromPhone } = require('../utils/zipToTimezone');
     const detectedTz = getTimezoneFromPhone(result.phoneNumber);
     await pool.query(
       'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2, timezone = $3 WHERE id = $4',
       [result.phoneNumber, result.phoneSid, detectedTz, userId]
     );
-    console.log(`✅ Provisioned dedicated Twilio number ${result.phoneNumber} for user ${userId} (${plan}, zip ${zipCode}, tz ${detectedTz})`);
+    console.log(`✅ ${result.reused ? 'Reassigned' : 'Purchased'} dedicated number ${result.phoneNumber} for user ${userId} (${plan}, zip ${zipCode}, tz ${detectedTz})`);
     return result.phoneNumber;
   } catch (err) {
     console.error(`⚠️ Could not provision a dedicated number for user ${userId}:`, err.message);

@@ -91,6 +91,50 @@ async function purchasePhoneNumber({ zipCode, areaCode, userId }) {
   }
 }
 
+// Finds a number we already own that no account is using, and hands it over rather
+// than buying another. Orphans happen — a failed signup can leave a number attached
+// to nobody while still billing monthly — so this recovers them automatically.
+//
+// The shared trial number and our own SORCE sender are excluded by name; they're
+// deliberately unassigned and must never be handed to a customer.
+async function claimSpareNumber(userId) {
+  const twilioClient = getClient();
+  const { pool } = require('../config/database');
+
+  const owned = await twilioClient.incomingPhoneNumbers.list({ limit: 200 });
+  if (owned.length === 0) return null;
+
+  const assigned = new Set(
+    (await pool.query(
+      `SELECT twilio_phone_number FROM users WHERE twilio_phone_number IS NOT NULL`
+    )).rows.map(r => String(r.twilio_phone_number).replace(/\D/g, '').slice(-10))
+  );
+
+  const reserved = new Set(
+    [process.env.TWILIO_SHARED_TRIAL_NUMBER, process.env.SORCE_SMS_FROM]
+      .filter(Boolean)
+      .map(n => String(n).replace(/\D/g, '').slice(-10))
+  );
+
+  const spare = owned.find(n => {
+    const last10 = String(n.phoneNumber).replace(/\D/g, '').slice(-10);
+    return !assigned.has(last10) && !reserved.has(last10);
+  });
+  if (!spare) return null;
+
+  const baseUrl = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
+  await twilioClient.incomingPhoneNumbers(spare.sid).update({
+    friendlyName: `SORCE-User-${userId}`,
+    smsUrl: `${baseUrl}/api/sms/webhook`,
+    smsMethod: 'POST',
+    voiceUrl: `${baseUrl}/api/voice/webhook`,
+    voiceMethod: 'POST',
+  });
+
+  console.log(`♻️ Reusing unassigned number ${spare.phoneNumber} for user ${userId} instead of buying one`);
+  return { phoneNumber: spare.phoneNumber, phoneSid: spare.sid, reused: true };
+}
+
 // Send SMS/MMS via Messaging Service
 async function sendSMS(to, message, userId, mediaUrl) {
   try {
@@ -204,6 +248,7 @@ async function releasePhoneNumber(phoneSid) {
 
 module.exports = {
   getClient,
+  claimSpareNumber,
   purchasePhoneNumber,
   sendSMS,
   setVoiceWebhook,
