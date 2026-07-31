@@ -192,8 +192,14 @@ router.get('/summary', authenticateToken, async (req, res) => {
     const cfgTiers = cfgRow.rows[0]?.efficiency_tiers;
     const tiers = (Array.isArray(cfgTiers) && cfgTiers.length) ? cfgTiers : DEFAULT_TIERS;
 
+    // By default only active staff show; ?includeArchived=1 adds former (archived) employees
+    // so the owner can review the hours of anyone who ever clocked in.
+    const includeArchived = req.query.includeArchived === 'true' || req.query.includeArchived === '1';
     const employees = (await pool.query(
-      'SELECT id, name, COALESCE(hourly_rate, 0) AS hourly_rate FROM employees WHERE user_id = $1 AND active = true ORDER BY name',
+      `SELECT id, name, COALESCE(hourly_rate, 0) AS hourly_rate, archived_at
+       FROM employees
+       WHERE user_id = $1 ${includeArchived ? '' : 'AND active = true'}
+       ORDER BY archived_at IS NOT NULL, name`,
       [userId]
     )).rows;
 
@@ -265,6 +271,7 @@ router.get('/summary', authenticateToken, async (req, res) => {
       return {
         id: emp.id, name: emp.name, baseRate, clockedHours, computedHours, clockedOverridden: overridden,
         budgetedEarned, efficiency, adjustedRate, projected, adjustedProjected, actual,
+        archived: emp.archived_at != null,
       };
     });
 
