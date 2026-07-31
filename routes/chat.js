@@ -114,15 +114,26 @@ async function getAvailableSlotsForDate(userId, serviceId, bookingDate, duration
   );
   if (empCount === 0) return candidateSlots;
 
+  // Only consider employees scheduled to work this day, within their work hours.
+  const dayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek];
+  const toMin = (t) => { const [hh, mm] = String(t).split(':').map(Number); return (hh || 0) * 60 + (mm || 0); };
+  const worksSlot = (emp, startMinAbs, endMinAbs) => {
+    const workDays = emp.work_days || {};
+    if (workDays[dayName] === false) return false;
+    const wh = emp.work_hours || {};
+    return startMinAbs >= toMin(wh.startTime || '00:00') && endMinAbs <= toMin(wh.endTime || '23:59');
+  };
+
   // Check each slot for employee availability
   const available = [];
   for (const slot of candidateSlots) {
     const [h, m] = slot.split(':').map(Number);
-    const endMin = h * 60 + m + durationMinutes;
+    const startMinAbs = h * 60 + m;
+    const endMin = startMinAbs + durationMinutes;
     const endTime = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
 
     const emp = await pool.query(
-      `SELECT e.id FROM employees e
+      `SELECT e.id, e.work_hours, e.work_days FROM employees e
        LEFT JOIN service_employees se ON e.id = se.employee_id
        WHERE e.user_id = $1 AND e.active = true
        AND (se.service_id = $2 OR NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id))
@@ -135,11 +146,10 @@ async function getAvailableSlotsForDate(userId, serviceId, bookingDate, duration
            (b.start_time < $5 AND b.end_time >= $5) OR
            (b.start_time >= $4 AND b.end_time <= $5)
          )
-       )
-       LIMIT 1`,
+       )`,
       [userId, serviceId, bookingDate, slot, endTime]
     );
-    if (emp.rows.length > 0) available.push(slot);
+    if (emp.rows.some(e => worksSlot(e, startMinAbs, endMin))) available.push(slot);
   }
   return available;
 }
@@ -323,6 +333,17 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
     const endMin = endMinutes % 60;
     const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
 
+    // An employee can take this booking only if scheduled to work that day AND their work
+    // hours cover the whole service window — mirrors the public booking widget.
+    const bookingDayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][bookingDayOfWeek];
+    const timeToMin = (t) => { const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+    const empWorksSlot = (emp) => {
+      const workDays = emp.work_days || {};
+      if (workDays[bookingDayName] === false) return false;
+      const wh = emp.work_hours || {};
+      return startMinutes >= timeToMin(wh.startTime || '00:00') && endMinutes <= timeToMin(wh.endTime || '23:59');
+    };
+
     // Find available employee — if no employees are configured at all, allow the booking
     // to go through unassigned (owner assigns staff later in the dashboard)
     const empCountResult = await pool.query(
@@ -336,7 +357,7 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
 
     if (hasEmployees) {
       const availableEmpResult = await pool.query(
-        `SELECT e.id, e.name
+        `SELECT e.id, e.name, e.work_hours, e.work_days
          FROM employees e
          LEFT JOIN service_employees se ON e.id = se.employee_id
          WHERE e.user_id = $1
@@ -353,11 +374,13 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
              (b.start_time >= $4 AND b.end_time <= $5)
            )
          )
-         LIMIT 1`,
+         ORDER BY e.id ASC`,
         [userId, serviceId, bookingDate, startTime, endTime]
       );
 
-      if (availableEmpResult.rows.length === 0) {
+      // Only assign someone actually scheduled to work this day/time.
+      const workingEmp = availableEmpResult.rows.find(empWorksSlot);
+      if (!workingEmp) {
         const openSlots = await getAvailableSlotsForDate(userId, serviceId, bookingDate, service.duration_hours);
         const nearbyDays = openSlots.length === 0
           ? await getAvailableDaysNearDate(userId, serviceId, bookingDate, service.duration_hours)
@@ -365,8 +388,8 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
         return { success: false, error: 'slot_taken', availableSlots: openSlots, nearbyDays };
       }
 
-      employeeId = availableEmpResult.rows[0].id;
-      employeeName = availableEmpResult.rows[0].name;
+      employeeId = workingEmp.id;
+      employeeName = workingEmp.name;
     }
 
     // Generate booking number

@@ -579,6 +579,19 @@ router.post('/bookings/create', async (req, res) => {
     const endTotalMinutes = startH * 60 + startM + totalDurationMinutes;
     const endTime = `${String(Math.floor(endTotalMinutes / 60)).padStart(2, '0')}:${String(endTotalMinutes % 60).padStart(2, '0')}`;
 
+    // An employee can take this booking only if they're scheduled to work that day
+    // AND their work hours cover the whole service window. This mirrors the availability
+    // (slots) endpoint so we never assign someone on a day/time they don't work.
+    const bookingDayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][bookingDayOfWeek];
+    const empWorksSlot = (emp) => {
+      const workDays = emp.work_days || {};
+      if (workDays[bookingDayName] === false) return false;
+      const wh = emp.work_hours || {};
+      const empStartM = timeToMinutes(wh.startTime || '00:00');
+      const empEndM = timeToMinutes(wh.endTime || '23:59');
+      return startMin >= empStartM && endTotalMinutes <= empEndM;
+    };
+
     // Create or update customer
     const serviceName = servicesResult.rows.map(s => s.name).join(', ');
     let customerId;
@@ -677,8 +690,8 @@ router.post('/bookings/create', async (req, res) => {
         [businessId, bookingDate, endTime, startTime]
       );
       const existingCount = parseInt(countResult.rows[0].cnt);
-      const eligibleCountResult = await pool.query(
-        `SELECT COUNT(*) as cnt FROM employees e
+      const eligibleRowsResult = await pool.query(
+        `SELECT e.id, e.work_hours, e.work_days FROM employees e
          WHERE e.user_id = $1 AND e.active = true
          AND (
            NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id)
@@ -686,21 +699,43 @@ router.post('/bookings/create', async (req, res) => {
          )`,
         [businessId, Number(serviceId)]
       );
-      const eligibleCount = parseInt(eligibleCountResult.rows[0].cnt) || 0;
+      // Only count employees actually scheduled to work this day/time toward capacity,
+      // so a slot open because of one worker can't be overbooked onto staff who are off.
+      const eligibleCount = eligibleRowsResult.rows.filter(empWorksSlot).length;
       const slotCapacity = Math.max(eligibleCount, 1);
       if (existingCount >= slotCapacity) {
         return res.status(409).json({ error: 'This time slot is no longer available. Please choose a different time.' });
       }
     } catch (e) { /* employees table may not exist — skip check */ }
 
-    // Auto-assign a free employee who can perform the service
-    // Priority: employees with specific service assignment > unassigned (can-do-all) employees
-    let assignedEmployeeId = assignmentType === 'employee' ? employeeId : null;
-    if (!assignedEmployeeId) {
+    // Assign an employee. An explicit customer choice is validated against that person's
+    // schedule; otherwise auto-assign the first eligible employee who is scheduled to work
+    // this day/time and is free. Priority: specific-service assignment > can-do-all.
+    let assignedEmployeeId = null;
+    if (assignmentType === 'employee' && employeeId) {
+      // Customer picked a specific team member — make sure they actually work then.
+      const chosen = await pool.query(
+        'SELECT id, work_hours, work_days FROM employees WHERE id = $1 AND user_id = $2 AND active = true',
+        [employeeId, businessId]
+      );
+      if (chosen.rows.length === 0 || !empWorksSlot(chosen.rows[0])) {
+        return res.status(400).json({ error: 'That team member is not available at the selected time. Please choose a different time or team member.' });
+      }
+      const conflict = await pool.query(
+        `SELECT 1 FROM bookings
+         WHERE user_id = $1 AND employee_id = $2 AND booking_date = $3 AND status != 'cancelled'
+         AND start_time < $4 AND end_time > $5 LIMIT 1`,
+        [businessId, employeeId, bookingDate, endTime, startTime]
+      );
+      if (conflict.rows.length > 0) {
+        return res.status(409).json({ error: 'This time slot is no longer available for the selected team member. Please choose a different time.' });
+      }
+      assignedEmployeeId = employeeId;
+    } else {
       try {
         // Get all active employees who can do this service (same logic as availability)
         const eligibleResult = await pool.query(
-          `SELECT e.id FROM employees e
+          `SELECT e.id, e.work_hours, e.work_days FROM employees e
            WHERE e.user_id = $1 AND e.active = true
            AND (
              NOT EXISTS (SELECT 1 FROM service_employees WHERE employee_id = e.id)
@@ -711,9 +746,9 @@ router.post('/bookings/create', async (req, res) => {
              e.id ASC`,
           [businessId, Number(serviceId)]
         );
-        // Find first employee with no conflict at this time slot
-        const endM = timeToMinutes(endTime);
+        // First employee scheduled to work this day/time with no conflict.
         for (const row of eligibleResult.rows) {
+          if (!empWorksSlot(row)) continue;
           const conflict = await pool.query(
             `SELECT 1 FROM bookings
              WHERE user_id = $1 AND employee_id = $2 AND booking_date = $3 AND status != 'cancelled'
