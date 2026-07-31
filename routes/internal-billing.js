@@ -138,15 +138,19 @@ router.post('/checkout-link', requireAnalytics, requireAdmin, async (req, res) =
       mode: planItem ? 'subscription' : 'payment',
       customer: customerId,
       line_items: lineItems,
-      success_url: `${SITE_URL}/analytics?payment=success`,
-      cancel_url: `${SITE_URL}/analytics?payment=cancelled`,
+      // The customer opens this link, not us — send them to their own dashboard.
+      // Logged out, that bounces to the homepage login, which is where they belong.
+      success_url: `${SITE_URL}/dashboard?payment=success`,
+      cancel_url: `${SITE_URL}/pricing`,
       // Keep the card for future charges either way.
       ...(planItem
-        ? { subscription_data: { metadata: { sorce_user_id: user?.id || '', plan },
+        ? { subscription_data: { metadata: { userId: user?.id ? String(user.id) : '', plan },
                                  ...(trialDays ? { trial_period_days: Number(trialDays) } : {}) } }
         : { payment_intent_data: { setup_future_usage: 'off_session' } }),
       metadata: {
-        sorce_user_id: user?.id ? String(user.id) : '',
+        // Must be `userId` — the billing webhook reads that exact key to activate
+        // the account. Anything else and they pay while nothing is provisioned.
+        userId: user?.id ? String(user.id) : '',
         plan: plan || '',
         offer: offerDescription || '',
         taken_by: req.analytics?.name || 'internal',

@@ -191,8 +191,21 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   // Handle the event
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
-    const userId = session.metadata.userId;
-    const plan = session.metadata.plan;
+    const userId = session.metadata?.userId;
+    const plan = session.metadata?.plan;
+
+    // A payment link can be sent to someone who hasn't signed up yet, so there may
+    // be no account to activate. Say so loudly — they've been charged, and somebody
+    // has to connect the Stripe customer to an account by hand.
+    if (!userId) {
+      console.error(
+        `🚨 checkout.session.completed with no userId in metadata. Customer ` +
+        `${session.customer} paid for "${session.metadata?.plan || 'unknown plan'}" ` +
+        `and NOTHING was provisioned. Link the Stripe customer to a SORCE account, ` +
+        `then run the Stripe backfill.`
+      );
+      return res.json({ received: true });
+    }
 
     // Basic is no longer sold; anything unrecognised still lands on its own plan.
     const effectivePlan = plan === 'basic' ? 'pro' : plan;
