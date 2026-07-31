@@ -207,13 +207,49 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     }
   }
 
+  // A payment actually cleared — this, not the plan column, is what "paying" means.
+  if (event.type === 'invoice.payment_succeeded' || event.type === 'invoice.paid') {
+    const invoice = event.data.object;
+    try {
+      await pool.query(
+        `UPDATE users
+         SET last_payment_at = to_timestamp($1),
+             last_payment_amount = $2,
+             last_payment_failed_at = NULL,
+             subscription_status = 'active'
+         WHERE stripe_customer_id = $3`,
+        [invoice.created, invoice.amount_paid, invoice.customer]
+      );
+      console.log(`💰 Payment succeeded for customer ${invoice.customer} — $${(invoice.amount_paid / 100).toFixed(2)}`);
+    } catch (error) {
+      console.error('Error recording successful payment:', error.message);
+    }
+  }
+
+  // Card declined. Stripe keeps retrying for weeks before it cancels, and the plan
+  // column stays put that whole time — so flag it now or they show up as paying.
+  if (event.type === 'invoice.payment_failed') {
+    const invoice = event.data.object;
+    try {
+      await pool.query(
+        `UPDATE users
+         SET last_payment_failed_at = NOW(), subscription_status = 'past_due'
+         WHERE stripe_customer_id = $1`,
+        [invoice.customer]
+      );
+      console.log(`⚠️ Payment FAILED for customer ${invoice.customer} — marked past_due`);
+    } catch (error) {
+      console.error('Error recording failed payment:', error.message);
+    }
+  }
+
   // Handle subscription canceled (at period end)
   if (event.type === 'customer.subscription.deleted') {
     const subscription = event.data.object;
     try {
       await pool.query(
         `UPDATE users SET plan = NULL, stripe_subscription_id = NULL, base_plan = NULL,
-         trial_ends_at = NULL, subscription_canceling = false
+         trial_ends_at = NULL, subscription_canceling = false, subscription_status = 'canceled'
          WHERE stripe_subscription_id = $1`,
         [subscription.id]
       );
@@ -226,6 +262,17 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   // Handle subscription updated (plan change sync — safety net)
   if (event.type === 'customer.subscription.updated') {
     const subscription = event.data.object;
+    // Keep the real Stripe status alongside the plan, so the internal dashboard can
+    // tell an active payer from a trial or a card that's failing.
+    try {
+      await pool.query(
+        `UPDATE users SET subscription_status = $1, current_period_end = to_timestamp($2)
+         WHERE stripe_subscription_id = $3`,
+        [subscription.status, subscription.current_period_end, subscription.id]
+      );
+    } catch (error) {
+      console.error('Error syncing subscription status:', error.message);
+    }
     try {
       const priceAmount = subscription.items?.data?.[0]?.price?.unit_amount;
       const amountToPlan = { 2995: 'basic', 9995: 'pro', 17595: 'scale' };

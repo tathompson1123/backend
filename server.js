@@ -1335,6 +1335,16 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS base_plan VARCHAR(20)");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_canceling BOOLEAN DEFAULT false");
+    // Real payment state from Stripe. The plan column only says what they signed up
+    // for — it stays set through a failing card for the whole dunning window, so it
+    // can't be trusted to mean "paying". These are fed by invoice webhooks and by
+    // the nightly reconcile against Stripe.
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(24)");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_payment_at TIMESTAMPTZ");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_payment_amount INTEGER");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_payment_failed_at TIMESTAMPTZ");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_synced_at TIMESTAMPTZ");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS questionnaire_completed BOOLEAN DEFAULT false");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS leads_per_week VARCHAR(20)");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS revenue_range VARCHAR(30)");
@@ -2351,6 +2361,18 @@ cron.schedule('0 */4 * * *', () => runChatLearningAgent());
 // whole pool (winner gets the GBP incentive reward; everyone else a consolation).
 const { runMonthlyRaffles } = require('./utils/reviewRaffle');
 cron.schedule('0 9 1 * *', () => runMonthlyRaffles(), { timezone: 'America/New_York' });
+
+// ── Stripe reconcile — nightly at 4am ────────────────────────────────────────
+// Webhooks fire once and can be missed; this is the safety net that keeps
+// "who is actually paying" on the internal dashboard true.
+cron.schedule('0 4 * * *', async () => {
+  try {
+    const { reconcileAllSubscriptions } = require('./utils/stripeReconcile');
+    await reconcileAllSubscriptions();
+  } catch (err) {
+    console.error('Nightly Stripe reconcile error:', err.message);
+  }
+});
 
 // ── Discovery call reminders — 24 hours and 2 hours out ──────────────────────
 // Each window is one-shot per call via its own flag, so a late run or a restart

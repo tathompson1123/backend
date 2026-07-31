@@ -80,6 +80,13 @@ router.get('/data', requireAnalytics, async (req, res) => {
         u.created_at,
         u.trial_ends_at,
         u.subscription_canceling,
+        u.subscription_status,
+        u.last_payment_at,
+        u.last_payment_amount,
+        u.last_payment_failed_at,
+        u.current_period_end,
+        u.stripe_customer_id,
+        u.stripe_synced_at,
         COALESCE(sms_m.cnt,  0)::int      AS sms_sent_month,
         COALESCE(sms_t.cnt,  0)::int      AS sms_sent_total,
         COALESCE(chat_m.cnt, 0)::int      AS chat_convos_month,
@@ -132,7 +139,12 @@ router.get('/data', requireAnalytics, async (req, res) => {
     `);
 
     const users = result.rows.map(u => {
-      const revenue      = PLAN_REVENUE[u.plan] || 0;
+      // "Paying" means Stripe says active, not that a plan column is filled in — a
+      // failing card keeps the plan set for the whole dunning window.
+      const status     = u.subscription_status || (u.plan ? 'unknown' : 'none');
+      const isPaying   = status === 'active';
+      const isPastDue  = status === 'past_due' || status === 'unpaid' || status === 'incomplete';
+      const revenue    = isPaying ? (PLAN_REVENUE[u.plan] || 0) : 0;
       const smsCost      = u.sms_sent_month * SMS_COST;
       const claudeCost   = parseFloat(u.claude_cost_month) || 0;  // real tracked cost
       const totalCost    = smsCost + claudeCost;
@@ -150,6 +162,15 @@ router.get('/data', requireAnalytics, async (req, res) => {
         trial_ends_at: u.trial_ends_at,
         is_trialing: isTrialing,
         is_canceling: isCanceling,
+        subscription_status:    status,
+        is_paying:              isPaying,
+        is_past_due:            isPastDue,
+        last_payment_at:        u.last_payment_at,
+        last_payment_amount:    u.last_payment_amount != null ? u.last_payment_amount / 100 : null,
+        last_payment_failed_at: u.last_payment_failed_at,
+        current_period_end:     u.current_period_end,
+        has_stripe:             !!u.stripe_customer_id,
+        stripe_synced_at:       u.stripe_synced_at,
         sms_sent_month:            u.sms_sent_month,
         sms_sent_total:            u.sms_sent_total,
         chat_convos_month:         u.chat_convos_month,
@@ -167,13 +188,20 @@ router.get('/data', requireAnalytics, async (req, res) => {
 
     const totals = users.reduce((a, u) => ({
       user_count:        a.user_count + 1,
+      paying_count:      a.paying_count   + (u.is_paying ? 1 : 0),
+      trialing_count:    a.trialing_count + (u.subscription_status === 'trialing' ? 1 : 0),
+      past_due_count:    a.past_due_count + (u.is_past_due ? 1 : 0),
+      churned_count:     a.churned_count  + (u.subscription_status === 'canceled' ? 1 : 0),
       revenue:           a.revenue           + u.revenue,
       total_cost:        a.total_cost        + u.total_cost,
       margin:            a.margin            + u.margin,
       sms_sent_month:    a.sms_sent_month    + u.sms_sent_month,
       chat_convos_month: a.chat_convos_month + u.chat_convos_month,
       leads_month:       a.leads_month       + u.leads_month,
-    }), { user_count: 0, revenue: 0, total_cost: 0, margin: 0, sms_sent_month: 0, chat_convos_month: 0, leads_month: 0 });
+    }), {
+      user_count: 0, paying_count: 0, trialing_count: 0, past_due_count: 0, churned_count: 0,
+      revenue: 0, total_cost: 0, margin: 0, sms_sent_month: 0, chat_convos_month: 0, leads_month: 0,
+    });
 
     totals.revenue    = +totals.revenue.toFixed(2);
     totals.total_cost = +totals.total_cost.toFixed(2);
@@ -188,6 +216,20 @@ router.get('/data', requireAnalytics, async (req, res) => {
   } catch (error) {
     console.error('Analytics data error:', error.message);
     res.status(500).json({ error: 'Failed to fetch analytics data' });
+  }
+});
+
+// ── POST /api/analytics/sync-stripe ───────────────────────────
+// Pull payment state straight from Stripe. Runs nightly too, but this is here for
+// when you need the numbers to be right now — after a refund, say.
+router.post('/sync-stripe', requireAnalytics, async (req, res) => {
+  try {
+    const { reconcileAllSubscriptions } = require('../utils/stripeReconcile');
+    const result = await reconcileAllSubscriptions();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Stripe sync error:', error.message);
+    res.status(500).json({ error: 'Failed to sync with Stripe' });
   }
 });
 
