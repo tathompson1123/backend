@@ -5,13 +5,37 @@ const { authenticateToken } = require('../config/middleware');
 const { pool } = require('../config/database');
 const { isUnlimitedAccount } = require('../utils/unlimitedAccounts');
 
-// Plan hierarchy for upgrade/downgrade detection
+// Plan hierarchy for upgrade/downgrade detection. Basic is no longer sold but is
+// still recognised so any legacy account on it can still be moved up.
 const PLAN_ORDER = { basic: 1, pro: 2, scale: 3 };
+
+// Prices in cents, overridable without a deploy. These must match the Stripe
+// prices exactly — the webhook maps a subscription's amount back to a plan name,
+// so a mismatch leaves the plan unset.
+const PLAN_AMOUNTS = {
+  pro:   parseInt(process.env.PLAN_AMOUNT_PRO   || '9900', 10),
+  scale: parseInt(process.env.PLAN_AMOUNT_SCALE || '17500', 10),
+};
+
+// Maps a Stripe subscription's price back to a plan name. Tolerant of the older
+// .95 pricing as well as the current amounts, because a subscription created under
+// old pricing must still resolve to a plan rather than silently returning nothing.
+function planFromAmount(amount) {
+  if (!amount) return null;
+  const table = {
+    [PLAN_AMOUNTS.pro]: 'pro',
+    [PLAN_AMOUNTS.scale]: 'scale',
+    9900: 'pro', 9995: 'pro',
+    17500: 'scale', 17595: 'scale',
+    2995: 'basic',  // legacy only — no longer sold
+  };
+  return table[amount] || null;
+}
 
 // Create a Stripe Price object for a given plan (needed for subscription updates)
 async function getStripePrice(plan) {
-  const amounts = { basic: 2995, pro: 9995, scale: 17595 };
-  const names = { basic: 'Basic Plan', pro: 'Pro Plan', scale: 'Scale Plan' };
+  const amounts = { pro: PLAN_AMOUNTS.pro, scale: PLAN_AMOUNTS.scale };
+  const names = { pro: 'Pro Plan', scale: 'Scale Plan' };
   if (!amounts[plan]) throw new Error('Invalid plan');
   const price = await stripe.prices.create({
     currency: 'usd',
@@ -28,11 +52,12 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
     const { plan } = req.body;
     const userId = req.user.userId;
 
+    // Basic is no longer sold. Legacy accounts on it keep working — PLAN_ORDER and
+    // the revenue maps still recognise it — but it can't be bought.
     const prices = {
-      basic: { amount: 2995, name: 'Basic Plan' },
-      pro: { amount: 9995, name: 'Pro Plan' },
-      scale: { amount: 17595, name: 'Scale Plan' },
-      expert: { amount: 9995, name: 'Expert Plan' }
+      pro: { amount: PLAN_AMOUNTS.pro, name: 'Pro Plan' },
+      scale: { amount: PLAN_AMOUNTS.scale, name: 'Scale Plan' },
+      expert: { amount: PLAN_AMOUNTS.pro, name: 'Expert Plan' }
     };
 
     const selectedPrice = prices[plan];
@@ -87,7 +112,7 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
     // ─── New subscriber (or returning after cancellation): checkout session ───
     // Trial enforcement: one free trial ever (check stripe_customer_id existence)
     const hadSubscription = !!user.stripe_customer_id;
-    const trialDays = hadSubscription ? 0 : { basic: 14, pro: 7, scale: 7 }[plan] || 0;
+    const trialDays = hadSubscription ? 0 : { pro: 7, scale: 7 }[plan] || 0;
 
     const sessionParams = {
       payment_method_types: ['card'],
@@ -169,12 +194,11 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const userId = session.metadata.userId;
     const plan = session.metadata.plan;
 
-    // Update user's plan in database
-    // Basic plan gets PRO features during 14-day trial
+    // Basic is no longer sold; anything unrecognised still lands on its own plan.
     const effectivePlan = plan === 'basic' ? 'pro' : plan;
-    const trialEnds = plan === 'basic' ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-                    : (plan === 'pro' || plan === 'scale') ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-                    : null;
+    const trialEnds = (plan === 'pro' || plan === 'scale')
+      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
     try {
       await pool.query(
         `UPDATE users SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3,
@@ -199,29 +223,24 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       );
       const userData = userRow.rows[0];
 
-      if ((plan === 'pro' || plan === 'scale') && !userData?.twilio_phone_number) {
-        const { purchasePhoneNumber } = require('../utils/twilio');
-        const result = await purchasePhoneNumber({
-          zipCode: userData?.zip_code,
-          userId
-        });
-        const { getTimezoneFromPhone } = require('../utils/zipToTimezone');
-        const detectedTz = getTimezoneFromPhone(result.phoneNumber);
-        await pool.query(
-          'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2, timezone = $3 WHERE id = $4',
-          [result.phoneNumber, result.phoneSid, detectedTz, userId]
-        );
-        console.log(`✅ Auto-provisioned Twilio number ${result.phoneNumber} for user ${userId} (${plan} plan, zip ${userData?.zip_code}, tz ${detectedTz})`);
-      } else if (plan === 'basic' && !userData?.twilio_phone_number) {
-        // Basic trial: assign the shared default number (no purchase needed)
+      // Trials sit on the shared number; a dedicated one is bought on first real
+      // payment instead. A number costs money every month whether or not the trial
+      // converts, so buying up front spends on people who never become customers.
+      const onTrial = !!trialEnds;
+
+      if (!userData?.twilio_phone_number && onTrial) {
         const sharedNumber = process.env.TWILIO_SHARED_TRIAL_NUMBER;
         if (sharedNumber) {
           await pool.query(
             'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = NULL WHERE id = $2',
             [sharedNumber, userId]
           );
-          console.log(`✅ Assigned shared trial number ${sharedNumber} to user ${userId} (basic trial)`);
+          console.log(`✅ Assigned shared trial number ${sharedNumber} to user ${userId} (${plan} trial)`);
+        } else {
+          console.warn(`⚠️ TWILIO_SHARED_TRIAL_NUMBER not set — user ${userId} has no number during their trial`);
         }
+      } else if (!userData?.twilio_phone_number && !onTrial) {
+        await provisionDedicatedNumber(userId, plan, userData?.zip_code);
       }
     } catch (provisionError) {
       console.error(`⚠️ Could not auto-provision phone for user ${userId}:`, provisionError.message);
@@ -242,6 +261,23 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         [invoice.created, invoice.amount_paid, invoice.customer]
       );
       console.log(`💰 Payment succeeded for customer ${invoice.customer} — $${(invoice.amount_paid / 100).toFixed(2)}`);
+
+      // First real payment is when a trial becomes a customer, so this is the point
+      // the dedicated number is worth buying. twilio_phone_sid is null while they're
+      // on the shared number, which is how we tell the two apart.
+      if (invoice.amount_paid > 0) {
+        const converted = await pool.query(
+          `SELECT u.id, u.plan, u.twilio_phone_sid, bi.zip_code
+           FROM users u
+           LEFT JOIN business_information bi ON bi.user_id = u.id
+           WHERE u.stripe_customer_id = $1`,
+          [invoice.customer]
+        );
+        const u = converted.rows[0];
+        if (u && !u.twilio_phone_sid && (u.plan === 'pro' || u.plan === 'scale')) {
+          await provisionDedicatedNumber(u.id, u.plan, u.zip_code);
+        }
+      }
     } catch (error) {
       console.error('Error recording successful payment:', error.message);
     }
@@ -303,8 +339,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     }
     try {
       const priceAmount = subscription.items?.data?.[0]?.price?.unit_amount;
-      const amountToPlan = { 2995: 'basic', 9995: 'pro', 17595: 'scale' };
-      const newPlan = amountToPlan[priceAmount];
+      const newPlan = planFromAmount(priceAmount);
       if (newPlan) {
         if (subscription.status === 'trialing') {
           // During trial, only update base_plan to preserve effective plan
@@ -341,11 +376,12 @@ router.post('/create-embedded-checkout', authenticateToken, async (req, res) => 
     );
     const user = userResult.rows[0];
 
+    // Basic is no longer sold. Legacy accounts on it keep working — PLAN_ORDER and
+    // the revenue maps still recognise it — but it can't be bought.
     const prices = {
-      basic: { amount: 2995, name: 'Basic Plan' },
-      pro: { amount: 9995, name: 'Pro Plan' },
-      scale: { amount: 17595, name: 'Scale Plan' },
-      expert: { amount: 9995, name: 'Expert Plan' }
+      pro: { amount: PLAN_AMOUNTS.pro, name: 'Pro Plan' },
+      scale: { amount: PLAN_AMOUNTS.scale, name: 'Scale Plan' },
+      expert: { amount: PLAN_AMOUNTS.pro, name: 'Expert Plan' }
     };
 
     const selectedPrice = prices[plan];
@@ -355,7 +391,7 @@ router.post('/create-embedded-checkout', authenticateToken, async (req, res) => 
 
     // Trial enforcement: one free trial ever
     const hadSubscription = !!user.stripe_customer_id;
-    const trialDays = hadSubscription ? 0 : { basic: 14, pro: 7, scale: 7 }[plan] || 0;
+    const trialDays = hadSubscription ? 0 : { pro: 7, scale: 7 }[plan] || 0;
 
     const sessionParams = {
       payment_method_types: ['card'],
@@ -652,5 +688,26 @@ router.post('/enterprise-inquiry', async (req, res) => {
     res.status(500).json({ error: 'Failed to submit inquiry' });
   }
 });
+
+
+// Buys a dedicated Twilio number and points the account at it. Shared by the
+// no-trial checkout path and the trial-converts-to-paid path.
+async function provisionDedicatedNumber(userId, plan, zipCode) {
+  try {
+    const { purchasePhoneNumber } = require('../utils/twilio');
+    const result = await purchasePhoneNumber({ zipCode, userId });
+    const { getTimezoneFromPhone } = require('../utils/zipToTimezone');
+    const detectedTz = getTimezoneFromPhone(result.phoneNumber);
+    await pool.query(
+      'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = $2, timezone = $3 WHERE id = $4',
+      [result.phoneNumber, result.phoneSid, detectedTz, userId]
+    );
+    console.log(`✅ Provisioned dedicated Twilio number ${result.phoneNumber} for user ${userId} (${plan}, zip ${zipCode}, tz ${detectedTz})`);
+    return result.phoneNumber;
+  } catch (err) {
+    console.error(`⚠️ Could not provision a dedicated number for user ${userId}:`, err.message);
+    return null;
+  }
+}
 
 module.exports = router;

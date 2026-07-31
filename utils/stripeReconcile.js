@@ -131,7 +131,11 @@ module.exports = { reconcileAllSubscriptions, reconcileUser, PAYING };
 //
 // Phone numbers are reported, never bought — provisioning costs money and belongs to
 // a deliberate decision, not a repair script.
-const AMOUNT_TO_PLAN = { 2995: 'basic', 9995: 'pro', 17595: 'scale' };
+const AMOUNT_TO_PLAN = {
+  9900: 'pro', 9995: 'pro',
+  17500: 'scale', 17595: 'scale',
+  2995: 'basic', // legacy only
+};
 
 async function backfillFromStripe({ dryRun = true } = {}) {
   if (!process.env.STRIPE_SECRET_KEY) {

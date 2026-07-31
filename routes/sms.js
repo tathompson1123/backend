@@ -169,14 +169,47 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
   } else if (userResult.rows.length === 1) {
     user = userResult.rows[0];
   } else {
-    const leadLookup = await pool.query(
-      `SELECT user_id FROM leads WHERE phone = ANY($1) AND user_id = ANY($2)
+    // Several accounts share this number (trials all sit on the shared one), so the
+    // number alone can't say who the reply belongs to. Whoever last texted this
+    // person owns the conversation — that covers review requests, booking
+    // confirmations and lead follow-ups alike, where a leads-only lookup missed most
+    // of them and fell back to an arbitrary row.
+    const candidateIds = userResult.rows.map(r => r.id);
+    const last10 = (From || '').replace(/\D/g, '').slice(-10);
+
+    const convoLookup = await pool.query(
+      `SELECT user_id FROM sms_messages
+       WHERE direction = 'outgoing'
+         AND user_id = ANY($1)
+         AND right(regexp_replace(to_number, '\\D', '', 'g'), 10) = $2
        ORDER BY created_at DESC LIMIT 1`,
-      [phoneVariants(From), userResult.rows.map(r => r.id)]
+      [candidateIds, last10]
     );
-    user = leadLookup.rows.length > 0
-      ? userResult.rows.find(r => r.id === leadLookup.rows[0].user_id)
-      : userResult.rows[0];
+
+    let resolvedId = convoLookup.rows[0]?.user_id;
+
+    // Nothing outbound yet — they may have texted in cold off a form.
+    if (!resolvedId) {
+      const leadLookup = await pool.query(
+        `SELECT user_id FROM leads WHERE phone = ANY($1) AND user_id = ANY($2)
+         ORDER BY created_at DESC LIMIT 1`,
+        [phoneVariants(From), candidateIds]
+      );
+      resolvedId = leadLookup.rows[0]?.user_id;
+    }
+
+    // Still nothing. Guessing would file this person's message under a business
+    // they never contacted and answer them in that business's voice, so stop.
+    if (!resolvedId) {
+      console.warn(
+        `⚠️ Inbound SMS from ${From} to shared number ${To} could not be matched to ` +
+        `any of ${candidateIds.length} accounts — no prior message or lead. Dropping ` +
+        `rather than attributing it to the wrong business.`
+      );
+      return;
+    }
+
+    user = userResult.rows.find(r => r.id === resolvedId);
   }
 
   selfHealWebhook(user.twilio_phone_sid, To);
