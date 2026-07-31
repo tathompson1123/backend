@@ -197,9 +197,9 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     // A payment link can be sent to someone who hasn't signed up yet, so there may
     // be no account to activate. Say so loudly — they've been charged, and somebody
     // has to connect the Stripe customer to an account by hand.
-    if (!userId) {
+    if (!userId || !Number.isInteger(Number(userId))) {
       console.error(
-        `🚨 checkout.session.completed with no userId in metadata. Customer ` +
+        `🚨 checkout.session.completed with no usable userId in metadata. Customer ` +
         `${session.customer} paid for "${session.metadata?.plan || 'unknown plan'}" ` +
         `and NOTHING was provisioned. Link the Stripe customer to a SORCE account, ` +
         `then run the Stripe backfill.`
@@ -731,6 +731,13 @@ router.post('/enterprise-inquiry', async (req, res) => {
 // Buys a dedicated Twilio number and points the account at it. Shared by the
 // no-trial checkout path and the trial-converts-to-paid path.
 async function provisionDedicatedNumber(userId, plan, zipCode) {
+  // Buying a number costs real money every month, so never do it without a user to
+  // attach it to. A missing id previously bought a number that belonged to nobody
+  // and sat in the Messaging Service pool billing forever.
+  if (!userId || !Number.isInteger(Number(userId))) {
+    console.error(`🚨 Refusing to buy a Twilio number — no valid userId (got ${JSON.stringify(userId)})`);
+    return null;
+  }
   try {
     const { purchasePhoneNumber } = require('../utils/twilio');
     const result = await purchasePhoneNumber({ zipCode, userId });

@@ -115,6 +115,10 @@ router.post('/checkout-link', requireAnalytics, requireAdmin, async (req, res) =
     if (!plan && !offerAmount) {
       return res.status(400).json({ error: 'Pick a plan, an offer amount, or both' });
     }
+    // Stripe rejects anything under 50c, and its error text is opaque — say it plainly.
+    if (!plan && Number(offerAmount) > 0 && Number(offerAmount) < 0.5) {
+      return res.status(400).json({ error: 'The smallest charge Stripe accepts is $0.50' });
+    }
 
     const { user, customerId } = await resolveCustomer({ userId, email, name });
 
