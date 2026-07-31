@@ -268,6 +268,65 @@ router.get('/stats', authenticateToken, async (req, res) => {
 });
 
 // GET - Review requests history
+// GET /api/google-business/review-diagnostics
+// Why a booking did or didn't get its review text, for the signed-in business.
+// Walks the same gates the two crons apply, so a customer who was skipped shows a
+// reason in the dashboard instead of just being absent.
+router.get('/review-diagnostics', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const days = parseInt(req.query.days, 10) || 30;
+
+    const cfg = (await pool.query(
+      `SELECT auto_send_enabled, send_trigger, send_delay FROM review_configs WHERE user_id = $1`,
+      [userId]
+    )).rows[0] || null;
+
+    const rows = (await pool.query(
+      `SELECT b.id AS booking_id, b.status AS booking_status, b.booking_date,
+              b.start_time, b.end_time, b.customer_id,
+              c.name AS customer_name, c.phone AS customer_phone, c.sms_unsubscribed,
+              rr.id AS review_request_id, rr.status AS rr_status, rr.sms_sent,
+              rr.scheduled_send_time
+       FROM bookings b
+       LEFT JOIN customers c ON c.id = b.customer_id
+       LEFT JOIN review_requests rr ON rr.booking_id = b.id
+       WHERE b.user_id = $1 AND b.booking_date >= CURRENT_DATE - ($2::int)
+       ORDER BY b.booking_date DESC, b.start_time DESC`,
+      [userId, days]
+    )).rows;
+
+    const bookings = rows.map(b => {
+      let status, reason;
+      if (b.sms_sent) { status = 'sent'; reason = 'Review text sent'; }
+      else if (!cfg?.auto_send_enabled) { status = 'blocked'; reason = 'Auto-send is turned off'; }
+      else if (b.booking_status === 'cancelled') { status = 'skipped'; reason = 'Booking was cancelled'; }
+      else if (!b.customer_id) { status = 'blocked'; reason = 'No customer attached to this booking, so there is nobody to text'; }
+      else if (!b.review_request_id) {
+        if (cfg.send_trigger === 'booking_completed' && b.booking_status !== 'completed') {
+          status = 'waiting'; reason = `Mark this booking completed to trigger the request (currently "${b.booking_status}")`;
+        } else {
+          status = 'waiting'; reason = 'Not due yet — the service end time plus your delay has not passed';
+        }
+      }
+      else if (!b.customer_phone) { status = 'blocked'; reason = 'This customer has no phone number on file'; }
+      else if (b.sms_unsubscribed) { status = 'blocked'; reason = 'This customer replied STOP and cannot be texted'; }
+      else if (b.rr_status === 'sms_limit_reached') { status = 'blocked'; reason = 'Monthly SMS limit reached on your plan'; }
+      else if (b.rr_status === 'skipped') { status = 'blocked'; reason = 'Your plan has no SMS allowance'; }
+      else if (b.scheduled_send_time && new Date(b.scheduled_send_time) > new Date()) {
+        status = 'waiting'; reason = `Queued — sends ${new Date(b.scheduled_send_time).toLocaleString('en-US')}`;
+      }
+      else { status = 'waiting'; reason = 'Queued and due — should send within a few minutes'; }
+      return { ...b, diagnostic_status: status, reason };
+    });
+
+    res.json({ success: true, config: cfg, bookings });
+  } catch (error) {
+    console.error('Review diagnostics error:', error.message);
+    res.status(500).json({ error: 'Failed to load review diagnostics' });
+  }
+});
+
 router.get('/review-requests', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
