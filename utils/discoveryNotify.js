@@ -33,18 +33,37 @@ function formatWhen(scheduledAt, timezone = 'America/New_York') {
   }
 }
 
+// SORCE_SMS_FROM must win over the Messaging Service here.
+//
+// purchasePhoneNumber adds every customer's dedicated number to the shared
+// Messaging Service pool, so sending with only messagingServiceSid lets Twilio
+// pick a number that belongs to one of our customers. The prospect would then be
+// texted from some unrelated business, and worse: inbound replies route by the
+// `To` number, so their reply would land on that customer's account and be fed to
+// that business's AI SMS agent as if the prospect were their lead.
+//
+// So: send from our own number. Only fall back to the pool if there isn't one,
+// and make the noise loud enough that it gets fixed.
 async function sendDiscoverySMS(to, body) {
   const phone = toE164(to);
   if (!phone) throw new Error('No valid phone number');
   const client = getClient();
   const params = { body, to: phone };
-  if (process.env.TWILIO_MESSAGING_SERVICE_SID) {
-    params.messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
-  } else if (process.env.SORCE_SMS_FROM) {
+
+  if (process.env.SORCE_SMS_FROM) {
     params.from = process.env.SORCE_SMS_FROM;
+  } else if (process.env.TWILIO_MESSAGING_SERVICE_SID) {
+    console.warn(
+      '⚠️ SORCE_SMS_FROM is not set — this discovery text will go out from the shared ' +
+      'Messaging Service pool, which contains customers\' dedicated numbers. The prospect ' +
+      'may be texted from an unrelated business, and any reply will be routed to that ' +
+      'business\'s account. Set SORCE_SMS_FROM to a number reserved for SORCE.'
+    );
+    params.messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
   } else {
-    throw new Error('No Twilio Messaging Service or SORCE_SMS_FROM configured');
+    throw new Error('No SORCE_SMS_FROM or Twilio Messaging Service configured');
   }
+
   const result = await client.messages.create(params);
   return { sid: result.sid, status: result.status };
 }
