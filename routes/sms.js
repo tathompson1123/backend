@@ -297,7 +297,39 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
           [user.id, From, To, Body, MessageSid, rr.id]
         ).catch(() => {});
 
-        const sentiment = await classifyReplySentiment(Body, user.id);
+        const verdict = await classifyReplySentiment(Body, user.id);
+        const sentiment = verdict.sentiment;
+
+        // A happy customer will still tell you the pressure washer was broken. That
+        // shouldn't cost them the review ask, but the owner does need to hear it —
+        // so it goes out as its own note rather than riding on the sentiment call.
+        if (sentiment !== 'negative' && verdict.issue && rr.owner_email && process.env.SENDGRID_API_KEY) {
+          try {
+            const sgMail = require('@sendgrid/mail');
+            sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+            await sgMail.send({
+              to: rr.owner_email,
+              from: { name: 'SORCE', email: 'noreply@sorceintegrations.com' },
+              replyTo: rr.owner_email,
+              subject: `Worth a look: ${firstName} mentioned something`,
+              html: `
+                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+                  <p style="margin:0 0 4px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;">Happy customer, but worth knowing</p>
+                  <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${firstName} was satisfied — and mentioned this</h2>
+                  <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:14px;margin-bottom:16px;">
+                    <p style="margin:0;color:#92400e;font-size:15px;font-weight:600;">${verdict.issue}</p>
+                  </div>
+                  <p style="margin:0 0 6px;font-size:13px;color:#6b7280;">What they said:</p>
+                  <p style="margin:0 0 16px;color:#374151;font-size:15px;font-style:italic;">"${Body}"</p>
+                  <p style="margin:0;color:#6b7280;font-size:13px;">
+                    They were happy overall, so we've asked them for a review as normal.
+                    Reach them on ${From} if you want to follow up.
+                  </p>
+                </div>`,
+            });
+            console.log(`📨 Operational note emailed to ${rr.owner_email}: ${verdict.issue}`);
+          } catch (e) { console.log(`Operational note email failed: ${e.message}`); }
+        }
 
         if (sentiment === 'negative') {
           const escalation = `Thanks for the honest feedback, ${firstName} — I'm escalating this to our manager so we can look into it and make it right. We'll be in touch.`;

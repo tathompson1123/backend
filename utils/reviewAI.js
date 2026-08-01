@@ -87,11 +87,11 @@ function keywordSentiment(body) {
 
 async function classifyReplySentiment(text, userId) {
   const body = String(text || '').trim();
-  if (!body) return 'neutral';
+  if (!body) return { sentiment: 'neutral', reason: null, issue: null };
 
   // If they stated a rating, that's the answer — don't let the model reinterpret it.
   const stated = explicitRating(body);
-  if (stated) return stated;
+  if (stated) return { sentiment: stated, reason: 'Customer stated a rating outright', issue: null };
 
   try {
     // Given room to weigh the reply rather than forced into a single token, so a
@@ -116,8 +116,13 @@ async function classifyReplySentiment(text, userId) {
       '"Fine but the guy was 20 min late" -> positive (minor, stated without annoyance)\n' +
       '"They missed a spot and nobody got back to me" -> negative (unresolved, wants action)\n' +
       '"Terrible, want a refund" -> negative\n\n' +
+      'Separately, note anything the business would want to know about operationally — ' +
+      'broken equipment, a missed step, a late arrival, a staff issue. Note it even when ' +
+      'the customer is perfectly happy, because they often are and the business still ' +
+      'needs to hear it. Write "none" if there is nothing.\n\n' +
       'Answer in exactly this format, nothing else:\n' +
       'REASON: <one short sentence>\n' +
+      'ISSUE: <what needs looking at, or none>\n' +
       'VERDICT: positive|negative|neutral',
       `Reply: "${body}"`,
       120
@@ -125,6 +130,8 @@ async function classifyReplySentiment(text, userId) {
 
     const verdict = (out.match(/VERDICT:\s*(\w+)/i)?.[1] || out).toLowerCase();
     const reason = out.match(/REASON:\s*(.+)/i)?.[1]?.trim();
+    const rawIssue = out.match(/ISSUE:\s*(.+)/i)?.[1]?.trim();
+    const issue = rawIssue && !/^none\b/i.test(rawIssue) ? rawIssue : null;
 
     let result = null;
     if (verdict.startsWith('pos')) result = 'positive';
@@ -132,13 +139,13 @@ async function classifyReplySentiment(text, userId) {
     else if (verdict.startsWith('neu')) result = 'neutral';
 
     if (result) {
-      console.log(`🧠 Review sentiment: ${result}${reason ? ` — ${reason}` : ''} | reply: "${body.slice(0, 120)}"`);
-      return result;
+      console.log(`🧠 Review sentiment: ${result}${reason ? ` — ${reason}` : ''}${issue ? ` | issue: ${issue}` : ''} | reply: "${body.slice(0, 120)}"`);
+      return { sentiment: result, reason: reason || null, issue };
     }
-    return keywordSentiment(body);
+    return { sentiment: keywordSentiment(body), reason: null, issue: null };
   } catch (err) {
     console.warn('Review sentiment call failed, falling back to keywords:', err.message);
-    return keywordSentiment(body);
+    return { sentiment: keywordSentiment(body), reason: null, issue: null };
   }
 }
 
