@@ -268,6 +268,62 @@ router.get('/stats', authenticateToken, async (req, res) => {
 });
 
 // GET - Review requests history
+// POST /api/google-business/review-requests/:id/send-ask
+// Send the positive-path review ask to someone the sentiment call got wrong, or who
+// replied in a way that needed a human read.
+router.post('/review-requests/:id/send-ask', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const rr = (await pool.query(
+      `SELECT rr.id, rr.user_id, c.name AS customer_name, c.phone,
+              u.business_name, u.google_review_link,
+              rc.incentive, rc.incentive_enabled, rc.review_link_base
+       FROM review_requests rr
+       JOIN customers c ON c.id = rr.customer_id
+       JOIN users u ON u.id = rr.user_id
+       LEFT JOIN review_configs rc ON rc.user_id = rr.user_id
+       WHERE rr.id = $1 AND rr.user_id = $2`,
+      [req.params.id, userId]
+    )).rows[0];
+
+    if (!rr) return res.status(404).json({ error: 'Review request not found' });
+    if (!rr.phone) return res.status(400).json({ error: 'That customer has no phone number' });
+    if (!rr.google_review_link) return res.status(400).json({ error: 'Set your Google review link first' });
+
+    const { buildReviewLink } = require('../utils/reviewLink');
+    const { composePositiveReply } = require('../utils/reviewAI');
+    const { sendSMS } = require('../utils/twilio');
+
+    const link = await buildReviewLink(pool, {
+      reviewRequestId: rr.id,
+      userId: rr.user_id,
+      customBase: rr.review_link_base,
+      hasGoogleLink: true,
+    });
+
+    const message = await composePositiveReply({
+      firstName: String(rr.customer_name || 'there').split(/\s+/)[0],
+      businessName: rr.business_name,
+      incentive: rr.incentive,
+      incentiveEnabled: rr.incentive_enabled,
+      reviewLink: link,
+    }, userId);
+
+    await sendSMS(rr.phone, message, userId);
+    await pool.query(
+      `INSERT INTO sms_messages (user_id, direction, to_number, message, review_request_id, created_at)
+       VALUES ($1, 'outgoing', $2, $3, $4, NOW())`,
+      [userId, rr.phone, message, rr.id]
+    ).catch(() => {});
+
+    console.log(`✅ Manual review ask sent for request ${rr.id}`);
+    res.json({ success: true, message });
+  } catch (error) {
+    console.error('Manual review ask error:', error.message);
+    res.status(500).json({ error: error.message || 'Could not send that message' });
+  }
+});
+
 // GET /api/google-business/review-diagnostics
 // Why a booking did or didn't get its review text, for the signed-in business.
 // Walks the same gates the two crons apply, so a customer who was skipped shows a

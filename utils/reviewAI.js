@@ -57,9 +57,30 @@ async function shortenServiceName(serviceName, userId) {
 }
 
 // ── Classify a reply as positive / negative / neutral ────────────────────────
+
+// An explicit rating is the customer telling us the answer outright, so it beats
+// any reading of the prose. Someone can describe a hiccup and still say 5 stars —
+// that happened, and they got escalated to a manager for it.
+function explicitRating(body) {
+  const t = String(body).toLowerCase();
+  const m = t.match(/\b([1-5])\s*(?:\/\s*5\b|\s*stars?\b|\s*star\b)/) || t.match(/\b([1-5])\s*out of\s*5\b/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (n >= 4) return 'positive';
+  if (n <= 2) return 'negative';
+  return 'neutral';
+}
+
 function keywordSentiment(body) {
   const t = String(body).toLowerCase();
-  if (/\b(bad|terrible|awful|disappoint\w*|not happy|unhappy|worst|horrible|issue|problem|complain\w*|refund|poor|upset|angry|mad|not good|wasn'?t good|didn'?t|scratch\w*|damage\w*|never again|rude)\b/.test(t)) return 'negative';
+
+  const rating = explicitRating(t);
+  if (rating) return rating;
+
+  // Words that describe an incident ("problem", "issue", "didn't") say nothing
+  // about how the customer feels, so they can't sit in the negative list. Keep it
+  // to phrases that express dissatisfaction.
+  if (/\b(bad|terrible|awful|disappoint\w*|not happy|unhappy|worst|horrible|complain\w*|refund|poor|upset|angry|mad|not good|wasn'?t good|never again|rude|unacceptable|waste of money)\b/.test(t)) return 'negative';
   if (/\b(great|good|awesome|amazing|love\w*|perfect|excellent|fantastic|happy|satisfied|thank\w*|nice|wonderful|best|incredible|10\/10|beautiful|clean)\b/.test(t)) return 'positive';
   return 'neutral';
 }
@@ -67,19 +88,56 @@ function keywordSentiment(body) {
 async function classifyReplySentiment(text, userId) {
   const body = String(text || '').trim();
   if (!body) return 'neutral';
+
+  // If they stated a rating, that's the answer — don't let the model reinterpret it.
+  const stated = explicitRating(body);
+  if (stated) return stated;
+
   try {
+    // Given room to weigh the reply rather than forced into a single token, so a
+    // resolved hiccup mentioned alongside praise is read the way a person would
+    // read it. The rationale is logged, which is how misreads get caught.
     const out = await ask(
       userId, 'review_sentiment',
-      'Classify a customer\'s reply to the question "How did the service go?" as exactly one word: positive, negative, or neutral. positive = satisfied/happy. negative = unhappy/complaint/problem. neutral = unclear, a question, or unrelated. Reply with ONLY one word.',
+      'A customer was asked "How did the service go?". Decide whether they are SATISFIED.\n\n' +
+      'Weigh the whole reply the way a business owner would:\n' +
+      '- What did they actually say about the outcome and the people?\n' +
+      '- If something went wrong, was it explained, resolved, or shrugged off? A problem they ' +
+      '  are relaxed about is not dissatisfaction. A small thing they are clearly annoyed by is.\n' +
+      '- Do they state a rating? That is them answering directly — take it at face value.\n' +
+      '- Would this person recommend the business right now, or do they want something fixed?\n\n' +
+      'Judge how they FEEL overall, not whether an incident is mentioned. Most people mention ' +
+      'the one thing that stood out even when they are perfectly happy.\n\n' +
+      'positive = satisfied overall, worth asking for a review\n' +
+      'negative = genuinely dissatisfied, or wants something put right\n' +
+      'neutral = unclear, a question, or unrelated\n\n' +
+      'Examples:\n' +
+      '"Good, could not wash the car because the pressure washer broke. Charlie came by to explain. 5 stars" -> positive (they rated it 5 and were fine with the explanation)\n' +
+      '"Fine but the guy was 20 min late" -> positive (minor, stated without annoyance)\n' +
+      '"They missed a spot and nobody got back to me" -> negative (unresolved, wants action)\n' +
+      '"Terrible, want a refund" -> negative\n\n' +
+      'Answer in exactly this format, nothing else:\n' +
+      'REASON: <one short sentence>\n' +
+      'VERDICT: positive|negative|neutral',
       `Reply: "${body}"`,
-      8
+      120
     );
-    const w = out.toLowerCase().replace(/[^a-z]/g, '');
-    if (w.startsWith('pos')) return 'positive';
-    if (w.startsWith('neg')) return 'negative';
-    if (w.startsWith('neu')) return 'neutral';
+
+    const verdict = (out.match(/VERDICT:\s*(\w+)/i)?.[1] || out).toLowerCase();
+    const reason = out.match(/REASON:\s*(.+)/i)?.[1]?.trim();
+
+    let result = null;
+    if (verdict.startsWith('pos')) result = 'positive';
+    else if (verdict.startsWith('neg')) result = 'negative';
+    else if (verdict.startsWith('neu')) result = 'neutral';
+
+    if (result) {
+      console.log(`🧠 Review sentiment: ${result}${reason ? ` — ${reason}` : ''} | reply: "${body.slice(0, 120)}"`);
+      return result;
+    }
     return keywordSentiment(body);
-  } catch {
+  } catch (err) {
+    console.warn('Review sentiment call failed, falling back to keywords:', err.message);
     return keywordSentiment(body);
   }
 }
