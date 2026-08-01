@@ -285,6 +285,8 @@ router.get('/review-diagnostics', authenticateToken, async (req, res) => {
     const rows = (await pool.query(
       `SELECT b.id AS booking_id, b.status AS booking_status, b.booking_date,
               b.start_time, b.end_time, b.customer_id,
+              (SELECT bi.service_name FROM booking_items bi
+                WHERE bi.booking_id = b.id ORDER BY bi.id LIMIT 1) AS service_name,
               c.name AS customer_name, c.phone AS customer_phone, c.sms_unsubscribed,
               rr.id AS review_request_id, rr.status AS rr_status, rr.sms_sent,
               rr.scheduled_send_time
@@ -306,7 +308,23 @@ router.get('/review-diagnostics', authenticateToken, async (req, res) => {
         if (cfg.send_trigger === 'booking_completed' && b.booking_status !== 'completed') {
           status = 'waiting'; reason = `Mark this booking completed to trigger the request (currently "${b.booking_status}")`;
         } else {
-          status = 'waiting'; reason = 'Not due yet — the service end time plus your delay has not passed';
+          // Work out when it was actually due rather than assuming it's in the
+          // future — a job that came and went without queueing is a fault, not a wait.
+          const dueAt = b.booking_date && (b.end_time || b.start_time)
+            ? new Date(`${new Date(b.booking_date).toISOString().slice(0, 10)}T${b.end_time || b.start_time}`)
+            : null;
+          if (dueAt) dueAt.setHours(dueAt.getHours() + (cfg.send_delay ?? 1));
+
+          if (dueAt && dueAt < new Date()) {
+            status = 'blocked';
+            reason = `Should have sent ${dueAt.toLocaleString('en-US')} but was never queued — check the booking has an end time and a customer`;
+          } else if (dueAt) {
+            status = 'waiting';
+            reason = `Not due yet — sends around ${dueAt.toLocaleString('en-US')}`;
+          } else {
+            status = 'blocked';
+            reason = 'Booking has no start or end time, so there is nothing to schedule from';
+          }
         }
       }
       else if (!b.customer_phone) { status = 'blocked'; reason = 'This customer has no phone number on file'; }
