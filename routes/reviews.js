@@ -283,19 +283,29 @@ router.get('/review-diagnostics', authenticateToken, async (req, res) => {
     )).rows[0] || null;
 
     const rows = (await pool.query(
-      `SELECT b.id AS booking_id, b.status AS booking_status, b.booking_date,
+      // booking_date is a DATE. Serialised as a timestamp it lands at UTC midnight
+      // and renders a day early for anyone west of UTC, so hand it over as plain
+      // text. due_at is computed here with the same AT TIME ZONE expression the
+      // queueing cron uses, rather than being rebuilt in JS against the server's
+      // clock — the booking's times belong to the business's timezone, not ours.
+      `SELECT b.id AS booking_id, b.status AS booking_status,
+              to_char(b.booking_date, 'YYYY-MM-DD') AS booking_date,
               b.start_time, b.end_time, b.customer_id,
+              (b.booking_date || ' ' || COALESCE(b.end_time, b.start_time))::timestamp
+                AT TIME ZONE COALESCE(u.timezone, 'America/New_York')
+                + COALESCE($3::int, 1) * INTERVAL '1 hour'   AS due_at,
               (SELECT bi.service_name FROM booking_items bi
                 WHERE bi.booking_id = b.id ORDER BY bi.id LIMIT 1) AS service_name,
               c.name AS customer_name, c.phone AS customer_phone, c.sms_unsubscribed,
               rr.id AS review_request_id, rr.status AS rr_status, rr.sms_sent,
               rr.scheduled_send_time
        FROM bookings b
+       JOIN users u ON u.id = b.user_id
        LEFT JOIN customers c ON c.id = b.customer_id
        LEFT JOIN review_requests rr ON rr.booking_id = b.id
        WHERE b.user_id = $1 AND b.booking_date >= CURRENT_DATE - ($2::int)
        ORDER BY b.booking_date DESC, b.start_time DESC`,
-      [userId, days]
+      [userId, days, cfg?.send_delay ?? 1]
     )).rows;
 
     const bookings = rows.map(b => {
@@ -308,12 +318,8 @@ router.get('/review-diagnostics', authenticateToken, async (req, res) => {
         if (cfg.send_trigger === 'booking_completed' && b.booking_status !== 'completed') {
           status = 'waiting'; reason = `Mark this booking completed to trigger the request (currently "${b.booking_status}")`;
         } else {
-          // Work out when it was actually due rather than assuming it's in the
-          // future — a job that came and went without queueing is a fault, not a wait.
-          const dueAt = b.booking_date && (b.end_time || b.start_time)
-            ? new Date(`${new Date(b.booking_date).toISOString().slice(0, 10)}T${b.end_time || b.start_time}`)
-            : null;
-          if (dueAt) dueAt.setHours(dueAt.getHours() + (cfg.send_delay ?? 1));
+          // due_at comes from SQL in the business's own timezone.
+          const dueAt = b.due_at ? new Date(b.due_at) : null;
 
           if (dueAt && dueAt < new Date()) {
             status = 'blocked';
