@@ -9,14 +9,19 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    // Dedup: for customers sharing the same email (or same name when no email),
-    // return only the record with the most data (non-null fields), then earliest created.
+    // Dedup the same person entered twice, keeping the record with the most data.
+    //
+    // Keyed on name AND email together, deliberately. Keying on email alone merged
+    // genuinely different people who share an address — a household, or a placeholder
+    // reused across bookings — and the loser disappeared from the customer list
+    // entirely while their bookings still pointed at them.
     const result = await pool.query(
       `WITH ranked AS (
          SELECT *,
            ROW_NUMBER() OVER (
              PARTITION BY
-               LOWER(COALESCE(NULLIF(TRIM(email), ''), LOWER(TRIM(name))))
+               LOWER(TRIM(COALESCE(name, ''))) || '|' ||
+               LOWER(TRIM(COALESCE(email, '')))
              ORDER BY
                (CASE WHEN email IS NOT NULL AND email != '' THEN 1 ELSE 2 END),
                (CASE WHEN phone IS NOT NULL AND phone != '' THEN 0 ELSE 1 END),
