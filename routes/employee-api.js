@@ -1668,12 +1668,53 @@ router.post('/bookings', async (req, res) => {
     const bnRes = await pool.query('SELECT generate_booking_number() as number');
     const bookingNumber = bnRes.rows[0].number;
 
+    // A booking taken in the field is still a customer. Without a customers row and
+    // a customer_id on the booking, this person never appears in the CRM and the
+    // review request cron skips the job entirely — its first gate is customer_id.
+    // Match an existing customer on phone or email before creating another.
+    let customerId = null;
+    try {
+      const phoneDigits = (customerPhone || '').replace(/\D/g, '').slice(-10);
+      const existing = await pool.query(
+        `SELECT id FROM customers
+         WHERE user_id = $1
+           AND (
+             ($2 <> '' AND right(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $2)
+             OR ($3 <> '' AND LOWER(COALESCE(email, '')) = LOWER($3))
+           )
+         ORDER BY created_at ASC LIMIT 1`,
+        [userId, phoneDigits, (customerEmail || '').trim()]
+      );
+
+      if (existing.rows[0]) {
+        customerId = existing.rows[0].id;
+        // Fill in anything we now know that the existing record was missing.
+        await pool.query(
+          `UPDATE customers
+           SET phone = COALESCE(NULLIF(phone, ''), $1),
+               email = COALESCE(NULLIF(email, ''), $2)
+           WHERE id = $3`,
+          [customerPhone || null, customerEmail || null, customerId]
+        );
+      } else {
+        const created = await pool.query(
+          `INSERT INTO customers (user_id, name, email, phone) VALUES ($1,$2,$3,$4) RETURNING id`,
+          [userId, customerName, customerEmail || null, customerPhone || null]
+        );
+        customerId = created.rows[0].id;
+      }
+    } catch (custErr) {
+      // Never block the booking over this — but it must be visible, because a null
+      // customer_id silently costs them the review request.
+      console.error(`⚠️ Employee booking: could not link a customer for "${customerName}":`, custErr.message);
+    }
+
     const result = await pool.query(
-      `INSERT INTO bookings (user_id, employee_id, booking_number, customer_name, customer_email, customer_phone,
+      `INSERT INTO bookings (user_id, employee_id, booking_number, customer_id, customer_name, customer_email, customer_phone,
         customer_address, customer_notes, booking_date, start_time, end_time, status, subtotal, total_amount, job_notes, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'confirmed',$12,$13,$14,'manual')
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',$13,$14,$15,'manual')
        RETURNING *`,
-      [userId, assignTo, bookingNumber, customerName, customerEmail||null, customerPhone||null,
+      [userId, assignTo, bookingNumber, customerId, customerName, customerEmail||null, customerPhone||null,
        customerAddress||null, customerNotes||null, bookingDate, startTime, endTime,
        subtotal, subtotal, notes||null]
     );
