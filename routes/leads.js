@@ -168,6 +168,10 @@ router.post('/public/:userId', async (req, res) => {
           return sgMail.send({
             to: owner.email,
             from: { name: 'SORCE', email: 'help@sorceintegrations.com' },
+            // Reply goes to the lead, which is what hitting reply on "you have a
+            // new lead" is meant to do. Without it, the owner replies to our own
+            // inbox and the lead never hears from them.
+            ...(email ? { replyTo: { name: name || '', email } } : {}),
             subject: `New lead: ${name}`,
             html: `
               <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
