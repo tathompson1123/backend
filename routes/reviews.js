@@ -318,6 +318,18 @@ router.post('/review-requests/:id/send-ask', authenticateToken, async (req, res)
       [userId, askLeadId, rr.phone, message, rr.id]
     ).catch(() => {});
 
+    // This person has now been sent a link, so mark them asked and enrol them in the
+    // follow-up sequence. Without this the request sat in 'awaiting_reply' and the
+    // follow-up cron skipped it — the one customer the owner cared enough to chase by
+    // hand would have been the only one who never got a reminder.
+    await pool.query(
+      `UPDATE review_requests
+          SET status = 'replied_positive',
+              followup_seq_started_at = COALESCE(followup_seq_started_at, NOW())
+        WHERE id = $1`,
+      [rr.id]
+    ).catch(e => console.error('Manual ask status update failed:', e.message));
+
     console.log(`✅ Manual review ask sent for request ${rr.id}`);
     res.json({ success: true, message });
   } catch (error) {

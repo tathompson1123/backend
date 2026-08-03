@@ -289,9 +289,6 @@ router.put('/my-bookings/:id/status', requirePermission('manage_bookings'), asyn
           const serviceName = itemsResult.rows[0]?.service_name || 'Service';
           const delayHours = config ? (config.send_delay ?? 2) : 2;
           const scheduledTime = new Date(Date.now() + delayHours * 60 * 60 * 1000);
-          const incentiveCode = config?.incentive_enabled
-            ? `REV-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
-            : null;
 
           const existing = await pool.query(
             'SELECT id FROM review_requests WHERE user_id = $1 AND customer_email = $2 AND service_name = $3 AND created_at > NOW() - INTERVAL \'24 hours\'',
@@ -300,9 +297,9 @@ router.put('/my-bookings/:id/status', requirePermission('manage_bookings'), asyn
 
           if (existing.rows.length === 0) {
             await pool.query(
-              `INSERT INTO review_requests (user_id, customer_name, customer_email, customer_phone, service_name, status, scheduled_send_time, incentive_code, created_at)
-               VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, NOW())`,
-              [userId, booking.customer_name, booking.customer_email, booking.customer_phone, serviceName, scheduledTime, incentiveCode]
+              `INSERT INTO review_requests (user_id, customer_name, customer_email, customer_phone, service_name, status, scheduled_send_time, created_at)
+               VALUES ($1, $2, $3, $4, $5, 'pending', $6, NOW())`,
+              [userId, booking.customer_name, booking.customer_email, booking.customer_phone, serviceName, scheduledTime]
             );
             console.log(`✅ Review request created for booking ${id} (via employee app)`);
           }

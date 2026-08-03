@@ -536,11 +536,6 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
         const delayHours = config ? (config.send_delay ?? 2) : 2;
         const scheduledTime = new Date(Date.now() + delayHours * 60 * 60 * 1000);
 
-        // Generate incentive code if incentives are enabled
-        const incentiveEnabled = config ? config.incentive_enabled : false;
-        const incentiveCode = incentiveEnabled
-          ? `REV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
-          : null;
 
         // Check if review request already exists for this customer recently
         const existing = await pool.query(
@@ -550,9 +545,9 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
 
         if (existing.rows.length === 0) {
           await pool.query(
-            `INSERT INTO review_requests (user_id, customer_id, status, scheduled_send_time, incentive_code, created_at)
-             VALUES ($1, $2, 'pending', $3, $4, NOW())`,
-            [userId, booking.customer_id, scheduledTime, incentiveCode]
+            `INSERT INTO review_requests (user_id, customer_id, status, scheduled_send_time, created_at)
+             VALUES ($1, $2, 'pending', $3, NOW())`,
+            [userId, booking.customer_id, scheduledTime]
           );
           console.log(`✅ Review request created for booking ${id}`);
         }

@@ -225,6 +225,56 @@ async function composePositiveReply(
   }
 }
 
+// ── Follow-up nudges for a customer who was asked but hasn't left a review ───
+// attempt 1 = a day after the ask, attempt 2 = a week after. Kept deliberately
+// short and low-pressure: this person already said they were happy, so the job is
+// to make it easy, not to sell. Never implies they promised anything.
+function fallbackFollowUp({ fn, businessName, incentive, incentiveEnabled, reviewLink, attempt }) {
+  const inc = incentiveEnabled && incentive ? ` and ${incentive}` : '';
+  const body = attempt === 1
+    ? `Hi ${fn}, just floating this back up — if you have a minute for a quick Google review${inc}, here's the link:`
+    : `Hi ${fn}, last nudge from ${businessName || 'us'} on this one — a quick Google review${inc} would really help us out:`;
+  return `${body} ${reviewLink || ''}`.trim();
+}
+
+async function composeReviewFollowUp(
+  { firstName, businessName, incentive, incentiveEnabled, reviewLink, attempt = 1, history },
+  userId
+) {
+  const fn = (firstName && String(firstName).trim()) || 'there';
+  try {
+    const incLine = incentiveEnabled && incentive
+      ? `You may mention the incentive, but ONLY as conditional on leaving the review: "${incentive}".`
+      : 'Do not offer any incentive.';
+
+    const thread = (history || [])
+      .slice(-6)
+      .map(m => `${m.direction === 'incoming' ? 'Customer' : 'Business'}: ${m.message}`)
+      .join('\n');
+
+    const out = await ask(
+      userId, 'review_followup',
+      `You write a single short follow-up SMS from ${businessName || 'the business'} to a customer who said their service went well and was sent a Google review link, but hasn't used it yet.\n\n` +
+      `${attempt === 1
+        ? 'This is a gentle first reminder, about a day after the ask.'
+        : 'This is the SECOND and final text reminder, about a week after the ask. Make it clear this is the last time you will bring it up, warmly and without guilt-tripping.'}\n\n` +
+      `${incLine}\n\n` +
+      'Rules: assume they are busy, not avoiding you — never imply they promised or forgot, never guilt them, never repeat a previous follow-up almost word for word. One short sentence plus the link, no more. At most one emoji. End with the review link exactly as given. Reply with ONLY the message text.',
+      [
+        `Customer first name: ${fn}`,
+        thread ? `Conversation so far:\n${thread}` : null,
+        `Review link: ${reviewLink || ''}`,
+      ].filter(Boolean).join('\n'),
+      160
+    );
+    let msg = out.replace(/^["']|["']$/g, '').trim();
+    if (reviewLink && !msg.includes(reviewLink)) msg = `${msg} ${reviewLink}`.trim();
+    return msg || fallbackFollowUp({ fn, businessName, incentive, incentiveEnabled, reviewLink, attempt });
+  } catch {
+    return fallbackFollowUp({ fn, businessName, incentive, incentiveEnabled, reviewLink, attempt });
+  }
+}
+
 // ── Rate an owner's incentive 1-10 for how well it earns reviews ─────────────
 async function rateIncentive(incentiveText, userId) {
   const inc = String(incentiveText || '').trim();
@@ -253,5 +303,6 @@ module.exports = {
   shortenServiceName,
   classifyReplySentiment,
   composePositiveReply,
+  composeReviewFollowUp,
   rateIncentive,
 };

@@ -713,7 +713,6 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
         link_clicked BOOLEAN DEFAULT false,
         review_completed BOOLEAN DEFAULT false,
         review_completed_at TIMESTAMP,
-        incentive_code VARCHAR(50),
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -731,6 +730,23 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255)`);
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(50)`);
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS service_name VARCHAR(255)`);
+
+    // Review follow-up sequence: two more texts (day 1, day 7) then two emails
+    // (day 21, day 42) for customers who were asked and still haven't left a review.
+    //
+    // followup_seq_started_at is what enrols a request in the sequence, and it is set
+    // when the opener goes out — deliberately NOT reusing sms_sent_at. Every one of the
+    // 159 requests already in the table predates this feature and is months past day 42,
+    // so anchoring on sms_sent_at would have fired all four steps at every one of them
+    // on the first cron tick after deploy. Existing rows have this NULL and are never
+    // enrolled; only requests opened from here on enter the sequence.
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS followup_seq_started_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS followup_sms_1_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS followup_sms_2_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS followup_email_1_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS followup_email_2_at TIMESTAMP`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_review_requests_followup
+      ON review_requests(followup_seq_started_at) WHERE followup_seq_started_at IS NOT NULL`);
     console.log('✅ Review requests table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify review_requests table:', e.message);
@@ -1852,7 +1868,7 @@ cron.schedule('*/30 * * * * *', async () => {
 cron.schedule('*/60 * * * * *', async () => {
   try {
     const pending = await pool.query(
-      `SELECT rr.id, rr.user_id, rr.customer_id, rr.incentive_code,
+      `SELECT rr.id, rr.user_id, rr.customer_id,
               c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email,
               COALESCE(
                 (SELECT bi.service_name FROM booking_items bi
@@ -1927,7 +1943,10 @@ cron.schedule('*/60 * * * * *', async () => {
         // Opener sent → now waiting for the customer's reply, which the inbound webhook
         // classifies (positive → incentive+link, negative → escalate to owner).
         await pool.query(
-          `UPDATE review_requests SET sms_sent = true, sms_sent_at = NOW(), actual_send_time = NOW(), status = 'awaiting_reply' WHERE id = $1`,
+          `UPDATE review_requests
+              SET sms_sent = true, sms_sent_at = NOW(), actual_send_time = NOW(),
+                  status = 'awaiting_reply', followup_seq_started_at = NOW()
+            WHERE id = $1`,
           [req.id]
         );
 
@@ -1939,6 +1958,186 @@ cron.schedule('*/60 * * * * *', async () => {
     }
   } catch (err) {
     console.error('❌ Review SMS cron error:', err.message || err);
+  }
+});
+
+// ── Review follow-up sequence ─────────────────────────────
+// After the opener and the review ask, a customer who was asked and still hasn't
+// used the link gets: a text at day 1, a text at day 7, then emails at day 21 and
+// day 42. Everything is anchored on followup_seq_started_at (set when the opener
+// goes out) and stops the moment they click through.
+//
+// Only customers who actually received a link are chased. 'awaiting_reply' — they
+// never answered "how did it go?" — is excluded on purpose: they were never sent a
+// review link, so "did you get a chance to leave that review?" would be nonsense to
+// them, and the whole point of the sentiment gate is not to ask before we know
+// they're happy. 'replied_negative' is excluded for the obvious reason.
+const REVIEW_FOLLOWUP_STEPS = [
+  { col: 'followup_sms_1_at',   channel: 'sms',   afterDays: 1,  attempt: 1 },
+  { col: 'followup_sms_2_at',   channel: 'sms',   afterDays: 7,  attempt: 2 },
+  { col: 'followup_email_1_at', channel: 'email', afterDays: 21, attempt: 1 },
+  { col: 'followup_email_2_at', channel: 'email', afterDays: 42, attempt: 2 },
+];
+
+// Statuses meaning "we sent them a review link". 'sent' is the legacy one-way flow.
+const REVIEW_ASKED_STATUSES = ['replied_positive', 'replied_neutral', 'sent'];
+
+// A step more than this far overdue is marked done without sending. Without it, a
+// cron outage (or a long deploy gap) would come back up and fire a burst of stale
+// nudges at people whose job was weeks ago.
+const FOLLOWUP_MAX_LATE_DAYS = 3;
+
+cron.schedule('*/10 * * * *', async () => {
+  for (const step of REVIEW_FOLLOWUP_STEPS) {
+    try {
+      const due = await pool.query(
+        `SELECT rr.id, rr.user_id, rr.status, rr.followup_seq_started_at,
+                COALESCE(c.name,  rr.customer_name)  AS customer_name,
+                COALESCE(c.phone, rr.customer_phone) AS customer_phone,
+                COALESCE(c.email, rr.customer_email) AS customer_email,
+                c.sms_unsubscribed,
+                u.business_name, u.email AS owner_email, u.google_review_link,
+                u.twilio_phone_number, u.plan,
+                rc.incentive, rc.incentive_enabled, rc.review_link_base,
+                rr.followup_seq_started_at + ($2::int * INTERVAL '1 day') AS due_at
+           FROM review_requests rr
+           JOIN users u ON u.id = rr.user_id
+           LEFT JOIN customers c ON c.id = rr.customer_id
+           LEFT JOIN review_configs rc ON rc.user_id = rr.user_id
+          WHERE rr.followup_seq_started_at IS NOT NULL
+            AND rr.${step.col} IS NULL
+            AND rr.status = ANY($1)
+            AND COALESCE(rr.link_clicked, false)    = false
+            AND COALESCE(rr.review_completed, false) = false
+            AND COALESCE(rr.review_verified, false)  = false
+            AND rr.followup_seq_started_at + ($2::int * INTERVAL '1 day') <= NOW()
+          LIMIT 200`,
+        [REVIEW_ASKED_STATUSES, step.afterDays]
+      );
+
+      for (const req of due.rows) {
+        // Stamp first, then send. A crash mid-send costs one nudge; the other order
+        // would re-text the same person every 10 minutes until it succeeded.
+        const markDone = () => pool.query(
+          `UPDATE review_requests SET ${step.col} = NOW() WHERE id = $1`, [req.id]
+        ).catch(e => console.error(`Follow-up stamp failed for ${req.id}:`, e.message));
+
+        const lateDays = (Date.now() - new Date(req.due_at).getTime()) / 86400000;
+        if (lateDays > FOLLOWUP_MAX_LATE_DAYS) {
+          await markDone();
+          console.log(`⏭️ Review follow-up ${step.col} skipped for request ${req.id} — ${Math.round(lateDays)}d overdue`);
+          continue;
+        }
+
+        try {
+          const firstName = String(req.customer_name || 'there').split(' ')[0];
+          const reviewLink = await buildReviewLink(pool, {
+            reviewRequestId: req.id,
+            userId: req.user_id,
+            customBase: req.review_link_base,
+            hasGoogleLink: !!req.google_review_link,
+          });
+          if (!reviewLink) { await markDone(); continue; }
+
+          if (step.channel === 'sms') {
+            if (!req.customer_phone || req.sms_unsubscribed || !req.twilio_phone_number) {
+              await markDone();
+              continue;
+            }
+            // Same monthly allowance the opener respects — a follow-up shouldn't be
+            // the thing that pushes an account over its plan limit.
+            const unlimited = smsCampaignRoutes.isUnlimitedSms(req.owner_email);
+            if (!unlimited) {
+              const SMS_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
+              const smsLimit = SMS_LIMITS[req.plan] || 0;
+              const used = parseInt((await pool.query(
+                `SELECT COUNT(*) FROM sms_messages
+                  WHERE user_id = $1 AND direction = 'outgoing'
+                    AND created_at >= date_trunc('month', NOW())`,
+                [req.user_id]
+              )).rows[0].count, 10);
+              if (smsLimit === 0 || used >= smsLimit) {
+                await markDone();
+                console.log(`⏭️ Review follow-up ${step.col} skipped for request ${req.id} — SMS limit`);
+                continue;
+              }
+            }
+
+            const priorTurns = (await pool.query(
+              `SELECT direction, message FROM sms_messages
+                WHERE review_request_id = $1 ORDER BY created_at ASC LIMIT 8`,
+              [req.id]
+            ).catch(() => ({ rows: [] }))).rows;
+
+            const { composeReviewFollowUp } = require('./utils/reviewAI');
+            const body = await composeReviewFollowUp({
+              firstName,
+              businessName: req.business_name,
+              incentive: req.incentive,
+              incentiveEnabled: req.incentive_enabled,
+              reviewLink,
+              attempt: step.attempt,
+              history: priorTurns,
+            }, req.user_id);
+
+            const toPhone = req.customer_phone.startsWith('+')
+              ? req.customer_phone
+              : `+1${req.customer_phone.replace(/\D/g, '')}`;
+
+            await markDone();
+            const smsResult = await sendSMSAuto(toPhone, body, req.user_id);
+            const followUpLeadId = await findLeadIdByPhone(pool, req.user_id, toPhone);
+            await pool.query(
+              `INSERT INTO sms_messages (user_id, lead_id, direction, to_number, from_number, provider, message, twilio_message_sid, review_request_id, created_at)
+               VALUES ($1, $2, 'outgoing', $3, $4, $5, $6, $7, $8, NOW())`,
+              [req.user_id, followUpLeadId, toPhone, smsResult.fromNumber, smsResult.provider, body, smsResult.messageSid, req.id]
+            ).catch(e => console.error('Follow-up SMS log failed:', e.message));
+            console.log(`🔁 Review follow-up text ${step.attempt} sent for request ${req.id} to ${toPhone}`);
+          } else {
+            const toEmail = String(req.customer_email || '').trim();
+            if (!process.env.SENDGRID_API_KEY || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
+              await markDone();
+              continue;
+            }
+            const sgMail = require('@sendgrid/mail');
+            sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+            const finalOne = step.attempt === 2;
+            const incentiveLine = req.incentive_enabled && req.incentive
+              ? `<p style="margin:0 0 16px;">Leave a review and ${req.incentive}.</p>`
+              : '';
+
+            await markDone();
+            await sgMail.send({
+              to: toEmail,
+              from: { name: req.business_name || 'SORCE', email: 'help@sorceintegrations.com' },
+              replyTo: req.owner_email ? { email: req.owner_email } : undefined,
+              subject: finalOne
+                ? `One last ask — ${req.business_name || 'us'}`
+                : `Would you mind leaving us a review?`,
+              html: `
+                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111827;">
+                  <p style="margin:0 0 16px;font-size:16px;">Hi ${firstName},</p>
+                  <p style="margin:0 0 16px;font-size:15px;line-height:1.5;">
+                    ${finalOne
+                      ? `We won't keep asking — but if you have a spare minute, a quick Google review really does help a small business like ${req.business_name || 'ours'}.`
+                      : `You mentioned things went well with us, and we'd be really grateful if you'd share that in a quick Google review.`}
+                  </p>
+                  ${incentiveLine}
+                  <div style="text-align:center;margin:28px 0;">
+                    <a href="${reviewLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:600;">Leave a Review</a>
+                  </div>
+                  <p style="margin:0;color:#6b7280;font-size:13px;">Thanks again for choosing ${req.business_name || 'us'}.</p>
+                </div>`,
+            });
+            console.log(`🔁 Review follow-up email ${step.attempt} sent for request ${req.id} to ${toEmail}`);
+          }
+        } catch (stepErr) {
+          console.error(`❌ Review follow-up ${step.col} failed for request ${req.id}:`, stepErr.message);
+        }
+      }
+    } catch (err) {
+      console.error(`❌ Review follow-up cron error (${step.col}):`, err.message || err);
+    }
   }
 });
 
@@ -1985,14 +2184,11 @@ cron.schedule('*/5 * * * *', async () => {
       try {
         // scheduled_send_time = now (the delay condition already passed in WHERE)
         const scheduledTime = new Date();
-        const incentiveCode = row.incentive_enabled
-          ? `REV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
-          : null;
         await pool.query(
-          `INSERT INTO review_requests (user_id, customer_id, booking_id, status, scheduled_send_time, incentive_code, created_at)
-           VALUES ($1, $2, $3, 'pending', $4, $5, NOW())
+          `INSERT INTO review_requests (user_id, customer_id, booking_id, status, scheduled_send_time, created_at)
+           VALUES ($1, $2, $3, 'pending', $4, NOW())
            ON CONFLICT (booking_id) WHERE booking_id IS NOT NULL DO NOTHING`,
-          [row.user_id, row.customer_id, row.booking_id, scheduledTime, incentiveCode]
+          [row.user_id, row.customer_id, row.booking_id, scheduledTime]
         );
         console.log(`✅ [service_duration] Review request queued for booking ${row.booking_id}`);
       } catch (rowErr) {
@@ -2004,101 +2200,11 @@ cron.schedule('*/5 * * * *', async () => {
   }
 });
 
-// ── Review follow-up email cron — runs every 30 minutes ──────────────────────
-// Sends a follow-up review request email 24 hours after the SMS was sent.
-cron.schedule('*/30 * * * *', async () => {
-  try {
-    const sgMail = require('@sendgrid/mail');
-    if (!process.env.SENDGRID_API_KEY) return;
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
-    const pending = await pool.query(
-      `SELECT rr.id, rr.user_id, rr.customer_id, rr.incentive_code,
-              c.name AS customer_name, c.email AS customer_email, c.last_service AS service_name,
-              u.business_name, u.email AS owner_email, u.google_review_link,
-              rc.message_template, rc.incentive, rc.incentive_enabled, rc.review_link_base
-       FROM review_requests rr
-       JOIN users u ON u.id = rr.user_id
-       JOIN customers c ON c.id = rr.customer_id
-       LEFT JOIN review_configs rc ON rc.user_id = rr.user_id
-       WHERE rr.sms_sent = true
-         AND (rr.email_sent = false OR rr.email_sent IS NULL)
-         AND (rr.link_clicked = false OR rr.link_clicked IS NULL)
-         AND c.email IS NOT NULL
-         AND rr.sms_sent_at + INTERVAL '24 hours' <= NOW()
-         AND (u.plan IS NOT NULL)`
-    );
-
-    // A single malformed address makes SendGrid 400 the whole send. Screen them out and
-    // mark them done so they don't retry (and re-log) every 30 minutes forever.
-    const isValidEmail = (e) => typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
-
-    for (const req of pending.rows) {
-      try {
-        const toEmail = (req.customer_email || '').trim();
-        if (!isValidEmail(toEmail)) {
-          await pool.query(`UPDATE review_requests SET email_sent = true, email_sent_at = NOW() WHERE id = $1`, [req.id]);
-          console.warn(`⚠️ Cron: Review email skipped for request ${req.id} — invalid address "${req.customer_email}"`);
-          continue;
-        }
-        const firstName = (req.customer_name || 'there').split(' ')[0];
-        const reviewLink = await buildReviewLink(pool, {
-          reviewRequestId: req.id,
-          userId: req.user_id,
-          customBase: req.review_link_base,
-          hasGoogleLink: !!req.google_review_link,
-        });
-
-        let bodyText = req.incentive_enabled && req.incentive
-          ? `We'd love to hear about your experience! Could you take a moment to share a review? As a thank you, here's a special offer: <strong>${req.incentive}</strong>`
-          : `We'd love to hear about your experience with <strong>${req.service_name || 'our service'}</strong>. Could you take a moment to leave us a review?`;
-
-        await sgMail.send({
-          to: toEmail,
-          from: { name: req.business_name || 'Your Service Provider', email: 'help@sorceintegrations.com' },
-          replyTo: req.owner_email ? { email: req.owner_email } : undefined,
-          subject: `How was your experience? — ${req.business_name || 'Us'}`,
-          html: `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-              <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-                <h1 style="color:#fff;margin:0;font-size:1.5rem;">We Value Your Feedback</h1>
-              </div>
-              <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-                <p style="font-size:1rem;margin-top:0;">Hi ${firstName},</p>
-                <p>${bodyText}</p>
-                ${reviewLink
-                  ? `<div style="text-align:center;margin:2rem 0;">
-                       <a href="${reviewLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:600;">Leave a Review</a>
-                     </div>`
-                  : ''}
-                <p style="color:#6b7280;font-size:0.85rem;margin-top:1.5rem;">Thank you for choosing ${req.business_name || 'us'}. We appreciate your business!</p>
-              </div>
-            </div>`,
-        });
-
-        await pool.query(
-          `UPDATE review_requests SET email_sent = true, email_sent_at = NOW() WHERE id = $1`,
-          [req.id]
-        );
-        console.log(`📧 Cron: Review follow-up email sent for request ${req.id} to ${toEmail}`);
-      } catch (emailErr) {
-        // SendGrid hides the real reason in response.body.errors; "Bad Request" alone is useless.
-        const sgErrors = emailErr?.response?.body?.errors;
-        const detail = Array.isArray(sgErrors) && sgErrors.length ? sgErrors.map(x => x.message).join('; ') : emailErr.message;
-        const statusCode = emailErr?.code || emailErr?.response?.statusCode;
-        console.error(`❌ Cron: Review email failed for request ${req.id}: ${detail}`);
-        // A 4xx is a permanent rejection (bad address, etc.) — mark done so it doesn't retry
-        // every 30 minutes. Transient 5xx errors are left to retry next run.
-        if (statusCode >= 400 && statusCode < 500) {
-          await pool.query(`UPDATE review_requests SET email_sent = true, email_sent_at = NOW() WHERE id = $1`, [req.id])
-            .catch(() => {});
-        }
-      }
-    }
-  } catch (err) {
-    console.error('❌ Review email follow-up cron error:', err.message || err);
-  }
-});
+// The old 24-hour review follow-up email cron used to live here. It is replaced by
+// the review follow-up sequence above, which emails at day 21 and day 42 instead —
+// and, unlike this one, only chases customers who were actually sent a review link.
+// The old query had no status filter, so a customer who replied that the job went
+// badly got an email the next morning asking them to review it.
 
 // ── Email campaign cron job ──────────────────────────────
 // Runs every hour. Two modes:
