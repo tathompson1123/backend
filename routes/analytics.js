@@ -232,6 +232,97 @@ router.get('/data', requireAnalytics, requireAdmin, async (req, res) => {
   }
 });
 
+// ── POST /api/analytics/backfill-booking-customers ────────────
+// Repairs bookings taken in the employee app before it created customer records.
+// Those have the customer's details on the booking row but no customer_id, so the
+// person is missing from the CRM and every one of their jobs was skipped by the
+// review cron. Links them to a customer, creating one only where none matches.
+//
+// Anything already past its review window is given a suppressed request, so fixing
+// months of history doesn't text a pile of old customers all at once. Dry run
+// unless { apply: true }.
+router.post('/backfill-booking-customers', requireAnalytics, requireAdmin, async (req, res) => {
+  try {
+    const apply = !!req.body?.apply;
+    const suppressHours = req.body?.suppressOlderThanHours ?? 48;
+
+    const orphans = (await pool.query(
+      `SELECT b.id, b.user_id, b.customer_name, b.customer_email, b.customer_phone,
+              b.booking_date, b.end_time, b.start_time,
+              ((b.booking_date || ' ' || COALESCE(b.end_time, b.start_time))::timestamp
+                AT TIME ZONE COALESCE(u.timezone, 'America/New_York'))
+                < NOW() - ($1::int * INTERVAL '1 hour') AS past_window
+       FROM bookings b
+       JOIN users u ON u.id = b.user_id
+       WHERE b.customer_id IS NULL
+         AND COALESCE(TRIM(b.customer_name), '') <> ''
+         AND b.status <> 'cancelled'
+       ORDER BY b.booking_date DESC`,
+      [suppressHours]
+    )).rows;
+
+    const report = { found: orphans.length, linked: 0, customersCreated: 0, suppressed: 0, willText: 0, errors: [] };
+
+    for (const b of orphans) {
+      try {
+        if (!apply) {
+          report.linked++;
+          if (b.past_window) report.suppressed++; else report.willText++;
+          continue;
+        }
+
+        const phoneDigits = (b.customer_phone || '').replace(/\D/g, '').slice(-10);
+        const existing = await pool.query(
+          `SELECT id FROM customers
+           WHERE user_id = $1
+             AND (
+               ($2 <> '' AND right(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $2)
+               OR ($3 <> '' AND LOWER(COALESCE(email, '')) = LOWER($3))
+               OR ($2 = '' AND $3 = '' AND LOWER(TRIM(name)) = LOWER($4))
+             )
+           ORDER BY created_at ASC LIMIT 1`,
+          [b.user_id, phoneDigits, (b.customer_email || '').trim(), (b.customer_name || '').trim()]
+        );
+
+        let customerId = existing.rows[0]?.id;
+        if (!customerId) {
+          const created = await pool.query(
+            `INSERT INTO customers (user_id, name, email, phone) VALUES ($1,$2,$3,$4) RETURNING id`,
+            [b.user_id, b.customer_name, b.customer_email || null, b.customer_phone || null]
+          );
+          customerId = created.rows[0].id;
+          report.customersCreated++;
+        }
+
+        await pool.query('UPDATE bookings SET customer_id = $1 WHERE id = $2', [customerId, b.id]);
+        report.linked++;
+
+        // Past its window: leave a suppressed request so the cron sees this booking
+        // as handled and doesn't text someone about a job from weeks ago.
+        if (b.past_window) {
+          await pool.query(
+            `INSERT INTO review_requests (user_id, customer_id, booking_id, status, sms_sent, scheduled_send_time, created_at)
+             VALUES ($1, $2, $3, 'skipped', true, NOW(), NOW())
+             ON CONFLICT (booking_id) WHERE booking_id IS NOT NULL DO NOTHING`,
+            [b.user_id, customerId, b.id]
+          );
+          report.suppressed++;
+        } else {
+          report.willText++;
+        }
+      } catch (err) {
+        report.errors.push({ bookingId: b.id, error: err.message });
+      }
+    }
+
+    console.log(`🔧 Booking customer backfill${apply ? '' : ' (dry run)'}: ${report.linked} linked, ${report.suppressed} suppressed, ${report.willText} will text`);
+    res.json({ success: true, dryRun: !apply, suppressOlderThanHours: suppressHours, report });
+  } catch (error) {
+    console.error('Booking customer backfill error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ── GET /api/analytics/review-diagnostics ─────────────────────
 // Why a given booking did or didn't get its review text. Walks the same gates the
 // two crons apply and says which one it fell out of, so this doesn't need a SQL
