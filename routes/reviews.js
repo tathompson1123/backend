@@ -310,10 +310,12 @@ router.post('/review-requests/:id/send-ask', authenticateToken, async (req, res)
     }, userId);
 
     await sendSMS(rr.phone, message, userId);
+    const { findLeadIdByPhone } = require('../utils/smsThread');
+    const askLeadId = await findLeadIdByPhone(pool, userId, rr.phone);
     await pool.query(
-      `INSERT INTO sms_messages (user_id, direction, to_number, message, review_request_id, created_at)
-       VALUES ($1, 'outgoing', $2, $3, $4, NOW())`,
-      [userId, rr.phone, message, rr.id]
+      `INSERT INTO sms_messages (user_id, lead_id, direction, to_number, message, review_request_id, created_at)
+       VALUES ($1, $2, 'outgoing', $3, $4, $5, NOW())`,
+      [userId, askLeadId, rr.phone, message, rr.id]
     ).catch(() => {});
 
     console.log(`✅ Manual review ask sent for request ${rr.id}`);

@@ -266,10 +266,14 @@ async function runRaffleForUser(userId, period, { dryRun = false } = {}) {
 
     try {
       const result = await sendSMS(to, message, userId);
+      // Both texts say "reply to claim", so the reply has to land somewhere sensible.
+      // Tagging the review request and the lead gives it a thread to land in.
+      const { findLeadIdByPhone } = require('./smsThread');
+      const raffleLeadId = await findLeadIdByPhone(pool, userId, to);
       await pool.query(
-        `INSERT INTO sms_messages (user_id, direction, to_number, from_number, provider, message, twilio_message_sid, created_at)
-         VALUES ($1, 'outgoing', $2, $3, 'twilio', $4, $5, NOW())`,
-        [userId, to, cfg.twilio_phone_number, message, result.messageSid]
+        `INSERT INTO sms_messages (user_id, lead_id, review_request_id, direction, to_number, from_number, provider, message, twilio_message_sid, created_at)
+         VALUES ($1, $2, $3, 'outgoing', $4, $5, 'twilio', $6, $7, NOW())`,
+        [userId, raffleLeadId, row.id, to, cfg.twilio_phone_number, message, result.messageSid]
       );
       await pool.query(
         `UPDATE review_requests

@@ -420,11 +420,15 @@ router.post('/my-bookings/:id/messages', requirePermission('send_messages'), asy
     const { sendSMS } = require('../utils/twilio');
     const smsResult = await sendSMS(phone, message.trim(), userId);
 
-    // Store message
+    // Store message, tied to the lead too when this customer is one — the owner's
+    // Conversations panel is keyed on lead_id, and without it an employee's messages
+    // are missing from the thread the owner reads.
+    const { findLeadIdByPhone } = require('../utils/smsThread');
+    const msgLeadId = await findLeadIdByPhone(pool, userId, phone);
     await pool.query(
-      `INSERT INTO sms_messages (user_id, booking_id, sent_by_employee_id, direction, to_number, message, twilio_message_sid, status, created_at)
-       VALUES ($1, $2, $3, 'outgoing', $4, $5, $6, 'sent', NOW())`,
-      [userId, id, employeeId, phone, message.trim(), smsResult.messageSid]
+      `INSERT INTO sms_messages (user_id, booking_id, lead_id, sent_by_employee_id, direction, to_number, message, twilio_message_sid, status, created_at)
+       VALUES ($1, $2, $3, $4, 'outgoing', $5, $6, $7, 'sent', NOW())`,
+      [userId, id, msgLeadId, employeeId, phone, message.trim(), smsResult.messageSid]
     );
 
     res.json({ success: true, messageSid: smsResult.messageSid });
@@ -482,10 +486,12 @@ router.post(
       const { sendSMS } = require('../utils/twilio');
       const smsResult = await sendSMS(phone, body, userId, mediaUrl);
 
+      const { findLeadIdByPhone } = require('../utils/smsThread');
+      const mediaLeadId = await findLeadIdByPhone(pool, userId, phone);
       await pool.query(
-        `INSERT INTO sms_messages (user_id, booking_id, sent_by_employee_id, direction, to_number, message, media_url, twilio_message_sid, status, created_at)
-         VALUES ($1, $2, $3, 'outgoing', $4, $5, $6, $7, 'sent', NOW())`,
-        [userId, id, req.employee.employeeId, phone, body, mediaUrl, smsResult.messageSid]
+        `INSERT INTO sms_messages (user_id, booking_id, lead_id, sent_by_employee_id, direction, to_number, message, media_url, twilio_message_sid, status, created_at)
+         VALUES ($1, $2, $3, $4, 'outgoing', $5, $6, $7, $8, 'sent', NOW())`,
+        [userId, id, mediaLeadId, req.employee.employeeId, phone, body, mediaUrl, smsResult.messageSid]
       );
 
       res.json({ success: true, messageSid: smsResult.messageSid, mediaUrl });

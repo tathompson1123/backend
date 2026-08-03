@@ -1132,6 +1132,52 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     console.warn('⚠️ Could not verify sms_messages booking_id:', e.message);
   }
 
+  // Backfill lead_id on historical SMS by phone number.
+  //
+  // Only a few code paths ever stamped lead_id, so review texts, campaign blasts,
+  // booking messages and opt-outs sat in the table unattached. That broke two things:
+  // the owner's Conversations panel (keyed on lead_id) showed a partial thread, and
+  // reply attribution had almost no tagged history to reason about, which is how a
+  // campaign blast ended up claiming replies that belonged elsewhere.
+  //
+  // Matching is on the last 10 digits because phone formats are inconsistent across
+  // both tables (E.164, bare 10-digit, "(555) 123-4567"). Where a number maps to
+  // several leads, the most recent one wins — same rule the live webhook uses.
+  try {
+    // Keeps the rescan on every boot cheap once the backfillable rows are done.
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sms_lead_id_null
+      ON sms_messages(user_id) WHERE lead_id IS NULL`);
+
+    const cp = `right(regexp_replace(
+      CASE WHEN s2.direction = 'outgoing' THEN COALESCE(s2.to_number, '')
+           ELSE COALESCE(s2.from_number, '') END,
+      '\\D', '', 'g'), 10)`;
+
+    const backfilled = await pool.query(`
+      UPDATE sms_messages s
+      SET lead_id = sub.lead_id
+      FROM (
+        SELECT s2.id AS msg_id,
+               (SELECT l.id FROM leads l
+                 WHERE l.user_id = s2.user_id
+                   AND right(regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g'), 10) = ${cp}
+                 ORDER BY l.created_at DESC
+                 LIMIT 1) AS lead_id
+          FROM sms_messages s2
+         WHERE s2.lead_id IS NULL
+           AND length(${cp}) = 10
+      ) sub
+      WHERE s.id = sub.msg_id AND sub.lead_id IS NOT NULL
+    `);
+    if (backfilled.rowCount > 0) {
+      console.log(`✅ Backfilled lead_id on ${backfilled.rowCount} sms_messages rows`);
+    } else {
+      console.log('✅ sms_messages lead_id backfill — nothing left to attach');
+    }
+  } catch (e) {
+    console.warn('⚠️ Could not backfill sms_messages.lead_id:', e.message);
+  }
+
   // Claude usage tracking
   try {
     await pool.query(`
@@ -1629,6 +1675,7 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
 // and updates the lead status. Survives server restarts.
 const cron = require('node-cron');
 const { sendSMS } = require('./utils/twilio');
+const { findLeadIdByPhone } = require('./utils/smsThread');
 const { generateAIResponse } = require('./routes/sms');
 
 // Helper: send SMS via the user's Twilio number
@@ -1867,10 +1914,14 @@ cron.schedule('*/60 * * * * *', async () => {
         const toPhone = req.customer_phone.startsWith('+') ? req.customer_phone : `+1${req.customer_phone.replace(/\D/g, '')}`;
         const smsResult = await sendSMSAuto(toPhone, message, req.user_id);
 
+        // Tie the opener to the lead as well as the review request, so the review
+        // exchange shows up inside that contact's conversation rather than only in
+        // the review tab.
+        const openerLeadId = await findLeadIdByPhone(pool, req.user_id, toPhone);
         await pool.query(
-          `INSERT INTO sms_messages (user_id, direction, to_number, from_number, provider, message, twilio_message_sid, review_request_id, created_at)
-           VALUES ($1, 'outgoing', $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
-          [req.user_id, toPhone, smsResult.fromNumber, smsResult.provider, message, smsResult.messageSid, req.id]
+          `INSERT INTO sms_messages (user_id, lead_id, direction, to_number, from_number, provider, message, twilio_message_sid, review_request_id, created_at)
+           VALUES ($1, $2, 'outgoing', $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+          [req.user_id, openerLeadId, toPhone, smsResult.fromNumber, smsResult.provider, message, smsResult.messageSid, req.id]
         );
 
         // Opener sent → now waiting for the customer's reply, which the inbound webhook
@@ -2338,7 +2389,19 @@ cron.schedule('*/15 * * * *', async () => {
             ? booking.customer_phone
             : `+1${booking.customer_phone.replace(/\D/g, '')}`;
 
-          await sendSMSAuto(toPhone, smsText, user_id);
+          const reminderResult = await sendSMSAuto(toPhone, smsText, user_id);
+
+          // Log the reminder into the thread. It used to go out untracked, which left
+          // a hole in attribution: a customer replying "can we push it to Friday?" had
+          // no booking-tagged message to reply TO, so the webhook fell back to guessing
+          // from their phone number. Now the reminder itself says which booking it is.
+          const reminderLeadId = await findLeadIdByPhone(pool, user_id, toPhone);
+          await pool.query(
+            `INSERT INTO sms_messages (user_id, booking_id, lead_id, direction, to_number, from_number, provider, message, twilio_message_sid, status, created_at)
+             VALUES ($1, $2, $3, 'outgoing', $4, $5, $6, $7, $8, 'sent', CURRENT_TIMESTAMP)`,
+            [user_id, booking.id, reminderLeadId, toPhone, reminderResult.fromNumber,
+             reminderResult.provider, smsText, reminderResult.messageSid]
+          ).catch(e => console.error('Reminder SMS log insert failed:', e.message));
 
           await pool.query(
             `INSERT INTO booking_reminders_sent (booking_id, hours_before, channel) VALUES ($1, $2, 'sms')

@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
 const { sendSMS } = require('../utils/twilio');
 const { fireLeadEvent, clientIpFromReq } = require('../utils/metaConversions');
+const { THREAD_SOURCE_SQL } = require('../utils/smsThread');
 const sgMail = require('@sendgrid/mail');
 
 if (process.env.SENDGRID_API_KEY) {
@@ -333,17 +334,34 @@ router.get('/sms-conversations', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
 
+    // last_thread_source labels the conversation by whatever came through most
+    // recently, so the list distinguishes a live agent thread from a campaign blast
+    // or a booking exchange without having to open each one.
     const result = await pool.query(
       `SELECT
         l.id, l.name, l.phone, l.email, l.status, l.source, l.service, l.message, l.notes, l.created_at,
         COUNT(s.id)::int AS message_count,
         MAX(s.created_at) AS last_message_at,
-        (SELECT s2.message FROM sms_messages s2 WHERE s2.lead_id = l.id ORDER BY s2.created_at DESC LIMIT 1) AS last_message,
-        (SELECT s2.direction FROM sms_messages s2 WHERE s2.lead_id = l.id ORDER BY s2.created_at DESC LIMIT 1) AS last_direction
+        MIN(s.created_at) AS first_message_at,
+        latest.message       AS last_message,
+        latest.direction     AS last_direction,
+        latest.thread_source AS last_thread_source,
+        COUNT(DISTINCT s.thread_source)::int AS thread_source_count
        FROM leads l
-       JOIN sms_messages s ON s.lead_id = l.id
+       JOIN (
+         SELECT id, lead_id, direction, created_at, ${THREAD_SOURCE_SQL} AS thread_source
+           FROM sms_messages
+       ) s ON s.lead_id = l.id
+       LEFT JOIN LATERAL (
+         SELECT s2.message, s2.direction, ${THREAD_SOURCE_SQL} AS thread_source
+           FROM sms_messages s2
+          WHERE s2.lead_id = l.id
+          ORDER BY s2.created_at DESC, s2.id DESC
+          LIMIT 1
+       ) latest ON TRUE
        WHERE l.user_id = $1
-       GROUP BY l.id, l.name, l.phone, l.email, l.status, l.source, l.service, l.message, l.notes, l.created_at
+       GROUP BY l.id, l.name, l.phone, l.email, l.status, l.source, l.service, l.message, l.notes, l.created_at,
+                latest.message, latest.direction, latest.thread_source
        ORDER BY MAX(s.created_at) DESC`,
       [userId]
     );
@@ -904,12 +922,16 @@ router.get('/:leadId/sms-conversation', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Lead not found' });
     }
     
-    // Get SMS messages
+    // Get SMS messages. thread_source tells the panel which conversation each text
+    // came from — a campaign blast, a booking exchange, a review ask or the agent —
+    // so a thread that pulls together several sources doesn't read as one voice.
     const messagesResult = await pool.query(
-      `SELECT direction, to_number, from_number, message, created_at 
-       FROM sms_messages 
-       WHERE lead_id = $1 
-       ORDER BY created_at ASC`,
+      `SELECT id, direction, to_number, from_number, message, created_at, status,
+              lead_id, booking_id, campaign_id, review_request_id, sent_by_employee_id,
+              ${THREAD_SOURCE_SQL} AS thread_source
+       FROM sms_messages
+       WHERE lead_id = $1
+       ORDER BY created_at ASC, id ASC`,
       [leadId]
     );
     

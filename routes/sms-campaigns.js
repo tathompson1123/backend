@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { sendSMS } = require('../utils/twilio');
 const { sendSmsCampaignReplyNotification } = require('../utils/bookingEmail');
+const { findLeadIdByPhone } = require('../utils/smsThread');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logClaudeUsage } = require('../utils/claudeUsage');
 
@@ -470,11 +471,16 @@ router.post('/send-now', authenticateToken, async (req, res) => {
           sent++;
           // Log the outgoing campaign text. The campaign_id tag lets the inbound webhook
           // recognize a reply as a campaign reply, and stores exactly what we sent.
+          // lead_id is stamped when the recipient is already a lead, so the blast shows
+          // up in their conversation instead of appearing to come out of nowhere when
+          // they reply. Recipients who aren't leads stay null — a blast shouldn't mint
+          // hundreds of leads into the owner's box.
+          const blastLeadId = await findLeadIdByPhone(pool, userId, phone);
           await pool.query(
             `INSERT INTO sms_messages
-             (user_id, campaign_id, direction, to_number, message, twilio_message_sid, status, provider, created_at)
-             VALUES ($1, $2, 'outgoing', $3, $4, $5, 'sent', 'twilio', NOW())`,
-            [userId, campaignId, phone, body, result?.messageSid || null]
+             (user_id, campaign_id, lead_id, direction, to_number, message, twilio_message_sid, status, provider, created_at)
+             VALUES ($1, $2, $3, 'outgoing', $4, $5, $6, 'sent', 'twilio', NOW())`,
+            [userId, campaignId, blastLeadId, phone, body, result?.messageSid || null]
           ).catch(err => console.error('Campaign SMS log insert failed:', err.message));
         } catch (err) {
           console.error(`📵 Campaign SMS failed to ${contact.phone}:`, err.message);

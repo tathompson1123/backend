@@ -6,6 +6,10 @@ const { classifyReplySentiment, composePositiveReply } = require('../utils/revie
 const { sendPushToOwner } = require('../utils/pushNotifications');
 const { sendSmsBookingConfirmationRequest, sendSmsCampaignReplyNotification } = require('../utils/bookingEmail');
 const { getBusinessDateTime } = require('../utils/zipToTimezone');
+const {
+  COUNTERPARTY_LAST10, COUNTERPARTY_IS_FULL,
+  last10, phoneVariants, findLeadIdByPhone, resolveThread,
+} = require('../utils/smsThread');
 const twilio = require('twilio');
 
 // Auto-heal Twilio webhook URL for a phone number (non-blocking, fire-and-forget)
@@ -71,9 +75,6 @@ router.post('/webhook', express.urlencoded({ extended: false }), (req, res) => {
   });
 });
 
-// Build the set of phone formats we may have stored historically.
-// Twilio gives us E.164 (+1XXXXXXXXXX), but earlier code paths stored
-// 10-digit (XXXXXXXXXX) or 11-digit (1XXXXXXXXXX). Match all three.
 // Carrier-standard opt-out / opt-in keywords. We match the whole trimmed body so a
 // message like "please stop by Tuesday" is NOT treated as an unsubscribe.
 const OPT_OUT_KEYWORDS = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT']);
@@ -125,24 +126,6 @@ function optKeyword(body) {
   if (OPT_OUT_PHRASES.some(re => re.test(norm))) return 'out';
 
   return null;
-}
-
-function phoneVariants(num) {
-  if (!num) return [num];
-  const digits = num.replace(/\D/g, '');
-  const variants = new Set([num]);
-  if (digits.length === 11 && digits.startsWith('1')) {
-    variants.add('+' + digits);          // +1XXXXXXXXXX
-    variants.add(digits);                // 1XXXXXXXXXX
-    variants.add(digits.slice(1));       // XXXXXXXXXX
-  } else if (digits.length === 10) {
-    variants.add(digits);                // XXXXXXXXXX
-    variants.add('1' + digits);          // 1XXXXXXXXXX
-    variants.add('+1' + digits);         // +1XXXXXXXXXX
-  } else if (digits) {
-    variants.add(digits);
-  }
-  return [...variants];
 }
 
 async function processInboundSms({ From, To, Body, MessageSid }) {
@@ -232,12 +215,16 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
     } catch (e) {
       console.error('Opt-out flag update failed:', e.message);
     }
-    // Log the inbound command for the audit trail (no lead_id — it isn't a lead).
+    // Log the inbound command for the audit trail, tied to the lead if this number is
+    // already one — an unsubscribe is exactly the context the owner needs when they
+    // open that conversation and wonder why the agent stopped replying. (Linking an
+    // existing lead only; a STOP from a stranger doesn't mint one.)
+    const optLeadId = await findLeadIdByPhone(pool, user.id, From);
     await pool.query(
       `INSERT INTO sms_messages
-       (user_id, direction, from_number, to_number, message, twilio_message_sid, status, created_at)
-       VALUES ($1, 'incoming', $2, $3, $4, $5, 'received', NOW())`,
-      [user.id, From, To, Body, MessageSid]
+       (user_id, lead_id, direction, from_number, to_number, message, twilio_message_sid, status, created_at)
+       VALUES ($1, $2, 'incoming', $3, $4, $5, $6, 'received', NOW())`,
+      [user.id, optLeadId, From, To, Body, MessageSid]
     ).catch(() => {});
 
     // Send the required confirmation. Wrapped so it can't throw if the carrier has
@@ -251,9 +238,9 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
       await sendSMS(From, confirmation, user.id);
       await pool.query(
         `INSERT INTO sms_messages
-         (user_id, direction, to_number, message, created_at)
-         VALUES ($1, 'outgoing', $2, $3, NOW())`,
-        [user.id, From, confirmation]
+         (user_id, lead_id, direction, to_number, message, created_at)
+         VALUES ($1, $2, 'outgoing', $3, $4, NOW())`,
+        [user.id, optLeadId, From, confirmation]
       ).catch(() => {});
     } catch (e) {
       console.log(`Opt-${optAction} confirmation not sent to ${From}: ${e.message}`);
@@ -289,12 +276,15 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
         const rr = revRes.rows[0];
         const firstName = ((rr.customer_name || rr.c_name || '').split(' ')[0]) || 'there';
 
-        // Log the customer's reply against the review conversation.
+        // Log the customer's reply against the review conversation — and against the
+        // lead too when we know it, so the review exchange isn't invisible from the
+        // lead's own thread.
+        const revLeadId = await findLeadIdByPhone(pool, user.id, From);
         await pool.query(
           `INSERT INTO sms_messages
-           (user_id, direction, from_number, to_number, message, twilio_message_sid, status, review_request_id, created_at)
-           VALUES ($1, 'incoming', $2, $3, $4, $5, 'received', $6, NOW())`,
-          [user.id, From, To, Body, MessageSid, rr.id]
+           (user_id, lead_id, direction, from_number, to_number, message, twilio_message_sid, status, review_request_id, created_at)
+           VALUES ($1, $2, 'incoming', $3, $4, $5, $6, 'received', $7, NOW())`,
+          [user.id, revLeadId, From, To, Body, MessageSid, rr.id]
         ).catch(() => {});
 
         // Give it the thread, so "yeah still not fixed" is read against what was
@@ -344,9 +334,9 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
           try {
             await sendSMS(From, escalation, user.id);
             await pool.query(
-              `INSERT INTO sms_messages (user_id, direction, to_number, message, review_request_id, created_at)
-               VALUES ($1, 'outgoing', $2, $3, $4, NOW())`,
-              [user.id, From, escalation, rr.id]
+              `INSERT INTO sms_messages (user_id, lead_id, direction, to_number, message, review_request_id, created_at)
+               VALUES ($1, $2, 'outgoing', $3, $4, $5, NOW())`,
+              [user.id, revLeadId, From, escalation, rr.id]
             ).catch(() => {});
           } catch (e) { console.log(`Review escalation SMS not sent to ${From}: ${e.message}`); }
 
@@ -392,9 +382,9 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
           try {
             await sendSMS(From, reply, user.id);
             await pool.query(
-              `INSERT INTO sms_messages (user_id, direction, to_number, message, review_request_id, created_at)
-               VALUES ($1, 'outgoing', $2, $3, $4, NOW())`,
-              [user.id, From, reply, rr.id]
+              `INSERT INTO sms_messages (user_id, lead_id, direction, to_number, message, review_request_id, created_at)
+               VALUES ($1, $2, 'outgoing', $3, $4, $5, NOW())`,
+              [user.id, revLeadId, From, reply, rr.id]
             ).catch(() => {});
           } catch (e) { console.log(`Review positive SMS not sent to ${From}: ${e.message}`); }
 
@@ -411,24 +401,39 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
     console.error('Review reply handling error:', e.message);
   }
 
+  // ── Thread attribution ────────────────────────────────────────────────────
+  // Decide which conversation this reply continues before any branch claims it.
+  //
+  // The old rule was "whatever we last SENT them", which let a marketing blast own
+  // every reply from that number for a fortnight: a customer answering their booking
+  // thread, or a lead picking their conversation back up two weeks later, landed in
+  // the campaign inbox and the agent went silent on them. Two fixes — the newest
+  // thread-tagged message in EITHER direction decides (their own last message counts,
+  // and it's what says they've moved on from the blast), and a campaign only claims a
+  // reply that genuinely follows the blast rather than merely trailing it by days.
+  const replyFromLast10 = last10(From);
+  const thread = await resolveThread(pool, user.id, From);
+  const threadAgeMs = thread ? Date.now() - new Date(thread.created_at).getTime() : Infinity;
+
   // ── SMS campaign reply handling ───────────────────────────────────────────
-  // If the most recent thing we texted this number was a marketing-campaign blast
-  // (and it was recent), treat their reply as a campaign reply: drop it into the
-  // Leads box and email the owner with what they said — instead of routing it to a
-  // booking thread or the AI lead agent, so the owner can follow up personally.
-  const replyFromLast10 = (From || '').replace(/\D/g, '').slice(-10);
-  const lastOutbound = await pool.query(
-    `SELECT campaign_id, message, created_at FROM sms_messages
-     WHERE user_id = $1 AND direction = 'outgoing'
-       AND right(regexp_replace(to_number, '\\D', '', 'g'), 10) = $2
-     ORDER BY created_at DESC LIMIT 1`,
-    [user.id, replyFromLast10]
-  );
-  const lastOut = lastOutbound.rows[0];
-  const isCampaignReply = lastOut && lastOut.campaign_id != null &&
-    (Date.now() - new Date(lastOut.created_at).getTime()) <= 14 * 24 * 60 * 60 * 1000;
+  // A reply to a blast arrives within a day or two. Past that they're texting about
+  // something new, and it belongs to the lead agent — not the owner's campaign inbox.
+  const CAMPAIGN_REPLY_WINDOW_MS = 72 * 60 * 60 * 1000;
+  const isCampaignReply = !!thread && thread.campaign_id != null &&
+    threadAgeMs <= CAMPAIGN_REPLY_WINDOW_MS;
 
   if (isCampaignReply) {
+    // Quote the blast itself in the owner's email. thread may be the customer's own
+    // earlier reply (also tagged with the campaign), so go get the outgoing side.
+    const campaignSent = await pool.query(
+      `SELECT message FROM sms_messages
+        WHERE user_id = $1 AND campaign_id = $2 AND direction = 'outgoing'
+          AND ${COUNTERPARTY_IS_FULL} AND ${COUNTERPARTY_LAST10} = $3
+        ORDER BY created_at DESC LIMIT 1`,
+      [user.id, thread.campaign_id, replyFromLast10]
+    ).catch(() => ({ rows: [] }));
+    const campaignMessage = campaignSent.rows[0]?.message || null;
+
     // Find an existing lead for this number, or create one tagged as a campaign reply.
     let crLead = await pool.query(
       'SELECT id, name, email FROM leads WHERE phone = ANY($1) AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
@@ -456,12 +461,14 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
     }
 
     // Flag the row as emailed up front — we fire the owner email below, and this keeps
-    // the one-time backfill from emailing the same reply a second time.
+    // the one-time backfill from emailing the same reply a second time. Tagging the
+    // reply with campaign_id too keeps the thread intact: without it the next message
+    // in this conversation can't tell it was ever a campaign at all.
     await pool.query(
       `INSERT INTO sms_messages
-       (lead_id, user_id, direction, from_number, to_number, message, twilio_message_sid, status, campaign_reply_emailed, created_at)
-       VALUES ($1, $2, 'incoming', $3, $4, $5, $6, 'received', TRUE, CURRENT_TIMESTAMP)`,
-      [crLeadId, user.id, From, To, Body, MessageSid]
+       (lead_id, user_id, campaign_id, direction, from_number, to_number, message, twilio_message_sid, status, campaign_reply_emailed, created_at)
+       VALUES ($1, $2, $3, 'incoming', $4, $5, $6, $7, 'received', TRUE, CURRENT_TIMESTAMP)`,
+      [crLeadId, user.id, thread.campaign_id, From, To, Body, MessageSid]
     );
     await pool.query(
       `UPDATE leads SET status = 'replied', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
@@ -476,7 +483,7 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
       customerName: crLead.rows[0]?.name || null,
       customerPhone: From,
       replyText: Body,
-      campaignMessage: lastOut.message,
+      campaignMessage,
     }).catch(err => console.error('Campaign reply email failed:', err.message));
 
     console.log(`📣 Campaign reply from ${From} → lead #${crLeadId} (owner emailed, lead agent skipped)`);
@@ -485,27 +492,56 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
 
   // If this phone belongs to a booking customer, treat the reply as part of
   // that booking thread — never let the lead agent take over a real customer
-  // conversation. Customer phone formats vary in the DB (parens, dashes, +1,
-  // bare 10-digit), so match on the last 10 digits of both sides.
-  const fromDigits = (From || '').replace(/\D/g, '');
-  const fromLast10 = fromDigits.slice(-10);
-  const bookingMatch = await pool.query(
-    `SELECT id, customer_name FROM bookings
-     WHERE user_id = $1
-       AND customer_phone IS NOT NULL
-       AND right(regexp_replace(customer_phone, '\\D', '', 'g'), 10) = $2
-     ORDER BY booking_date DESC, id DESC LIMIT 1`,
-    [user.id, fromLast10]
-  );
+  // conversation.
+  let bookingRow = null;
 
-  if (bookingMatch.rows.length > 0) {
-    const bookingId = bookingMatch.rows[0].id;
-    const customerName = bookingMatch.rows[0].customer_name || From;
+  if (thread?.booking_id) {
+    // The thread already names the booking — resume exactly that one, rather than
+    // whichever booking happens to sort newest for this number.
+    bookingRow = (await pool.query(
+      'SELECT id, customer_name FROM bookings WHERE id = $1 AND user_id = $2',
+      [thread.booking_id, user.id]
+    )).rows[0] || null;
+  }
+
+  // Fall back to matching the number against bookings — this catches replies to
+  // reminders and confirmations sent before rows carried a booking_id. Skipped when
+  // the newest tagged message is a live lead conversation: someone who booked two
+  // years ago and is now mid-thread with the agent is not resuming that booking, and
+  // filing them there kills the agent's half of the exchange.
+  // Customer phone formats vary in the DB (parens, dashes, +1, bare 10-digit), so
+  // match on the last 10 digits of both sides.
+  //
+  // "Live lead conversation" means the newest tagged message was ONLY a lead message.
+  // Rows carry several tags at once — a review text and a campaign blast both also
+  // carry lead_id once stamped — so this leans on thread_source, which applies the
+  // same precedence used everywhere else (review > campaign > booking > employee >
+  // lead). Testing lead_id directly would send a customer who last got a review text
+  // to the AI agent instead of their booking.
+  const fromLast10 = replyFromLast10;
+  const threadIsLead = thread?.thread_source === 'lead';
+  if (!bookingRow && !threadIsLead) {
+    bookingRow = (await pool.query(
+      `SELECT id, customer_name FROM bookings
+       WHERE user_id = $1
+         AND customer_phone IS NOT NULL
+         AND right(regexp_replace(customer_phone, '\\D', '', 'g'), 10) = $2
+       ORDER BY booking_date DESC, id DESC LIMIT 1`,
+      [user.id, fromLast10]
+    )).rows[0] || null;
+  }
+
+  if (bookingRow) {
+    const bookingId = bookingRow.id;
+    const customerName = bookingRow.customer_name || From;
+    // Stamp the lead too when this number is already a known lead, so the booking
+    // reply still shows up in that lead's conversation instead of vanishing from it.
+    const bookingLeadId = await findLeadIdByPhone(pool, user.id, From);
     await pool.query(
       `INSERT INTO sms_messages
-       (user_id, booking_id, direction, from_number, to_number, message, twilio_message_sid, status, created_at)
-       VALUES ($1, $2, 'incoming', $3, $4, $5, $6, 'received', NOW())`,
-      [user.id, bookingId, From, To, Body, MessageSid]
+       (user_id, booking_id, lead_id, direction, from_number, to_number, message, twilio_message_sid, status, created_at)
+       VALUES ($1, $2, $3, 'incoming', $4, $5, $6, $7, 'received', NOW())`,
+      [user.id, bookingId, bookingLeadId, From, To, Body, MessageSid]
     );
     // Push the business owner
     sendPushToOwner(
