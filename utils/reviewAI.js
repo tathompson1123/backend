@@ -85,13 +85,23 @@ function keywordSentiment(body) {
   return 'neutral';
 }
 
-async function classifyReplySentiment(text, userId) {
+/**
+ * @param history optional prior turns [{ direction, message }] so a short reply
+ *   like "yes" or "still no" is read against what was actually said before.
+ */
+async function classifyReplySentiment(text, userId, history = []) {
   const body = String(text || '').trim();
   if (!body) return { sentiment: 'neutral', reason: null, issue: null };
 
-  // If they stated a rating, that's the answer — don't let the model reinterpret it.
+  // A stated rating settles the verdict — but the read still runs, because someone
+  // can say "5 stars" and in the same breath mention the broken pressure washer,
+  // and that is exactly the thing the business needs to hear about.
   const stated = explicitRating(body);
-  if (stated) return { sentiment: stated, reason: 'Customer stated a rating outright', issue: null };
+
+  const thread = (history || [])
+    .slice(-6)
+    .map(m => `${m.direction === 'incoming' ? 'Customer' : 'Business'}: ${m.message}`)
+    .join('\n');
 
   try {
     // Given room to weigh the reply rather than forced into a single token, so a
@@ -124,7 +134,7 @@ async function classifyReplySentiment(text, userId) {
       'REASON: <one short sentence>\n' +
       'ISSUE: <what needs looking at, or none>\n' +
       'VERDICT: positive|negative|neutral',
-      `Reply: "${body}"`,
+      (thread ? `Conversation so far:\n${thread}\n\n` : '') + `Latest reply: "${body}"`,
       120
     );
 
@@ -139,13 +149,19 @@ async function classifyReplySentiment(text, userId) {
     else if (verdict.startsWith('neu')) result = 'neutral';
 
     if (result) {
-      console.log(`🧠 Review sentiment: ${result}${reason ? ` — ${reason}` : ''}${issue ? ` | issue: ${issue}` : ''} | reply: "${body.slice(0, 120)}"`);
-      return { sentiment: result, reason: reason || null, issue };
+      // A rating they typed themselves outranks the model's reading of the prose,
+      // but the issue it spotted is kept either way.
+      const final = stated || result;
+      if (stated && stated !== result) {
+        console.log(`🧠 Rating "${stated}" overrides model verdict "${result}"`);
+      }
+      console.log(`🧠 Review sentiment: ${final}${reason ? ` — ${reason}` : ''}${issue ? ` | issue: ${issue}` : ''} | reply: "${body.slice(0, 120)}"`);
+      return { sentiment: final, reason: reason || null, issue };
     }
-    return { sentiment: keywordSentiment(body), reason: null, issue: null };
+    return { sentiment: stated || keywordSentiment(body), reason: null, issue: null };
   } catch (err) {
     console.warn('Review sentiment call failed, falling back to keywords:', err.message);
-    return { sentiment: keywordSentiment(body), reason: null, issue: null };
+    return { sentiment: stated || keywordSentiment(body), reason: null, issue: null };
   }
 }
 

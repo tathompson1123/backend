@@ -297,7 +297,15 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
           [user.id, From, To, Body, MessageSid, rr.id]
         ).catch(() => {});
 
-        const verdict = await classifyReplySentiment(Body, user.id);
+        // Give it the thread, so "yeah still not fixed" is read against what was
+        // actually said rather than judged as a standalone sentence.
+        const priorTurns = (await pool.query(
+          `SELECT direction, message FROM sms_messages
+           WHERE review_request_id = $1 ORDER BY created_at ASC LIMIT 8`,
+          [rr.id]
+        ).catch(() => ({ rows: [] }))).rows;
+
+        const verdict = await classifyReplySentiment(Body, user.id, priorTurns);
         const sentiment = verdict.sentiment;
 
         // A happy customer will still tell you the pressure washer was broken. That
