@@ -832,7 +832,7 @@ router.post('/bookings/create', async (req, res) => {
             const timeStr = `${hh % 12 || 12}:${String(mm).padStart(2,'0')} ${hh >= 12 ? 'PM' : 'AM'}`;
             sgMail.send({
               to: owner.email,
-              from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
+              from: { name: 'SORCE Notifications', email: 'help@sorceintegrations.com' },
               subject: `Card saved on file — ${customerInfo.name} is confirmed`,
               html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
                 <div style="background:#059669;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
@@ -870,7 +870,7 @@ router.post('/bookings/create', async (req, res) => {
           const timeStr = `${hh % 12 || 12}:${String(mm).padStart(2,'0')} ${hh >= 12 ? 'PM' : 'AM'}`;
           sgMail.send({
             to: customerInfo.email,
-            from: { name: owner.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
+            from: { name: owner.business_name || 'Your Service Provider', email: 'help@sorceintegrations.com' },
             replyTo: owner.email ? { email: owner.email } : undefined,
             subject: `One last step to confirm your appointment — ${owner.business_name || 'Us'}`,
             html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
@@ -891,7 +891,7 @@ router.post('/bookings/create', async (req, res) => {
           if (owner.email) {
             sgMail.send({
               to: owner.email,
-              from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
+              from: { name: 'SORCE Notifications', email: 'help@sorceintegrations.com' },
               subject: `Card on file link sent to ${customerInfo.name}`,
               html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
                 <div style="background:#d97706;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
@@ -1124,7 +1124,7 @@ router.post('/card-on-file/:token/save', async (req, res) => {
         const dateStr = (_pD && !isNaN(_pD)) ? _pD.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
         sgMail.send({
           to: owner.email,
-          from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
+          from: { name: 'SORCE Notifications', email: 'help@sorceintegrations.com' },
           subject: `Card saved — ${row.customer_name}'s booking is confirmed`,
           html: `
             <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">

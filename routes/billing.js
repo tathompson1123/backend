@@ -650,7 +650,7 @@ router.post('/contact-sales', authenticateToken, async (req, res) => {
         // Internal notification
         {
           to: 'help@sorceintegrations.com',
-          from: { name: 'SORCE Billing', email: 'noreply@sorceintegrations.com' },
+          from: { name: 'SORCE Billing', email: 'help@sorceintegrations.com' },
           subject: `Cancellation Request — ${u?.business_name || u?.email || 'User ' + userId} (${u?.plan || 'unknown'} plan)`,
           html: `
             <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
@@ -673,7 +673,7 @@ router.post('/contact-sales', authenticateToken, async (req, res) => {
       if (u?.email) {
         emails.push({
           to: u.email,
-          from: { name: 'SORCE', email: 'noreply@sorceintegrations.com' },
+          from: { name: 'SORCE', email: 'help@sorceintegrations.com' },
           subject: 'We received your cancellation request',
           html: `
             <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
@@ -716,7 +716,7 @@ router.post('/enterprise-inquiry', async (req, res) => {
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
       sgMail.send({
         to: 'support@sorceintegrations.com',
-        from: { name: 'SORCE Sales', email: 'noreply@sorceintegrations.com' },
+        from: { name: 'SORCE Sales', email: 'help@sorceintegrations.com' },
         subject: `Enterprise Inquiry — ${company || name}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">

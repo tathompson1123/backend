@@ -317,7 +317,7 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
             sgMail.setApiKey(process.env.SENDGRID_API_KEY);
             await sgMail.send({
               to: rr.owner_email,
-              from: { name: 'SORCE', email: 'noreply@sorceintegrations.com' },
+              from: { name: 'SORCE', email: 'help@sorceintegrations.com' },
               replyTo: rr.owner_email,
               subject: `Worth a look: ${firstName} mentioned something`,
               html: `

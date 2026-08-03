@@ -265,7 +265,7 @@ async function sendSmsBookingConfirmationRequest(opts) {
 
     await sgMail.send({
       to: ownerEmail,
-      from: { name: 'SORCE SMS Agent', email: 'noreply@sorceintegrations.com' },
+      from: { name: 'SORCE SMS Agent', email: 'help@sorceintegrations.com' },
       replyTo: { email: ownerEmail },
       subject: `Action needed: confirm a booking from your SMS agent — ${opts.customerName || opts.customerPhone}`,
       html: `
@@ -332,7 +332,7 @@ async function sendSmsCampaignReplyNotification(opts) {
 
     await sgMail.send({
       to: ownerEmail,
-      from: { name: 'SORCE SMS Campaign', email: 'noreply@sorceintegrations.com' },
+      from: { name: 'SORCE SMS Campaign', email: 'help@sorceintegrations.com' },
       replyTo: { email: ownerEmail },
       subject: `New reply to your SMS campaign — ${opts.customerName || opts.customerPhone}`,
       html: `

@@ -2004,7 +2004,7 @@ cron.schedule('*/30 * * * *', async () => {
 
         await sgMail.send({
           to: toEmail,
-          from: { name: req.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
+          from: { name: req.business_name || 'Your Service Provider', email: 'help@sorceintegrations.com' },
           replyTo: req.owner_email ? { email: req.owner_email } : undefined,
           subject: `How was your experience? — ${req.business_name || 'Us'}`,
           html: `
@@ -2240,7 +2240,7 @@ cron.schedule('*/15 * * * *', async () => {
 
           await sgMail.send({
             to: booking.customer_email,
-            from: { name: booking.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
+            from: { name: booking.business_name || 'Your Service Provider', email: 'help@sorceintegrations.com' },
             replyTo: booking.owner_email ? { email: booking.owner_email } : undefined,
             subject: `Reminder: ${serviceName} on ${formatDate(booking.booking_date)}`,
             html: `

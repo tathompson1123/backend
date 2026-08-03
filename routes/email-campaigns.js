@@ -397,7 +397,7 @@ async function sendCampaign(userId, config, campaignId) {
       const htmlWithUnsub = applyUnsubscribeUrl(c.body_html, unsubUrl, fromName);
       return {
         to: customer.email,
-        from: { name: fromName, email: 'noreply@sorceintegrations.com' },
+        from: { name: fromName, email: 'help@sorceintegrations.com' },
         replyTo: ownerReplyEmail ? { name: fromName, email: ownerReplyEmail } : undefined,
         subject: c.subject,
         text: c.body_text,
@@ -955,7 +955,7 @@ router.post('/test-send', authenticateToken, async (req, res) => {
 
     await sgMail.send({
       to: config.from_email,
-      from: { name: config.from_name || 'Campaign Test', email: 'noreply@sorceintegrations.com' },
+      from: { name: config.from_name || 'Campaign Test', email: 'help@sorceintegrations.com' },
       replyTo: { name: config.from_name || '', email: config.from_email },
       subject: `[TEST] ${emailSubject}`,
       text: emailText,

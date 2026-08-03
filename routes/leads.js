@@ -167,7 +167,7 @@ router.post('/public/:userId', async (req, res) => {
           if (!owner?.email) return;
           return sgMail.send({
             to: owner.email,
-            from: { name: 'SORCE', email: 'noreply@sorceintegrations.com' },
+            from: { name: 'SORCE', email: 'help@sorceintegrations.com' },
             subject: `New lead: ${name}`,
             html: `
               <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">

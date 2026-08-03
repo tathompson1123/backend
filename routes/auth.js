@@ -11,7 +11,7 @@ if (process.env.SENDGRID_API_KEY) {
 } else {
   console.warn('⚠️ SENDGRID_API_KEY not set — email sending disabled');
 }
-const FROM_EMAIL = { name: 'SORCE', email: process.env.SENDGRID_FROM_EMAIL || 'noreply@sorceintegrations.com' };
+const FROM_EMAIL = { name: 'SORCE', email: process.env.SENDGRID_FROM_EMAIL || 'help@sorceintegrations.com' };
 
 // POST - Signup
 router.post('/signup', async (req, res) => {

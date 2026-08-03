@@ -204,7 +204,7 @@ async function sendAttentionEmail({ userId, customerName, customerPhone, convers
 
     await sgMail.send({
       to: ownerEmail,
-      from: { name: 'SORCE Chat Alerts', email: 'noreply@sorceintegrations.com' },
+      from: { name: 'SORCE Chat Alerts', email: 'help@sorceintegrations.com' },
       subject: `Action needed: ${customerName} wants a call back`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#1a1a1a;">
@@ -580,7 +580,7 @@ router.post('/message', async (req, res) => {
           const upgradeUrl = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/dashboard?view=billing`;
           sgMail.send({
             to: ownerRow.email,
-            from: { name: 'SORCE', email: 'noreply@sorceintegrations.com' },
+            from: { name: 'SORCE', email: 'help@sorceintegrations.com' },
             subject: "You've hit your monthly AI chat limit",
             html: `
               <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
@@ -971,7 +971,7 @@ REAL-TIME AVAILABILITY:
             sgMail.setApiKey(process.env.SENDGRID_API_KEY);
             sgMail.send({
               to: customerEmail.trim(),
-              from: { name: owner.business_name || 'Your Service Provider', email: 'noreply@sorceintegrations.com' },
+              from: { name: owner.business_name || 'Your Service Provider', email: 'help@sorceintegrations.com' },
               replyTo: owner.email ? { email: owner.email } : undefined,
               subject: `One last step to confirm your appointment — ${owner.business_name || 'Us'}`,
               html: `
@@ -1001,7 +1001,7 @@ REAL-TIME AVAILABILITY:
             sgMail2.setApiKey(process.env.SENDGRID_API_KEY);
             sgMail2.send({
               to: owner.email,
-              from: { name: 'SORCE Notifications', email: 'noreply@sorceintegrations.com' },
+              from: { name: 'SORCE Notifications', email: 'help@sorceintegrations.com' },
               subject: `Card on file link sent to ${customerName.trim()}`,
               html: `
                 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">

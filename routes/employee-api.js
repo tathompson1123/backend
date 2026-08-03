@@ -89,7 +89,7 @@ async function sendStatusEmail(booking, status, businessName, ownerEmail) {
   try {
     await sgMail.send({
       to: booking.customer_email,
-      from: { name: businessName, email: 'noreply@sorceintegrations.com' },
+      from: { name: businessName, email: 'help@sorceintegrations.com' },
       replyTo: ownerEmail ? { name: businessName, email: ownerEmail } : undefined,
       subject,
       text,
@@ -708,7 +708,7 @@ router.post('/my-bookings/:id/invoice/send', requirePermission('process_payments
 
         await sgMail.send({
           to: data.customer_email,
-          from: { name: businessName, email: 'noreply@sorceintegrations.com' },
+          from: { name: businessName, email: 'help@sorceintegrations.com' },
           replyTo: ownerEmail ? { name: businessName, email: ownerEmail } : undefined,
           subject: `Invoice ${data.invoice_number} from ${businessName}`,
           html: buildInvoiceEmailHtml({

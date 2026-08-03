@@ -311,7 +311,7 @@ router.post('/:id/invite', async (req, res) => {
 
       await sgMail.send({
         to: employee.email,
-        from: { name: businessName, email: 'noreply@sorceintegrations.com' },
+        from: { name: businessName, email: 'help@sorceintegrations.com' },
         replyTo: ownerEmail ? { name: businessName, email: ownerEmail } : undefined,
         subject: `You're invited to join ${businessName} on SORCE`,
         html: `

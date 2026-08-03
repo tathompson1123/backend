@@ -383,7 +383,7 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
 
       await sgMail.send({
         to: invoice.customer_email,
-        from: { name: invoice.business_name, email: 'noreply@sorceintegrations.com' },
+        from: { name: invoice.business_name, email: 'help@sorceintegrations.com' },
         replyTo: invoice.owner_email ? { name: invoice.business_name, email: invoice.owner_email } : undefined,
         subject: `Invoice ${invoice.invoice_number} from ${invoice.business_name}`,
         html: buildInvoiceEmailHtml({
@@ -445,7 +445,7 @@ router.post('/:id/remind', authenticateToken, async (req, res) => {
 
     await sgMail.send({
       to: invoice.customer_email,
-      from: { name: invoice.business_name, email: 'noreply@sorceintegrations.com' },
+      from: { name: invoice.business_name, email: 'help@sorceintegrations.com' },
       replyTo: invoice.owner_email ? { name: invoice.business_name, email: invoice.owner_email } : undefined,
       subject: `Payment Reminder: Invoice ${invoice.invoice_number} from ${invoice.business_name}`,
       html: buildInvoiceEmailHtml({
