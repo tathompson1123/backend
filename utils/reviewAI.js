@@ -275,6 +275,50 @@ async function composeReviewFollowUp(
   }
 }
 
+// ── Re-ask for a customer who never answered the opener ──────────────────────
+// These people were asked "how did it go?" and said nothing, so they have never
+// been sent a review link. Chasing them for a review would be incoherent — the
+// nudge re-opens the original question instead, and if they answer, the inbound
+// webhook runs the normal sentiment branch from there.
+function fallbackReAsk({ fn, businessName, serviceName, attempt }) {
+  const svc = serviceName ? ` with the ${serviceName}` : '';
+  return attempt === 1
+    ? `Hey ${fn}, just checking in — how did everything go${svc}? Any feedback helps us out.`
+    : `Hi ${fn}, last check-in from ${businessName || 'us'} — was everything alright${svc}? Happy to sort anything that wasn't.`;
+}
+
+async function composeOpenerReAsk(
+  { firstName, businessName, serviceName, repName, attempt = 1, history },
+  userId
+) {
+  const fn = (firstName && String(firstName).trim()) || 'there';
+  try {
+    const thread = (history || [])
+      .slice(-6)
+      .map(m => `${m.direction === 'incoming' ? 'Customer' : 'Business'}: ${m.message}`)
+      .join('\n');
+
+    const out = await ask(
+      userId, 'review_reask',
+      `You write a single short SMS from ${businessName || 'the business'}${repName ? ` (from ${repName})` : ''} to a customer who was asked how their service went and never replied.\n\n` +
+      `${attempt === 1
+        ? 'This is a gentle second attempt, about a day later.'
+        : 'This is the SECOND and final check-in, about a week later. Make it clear you will leave it there, warmly.'}\n\n` +
+      'Ask how it went — nothing else. Do NOT ask for a review, do NOT mention reviews, ratings, stars or any incentive: they have not told you whether they were happy, and asking before you know would be the wrong move. Do not repeat the first message word for word, and do not scold them for not replying. One short sentence. No link. At most one emoji. Reply with ONLY the message text.',
+      [
+        `Customer first name: ${fn}`,
+        serviceName ? `Service: ${serviceName}` : null,
+        thread ? `What we already sent:\n${thread}` : null,
+      ].filter(Boolean).join('\n'),
+      120
+    );
+    const msg = out.replace(/^["']|["']$/g, '').trim();
+    return msg || fallbackReAsk({ fn, businessName, serviceName, attempt });
+  } catch {
+    return fallbackReAsk({ fn, businessName, serviceName, attempt });
+  }
+}
+
 // ── Rate an owner's incentive 1-10 for how well it earns reviews ─────────────
 async function rateIncentive(incentiveText, userId) {
   const inc = String(incentiveText || '').trim();
@@ -304,5 +348,6 @@ module.exports = {
   classifyReplySentiment,
   composePositiveReply,
   composeReviewFollowUp,
+  composeOpenerReAsk,
   rateIncentive,
 };

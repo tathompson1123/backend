@@ -1967,20 +1967,32 @@ cron.schedule('*/60 * * * * *', async () => {
 // day 42. Everything is anchored on followup_seq_started_at (set when the opener
 // goes out) and stops the moment they click through.
 //
-// Only customers who actually received a link are chased. 'awaiting_reply' — they
-// never answered "how did it go?" — is excluded on purpose: they were never sent a
-// review link, so "did you get a chance to leave that review?" would be nonsense to
-// them, and the whole point of the sentiment gate is not to ask before we know
-// they're happy. 'replied_negative' is excluded for the obvious reason.
-const REVIEW_FOLLOWUP_STEPS = [
-  { col: 'followup_sms_1_at',   channel: 'sms',   afterDays: 1,  attempt: 1 },
-  { col: 'followup_sms_2_at',   channel: 'sms',   afterDays: 7,  attempt: 2 },
-  { col: 'followup_email_1_at', channel: 'email', afterDays: 21, attempt: 1 },
-  { col: 'followup_email_2_at', channel: 'email', afterDays: 42, attempt: 2 },
-];
-
-// Statuses meaning "we sent them a review link". 'sent' is the legacy one-way flow.
+// Two kinds of customer travel through these steps and they get different messages:
+//
+//   asked        — replied, were judged happy, got a link. Nudge them about the review.
+//   awaiting_reply — never answered "how did it go?", so they have NEVER been sent a
+//                  link. Chasing them for a review would be nonsense, and asking before
+//                  we know they're happy is exactly what the sentiment gate exists to
+//                  prevent. They get the original question re-opened instead; if they
+//                  answer, the inbound webhook runs the normal branch from there.
+//
+// The re-ask is texts only. An email three weeks after the job asking "how did it go?"
+// is stale, and it reads as a review ask however it's worded.
+//
+// 'replied_negative' appears in neither list, for the obvious reason.
 const REVIEW_ASKED_STATUSES = ['replied_positive', 'replied_neutral', 'sent'];
+const REVIEW_REASK_STATUSES = ['awaiting_reply'];
+
+const REVIEW_FOLLOWUP_STEPS = [
+  { col: 'followup_sms_1_at',   channel: 'sms',   afterDays: 1,  attempt: 1,
+    statuses: [...REVIEW_ASKED_STATUSES, ...REVIEW_REASK_STATUSES] },
+  { col: 'followup_sms_2_at',   channel: 'sms',   afterDays: 7,  attempt: 2,
+    statuses: [...REVIEW_ASKED_STATUSES, ...REVIEW_REASK_STATUSES] },
+  { col: 'followup_email_1_at', channel: 'email', afterDays: 21, attempt: 1,
+    statuses: REVIEW_ASKED_STATUSES },
+  { col: 'followup_email_2_at', channel: 'email', afterDays: 42, attempt: 2,
+    statuses: REVIEW_ASKED_STATUSES },
+];
 
 // A step more than this far overdue is marked done without sending. Without it, a
 // cron outage (or a long deploy gap) would come back up and fire a burst of stale
@@ -1998,7 +2010,13 @@ cron.schedule('*/10 * * * *', async () => {
                 c.sms_unsubscribed,
                 u.business_name, u.email AS owner_email, u.google_review_link,
                 u.twilio_phone_number, u.plan,
-                rc.incentive, rc.incentive_enabled, rc.review_link_base,
+                rc.incentive, rc.incentive_enabled, rc.review_link_base, rc.rep_name,
+                COALESCE(
+                  (SELECT bi.service_name FROM booking_items bi
+                    WHERE bi.booking_id = rr.booking_id AND bi.is_addon = false
+                    ORDER BY bi.id LIMIT 1),
+                  rr.service_name, c.last_service
+                ) AS service_name,
                 rr.followup_seq_started_at + ($2::int * INTERVAL '1 day') AS due_at
            FROM review_requests rr
            JOIN users u ON u.id = rr.user_id
@@ -2012,7 +2030,7 @@ cron.schedule('*/10 * * * *', async () => {
             AND COALESCE(rr.review_verified, false)  = false
             AND rr.followup_seq_started_at + ($2::int * INTERVAL '1 day') <= NOW()
           LIMIT 200`,
-        [REVIEW_ASKED_STATUSES, step.afterDays]
+        [step.statuses, step.afterDays]
       );
 
       for (const req of due.rows) {
@@ -2031,13 +2049,16 @@ cron.schedule('*/10 * * * *', async () => {
 
         try {
           const firstName = String(req.customer_name || 'there').split(' ')[0];
-          const reviewLink = await buildReviewLink(pool, {
+          // A re-ask carries no link — it re-opens "how did it go?" and nothing more —
+          // so only the review chase needs one, and only it should abort without one.
+          const isReAsk = REVIEW_REASK_STATUSES.includes(req.status);
+          const reviewLink = isReAsk ? null : await buildReviewLink(pool, {
             reviewRequestId: req.id,
             userId: req.user_id,
             customBase: req.review_link_base,
             hasGoogleLink: !!req.google_review_link,
           });
-          if (!reviewLink) { await markDone(); continue; }
+          if (!isReAsk && !reviewLink) { await markDone(); continue; }
 
           if (step.channel === 'sms') {
             if (!req.customer_phone || req.sms_unsubscribed || !req.twilio_phone_number) {
@@ -2069,16 +2090,25 @@ cron.schedule('*/10 * * * *', async () => {
               [req.id]
             ).catch(() => ({ rows: [] }))).rows;
 
-            const { composeReviewFollowUp } = require('./utils/reviewAI');
-            const body = await composeReviewFollowUp({
-              firstName,
-              businessName: req.business_name,
-              incentive: req.incentive,
-              incentiveEnabled: req.incentive_enabled,
-              reviewLink,
-              attempt: step.attempt,
-              history: priorTurns,
-            }, req.user_id);
+            const { composeReviewFollowUp, composeOpenerReAsk, shortenServiceName } = require('./utils/reviewAI');
+            const body = isReAsk
+              ? await composeOpenerReAsk({
+                  firstName,
+                  businessName: req.business_name,
+                  serviceName: await shortenServiceName(req.service_name, req.user_id),
+                  repName: (req.rep_name || '').trim(),
+                  attempt: step.attempt,
+                  history: priorTurns,
+                }, req.user_id)
+              : await composeReviewFollowUp({
+                  firstName,
+                  businessName: req.business_name,
+                  incentive: req.incentive,
+                  incentiveEnabled: req.incentive_enabled,
+                  reviewLink,
+                  attempt: step.attempt,
+                  history: priorTurns,
+                }, req.user_id);
 
             const toPhone = req.customer_phone.startsWith('+')
               ? req.customer_phone
@@ -2092,7 +2122,7 @@ cron.schedule('*/10 * * * *', async () => {
                VALUES ($1, $2, 'outgoing', $3, $4, $5, $6, $7, $8, NOW())`,
               [req.user_id, followUpLeadId, toPhone, smsResult.fromNumber, smsResult.provider, body, smsResult.messageSid, req.id]
             ).catch(e => console.error('Follow-up SMS log failed:', e.message));
-            console.log(`🔁 Review follow-up text ${step.attempt} sent for request ${req.id} to ${toPhone}`);
+            console.log(`🔁 Review ${isReAsk ? 're-ask' : 'follow-up'} text ${step.attempt} sent for request ${req.id} to ${toPhone}`);
           } else {
             const toEmail = String(req.customer_email || '').trim();
             if (!process.env.SENDGRID_API_KEY || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
