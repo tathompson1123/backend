@@ -378,6 +378,11 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
             incentive: rr.incentive,
             incentiveEnabled: rr.incentive_enabled,
             reviewLink: trackedUrl,
+            // Give it what they actually said, plus the thread, so the ask lands as a
+            // reply to them rather than a form letter that ignores their message.
+            customerReply: Body,
+            sentiment,
+            history: priorTurns,
           }, user.id);
           try {
             await sendSMS(From, reply, user.id);

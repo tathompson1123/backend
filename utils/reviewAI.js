@@ -166,30 +166,62 @@ async function classifyReplySentiment(text, userId, history = []) {
 }
 
 // ── Compose the positive-reply SMS (weaves the incentive in naturally) ───────
-function fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink }) {
+// "Lukewarm" covers neutral verdicts and the mild-positive replies people actually
+// send ("it went ok", "fine thanks") — gushing at those reads as canned, because it
+// plainly isn't a response to what they said.
+function fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink, lukewarm }) {
   const inc = incentiveEnabled && incentive
     ? `Leave us a quick Google review and ${incentive}. `
     : `If you have a sec, we'd love a quick Google review. `;
-  return `So glad to hear it, ${fn}! ${inc}${reviewLink || ''}`.trim();
+  const opener = lukewarm ? `Thanks for letting us know, ${fn}!` : `So glad to hear it, ${fn}!`;
+  return `${opener} ${inc}${reviewLink || ''}`.trim();
 }
 
-async function composePositiveReply({ firstName, businessName, incentive, incentiveEnabled, reviewLink }, userId) {
+// customerReply/history are what make this a reply rather than a form letter. Without
+// them the model wrote the same "thrilled you're happy with the results!" to someone
+// who had said "it went ok, thanks for getting me in so soon" — overclaiming their
+// mood and ignoring the one specific thing they'd actually chosen to mention.
+async function composePositiveReply(
+  { firstName, businessName, incentive, incentiveEnabled, reviewLink,
+    customerReply, sentiment, history },
+  userId
+) {
   const fn = (firstName && String(firstName).trim()) || 'there';
+  const reply = String(customerReply || '').trim();
+  const lukewarm = sentiment === 'neutral';
   try {
     const incLine = incentiveEnabled && incentive
       ? `Offer this incentive, but ONLY as a reward conditional on leaving the review: "${incentive}". Phrase it like "if you leave us a Google review, <incentive>".`
       : 'Do not offer any incentive; just warmly ask for the review.';
-    const out = await ask(
-      userId, 'review_positive',
-      `You write a single short, friendly SMS (max ~2 sentences, at most one emoji) from ${businessName || 'the business'} thanking a happy customer and asking them to leave a Google review. ${incLine} End with the review link exactly as given, on the same line is fine. Do not invent facts. Reply with ONLY the message text.`,
-      `Customer first name: ${fn}\nReview link: ${reviewLink || ''}`,
-      160
-    );
+
+    const thread = (history || [])
+      .slice(-6)
+      .map(m => `${m.direction === 'incoming' ? 'Customer' : 'Business'}: ${m.message}`)
+      .join('\n');
+
+    const system = reply
+      ? `You write a single short SMS from ${businessName || 'the business'} replying to a customer who has just answered "how did the service go?".\n\n` +
+        'Do two things, in this order:\n' +
+        '1. Respond to what they ACTUALLY said. Pick up the specific thing they mentioned and answer it like a person would. If they thanked you for something, acknowledge that thing.\n' +
+        `2. Then ask them to leave a Google review. ${incLine}\n\n` +
+        'Match their energy, never inflate it. If they said it went "ok" or "fine", do NOT tell them they are thrilled or delighted or that you are so glad they loved it — something like "glad we could get you in quickly" is the right register. Save real enthusiasm for customers who were actually enthusiastic.\n\n' +
+        'Do not quote their words back at them verbatim, and do not invent details they did not mention. Keep it to about 2 sentences before the link, at most one emoji. End with the review link exactly as given. Reply with ONLY the message text.'
+      : `You write a single short, friendly SMS (max ~2 sentences, at most one emoji) from ${businessName || 'the business'} thanking a happy customer and asking them to leave a Google review. ${incLine} End with the review link exactly as given, on the same line is fine. Do not invent facts. Reply with ONLY the message text.`;
+
+    const user = [
+      `Customer first name: ${fn}`,
+      reply ? `What they just said: "${reply}"` : null,
+      thread ? `Conversation so far:\n${thread}` : null,
+      lukewarm ? 'Read: they were satisfied but understated. Keep the warmth measured.' : null,
+      `Review link: ${reviewLink || ''}`,
+    ].filter(Boolean).join('\n');
+
+    const out = await ask(userId, 'review_positive', system, user, 200);
     let msg = out.replace(/^["']|["']$/g, '').trim();
     if (reviewLink && !msg.includes(reviewLink)) msg = `${msg} ${reviewLink}`.trim();
-    return msg || fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink });
+    return msg || fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink, lukewarm });
   } catch {
-    return fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink });
+    return fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink, lukewarm });
   }
 }
 

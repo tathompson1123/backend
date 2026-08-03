@@ -361,7 +361,14 @@ router.get('/review-diagnostics', authenticateToken, async (req, res) => {
        JOIN users u ON u.id = b.user_id
        LEFT JOIN customers c ON c.id = b.customer_id
        LEFT JOIN review_requests rr ON rr.booking_id = b.id
-       WHERE b.user_id = $1 AND b.booking_date >= CURRENT_DATE - ($2::int)
+       -- Only jobs that have already come around. A booking scheduled for next week
+       -- obviously hasn't had its review text yet, so listing it under "no review
+       -- text" is noise the owner can't act on. Both bounds run off the business's
+       -- own day rather than CURRENT_DATE (the server's UTC day), which for anyone
+       -- west of UTC counted tomorrow's jobs as today's for part of every evening.
+       WHERE b.user_id = $1
+         AND b.booking_date >= (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/New_York'))::date - ($2::int)
+         AND b.booking_date <= (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/New_York'))::date
        ORDER BY b.booking_date DESC, b.start_time DESC`,
       [userId, days, cfg?.send_delay ?? 1]
     )).rows;
@@ -411,15 +418,44 @@ router.get('/review-diagnostics', authenticateToken, async (req, res) => {
 
 router.get('/review-requests', authenticateToken, async (req, res) => {
   try {
+    // review_requests has customer_name/service_name columns, but only the employee-app
+    // path ever writes them — every request queued by the crons or the booking routes
+    // left them NULL, so the dashboard listed a date and a status against nobody, with
+    // an empty Service field. Resolve them from the customer and booking instead of
+    // trusting the denormalized copy: customers.name is the live one anyway, so this
+    // also keeps the list correct after a rename.
     const result = await pool.query(
-      `SELECT * FROM review_requests
-       WHERE user_id = $1
-       ORDER BY created_at DESC
-       LIMIT 100`,
+      `SELECT rr.*,
+              COALESCE(NULLIF(rr.customer_name, ''),  c.name,  b.customer_name)  AS resolved_customer_name,
+              COALESCE(NULLIF(rr.customer_phone, ''), c.phone, b.customer_phone) AS resolved_customer_phone,
+              COALESCE(NULLIF(rr.customer_email, ''), c.email, b.customer_email) AS resolved_customer_email,
+              COALESCE(NULLIF(rr.service_name, ''),
+                (SELECT string_agg(bi.service_name, ', ' ORDER BY bi.id)
+                   FROM booking_items bi WHERE bi.booking_id = rr.booking_id)
+              ) AS resolved_service_name
+         FROM review_requests rr
+         LEFT JOIN customers c ON c.id = rr.customer_id
+         LEFT JOIN bookings  b ON b.id = rr.booking_id
+        WHERE rr.user_id = $1
+        ORDER BY rr.created_at DESC
+        LIMIT 100`,
       [req.user.userId]
     );
 
-    res.json({ success: true, requests: result.rows });
+    // Fold the resolved values over the stored ones so the client keeps reading the
+    // same field names.
+    const requests = result.rows.map(({
+      resolved_customer_name, resolved_customer_phone, resolved_customer_email,
+      resolved_service_name, ...rr
+    }) => ({
+      ...rr,
+      customer_name:  resolved_customer_name  || null,
+      customer_phone: resolved_customer_phone || null,
+      customer_email: resolved_customer_email || null,
+      service_name:   resolved_service_name   || null,
+    }));
+
+    res.json({ success: true, requests });
   } catch (error) {
     console.error('Error fetching review requests:', error.message);
     res.json({ success: true, requests: [] });
