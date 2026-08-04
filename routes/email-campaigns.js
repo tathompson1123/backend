@@ -69,13 +69,29 @@ function normalizeHeroImageUrl(src) {
   }
 }
 
+function buildUnsubscribeToken(email, userId) {
+  return jwt.sign({ email, userId, type: 'unsubscribe' }, UNSUB_SECRET, { expiresIn: '365d' });
+}
+
 function buildUnsubscribeUrl(email, userId) {
-  const token = jwt.sign(
-    { email, userId, type: 'unsubscribe' },
-    UNSUB_SECRET,
-    { expiresIn: '365d' }
-  );
-  return `${FRONTEND_URL}/unsubscribe?token=${token}`;
+  return `${FRONTEND_URL}/unsubscribe?token=${buildUnsubscribeToken(email, userId)}`;
+}
+
+// RFC 8058 headers. Gmail and Yahoo have required one-click unsubscribe from bulk
+// senders since February 2024; without it, mail is far likelier to be filtered, and
+// recipients who can't unsubscribe easily hit "report spam" instead — which is what
+// actually burns the sending domain's reputation for every other message on it,
+// transactional ones included.
+//
+// The URL must point at the BACKEND (which accepts the POST), not the frontend page.
+const BACKEND_URL = process.env.PRODUCTION_BACKEND_URL || 'https://backend-production-ab50.up.railway.app';
+
+function unsubscribeHeaders(email, userId) {
+  const url = `${BACKEND_URL}/api/email-campaigns/unsubscribe?token=${buildUnsubscribeToken(email, userId)}`;
+  return {
+    'List-Unsubscribe': `<${url}>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  };
 }
 
 function emailBlocksToHtml(blocks) {
@@ -402,6 +418,7 @@ async function sendCampaign(userId, config, campaignId) {
         subject: c.subject,
         text: c.body_text,
         html: htmlWithUnsub,
+        headers: unsubscribeHeaders(customer.email, userId),
         trackingSettings: { clickTracking: { enable: true }, openTracking: { enable: true } },
       };
     });
@@ -1196,41 +1213,65 @@ router.post('/templates/:id/apply', authenticateToken, async (req, res) => {
   }
 });
 
+async function applyUnsubscribeToken(token) {
+  if (!token) return { status: 400, body: { error: 'Missing token' } };
+
+  let payload;
+  try {
+    payload = jwt.verify(token, UNSUB_SECRET);
+  } catch {
+    return { status: 400, body: { error: 'Invalid or expired unsubscribe link' } };
+  }
+
+  if (payload.type !== 'unsubscribe' || !payload.email || !payload.userId) {
+    return { status: 400, body: { error: 'Invalid token type' } };
+  }
+
+  // Match the send path's key exactly (LOWER(TRIM(email))) so a stored address with stray
+  // whitespace can't slip through unsubscribed-but-still-emailed.
+  const upd = await pool.query(
+    `UPDATE customers SET email_unsubscribed = TRUE
+     WHERE LOWER(TRIM(email)) = LOWER(TRIM($1)) AND user_id = $2`,
+    [payload.email, payload.userId]
+  );
+  if (upd.rowCount === 0) {
+    console.warn(`Unsubscribe: no customer matched ${payload.email} for user ${payload.userId}`);
+  }
+
+  return { status: 200, body: { success: true, email: payload.email } };
+}
+
 // GET /api/email-campaigns/unsubscribe?token=...  (public — no auth required)
+// Backs the unsubscribe page the in-body link points at.
 router.get('/unsubscribe', async (req, res) => {
   try {
-    const { token } = req.query;
-    if (!token) return res.status(400).json({ error: 'Missing token' });
-
-    let payload;
-    try {
-      payload = jwt.verify(token, UNSUB_SECRET);
-    } catch {
-      return res.status(400).json({ error: 'Invalid or expired unsubscribe link' });
-    }
-
-    if (payload.type !== 'unsubscribe' || !payload.email || !payload.userId) {
-      return res.status(400).json({ error: 'Invalid token type' });
-    }
-
-    // Match the send path's key exactly (LOWER(TRIM(email))) so a stored address with stray
-    // whitespace can't slip through unsubscribed-but-still-emailed.
-    const upd = await pool.query(
-      `UPDATE customers SET email_unsubscribed = TRUE
-       WHERE LOWER(TRIM(email)) = LOWER(TRIM($1)) AND user_id = $2`,
-      [payload.email, payload.userId]
-    );
-    if (upd.rowCount === 0) {
-      console.warn(`Unsubscribe: no customer matched ${payload.email} for user ${payload.userId}`);
-    }
-
-    res.json({ success: true, email: payload.email });
+    const { status, body } = await applyUnsubscribeToken(req.query.token);
+    res.status(status).json(body);
   } catch (e) {
     console.error('Unsubscribe error:', e.message);
     res.status(500).json({ error: 'Failed to process unsubscribe' });
   }
 });
 
+// POST /api/email-campaigns/unsubscribe?token=...  (public — no auth required)
+// RFC 8058 one-click. Gmail and Yahoo POST here directly from their own UI when the
+// recipient hits Unsubscribe next to the sender name; they never load the page, so a
+// GET-only handler meant the header could not be honoured and the requirement was not
+// actually met. Body is "List-Unsubscribe=One-Click" and is not worth parsing — the
+// token identifies the recipient on its own.
+router.post('/unsubscribe', express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    const { status } = await applyUnsubscribeToken(req.query.token);
+    // Mail providers only look at the status code. Anything non-2xx gets retried and,
+    // after enough failures, counts against the sender.
+    res.sendStatus(status === 200 ? 200 : 400);
+  } catch (e) {
+    console.error('One-click unsubscribe error:', e.message);
+    res.sendStatus(500);
+  }
+});
+
 module.exports = router;
 module.exports.generateCampaign = generateCampaign;
 module.exports.sendCampaign = sendCampaign;
+module.exports.unsubscribeHeaders = unsubscribeHeaders;

@@ -2007,7 +2007,7 @@ cron.schedule('*/10 * * * *', async () => {
                 COALESCE(c.name,  rr.customer_name)  AS customer_name,
                 COALESCE(c.phone, rr.customer_phone) AS customer_phone,
                 COALESCE(c.email, rr.customer_email) AS customer_email,
-                c.sms_unsubscribed,
+                c.sms_unsubscribed, c.email_unsubscribed,
                 u.business_name, u.email AS owner_email, u.google_review_link,
                 u.twilio_phone_number, u.plan,
                 rc.incentive, rc.incentive_enabled, rc.review_link_base, rc.rep_name,
@@ -2125,7 +2125,12 @@ cron.schedule('*/10 * * * *', async () => {
             console.log(`🔁 Review ${isReAsk ? 're-ask' : 'follow-up'} text ${step.attempt} sent for request ${req.id} to ${toPhone}`);
           } else {
             const toEmail = String(req.customer_email || '').trim();
-            if (!process.env.SENDGRID_API_KEY || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
+            // email_unsubscribed was not being checked at all — someone who opted out
+            // would still have been chased for a review by email, which is both the
+            // thing that generates spam complaints and the thing those complaints then
+            // punish the whole sending domain for.
+            if (!process.env.SENDGRID_API_KEY || req.email_unsubscribed ||
+                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
               await markDone();
               continue;
             }
@@ -2144,6 +2149,10 @@ cron.schedule('*/10 * * * *', async () => {
               subject: finalOne
                 ? `One last ask — ${req.business_name || 'us'}`
                 : `Would you mind leaving us a review?`,
+              // One-click unsubscribe, same as the campaigns. A review chase is
+              // promotional however politely it's worded, and giving people an easy way
+              // out is what keeps them from using "report spam" as the exit instead.
+              headers: require('./routes/email-campaigns').unsubscribeHeaders(toEmail, req.user_id),
               html: `
                 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111827;">
                   <p style="margin:0 0 16px;font-size:16px;">Hi ${firstName},</p>
