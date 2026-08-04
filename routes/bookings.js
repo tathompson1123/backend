@@ -8,6 +8,7 @@ const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const { normalizeServiceList, resolveBookingServices } = require('../utils/bookingServices');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
 // Resolve the business's IANA timezone from their saved location (state + zip).
 // Used so the dashboard can render booking timestamps (created_at) in the owner's
@@ -747,7 +748,7 @@ router.post('/:id/send-card-link', authenticateToken, async (req, res) => {
         : '';
       await sgMail.send({
         to: booking.customer_email,
-        from: { name: booking.business_name || 'Your Service Provider', email: 'help@sorceintegrations.com' },
+        from: { name: booking.business_name || 'Your Service Provider', email: TRANSACTIONAL_EMAIL },
         replyTo: booking.owner_email ? { email: booking.owner_email } : undefined,
         subject: `One last step to confirm your appointment — ${booking.business_name || 'Us'}`,
         html: `
@@ -782,7 +783,7 @@ router.post('/:id/send-card-link', authenticateToken, async (req, res) => {
       const serviceLine = booking.service_name ? ` for <strong>${booking.service_name}</strong>` : '';
       sgMail.send({
         to: booking.owner_email,
-        from: { name: 'SORCE Notifications', email: 'help@sorceintegrations.com' },
+        from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
         subject: `Card on file link sent to ${booking.customer_name}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">

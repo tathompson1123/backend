@@ -8,6 +8,7 @@ const { v2: cloudinary } = require('cloudinary');
 const { sendPushToTeam, sendPushToEmployee } = require('../utils/pushNotifications');
 const { normalizeServiceList, resolveBookingServices } = require('../utils/bookingServices');
 const { sendBookingEmails } = require('../utils/bookingEmail');
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
 // ── Time-tracking schema ─────────────────────────────────
 pool.query(`
@@ -89,7 +90,7 @@ async function sendStatusEmail(booking, status, businessName, ownerEmail) {
   try {
     await sgMail.send({
       to: booking.customer_email,
-      from: { name: businessName, email: 'help@sorceintegrations.com' },
+      from: { name: businessName, email: TRANSACTIONAL_EMAIL },
       replyTo: ownerEmail ? { name: businessName, email: ownerEmail } : undefined,
       subject,
       text,
@@ -711,7 +712,7 @@ router.post('/my-bookings/:id/invoice/send', requirePermission('process_payments
 
         await sgMail.send({
           to: data.customer_email,
-          from: { name: businessName, email: 'help@sorceintegrations.com' },
+          from: { name: businessName, email: TRANSACTIONAL_EMAIL },
           replyTo: ownerEmail ? { name: businessName, email: ownerEmail } : undefined,
           subject: `Invoice ${data.invoice_number} from ${businessName}`,
           html: buildInvoiceEmailHtml({

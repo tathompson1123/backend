@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 
@@ -274,7 +275,7 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
       await sgMail.send({
         to: estimate.customer_email,
-        from: { name: estimate.business_name || 'SORCE', email: 'help@sorceintegrations.com' },
+        from: { name: estimate.business_name || 'SORCE', email: TRANSACTIONAL_EMAIL },
         replyTo: estimate.owner_email ? { name: estimate.business_name || '', email: estimate.owner_email } : undefined,
         subject: `Estimate ${estimate.estimate_number} from ${estimate.business_name}`,
         html: `
@@ -332,7 +333,7 @@ router.post('/:id/remind', authenticateToken, async (req, res) => {
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
     await sgMail.send({
       to: estimate.customer_email,
-      from: process.env.SENDGRID_FROM_EMAIL || 'help@sorceintegrations.com',
+      from: process.env.SENDGRID_FROM_EMAIL || TRANSACTIONAL_EMAIL,
       subject: `Reminder: Estimate ${estimate.estimate_number} from ${estimate.business_name}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">

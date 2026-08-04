@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
 // Archiving (soft delete) instead of hard-deleting preserves an employee's clock/payroll
 // history — their time_entries would otherwise be cascade-deleted with the employee row.
@@ -311,7 +312,7 @@ router.post('/:id/invite', async (req, res) => {
 
       await sgMail.send({
         to: employee.email,
-        from: { name: businessName, email: 'help@sorceintegrations.com' },
+        from: { name: businessName, email: TRANSACTIONAL_EMAIL },
         replyTo: ownerEmail ? { name: businessName, email: ownerEmail } : undefined,
         subject: `You're invited to join ${businessName} on SORCE`,
         html: `

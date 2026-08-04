@@ -5,6 +5,7 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { getProcessorForUser } = require('../payment/ProcessorFactory');
 const { syncSquareInvoices } = require('../utils/squareSync');
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
 // GET /api/invoices - List invoices
 router.get('/', authenticateToken, async (req, res) => {
@@ -383,7 +384,7 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
 
       await sgMail.send({
         to: invoice.customer_email,
-        from: { name: invoice.business_name, email: 'help@sorceintegrations.com' },
+        from: { name: invoice.business_name, email: TRANSACTIONAL_EMAIL },
         replyTo: invoice.owner_email ? { name: invoice.business_name, email: invoice.owner_email } : undefined,
         subject: `Invoice ${invoice.invoice_number} from ${invoice.business_name}`,
         html: buildInvoiceEmailHtml({
@@ -445,7 +446,7 @@ router.post('/:id/remind', authenticateToken, async (req, res) => {
 
     await sgMail.send({
       to: invoice.customer_email,
-      from: { name: invoice.business_name, email: 'help@sorceintegrations.com' },
+      from: { name: invoice.business_name, email: TRANSACTIONAL_EMAIL },
       replyTo: invoice.owner_email ? { name: invoice.business_name, email: invoice.owner_email } : undefined,
       subject: `Payment Reminder: Invoice ${invoice.invoice_number} from ${invoice.business_name}`,
       html: buildInvoiceEmailHtml({

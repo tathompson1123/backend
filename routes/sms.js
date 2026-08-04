@@ -11,6 +11,7 @@ const {
   last10, phoneVariants, findLeadIdByPhone, resolveThread,
 } = require('../utils/smsThread');
 const twilio = require('twilio');
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
 // Auto-heal Twilio webhook URL for a phone number (non-blocking, fire-and-forget)
 function selfHealWebhook(phoneSid, phoneNumber) {
@@ -307,7 +308,7 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
             sgMail.setApiKey(process.env.SENDGRID_API_KEY);
             await sgMail.send({
               to: rr.owner_email,
-              from: { name: 'SORCE', email: 'help@sorceintegrations.com' },
+              from: { name: 'SORCE', email: TRANSACTIONAL_EMAIL },
               replyTo: rr.owner_email,
               subject: `Worth a look: ${firstName} mentioned something`,
               html: `
@@ -349,7 +350,7 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
               sgMail.setApiKey(process.env.SENDGRID_API_KEY);
               await sgMail.send({
                 to: rr.owner_email,
-                from: { name: `${rr.business_name || 'SORCE'} via SORCE`, email: 'help@sorceintegrations.com' },
+                from: { name: `${rr.business_name || 'SORCE'} via SORCE`, email: TRANSACTIONAL_EMAIL },
                 replyTo: rr.owner_email,
                 subject: `⚠️ Unhappy customer — ${firstName}`,
                 text: `${rr.customer_name || rr.c_name || 'A customer'} replied negatively to your review request.\n\n`

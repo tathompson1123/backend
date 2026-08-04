@@ -1,5 +1,6 @@
 const sgMail = require('@sendgrid/mail');
 const { pool } = require('../config/database');
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -72,7 +73,7 @@ async function sendBookingEmails(opts) {
     const location = opts.location || businessAddress;
     // Send from a real, monitored, verified address rather than noreply@ — inbox filters
     // slightly favor senders that can receive replies, and help@ is domain-authenticated.
-    const fromEmail = 'help@sorceintegrations.com';
+    const fromEmail = TRANSACTIONAL_EMAIL;
 
     const formattedDate = formatDate(opts.bookingDate);
     const formattedStart = formatTime(opts.startTime);
@@ -265,7 +266,7 @@ async function sendSmsBookingConfirmationRequest(opts) {
 
     await sgMail.send({
       to: ownerEmail,
-      from: { name: 'SORCE SMS Agent', email: 'help@sorceintegrations.com' },
+      from: { name: 'SORCE SMS Agent', email: TRANSACTIONAL_EMAIL },
       replyTo: { email: ownerEmail },
       subject: `Action needed: confirm a booking from your SMS agent — ${opts.customerName || opts.customerPhone}`,
       html: `
@@ -332,7 +333,7 @@ async function sendSmsCampaignReplyNotification(opts) {
 
     await sgMail.send({
       to: ownerEmail,
-      from: { name: 'SORCE SMS Campaign', email: 'help@sorceintegrations.com' },
+      from: { name: 'SORCE SMS Campaign', email: TRANSACTIONAL_EMAIL },
       replyTo: { email: ownerEmail },
       subject: `New reply to your SMS campaign — ${opts.customerName || opts.customerPhone}`,
       html: `

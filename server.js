@@ -78,6 +78,7 @@ const leadRoutes = require('./routes/leads');
 const serviceRoutes = require('./routes/services');
 const serviceCategoryRoutes = require('./routes/service-categories');
 const bookingWidgetConfigRoutes = require('./routes/booking-widget-config');
+const { TRANSACTIONAL_EMAIL } = require('./utils/emailFrom');
 const employeeRoutes = require('./routes/employees');
 const websiteRoutes = require('./routes/website');
 const aiAgentRoutes = require('./routes/ai-agents');
@@ -2144,7 +2145,7 @@ cron.schedule('*/10 * * * *', async () => {
             await markDone();
             await sgMail.send({
               to: toEmail,
-              from: { name: req.business_name || 'SORCE', email: 'help@sorceintegrations.com' },
+              from: { name: req.business_name || 'SORCE', email: TRANSACTIONAL_EMAIL },
               replyTo: req.owner_email ? { email: req.owner_email } : undefined,
               subject: finalOne
                 ? `One last ask — ${req.business_name || 'us'}`
@@ -2436,7 +2437,7 @@ cron.schedule('*/15 * * * *', async () => {
 
           await sgMail.send({
             to: booking.customer_email,
-            from: { name: booking.business_name || 'Your Service Provider', email: 'help@sorceintegrations.com' },
+            from: { name: booking.business_name || 'Your Service Provider', email: TRANSACTIONAL_EMAIL },
             replyTo: booking.owner_email ? { email: booking.owner_email } : undefined,
             subject: `Reminder: ${serviceName} on ${formatDate(booking.booking_date)}`,
             html: `

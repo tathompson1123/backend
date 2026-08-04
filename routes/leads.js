@@ -6,6 +6,7 @@ const { sendSMS } = require('../utils/twilio');
 const { fireLeadEvent, clientIpFromReq } = require('../utils/metaConversions');
 const { THREAD_SOURCE_SQL } = require('../utils/smsThread');
 const sgMail = require('@sendgrid/mail');
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -168,7 +169,7 @@ router.post('/public/:userId', async (req, res) => {
           if (!owner?.email) return;
           return sgMail.send({
             to: owner.email,
-            from: { name: 'SORCE', email: 'help@sorceintegrations.com' },
+            from: { name: 'SORCE', email: TRANSACTIONAL_EMAIL },
             // Reply goes to the lead, which is what hitting reply on "you have a
             // new lead" is meant to do. Without it, the owner replies to our own
             // inbox and the lead never hears from them.

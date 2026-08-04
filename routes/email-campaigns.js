@@ -8,6 +8,7 @@ const { isUnlimitedAccount } = require('../utils/unlimitedAccounts');
 const { fetchPexelsImages, fetchPexelsByQuery } = require('../utils/fetchPexelsImages');
 const sgMail = require('@sendgrid/mail');
 const jwt = require('jsonwebtoken');
+const { BULK_EMAIL } = require('../utils/emailFrom');
 
 const UNSUB_SECRET = process.env.JWT_SECRET || process.env.UNSUB_SECRET || 'sorce-unsubscribe-secret';
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.VITE_APP_URL || 'https://sorceintegrations.com';
@@ -413,7 +414,7 @@ async function sendCampaign(userId, config, campaignId) {
       const htmlWithUnsub = applyUnsubscribeUrl(c.body_html, unsubUrl, fromName);
       return {
         to: customer.email,
-        from: { name: fromName, email: 'help@sorceintegrations.com' },
+        from: { name: fromName, email: BULK_EMAIL },
         replyTo: ownerReplyEmail ? { name: fromName, email: ownerReplyEmail } : undefined,
         subject: c.subject,
         text: c.body_text,
@@ -972,7 +973,7 @@ router.post('/test-send', authenticateToken, async (req, res) => {
 
     await sgMail.send({
       to: config.from_email,
-      from: { name: config.from_name || 'Campaign Test', email: 'help@sorceintegrations.com' },
+      from: { name: config.from_name || 'Campaign Test', email: BULK_EMAIL },
       replyTo: { name: config.from_name || '', email: config.from_email },
       subject: `[TEST] ${emailSubject}`,
       text: emailText,
