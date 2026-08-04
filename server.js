@@ -485,6 +485,26 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_discovery_calls_scheduled ON discovery_calls(scheduled_at)`);
+    // SORCE's own sales pipeline — prospects the team is working before (or without) a
+    // booked discovery call. Deliberately separate from the customer-facing `leads`
+    // table, which is scoped per business; these rows are people buying SORCE itself.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sorce_leads (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(160) NOT NULL,
+        email VARCHAR(255),
+        phone VARCHAR(30),
+        company VARCHAR(160),
+        source VARCHAR(40) DEFAULT 'manual',
+        status VARCHAR(24) DEFAULT 'new',
+        notes TEXT,
+        assigned_to INTEGER REFERENCES sorce_team_members(id) ON DELETE SET NULL,
+        discovery_call_id INTEGER REFERENCES discovery_calls(id) ON DELETE SET NULL,
+        created_by INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sorce_leads_status ON sorce_leads(status, created_at DESC)`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS discovery_availability (
         id SERIAL PRIMARY KEY,

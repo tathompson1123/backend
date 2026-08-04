@@ -225,6 +225,126 @@ router.delete('/team/:id', requireAnalytics, requireAdmin, async (req, res) => {
   }
 });
 
+/* ─────────────────────────── SORCE SALES LEADS ─────────────────────────── */
+// Prospects for SORCE itself, worked before (or without) a booked discovery call.
+// requireAnalytics only, no requireAdmin — the whole team sells, so members need this
+// the same way they need the discovery calendar.
+
+const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'demo_scheduled', 'won', 'lost'];
+const LEAD_FIELDS = ['name', 'email', 'phone', 'company', 'source', 'status', 'notes', 'assigned_to'];
+
+// GET /api/discovery/leads
+router.get('/leads', requireAnalytics, async (req, res) => {
+  try {
+    const { status, q } = req.query;
+    const where = [];
+    const params = [];
+
+    if (status && status !== 'all') {
+      params.push(status);
+      where.push(`sl.status = $${params.length}`);
+    }
+    if (q && q.trim()) {
+      params.push(`%${q.trim()}%`);
+      const p = `$${params.length}`;
+      where.push(`(sl.name ILIKE ${p} OR sl.email ILIKE ${p} OR sl.company ILIKE ${p} OR sl.phone ILIKE ${p})`);
+    }
+
+    const result = await pool.query(
+      `SELECT sl.*, tm.name AS assigned_name,
+              dc.scheduled_at AS call_scheduled_at, dc.status AS call_status
+         FROM sorce_leads sl
+         LEFT JOIN sorce_team_members tm ON tm.id = sl.assigned_to
+         LEFT JOIN discovery_calls dc ON dc.id = sl.discovery_call_id
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY sl.created_at DESC
+        LIMIT 500`,
+      params
+    );
+
+    // Counts are unfiltered so the status chips keep showing the whole pipeline even
+    // while a filter is applied — otherwise every chip but the active one reads zero.
+    const counts = await pool.query(
+      `SELECT status, COUNT(*)::int AS n FROM sorce_leads GROUP BY status`
+    );
+
+    res.json({
+      success: true,
+      leads: result.rows,
+      counts: Object.fromEntries(counts.rows.map(r => [r.status, r.n])),
+    });
+  } catch (err) {
+    console.error('Sorce leads list error:', err.message);
+    res.status(500).json({ error: 'Failed to load leads' });
+  }
+});
+
+// POST /api/discovery/leads
+router.post('/leads', requireAnalytics, async (req, res) => {
+  try {
+    const { name, email, phone, company, source, status, notes, assigned_to } = req.body || {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    if (status && !LEAD_STATUSES.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    const result = await pool.query(
+      `INSERT INTO sorce_leads (name, email, phone, company, source, status, notes, assigned_to, created_by)
+       VALUES ($1, $2, $3, $4, COALESCE($5, 'manual'), COALESCE($6, 'new'), $7, $8, $9)
+       RETURNING *`,
+      [String(name).trim(), email || null, phone || null, company || null,
+       source || null, status || null, notes || null, assigned_to || null,
+       req.analytics?.tm || null]
+    );
+    res.json({ success: true, lead: result.rows[0] });
+  } catch (err) {
+    console.error('Sorce lead create error:', err.message);
+    res.status(500).json({ error: 'Failed to create lead' });
+  }
+});
+
+// PATCH /api/discovery/leads/:id — partial update, whitelist-driven
+router.patch('/leads/:id', requireAnalytics, async (req, res) => {
+  try {
+    const sets = [];
+    const params = [];
+    for (const f of LEAD_FIELDS) {
+      if (!(f in (req.body || {}))) continue;
+      if (f === 'status' && req.body.status && !LEAD_STATUSES.includes(req.body.status)) {
+        return res.status(400).json({ error: 'Invalid status' });
+      }
+      params.push(req.body[f] === '' ? null : req.body[f]);
+      sets.push(`${f} = $${params.length}`);
+    }
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+
+    params.push(req.params.id);
+    const result = await pool.query(
+      `UPDATE sorce_leads SET ${sets.join(', ')}, updated_at = NOW()
+        WHERE id = $${params.length} RETURNING *`,
+      params
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Lead not found' });
+    res.json({ success: true, lead: result.rows[0] });
+  } catch (err) {
+    console.error('Sorce lead update error:', err.message);
+    res.status(500).json({ error: 'Failed to update lead' });
+  }
+});
+
+// DELETE /api/discovery/leads/:id
+router.delete('/leads/:id', requireAnalytics, async (req, res) => {
+  try {
+    const r = await pool.query('DELETE FROM sorce_leads WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Lead not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Sorce lead delete error:', err.message);
+    res.status(500).json({ error: 'Failed to delete lead' });
+  }
+});
+
 /* ─────────────────────────── DISCOVERY CALLS ─────────────────────────── */
 
 // GET /api/discovery/calls
