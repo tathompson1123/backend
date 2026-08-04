@@ -13,7 +13,7 @@ if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const {
   sendDiscoverySMS, sendConfirmationEmail, confirmationSMS, formatWhen,
 } = require('../utils/discoveryNotify');
-const { isZoomConfigured, createMeeting, updateMeeting, deleteMeeting } = require('../utils/zoom');
+const { isZoomConfigured, createMeeting, updateMeeting, deleteMeeting, checkZoomSetup } = require('../utils/zoom');
 
 const SITE_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 const FROM_EMAIL = process.env.DISCOVERY_FROM_EMAIL || 'hello@sorceintegrations.com';
@@ -223,6 +223,17 @@ router.delete('/team/:id', requireAnalytics, requireAdmin, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to revoke access' });
+  }
+});
+
+// GET /api/discovery/zoom/status — confirm the Zoom credentials and scopes are right
+// without having to book a real call to find out. Admin-only: it names the host account
+// and echoes Zoom's own error text.
+router.get('/zoom/status', requireAnalytics, requireAdmin, async (req, res) => {
+  try {
+    res.json({ success: true, ...(await checkZoomSetup()) });
+  } catch (err) {
+    res.status(500).json({ success: false, ok: false, error: err.message });
   }
 });
 

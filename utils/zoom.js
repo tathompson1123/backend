@@ -124,4 +124,64 @@ async function deleteMeeting(meetingId) {
   });
 }
 
-module.exports = { isZoomConfigured, createMeeting, updateMeeting, deleteMeeting };
+// Setup check for the dashboard. Proves the three credentials mint a token AND that
+// the meeting scopes were actually granted — activating the app without them is the
+// easy mistake, and it fails at the first real booking rather than at setup.
+//
+// Reports which of create/update/delete are missing rather than just "it broke":
+// booking can work while rescheduling and cancelling silently don't, because those
+// need separate scopes.
+async function checkZoomSetup() {
+  const missingEnv = ['ZOOM_ACCOUNT_ID', 'ZOOM_CLIENT_ID', 'ZOOM_CLIENT_SECRET']
+    .filter(k => !process.env[k]);
+  if (missingEnv.length) {
+    return { ok: false, configured: false, missingEnv, error: `Not set in Railway: ${missingEnv.join(', ')}` };
+  }
+
+  let token;
+  try {
+    token = await getAccessToken();
+  } catch (err) {
+    return { ok: false, configured: true, tokenOk: false, error: err.message };
+  }
+
+  // Round-trip a real meeting a minute from now, then delete it. Cheap, invisible to
+  // anyone, and the only way to know the write scopes are genuinely present.
+  const probeStart = new Date(Date.now() + 60_000).toISOString();
+  let created;
+  try {
+    created = await createMeeting({
+      topic: 'SORCE setup check — ignore',
+      startTime: probeStart,
+      durationMinutes: 15,
+    });
+  } catch (err) {
+    return {
+      ok: false, configured: true, tokenOk: true, canCreate: false,
+      error: err.message,
+      hint: /scope/i.test(err.message)
+        ? 'Add the admin-level meeting create scope on the Scopes tab, then re-activate.'
+        : undefined,
+    };
+  }
+
+  const out = { ok: true, configured: true, tokenOk: true, canCreate: true, hostUser: HOST_USER };
+  try {
+    await updateMeeting(created.meetingId, { durationMinutes: 20 });
+    out.canUpdate = true;
+  } catch (err) {
+    out.canUpdate = false; out.ok = false;
+    out.updateError = `${err.message} — rescheduling a call will not move the Zoom meeting.`;
+  }
+  try {
+    await deleteMeeting(created.meetingId);
+    out.canDelete = true;
+  } catch (err) {
+    out.canDelete = false; out.ok = false;
+    out.deleteError = `${err.message} — cancelling a call will leave the meeting live. ` +
+      `Delete meeting ${created.meetingId} by hand.`;
+  }
+  return out;
+}
+
+module.exports = { isZoomConfigured, createMeeting, updateMeeting, deleteMeeting, checkZoomSetup };
