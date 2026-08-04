@@ -8,12 +8,52 @@
 //
 // Env:
 //   SORCE_SMS_FROM        — the number prospects are texted from (already required)
-//   SORCE_SMS_FORWARD_TO  — where replies land. Falls back per-call to the assigned
-//                           rep's phone when one is on file.
+//   SORCE_REP_PHONES      — per-rep routing, "email:number" pairs separated by commas
+//                           or semicolons. Matched on the rep's email, or their first
+//                           name if you'd rather key it that way:
+//                             austinbone14@live.com:+12065551234,ty:+13605555678
+//   SORCE_SMS_FORWARD_TO  — catch-all when the rep can't be resolved
 const { pool } = require('../config/database');
 const { sendDiscoverySMS, formatWhen } = require('./discoveryNotify');
 
 const last10 = (n) => String(n || '').replace(/\D/g, '').slice(-10);
+
+// Parsed once per call rather than cached, so editing the Railway variable takes
+// effect on the next restart without any other moving part.
+function repPhoneMap() {
+  const raw = process.env.SORCE_REP_PHONES;
+  if (!raw) return {};
+  const map = {};
+  for (const pair of raw.split(/[,;]/)) {
+    // rsplit on the last colon — emails don't contain one, but this stays correct if a
+    // key ever does, and it keeps "+1" on the number side.
+    const at = pair.lastIndexOf(':');
+    if (at < 1) continue;
+    const key = pair.slice(0, at).trim().toLowerCase();
+    const num = pair.slice(at + 1).trim();
+    if (key && num) map[key] = num;
+  }
+  return map;
+}
+
+// Whoever the call is assigned to gets it. A phone on the team record wins, since it's
+// editable without a redeploy; the env map is the way to set one today because there's
+// no UI to edit a member after they've been invited.
+function resolveRepPhone(call) {
+  if (call?.rep_phone) return { to: call.rep_phone, via: 'team record' };
+  const map = repPhoneMap();
+  const email = String(call?.rep_email || '').trim().toLowerCase();
+  const first = String(call?.rep_name || '').trim().split(/\s+/)[0].toLowerCase();
+  if (email && map[email]) return { to: map[email], via: `SORCE_REP_PHONES (${email})` };
+  if (first && map[first]) return { to: map[first], via: `SORCE_REP_PHONES (${first})` };
+  if (process.env.SORCE_SMS_FORWARD_TO) {
+    return {
+      to: process.env.SORCE_SMS_FORWARD_TO,
+      via: call?.rep_name ? `catch-all — no number for ${call.rep_name}` : 'catch-all',
+    };
+  }
+  return { to: null, via: null };
+}
 
 function isForSorceNumber(to) {
   const mine = process.env.SORCE_SMS_FROM;
@@ -79,7 +119,7 @@ async function handleSorceInbound({ From, To, Body, MessageSid }, optAction = nu
     ).catch(e => console.error('Discovery reply log failed:', e.message));
   }
 
-  const forwardTo = call?.rep_phone || process.env.SORCE_SMS_FORWARD_TO;
+  const { to: forwardTo, via } = resolveRepPhone(call);
   if (forwardTo) {
     const who = call ? `${call.name}${call.company ? ` (${call.company})` : ''}` : From;
     const when = call?.scheduled_at ? ` — call ${formatWhen(call.scheduled_at, call.timezone)}` : '';
@@ -89,14 +129,18 @@ async function handleSorceInbound({ From, To, Body, MessageSid }, optAction = nu
     const note = `${who} replied${when}:\n\n"${Body}"\n\nText them back on ${From}`;
     try {
       await sendDiscoverySMS(forwardTo, note);
-      console.log(`📨 Discovery reply from ${From} forwarded to ${forwardTo}${call ? ` (call ${call.id})` : ''}`);
+      console.log(
+        `📨 Discovery reply from ${From} → ${forwardTo} via ${via}` +
+        `${call ? ` (call ${call.id}, rep ${call.rep_name || 'unassigned'})` : ''}`
+      );
     } catch (err) {
       console.error(`⚠️ Could not forward discovery reply from ${From}:`, err.message);
     }
   } else {
     console.warn(
-      `⚠️ Text from ${From} to the SORCE number had nowhere to go — set SORCE_SMS_FORWARD_TO ` +
-      `or put a phone on the assigned rep. Message: "${String(Body).slice(0, 120)}"`
+      `⚠️ Text from ${From} to the SORCE number had nowhere to go — add the rep to ` +
+      `SORCE_REP_PHONES or set SORCE_SMS_FORWARD_TO. ` +
+      `Rep: ${call?.rep_name || 'unassigned'}. Message: "${String(Body).slice(0, 120)}"`
     );
   }
 
@@ -104,4 +148,6 @@ async function handleSorceInbound({ From, To, Body, MessageSid }, optAction = nu
   return true;
 }
 
-module.exports = { handleSorceInbound, isForSorceNumber };
+// resolveRepPhone and repPhoneMap are exported so the routing can be checked directly
+// rather than by sending real texts to find out where they land.
+module.exports = { handleSorceInbound, isForSorceNumber, resolveRepPhone, repPhoneMap };
