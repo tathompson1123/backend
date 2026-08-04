@@ -309,12 +309,15 @@ const LEAD_SELECT = `
   dc.scheduled_at AS call_scheduled_at, dc.status AS call_status,
   dc.zoom_join_url AS call_zoom_url, dc.duration_minutes AS call_duration,
   EXTRACT(DAY FROM (NOW() - COALESCE(sl.last_contacted_at, sl.created_at)))::int AS days_since_contact,
-  (sl.last_contacted_at IS NOT NULL) AS has_been_contacted`;
+  (sl.last_contacted_at IS NOT NULL) AS has_been_contacted,
+  (sl.sms_consent_at IS NOT NULL) AS has_sms_consent,
+  consenter.name AS sms_consent_by_name`;
 
 const LEAD_FROM = `
   FROM sorce_leads sl
   LEFT JOIN sorce_team_members tm ON tm.id = sl.assigned_to
-  LEFT JOIN discovery_calls dc ON dc.id = sl.discovery_call_id`;
+  LEFT JOIN discovery_calls dc ON dc.id = sl.discovery_call_id
+  LEFT JOIN sorce_team_members consenter ON consenter.id = sl.sms_consent_by`;
 
 // A booked discovery call is the same person further down the pipeline, so it lands in
 // the same table rather than a parallel one — that's what lets a cold call graduate to
@@ -471,6 +474,21 @@ router.patch('/leads/:id', requireAnalytics, async (req, res) => {
     // the column, and moving a lead to Contacted implies it too.
     if (req.body?.markContacted === true || req.body?.status === 'contacted') {
       sets.push('last_contacted_at = NOW()');
+    }
+
+    // Consent is stamped server-side with who recorded it, so the timestamp can't be
+    // backdated from the client — the whole point of the record is that it's evidence.
+    if (req.body?.recordSmsConsent === true) {
+      params.push(req.analytics?.tm || null);
+      sets.push(`sms_consent_at = NOW()`, `sms_consent_method = 'verbal'`,
+                `sms_consent_by = $${params.length}`);
+      if (typeof req.body.sms_consent_note === 'string') {
+        params.push(req.body.sms_consent_note.trim() || null);
+        sets.push(`sms_consent_note = $${params.length}`);
+      }
+    } else if (req.body?.recordSmsConsent === false) {
+      // Withdrawn, or recorded by mistake. Clearing it is as important as setting it.
+      sets.push('sms_consent_at = NULL', 'sms_consent_method = NULL', 'sms_consent_by = NULL');
     }
     if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
 

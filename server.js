@@ -525,6 +525,14 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS industry VARCHAR(120)`);
     await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS contact_title VARCHAR(120)`);
     await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS last_contacted_at TIMESTAMPTZ`);
+    // Verbal SMS consent, captured on the call. Consent given out loud is only worth
+    // anything if it's written down — carriers and the TCPA both want the date, who
+    // took it and what was read out, and "they said yes on the phone" is not a defence
+    // without a record of when.
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS sms_consent_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS sms_consent_method VARCHAR(20)`);
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS sms_consent_by INTEGER`);
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS sms_consent_note TEXT`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sorce_leads_call ON sorce_leads(discovery_call_id) WHERE discovery_call_id IS NOT NULL`);
 
     // Backfill the pipeline from calls booked before the sync existed, so Booked
