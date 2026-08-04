@@ -243,7 +243,76 @@ router.get('/zoom/status', requireAnalytics, requireAdmin, async (req, res) => {
 // the same way they need the discovery calendar.
 
 const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'demo_scheduled', 'won', 'lost'];
-const LEAD_FIELDS = ['name', 'email', 'phone', 'company', 'source', 'status', 'notes', 'assigned_to'];
+const LEAD_FIELDS = [
+  'name', 'email', 'phone', 'company', 'source', 'status', 'notes', 'assigned_to',
+  'website', 'address', 'city', 'state', 'industry', 'contact_title',
+];
+
+// Shared projection. days_since_contact falls back to created_at so a lead nobody has
+// touched yet still shows an age rather than a blank — "never contacted, 12 days old"
+// is the row most worth chasing, and it'd otherwise be the one that looks fine.
+const LEAD_SELECT = `
+  sl.*, tm.name AS assigned_name,
+  dc.scheduled_at AS call_scheduled_at, dc.status AS call_status,
+  dc.zoom_join_url AS call_zoom_url, dc.duration_minutes AS call_duration,
+  EXTRACT(DAY FROM (NOW() - COALESCE(sl.last_contacted_at, sl.created_at)))::int AS days_since_contact,
+  (sl.last_contacted_at IS NOT NULL) AS has_been_contacted`;
+
+const LEAD_FROM = `
+  FROM sorce_leads sl
+  LEFT JOIN sorce_team_members tm ON tm.id = sl.assigned_to
+  LEFT JOIN discovery_calls dc ON dc.id = sl.discovery_call_id`;
+
+// A booked discovery call is the same person further down the pipeline, so it lands in
+// the same table rather than a parallel one — that's what lets a cold call graduate to
+// "booked meeting" without being re-keyed, and what keeps the Booked Meetings view in
+// step with the calendar. Matched on email first, then phone, so booking from the
+// public page updates the row the team already created by hand.
+async function syncLeadForCall(call) {
+  if (!call?.id) return null;
+  try {
+    const email = call.email ? String(call.email).trim().toLowerCase() : null;
+    const last10 = call.phone ? String(call.phone).replace(/\D/g, '').slice(-10) : null;
+
+    const existing = await pool.query(
+      `SELECT id FROM sorce_leads
+        WHERE ($1::text IS NOT NULL AND LOWER(TRIM(email)) = $1)
+           OR ($2::text IS NOT NULL AND length($2) = 10
+               AND right(regexp_replace(COALESCE(phone,''), '\\D', '', 'g'), 10) = $2)
+        ORDER BY id LIMIT 1`,
+      [email, last10]
+    );
+
+    if (existing.rows.length) {
+      const updated = await pool.query(
+        `UPDATE sorce_leads
+            SET status = 'demo_scheduled', discovery_call_id = $2,
+                company = COALESCE(NULLIF(company,''), $3),
+                assigned_to = COALESCE(assigned_to, $4),
+                last_contacted_at = NOW(), updated_at = NOW()
+          WHERE id = $1 RETURNING *`,
+        [existing.rows[0].id, call.id, call.company || null, call.assigned_to || null]
+      );
+      return updated.rows[0];
+    }
+
+    const created = await pool.query(
+      `INSERT INTO sorce_leads
+         (name, email, phone, company, source, status, notes, assigned_to,
+          discovery_call_id, last_contacted_at)
+       VALUES ($1,$2,$3,$4,$5,'demo_scheduled',$6,$7,$8,NOW())
+       RETURNING *`,
+      [call.name, email, call.phone || null, call.company || null,
+       call.source === 'public' ? 'website' : 'manual',
+       call.notes || null, call.assigned_to || null, call.id]
+    );
+    return created.rows[0];
+  } catch (err) {
+    // Never let pipeline bookkeeping break a booking.
+    console.error(`⚠️ Lead sync failed for discovery call ${call.id}:`, err.message);
+    return null;
+  }
+}
 
 // GET /api/discovery/leads
 router.get('/leads', requireAnalytics, async (req, res) => {
@@ -263,11 +332,7 @@ router.get('/leads', requireAnalytics, async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT sl.*, tm.name AS assigned_name,
-              dc.scheduled_at AS call_scheduled_at, dc.status AS call_status
-         FROM sorce_leads sl
-         LEFT JOIN sorce_team_members tm ON tm.id = sl.assigned_to
-         LEFT JOIN discovery_calls dc ON dc.id = sl.discovery_call_id
+      `SELECT ${LEAD_SELECT} ${LEAD_FROM}
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY sl.created_at DESC
         LIMIT 500`,
@@ -279,11 +344,18 @@ router.get('/leads', requireAnalytics, async (req, res) => {
     const counts = await pool.query(
       `SELECT status, COUNT(*)::int AS n FROM sorce_leads GROUP BY status`
     );
+    const views = await pool.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE discovery_call_id IS NOT NULL)::int AS booked,
+              COUNT(*) FILTER (WHERE source = 'cold_outreach')::int AS outreach
+         FROM sorce_leads`
+    );
 
     res.json({
       success: true,
       leads: result.rows,
       counts: Object.fromEntries(counts.rows.map(r => [r.status, r.n])),
+      views: views.rows[0],
     });
   } catch (err) {
     console.error('Sorce leads list error:', err.message);
@@ -294,22 +366,35 @@ router.get('/leads', requireAnalytics, async (req, res) => {
 // POST /api/discovery/leads
 router.post('/leads', requireAnalytics, async (req, res) => {
   try {
-    const { name, email, phone, company, source, status, notes, assigned_to } = req.body || {};
-    if (!name || !String(name).trim()) {
+    const b = req.body || {};
+    if (!b.name || !String(b.name).trim()) {
       return res.status(400).json({ error: 'Name is required' });
     }
-    if (status && !LEAD_STATUSES.includes(status)) {
+    if (b.status && !LEAD_STATUSES.includes(b.status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
-    const result = await pool.query(
-      `INSERT INTO sorce_leads (name, email, phone, company, source, status, notes, assigned_to, created_by)
-       VALUES ($1, $2, $3, $4, COALESCE($5, 'manual'), COALESCE($6, 'new'), $7, $8, $9)
-       RETURNING *`,
-      [String(name).trim(), email || null, phone || null, company || null,
-       source || null, status || null, notes || null, assigned_to || null,
-       req.analytics?.tm || null]
+    // Logging a cold call is itself a contact, so the row starts its clock now rather
+    // than reading "0 days since contact, never contacted".
+    const contactedNow = b.source === 'cold_outreach' || b.markContacted === true;
+    const inserted = await pool.query(
+      `INSERT INTO sorce_leads
+         (name, email, phone, company, source, status, notes, assigned_to,
+          website, address, city, state, industry, contact_title,
+          last_contacted_at, created_by)
+       VALUES ($1,$2,$3,$4,COALESCE($5,'manual'),COALESCE($6,'new'),$7,$8,
+               $9,$10,$11,$12,$13,$14,
+               CASE WHEN $15 THEN NOW() ELSE NULL END, $16)
+       RETURNING id`,
+      [String(b.name).trim(), b.email || null, b.phone || null, b.company || null,
+       b.source || null, b.status || null, b.notes || null, b.assigned_to || null,
+       b.website || null, b.address || null, b.city || null, b.state || null,
+       b.industry || null, b.contact_title || null,
+       contactedNow, req.analytics?.tm || null]
     );
-    res.json({ success: true, lead: result.rows[0] });
+    const full = await pool.query(
+      `SELECT ${LEAD_SELECT} ${LEAD_FROM} WHERE sl.id = $1`, [inserted.rows[0].id]
+    );
+    res.json({ success: true, lead: full.rows[0] });
   } catch (err) {
     console.error('Sorce lead create error:', err.message);
     res.status(500).json({ error: 'Failed to create lead' });
@@ -329,16 +414,24 @@ router.patch('/leads/:id', requireAnalytics, async (req, res) => {
       params.push(req.body[f] === '' ? null : req.body[f]);
       sets.push(`${f} = $${params.length}`);
     }
+    // "Log contact" resets the days-since counter without the caller having to know
+    // the column, and moving a lead to Contacted implies it too.
+    if (req.body?.markContacted === true || req.body?.status === 'contacted') {
+      sets.push('last_contacted_at = NOW()');
+    }
     if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
 
     params.push(req.params.id);
     const result = await pool.query(
       `UPDATE sorce_leads SET ${sets.join(', ')}, updated_at = NOW()
-        WHERE id = $${params.length} RETURNING *`,
+        WHERE id = $${params.length} RETURNING id`,
       params
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Lead not found' });
-    res.json({ success: true, lead: result.rows[0] });
+    const full = await pool.query(
+      `SELECT ${LEAD_SELECT} ${LEAD_FROM} WHERE sl.id = $1`, [result.rows[0].id]
+    );
+    res.json({ success: true, lead: full.rows[0] });
   } catch (err) {
     console.error('Sorce lead update error:', err.message);
     res.status(500).json({ error: 'Failed to update lead' });
@@ -431,8 +524,14 @@ router.post('/calls', requireAnalytics, async (req, res) => {
     );
 
     const call = result.rows[0];
-    if (sendNotifications) await dispatchConfirmations(call);
-    res.json({ success: true, call });
+    // Outside the sendNotifications branch on purpose — a call booked quietly is still
+    // a booked meeting and still belongs in the pipeline.
+    await syncLeadForCall(call);
+    // Hand the delivery result back. It used to be discarded, so a text that failed to
+    // send — the usual cause being SORCE_SMS_FROM unset — looked like a clean booking
+    // and was only discoverable by noticing the "Confirmation text" badge stayed grey.
+    const delivery = sendNotifications ? await dispatchConfirmations(call) : null;
+    res.json({ success: true, call, delivery });
   } catch (err) {
     console.error('Create discovery call error:', err.message);
     res.status(500).json({ error: 'Failed to create discovery call' });
@@ -694,5 +793,6 @@ module.exports = {
   loadWindows,
   slotsForDate,
   dispatchConfirmations,
+  syncLeadForCall,
   DEFAULT_SLOT_MINUTES,
 };

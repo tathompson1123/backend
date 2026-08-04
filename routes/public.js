@@ -1227,7 +1227,7 @@ router.post('/discovery/book', async (req, res) => {
     if (!phone?.trim()) return res.status(400).json({ error: 'Please enter your phone number' });
     if (!scheduledAt)   return res.status(400).json({ error: 'Please pick a time' });
 
-    const { slotsForDate, dispatchConfirmations, DEFAULT_SLOT_MINUTES } = require('./discovery');
+    const { slotsForDate, dispatchConfirmations, syncLeadForCall, DEFAULT_SLOT_MINUTES } = require('./discovery');
 
     // Re-check the slot server-side so two prospects can't grab the same time.
     const dateStr = new Date(scheduledAt).toISOString().slice(0, 10);
@@ -1256,6 +1256,7 @@ router.post('/discovery/book', async (req, res) => {
     );
 
     const call = created.rows[0];
+    await syncLeadForCall(call);
     const delivery = await dispatchConfirmations(call);
     res.json({ success: true, call: { id: call.id, scheduled_at: call.scheduled_at }, delivery });
   } catch (err) {

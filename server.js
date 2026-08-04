@@ -512,6 +512,16 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sorce_leads_status ON sorce_leads(status, created_at DESC)`);
+    // Business detail for cold outreach — logging who was called needs more than a
+    // contact name, and these are what makes a row worth revisiting months later.
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS website VARCHAR(255)`);
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS address VARCHAR(255)`);
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS city VARCHAR(120)`);
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS state VARCHAR(40)`);
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS industry VARCHAR(120)`);
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS contact_title VARCHAR(120)`);
+    await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS last_contacted_at TIMESTAMPTZ`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sorce_leads_call ON sorce_leads(discovery_call_id) WHERE discovery_call_id IS NOT NULL`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS discovery_availability (
         id SERIAL PRIMARY KEY,
