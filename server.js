@@ -485,6 +485,13 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_discovery_calls_scheduled ON discovery_calls(scheduled_at)`);
+    // Zoom meeting per discovery call. zoom_start_url is the HOST link — it grants host
+    // control to whoever opens it, so it is for the team only and never goes in a
+    // prospect-facing message. zoom_join_url is the one that gets sent.
+    await pool.query(`ALTER TABLE discovery_calls ADD COLUMN IF NOT EXISTS zoom_meeting_id VARCHAR(32)`);
+    await pool.query(`ALTER TABLE discovery_calls ADD COLUMN IF NOT EXISTS zoom_join_url TEXT`);
+    await pool.query(`ALTER TABLE discovery_calls ADD COLUMN IF NOT EXISTS zoom_start_url TEXT`);
+    await pool.query(`ALTER TABLE discovery_calls ADD COLUMN IF NOT EXISTS zoom_passcode VARCHAR(24)`);
     // SORCE's own sales pipeline — prospects the team is working before (or without) a
     // booked discovery call. Deliberately separate from the customer-facing `leads`
     // table, which is scoped per business; these rows are people buying SORCE itself.

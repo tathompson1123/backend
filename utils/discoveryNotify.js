@@ -70,25 +70,35 @@ async function sendDiscoverySMS(to, body) {
 
 const firstNameOf = (name) => String(name || 'there').trim().split(/\s+/)[0];
 
+// Text is the primary channel for the Zoom link on purpose: it can't land in a spam
+// folder, and it's the one they'll actually have open on the day. The email repeats it.
+// Every one of these falls back to the phone-call wording when there's no meeting, so
+// a Zoom outage degrades to what the system did before rather than to a broken message.
 function confirmationSMS(call, rep) {
   const when = formatWhen(call.scheduled_at, call.timezone);
   const who = rep?.name ? ` with ${rep.name}` : '';
-  return `Hi ${firstNameOf(call.name)}! Your SORCE discovery call${who} is confirmed for ${when}. `
-    + `We'll call you on this number. Check your email for the details. Reply STOP to opt out.`;
+  const head = `Hi ${firstNameOf(call.name)}! Your SORCE discovery call${who} is confirmed for ${when}. `;
+  return call.zoom_join_url
+    ? head + `Join here: ${call.zoom_join_url} (we've emailed it too). Reply STOP to opt out.`
+    : head + `We'll call you on this number. Check your email for the details. Reply STOP to opt out.`;
 }
 
 function reminder24hSMS(call, rep) {
   const when = formatWhen(call.scheduled_at, call.timezone);
   const who = rep?.name ? `${rep.name} ` : 'we ';
-  return `Hi ${firstNameOf(call.name)} — reminder that ${who}will be calling you tomorrow for your SORCE discovery call, ${when}. `
-    + `Need to move it? Just reply here.`;
+  const head = `Hi ${firstNameOf(call.name)} — reminder about your SORCE discovery call tomorrow, ${when}. `;
+  return call.zoom_join_url
+    ? head + `Join here: ${call.zoom_join_url} — need to move it? Just reply.`
+    : head + `${who}will be calling you. Need to move it? Just reply here.`;
 }
 
 function reminder2hSMS(call, rep) {
   const when = formatWhen(call.scheduled_at, call.timezone);
   const who = rep?.name ? `${rep.name}` : 'We';
-  return `Hi ${firstNameOf(call.name)} — your SORCE discovery call is in about 2 hours (${when}). `
-    + `${who} will call you on this number. Talk soon!`;
+  const head = `Hi ${firstNameOf(call.name)} — your SORCE discovery call is in about 2 hours (${when}). `;
+  return call.zoom_join_url
+    ? head + `Join here: ${call.zoom_join_url} — talk soon!`
+    : head + `${who} will call you on this number. Talk soon!`;
 }
 
 function confirmationEmailHtml(call, rep) {
@@ -123,7 +133,11 @@ function confirmationEmailHtml(call, rep) {
       <table role="presentation" width="600" cellpadding="0" cellspacing="0"
              style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);">
 
-        <tr><td style="background:linear-gradient(135deg,#d97706,#2563eb);padding:32px;text-align:center;">
+        <!-- bgcolor + background-color before the gradient: Outlook and several Gmail
+             paths drop CSS gradients entirely, and without a solid fallback the header
+             rendered as white text on a white background. Same pattern invoiceEmail
+             already uses. -->
+        <tr><td bgcolor="#d97706" style="background-color:#d97706;background:linear-gradient(135deg,#d97706,#2563eb);padding:32px;text-align:center;">
           <p style="margin:0;color:#ffffff;font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9;">SORCE</p>
           <h1 style="margin:8px 0 0;color:#ffffff;font-size:26px;">Your discovery call is booked</h1>
         </td></tr>
@@ -144,9 +158,24 @@ function confirmationEmailHtml(call, rep) {
               <p style="margin:0 0 10px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">How long</p>
               <p style="margin:0 0 18px;font-size:16px;color:#111827;">${call.duration_minutes || 30} minutes</p>
               <p style="margin:0 0 10px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">Where</p>
+              ${call.zoom_join_url ? `
+              <p style="margin:0 0 14px;font-size:16px;color:#111827;">On Zoom — we've texted you this link too.</p>
+              <!-- bgcolor + solid background-color so the button survives clients that
+                   drop CSS backgrounds, same reason as the header above. -->
+              <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                <td bgcolor="#2563eb" style="background-color:#2563eb;border-radius:8px;">
+                  <a href="${call.zoom_join_url}"
+                     style="display:inline-block;padding:13px 28px;color:#ffffff;text-decoration:none;font-weight:bold;font-size:16px;">
+                    Join the Zoom call
+                  </a>
+                </td>
+              </tr></table>
+              <p style="margin:12px 0 0;font-size:13px;color:#6b7280;word-break:break-all;">
+                Or paste this in: ${call.zoom_join_url}${call.zoom_passcode ? `<br/>Passcode: <strong>${call.zoom_passcode}</strong>` : ''}
+              </p>` : `
               <p style="margin:0;font-size:16px;color:#111827;">
                 We'll call you at <strong>${call.phone || 'the number you provided'}</strong>
-              </p>
+              </p>`}
             </td></tr>
           </table>
         </td></tr>

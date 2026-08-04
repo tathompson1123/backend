@@ -13,6 +13,7 @@ if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const {
   sendDiscoverySMS, sendConfirmationEmail, confirmationSMS, formatWhen,
 } = require('../utils/discoveryNotify');
+const { isZoomConfigured, createMeeting, updateMeeting, deleteMeeting } = require('../utils/zoom');
 
 const SITE_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 const FROM_EMAIL = process.env.DISCOVERY_FROM_EMAIL || 'hello@sorceintegrations.com';
@@ -458,7 +459,40 @@ router.put('/calls/:id', requireAnalytics, async (req, res) => {
       params
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Call not found' });
-    res.json({ success: true, call: result.rows[0] });
+
+    const updated = result.rows[0];
+
+    // Keep Zoom in step with the row. A moved call whose meeting still sits at the old
+    // time would put the prospect in an empty room at the right moment; a cancelled one
+    // would leave a live link they could still join.
+    if (updated.zoom_meeting_id) {
+      const moved = req.body.scheduledAt !== undefined || req.body.durationMinutes !== undefined;
+      const killed = ['cancelled', 'no_show'].includes(req.body.status);
+      try {
+        if (killed) {
+          await deleteMeeting(updated.zoom_meeting_id);
+          await pool.query(
+            `UPDATE discovery_calls
+                SET zoom_meeting_id = NULL, zoom_join_url = NULL, zoom_start_url = NULL, zoom_passcode = NULL
+              WHERE id = $1`,
+            [updated.id]
+          );
+          updated.zoom_meeting_id = updated.zoom_join_url = updated.zoom_start_url = updated.zoom_passcode = null;
+        } else if (moved) {
+          await updateMeeting(updated.zoom_meeting_id, {
+            startTime: updated.scheduled_at,
+            durationMinutes: updated.duration_minutes,
+            timezone: updated.timezone,
+          });
+        }
+      } catch (zoomErr) {
+        // Never fail the update over Zoom — the row is already correct and the team can
+        // see the discrepancy, whereas a 500 here would lose the edit entirely.
+        console.error(`⚠️ Zoom sync failed (call ${updated.id}):`, zoomErr.message);
+      }
+    }
+
+    res.json({ success: true, call: updated });
   } catch (err) {
     console.error('Update discovery call error:', err.message);
     res.status(500).json({ error: 'Failed to update discovery call' });
@@ -468,6 +502,16 @@ router.put('/calls/:id', requireAnalytics, async (req, res) => {
 // DELETE /api/discovery/calls/:id
 router.delete('/calls/:id', requireAnalytics, async (req, res) => {
   try {
+    // Tear the meeting down first — deleting the row loses the id, and the meeting
+    // would stay live on the Zoom account forever with a link the prospect still holds.
+    const existing = await pool.query(
+      'SELECT zoom_meeting_id FROM discovery_calls WHERE id = $1', [req.params.id]
+    );
+    const meetingId = existing.rows[0]?.zoom_meeting_id;
+    if (meetingId) {
+      await deleteMeeting(meetingId)
+        .catch(e => console.error(`⚠️ Zoom delete failed (call ${req.params.id}):`, e.message));
+    }
     await pool.query('DELETE FROM discovery_calls WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
@@ -527,10 +571,45 @@ router.put('/availability', requireAnalytics, requireAdmin, async (req, res) => 
 
 /* ─────────────────────────── shared helpers ─────────────────────────── */
 
+// Give the call a Zoom meeting, once. Returns the call row — updated in place when a
+// meeting was created, unchanged otherwise.
+//
+// Every failure path deliberately returns the call rather than throwing: a prospect
+// who booked a slot must stay booked even if Zoom is misconfigured or down, and the
+// messaging below already falls back to the phone-call wording when there's no link.
+async function ensureZoomMeeting(call) {
+  if (call.zoom_join_url || !isZoomConfigured()) return call;
+  try {
+    const meeting = await createMeeting({
+      topic: `SORCE Discovery Call — ${call.name}`,
+      startTime: call.scheduled_at,
+      durationMinutes: call.duration_minutes || DEFAULT_SLOT_MINUTES,
+      timezone: call.timezone || 'America/New_York',
+      agenda: call.company ? `Discovery call with ${call.name} (${call.company})` : undefined,
+    });
+    const updated = await pool.query(
+      `UPDATE discovery_calls
+          SET zoom_meeting_id = $1, zoom_join_url = $2, zoom_start_url = $3, zoom_passcode = $4,
+              updated_at = NOW()
+        WHERE id = $5 RETURNING *`,
+      [meeting.meetingId, meeting.joinUrl, meeting.startUrl, meeting.passcode, call.id]
+    );
+    console.log(`🎥 Zoom meeting ${meeting.meetingId} created for discovery call ${call.id}`);
+    return updated.rows[0] || call;
+  } catch (err) {
+    console.error(`⚠️ Zoom meeting creation failed (call ${call.id}):`, err.message);
+    return call;
+  }
+}
+
 // Fire the confirmation text + email, recording what actually made it out so the
 // dashboard can show which channel failed rather than silently swallowing it.
 async function dispatchConfirmations(call, { force = false } = {}) {
   const result = { smsSent: false, emailSent: false, errors: [] };
+
+  // Before anything goes out, so the link is in the very first message they get.
+  call = await ensureZoomMeeting(call);
+  result.zoomJoinUrl = call.zoom_join_url || null;
 
   const rep = call.assigned_to
     ? (await pool.query(
