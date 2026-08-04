@@ -492,6 +492,10 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE discovery_calls ADD COLUMN IF NOT EXISTS zoom_join_url TEXT`);
     await pool.query(`ALTER TABLE discovery_calls ADD COLUMN IF NOT EXISTS zoom_start_url TEXT`);
     await pool.query(`ALTER TABLE discovery_calls ADD COLUMN IF NOT EXISTS zoom_passcode VARCHAR(24)`);
+    // What a prospect texted back, so the call card can show it rather than the reply
+    // living only in whoever's phone it was forwarded to.
+    await pool.query(`ALTER TABLE discovery_calls ADD COLUMN IF NOT EXISTS last_reply_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE discovery_calls ADD COLUMN IF NOT EXISTS last_reply_text TEXT`);
     // SORCE's own sales pipeline — prospects the team is working before (or without) a
     // booked discovery call. Deliberately separate from the customer-facing `leads`
     // table, which is scoped per business; these rows are people buying SORCE itself.

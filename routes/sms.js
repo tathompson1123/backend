@@ -141,6 +141,12 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
     }
   }
 
+  // Replies to SORCE's own number are ours, not any customer's. This has to run before
+  // the lookup below, which resolves by users.twilio_phone_number — SORCE has no row
+  // there, so these were falling through to "No user found" and being dropped.
+  const { handleSorceInbound } = require('../utils/discoveryInbound');
+  if (await handleSorceInbound({ From, To, Body, MessageSid }, optKeyword(Body))) return;
+
   const userResult = await pool.query(
     'SELECT id, business_name, twilio_phone_sid FROM users WHERE twilio_phone_number = $1',
     [To]
