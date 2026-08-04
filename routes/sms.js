@@ -234,23 +234,28 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
       [user.id, optLeadId, From, To, Body, MessageSid]
     ).catch(() => {});
 
-    // Send the required confirmation. Wrapped so it can't throw if the carrier has
-    // already blocked the number (Twilio Advanced Opt-Out), and skipped for generic
-    // "YES" which is too ambiguous to confirm a resubscribe on.
-    const businessName = user.business_name || 'this business';
-    const confirmation = unsub
-      ? `You've been unsubscribed from ${businessName} texts. Reply START to opt back in.`
-      : `You're resubscribed to ${businessName} texts. Reply STOP to unsubscribe.`;
-    try {
-      await sendSMS(From, confirmation, user.id);
-      await pool.query(
-        `INSERT INTO sms_messages
-         (user_id, lead_id, direction, to_number, message, created_at)
-         VALUES ($1, $2, 'outgoing', $3, $4, NOW())`,
-        [user.id, optLeadId, From, confirmation]
-      ).catch(() => {});
-    } catch (e) {
-      console.log(`Opt-${optAction} confirmation not sent to ${From}: ${e.message}`);
+    // No confirmation on STOP. Twilio blocks the number the moment it sees the keyword
+    // and sends the carrier-standard reply itself, so ours was rejected every time with
+    // "attempt to send to unsubscribed recipient" (21610) — a guaranteed failure on
+    // every opt-out, cluttering the logs and the delivery stats for a message the
+    // customer had already received from Twilio.
+    //
+    // START still gets one: the number is unblocked again by then, and a resubscribe
+    // is worth acknowledging in the business's own name.
+    if (!unsub) {
+      const businessName = user.business_name || 'this business';
+      const confirmation = `You're resubscribed to ${businessName} texts. Reply STOP to unsubscribe.`;
+      try {
+        await sendSMS(From, confirmation, user.id);
+        await pool.query(
+          `INSERT INTO sms_messages
+           (user_id, lead_id, direction, to_number, message, created_at)
+           VALUES ($1, $2, 'outgoing', $3, $4, NOW())`,
+          [user.id, optLeadId, From, confirmation]
+        ).catch(() => {});
+      } catch (e) {
+        console.log(`Opt-in confirmation not sent to ${From}: ${e.message}`);
+      }
     }
     console.log(`🔕 Opt-${optAction} from ${From} for user ${user.id} (lead agent skipped)`);
     return;

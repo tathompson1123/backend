@@ -526,6 +526,43 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS contact_title VARCHAR(120)`);
     await pool.query(`ALTER TABLE sorce_leads ADD COLUMN IF NOT EXISTS last_contacted_at TIMESTAMPTZ`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sorce_leads_call ON sorce_leads(discovery_call_id) WHERE discovery_call_id IS NOT NULL`);
+
+    // Backfill the pipeline from calls booked before the sync existed, so Booked
+    // Meetings shows the whole history rather than only what's been booked since.
+    // Both steps are idempotent — once every call has a linked lead they no-op.
+    //
+    // Link first, insert second: a call whose prospect is already in the pipeline
+    // should promote that row, not sit beside a duplicate of it.
+    const linked = await pool.query(`
+      UPDATE sorce_leads sl
+      SET discovery_call_id = dc.id,
+          status = 'demo_scheduled',
+          last_contacted_at = COALESCE(sl.last_contacted_at, dc.created_at),
+          updated_at = NOW()
+      FROM discovery_calls dc
+      WHERE sl.discovery_call_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM sorce_leads x WHERE x.discovery_call_id = dc.id)
+        AND (
+          (NULLIF(TRIM(dc.email), '') IS NOT NULL
+             AND LOWER(TRIM(sl.email)) = LOWER(TRIM(dc.email)))
+          OR (length(right(regexp_replace(COALESCE(dc.phone, ''), '\\D', '', 'g'), 10)) = 10
+             AND right(regexp_replace(COALESCE(sl.phone, ''), '\\D', '', 'g'), 10)
+               = right(regexp_replace(COALESCE(dc.phone, ''), '\\D', '', 'g'), 10))
+        )`);
+
+    const created = await pool.query(`
+      INSERT INTO sorce_leads
+        (name, email, phone, company, source, status, notes, assigned_to,
+         discovery_call_id, last_contacted_at, created_at)
+      SELECT dc.name, NULLIF(LOWER(TRIM(dc.email)), ''), dc.phone, dc.company,
+             CASE WHEN dc.source = 'public' THEN 'website' ELSE 'manual' END,
+             'demo_scheduled', dc.notes, dc.assigned_to, dc.id, dc.created_at, dc.created_at
+        FROM discovery_calls dc
+       WHERE NOT EXISTS (SELECT 1 FROM sorce_leads sl WHERE sl.discovery_call_id = dc.id)`);
+
+    if (linked.rowCount || created.rowCount) {
+      console.log(`✅ Booked-meeting backfill: ${linked.rowCount} lead(s) linked, ${created.rowCount} created`);
+    }
     await pool.query(`
       CREATE TABLE IF NOT EXISTS discovery_availability (
         id SERIAL PRIMARY KEY,

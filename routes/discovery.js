@@ -213,6 +213,59 @@ router.get('/me', requireAnalytics, (req, res) => {
   });
 });
 
+// PATCH /api/discovery/team/:id — edit a member's details
+// Phone matters beyond the profile: it's how a prospect's reply reaches the rep who
+// owns their call, and until now it could only be set at invite time — which meant
+// anyone already invited needed a Railway variable and a redeploy to be reachable.
+//
+// Admins edit anyone; a member can edit their own record. Role is deliberately not in
+// the whitelist so nobody can quietly promote themselves — that stays on /role, which
+// is admin-guarded.
+const TEAM_EDITABLE = ['name', 'email', 'title', 'phone', 'bio', 'photo_url'];
+
+router.patch('/team/:id', requireAnalytics, async (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+    const isAdmin = !req.analytics?.tm || req.analytics.role === 'admin';
+    if (!isAdmin && req.analytics.tm !== targetId) {
+      return res.status(403).json({ error: 'You can only edit your own details' });
+    }
+
+    const sets = [];
+    const params = [];
+    for (const f of TEAM_EDITABLE) {
+      if (!(f in (req.body || {}))) continue;
+      let v = req.body[f];
+      if (typeof v === 'string') v = v.trim();
+      if (f === 'email') {
+        if (!v) return res.status(400).json({ error: 'Email cannot be empty' });
+        v = String(v).toLowerCase();
+      }
+      if (f === 'name' && !v) return res.status(400).json({ error: 'Name cannot be empty' });
+      params.push(v === '' ? null : v);
+      sets.push(`${f} = $${params.length}`);
+    }
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+
+    params.push(targetId);
+    const result = await pool.query(
+      `UPDATE sorce_team_members SET ${sets.join(', ')} WHERE id = $${params.length}
+       RETURNING id, name, email, title, phone, photo_url, bio, role, active`,
+      params
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Team member not found' });
+    res.json({ success: true, member: result.rows[0] });
+  } catch (err) {
+    // email is unique — it's the login identifier, so a clash has to be a clear error
+    // rather than a 500 the user can't act on.
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Another team member already uses that email' });
+    }
+    console.error('Team update error:', err.message);
+    res.status(500).json({ error: 'Failed to update team member' });
+  }
+});
+
 // DELETE /api/discovery/team/:id — revoke access
 router.delete('/team/:id', requireAnalytics, requireAdmin, async (req, res) => {
   try {
