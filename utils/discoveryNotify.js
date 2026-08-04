@@ -48,7 +48,11 @@ async function sendDiscoverySMS(to, body) {
   const phone = toE164(to);
   if (!phone) throw new Error('No valid phone number');
   const client = getClient();
-  const params = { body, to: phone };
+  // This path calls Twilio directly rather than going through sendSMS, so it needs the
+  // same GSM-7 normalisation — otherwise a stray em-dash costs an extra segment on
+  // every discovery text.
+  const { normalizeSmsText } = require('./twilio');
+  const params = { body: normalizeSmsText(body), to: phone };
 
   if (process.env.SORCE_SMS_FROM) {
     params.from = process.env.SORCE_SMS_FROM;
@@ -74,6 +78,11 @@ const firstNameOf = (name) => String(name || 'there').trim().split(/\s+/)[0];
 // folder, and it's the one they'll actually have open on the day. The email repeats it.
 // Every one of these falls back to the phone-call wording when there's no meeting, so
 // a Zoom outage degrades to what the system did before rather than to a broken message.
+//
+// Keep every character in these bodies inside GSM-7 — plain hyphens, straight quotes,
+// no em-dashes or emoji. One character outside it flips the whole message to UCS-2,
+// which drops the per-segment limit from 153 to 67: these two reminders were costing
+// three segments each instead of two and one.
 function confirmationSMS(call, rep) {
   const when = formatWhen(call.scheduled_at, call.timezone);
   const who = rep?.name ? ` with ${rep.name}` : '';
@@ -86,18 +95,18 @@ function confirmationSMS(call, rep) {
 function reminder24hSMS(call, rep) {
   const when = formatWhen(call.scheduled_at, call.timezone);
   const who = rep?.name ? `${rep.name} ` : 'we ';
-  const head = `Hi ${firstNameOf(call.name)} — reminder about your SORCE discovery call tomorrow, ${when}. `;
+  const head = `Hi ${firstNameOf(call.name)}, reminder about your SORCE discovery call tomorrow, ${when}. `;
   return call.zoom_join_url
-    ? head + `Join here: ${call.zoom_join_url} — need to move it? Just reply.`
+    ? head + `Join here: ${call.zoom_join_url} - need to move it? Just reply.`
     : head + `${who}will be calling you. Need to move it? Just reply here.`;
 }
 
 function reminder2hSMS(call, rep) {
   const when = formatWhen(call.scheduled_at, call.timezone);
   const who = rep?.name ? `${rep.name}` : 'We';
-  const head = `Hi ${firstNameOf(call.name)} — your SORCE discovery call is in about 2 hours (${when}). `;
+  const head = `Hi ${firstNameOf(call.name)}, your SORCE discovery call is in about 2 hours (${when}). `;
   return call.zoom_join_url
-    ? head + `Join here: ${call.zoom_join_url} — talk soon!`
+    ? head + `Join here: ${call.zoom_join_url} - talk soon!`
     : head + `${who} will call you on this number. Talk soon!`;
 }
 

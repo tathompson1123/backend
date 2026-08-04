@@ -136,7 +136,32 @@ async function claimSpareNumber(userId) {
 }
 
 // Send SMS/MMS via Messaging Service
+// Typographic punctuation sits outside GSM-7, and a single character outside it flips
+// the whole message to UCS-2 — dropping the per-segment limit from 153 to 67 and
+// roughly tripling the cost of a two-line text. Claude writes em-dashes and curly
+// quotes by default, so the AI-composed replies were the worst offenders and no amount
+// of prompt wording fixes that reliably. Normalising here catches every send.
+//
+// Emoji are deliberately left alone: they also force UCS-2, but where they appear
+// (a raffle win, a friendly sign-off) they're a choice worth paying for.
+const GSM_SUBSTITUTIONS = [
+  [/[‘’‛′]/g, "'"],   // curly single quotes, prime
+  [/[“”‟″]/g, '"'],   // curly double quotes
+  [/[‐-―]/g, '-'],              // hyphens, en dash, em dash, horizontal bar
+  [/…/g, '...'],                     // ellipsis
+  [/[   ]/g, ' '],         // non-breaking spaces
+  [/•/g, '*'],                       // bullet
+  [/[‹›]/g, "'"],               // single angle quotes
+  [/[«»]/g, '"'],               // double angle quotes
+];
+
+function normalizeSmsText(text) {
+  if (typeof text !== 'string') return text;
+  return GSM_SUBSTITUTIONS.reduce((out, [re, to]) => out.replace(re, to), text);
+}
+
 async function sendSMS(to, message, userId, mediaUrl) {
+  message = normalizeSmsText(message);
   try {
     const twilioClient = getClient();
 
@@ -253,5 +278,6 @@ module.exports = {
   sendSMS,
   setVoiceWebhook,
   releasePhoneNumber,
-  toE164US
+  toE164US,
+  normalizeSmsText
 };
