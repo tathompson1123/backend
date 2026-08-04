@@ -338,6 +338,11 @@ router.get('/sms-conversations', authenticateToken, async (req, res) => {
     // last_thread_source labels the conversation by whatever came through most
     // recently, so the list distinguishes a live agent thread from a campaign blast
     // or a booking exchange without having to open each one.
+    //
+    // Review texts are excluded. Stamping lead_id on them linked them correctly, but
+    // the Google Review sub-tab already shows that exchange in full — leaving them in
+    // here duplicated every review thread into the lead's SMS conversation, and pulled
+    // leads into this list whose only messages were review texts.
     const result = await pool.query(
       `SELECT
         l.id, l.name, l.phone, l.email, l.status, l.source, l.service, l.message, l.notes, l.created_at,
@@ -352,11 +357,12 @@ router.get('/sms-conversations', authenticateToken, async (req, res) => {
        JOIN (
          SELECT id, lead_id, direction, created_at, ${THREAD_SOURCE_SQL} AS thread_source
            FROM sms_messages
+          WHERE review_request_id IS NULL
        ) s ON s.lead_id = l.id
        LEFT JOIN LATERAL (
          SELECT s2.message, s2.direction, ${THREAD_SOURCE_SQL} AS thread_source
            FROM sms_messages s2
-          WHERE s2.lead_id = l.id
+          WHERE s2.lead_id = l.id AND s2.review_request_id IS NULL
           ORDER BY s2.created_at DESC, s2.id DESC
           LIMIT 1
        ) latest ON TRUE
@@ -931,7 +937,7 @@ router.get('/:leadId/sms-conversation', authenticateToken, async (req, res) => {
               lead_id, booking_id, campaign_id, review_request_id, sent_by_employee_id,
               ${THREAD_SOURCE_SQL} AS thread_source
        FROM sms_messages
-       WHERE lead_id = $1
+       WHERE lead_id = $1 AND review_request_id IS NULL
        ORDER BY created_at ASC, id ASC`,
       [leadId]
     );
