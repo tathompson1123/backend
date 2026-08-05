@@ -62,8 +62,28 @@ function addPlainText(msg) {
   return text ? { ...msg, text } : msg;
 }
 
+// SendGrid's open tracking injects a 1x1 pixel into the HTML. SpamAssassin counts it
+// as a remote image, and on a short transactional email that tips the text-to-image
+// ratio far enough to fire HTML_IMAGE_ONLY_* — mail-tester docked over a point for it
+// on a message containing no images of its own.
+//
+// Knowing whether someone opened a booking confirmation is worth almost nothing;
+// having it land in the inbox is worth a lot. So default open tracking off, and only
+// when the caller hasn't decided for itself. Campaigns set trackingSettings explicitly,
+// so their open rates keep working untouched.
+function defaultTrackingOff(msg) {
+  if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return msg;
+  const current = msg.trackingSettings || {};
+  if (current.openTracking !== undefined) return msg;
+  return { ...msg, trackingSettings: { ...current, openTracking: { enable: false } } };
+}
+
+function applyDefaults(msg) {
+  return defaultTrackingOff(addPlainText(msg));
+}
+
 function applyToPayload(payload) {
-  return Array.isArray(payload) ? payload.map(addPlainText) : addPlainText(payload);
+  return Array.isArray(payload) ? payload.map(applyDefaults) : applyDefaults(payload);
 }
 
 let installed = false;
@@ -80,4 +100,4 @@ function installPlainTextFallback(sgMail) {
   console.log('✅ Email plain-text fallback installed');
 }
 
-module.exports = { installPlainTextFallback, htmlToText, addPlainText };
+module.exports = { installPlainTextFallback, htmlToText, addPlainText, defaultTrackingOff };
