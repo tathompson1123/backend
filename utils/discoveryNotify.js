@@ -6,7 +6,8 @@ const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const SITE_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
-const FROM_EMAIL = process.env.DISCOVERY_FROM_EMAIL || 'hello@sorceintegrations.com';
+const { TRANSACTIONAL_EMAIL } = require('./emailFrom');
+const FROM_EMAIL = TRANSACTIONAL_EMAIL;
 // TODO: replace with the real intro video once it's recorded. Anything falsy hides the block.
 const VIDEO_URL = process.env.DISCOVERY_VIDEO_URL || '';
 const VIDEO_THUMB = process.env.DISCOVERY_VIDEO_THUMBNAIL || `${SITE_URL}/home/hero.jpg`;

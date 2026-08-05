@@ -16,6 +16,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
 const SITE_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 
@@ -282,7 +283,7 @@ async function deliverLink({ session, user, email, name, send }) {
       if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
       await sgMail.send({
         to,
-        from: { name: 'SORCE', email: process.env.DISCOVERY_FROM_EMAIL || 'hello@sorceintegrations.com' },
+        from: { name: 'SORCE', email: TRANSACTIONAL_EMAIL },
         subject: 'Your SORCE setup link',
         html: `
           <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;padding:28px 24px;">

@@ -1,4 +1,8 @@
 require('dotenv').config();
+// Before any route file requires @sendgrid/mail, so every send in the app picks up the
+// patched methods. Gives each email a text/plain part derived from its HTML — 32 of the
+// 34 send sites were HTML-only, which both Gmail and Outlook score against.
+require('./utils/emailPlainText').installPlainTextFallback();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

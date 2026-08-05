@@ -14,7 +14,7 @@ if (process.env.SENDGRID_API_KEY) {
 // Verification and password-reset mail is as transactional as it gets — if it lands in
 // spam the user simply can't sign up, so it rides the transactional identity.
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
-const FROM_EMAIL = { name: 'SORCE', email: process.env.SENDGRID_FROM_EMAIL || TRANSACTIONAL_EMAIL };
+const FROM_EMAIL = { name: 'SORCE', email: TRANSACTIONAL_EMAIL };
 
 // POST - Signup
 router.post('/signup', async (req, res) => {

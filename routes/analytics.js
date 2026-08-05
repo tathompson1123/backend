@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const jwt = require('jsonwebtoken');
 const sgMail = require('@sendgrid/mail');
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const ANALYTICS_PASSWORD = process.env.ANALYTICS_PASSWORD || 'sorce-internal-2025';
@@ -469,11 +470,13 @@ router.post('/verification-requests/:id/approve', requireAnalytics, requireAdmin
     const platformLabel = request.platform === 'google_ads' ? 'Google Ads' : 'Google Local Services';
     const connectUrl = `${DASHBOARD_URL}/dashboard?tab=leads&subtab=analytics&connect=${request.platform}`;
 
-    if (process.env.SENDGRID_API_KEY && user?.email && process.env.SENDGRID_FROM_EMAIL) {
+    // See ad-platforms: SENDGRID_FROM_EMAIL no longer supplies the from address, so
+    // gating on it would silently kill this email once the variable is retired.
+    if (process.env.SENDGRID_API_KEY && user?.email) {
       try {
         await sgMail.send({
           to: user.email,
-          from: process.env.SENDGRID_FROM_EMAIL,
+          from: TRANSACTIONAL_EMAIL,
           subject: `Your ${platformLabel} account has been verified!`,
           html: `
             <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">

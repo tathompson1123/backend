@@ -5,6 +5,7 @@ const { authenticateToken } = require('../config/middleware');
 const jwt = require('jsonwebtoken');
 const { google } = require('googleapis');
 const sgMail = require('@sendgrid/mail');
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tathompson1123@gmail.com';
@@ -192,11 +193,14 @@ router.post('/verification-requests', authenticateToken, async (req, res) => {
     const u = userRes.rows[0] || {};
     const platformLabel = platform === 'google_ads' ? 'Google Ads' : 'Google Local Services';
 
-    if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL) {
+    // Gated on the API key alone. It used to also require SENDGRID_FROM_EMAIL, which no
+    // longer supplies the from address — leaving that check would have silently stopped
+    // this email the moment that variable was cleared from Railway.
+    if (process.env.SENDGRID_API_KEY) {
       try {
         await sgMail.send({
           to: ADMIN_EMAIL,
-          from: process.env.SENDGRID_FROM_EMAIL,
+          from: TRANSACTIONAL_EMAIL,
           subject: `[SORCE] New ${platformLabel} verification request`,
           html: `
             <h2 style="font-family:sans-serif">New ${platformLabel} verification request</h2>

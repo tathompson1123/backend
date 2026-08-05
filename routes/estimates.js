@@ -333,7 +333,7 @@ router.post('/:id/remind', authenticateToken, async (req, res) => {
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
     await sgMail.send({
       to: estimate.customer_email,
-      from: process.env.SENDGRID_FROM_EMAIL || TRANSACTIONAL_EMAIL,
+      from: TRANSACTIONAL_EMAIL,
       subject: `Reminder: Estimate ${estimate.estimate_number} from ${estimate.business_name}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">

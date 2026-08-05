@@ -16,7 +16,8 @@ const {
 const { isZoomConfigured, createMeeting, updateMeeting, deleteMeeting, checkZoomSetup } = require('../utils/zoom');
 
 const SITE_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
-const FROM_EMAIL = process.env.DISCOVERY_FROM_EMAIL || 'hello@sorceintegrations.com';
+const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const FROM_EMAIL = TRANSACTIONAL_EMAIL;
 const DEFAULT_SLOT_MINUTES = 30;
 
 // Same guard the analytics dashboard uses. Tokens minted for an individual team
