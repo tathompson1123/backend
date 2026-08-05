@@ -467,8 +467,18 @@ router.post('/admin/force-verify', async (req, res) => {
 });
 
 // POST - Admin: test email sending synchronously — returns full SendGrid response
+//
+// `from` lets a new sending identity be tested BEFORE it's switched on for real
+// traffic: authenticate the subdomain in SendGrid, send one of these from it, confirm
+// where it lands, and only then set SENDGRID_TRANSACTIONAL_FROM. Flipping the env var
+// first and watching live alerts to find out is the expensive way round.
+//
+// The body is a realistic transactional email with a matching plain-text part rather
+// than a one-line "it works". A two-sentence HTML-only message scores badly on
+// mail-tester and SpamAssassin regardless of authentication, so a minimal test would
+// report problems the real mail doesn't have — and hide the one it does.
 router.post('/admin/test-email', async (req, res) => {
-  const { adminSecret, email } = req.body;
+  const { adminSecret, email, from, fromName } = req.body;
   const expectedSecret = process.env.ADMIN_SECRET;
   if (!expectedSecret || adminSecret !== expectedSecret) {
     return res.status(403).json({ error: 'Forbidden' });
@@ -477,20 +487,49 @@ router.post('/admin/test-email', async (req, res) => {
   if (!process.env.SENDGRID_API_KEY) {
     return res.json({ success: false, error: 'SENDGRID_API_KEY not set', from: null });
   }
+
+  const sender = from
+    ? { name: fromName || 'SORCE', email: String(from).trim() }
+    : FROM_EMAIL;
+
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111827;">
+      <p style="margin:0 0 16px;font-size:16px;">Hi there,</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
+        This is a deliverability test from SORCE. It is shaped like the mail we actually
+        send &mdash; a booking confirmation or a new-lead alert &mdash; so that any spam
+        score you run against it reflects real traffic rather than a bare test message.
+      </p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
+        Sent from <strong>${sender.email}</strong>. If this reached your inbox rather than
+        your spam folder, this sending identity is in good standing.
+      </p>
+      <p style="margin:0;color:#6b7280;font-size:13px;">SORCE Integrations</p>
+    </div>`;
+
+  const text = `Hi there,
+
+This is a deliverability test from SORCE. It is shaped like the mail we actually send - a booking confirmation or a new-lead alert - so that any spam score you run against it reflects real traffic rather than a bare test message.
+
+Sent from ${sender.email}. If this reached your inbox rather than your spam folder, this sending identity is in good standing.
+
+SORCE Integrations`;
+
   try {
     const response = await sgMail.send({
       to: email,
-      from: FROM_EMAIL,
-      subject: 'SORCE email test',
-      html: '<p>If you received this, email sending is working correctly. From: ' + FROM_EMAIL.email + '</p>',
+      from: sender,
+      subject: 'Your appointment details from SORCE',
+      html,
+      text,
     });
-    console.log(`✅ Admin test email sent to ${email} (status ${response[0]?.statusCode})`);
+    console.log(`✅ Admin test email sent to ${email} from ${sender.email} (status ${response[0]?.statusCode})`);
     res.json({
       success: true,
       statusCode: response[0]?.statusCode,
-      from: FROM_EMAIL,
+      from: sender,
       to: email,
-      message: 'Email accepted by SendGrid. Check inbox and spam folder.',
+      message: 'Accepted by SendGrid. Check inbox vs spam, and the auth results in the raw headers.',
     });
   } catch (err) {
     console.error('Admin test-email error:', err.message, JSON.stringify(err.response?.body || ''));
