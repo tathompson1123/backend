@@ -33,6 +33,7 @@ const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 const { installPlainTextFallback, htmlToText } = require('../utils/emailPlainText');
 const { confirmationEmailHtml } = require('../utils/discoveryNotify');
 const { buildInvoiceEmailHtml } = require('../utils/invoiceEmail');
+const { plainEmail } = require('../utils/emailLayout');
 
 const LOG = path.join(__dirname, '.deliverability-log.jsonl');
 
@@ -58,6 +59,70 @@ function buildMessage(template) {
 <p>This is a reminder that your appointment is booked for Thursday, August 20 at 10:00 AM. It should take about 30 minutes.</p>
 <p>If you need to move it or cancel, reply to this message and we will take care of it.</p>
 <p>Thanks,<br>SORCE Integrations</p>`,
+    };
+  }
+
+  // The three below mirror their production call sites rather than importing a builder,
+  // because those templates are assembled inline from database rows. Same plainEmail call
+  // with the same arguments, so the rendered HTML is byte-identical to what a real send
+  // produces for this data — which is what placement actually turns on. discovery and
+  // invoice do import the real builders.
+  const BIZ = "Thompson's Auto Detailing";
+
+  if (template === 'booking') {
+    return {
+      subject: `Booking Confirmed — Full Car Detail on Thursday, August 20, 2026`,
+      html: plainEmail({
+        greeting: 'Hi Jordan,',
+        paragraphs: [`Your booking with <strong>${BIZ}</strong> is confirmed. Here are your details.`],
+        details: [
+          { label: 'Booking #', value: 'BK-1043' },
+          { label: 'Service', value: 'Full Car Detail' },
+          { label: 'Date', value: 'Thursday, August 20, 2026' },
+          { label: 'Time', value: '10:00 AM – 11:30 AM' },
+          { label: 'Place', value: '123 Main St, Vancouver, WA' },
+          { label: 'Total', value: '$289.50' },
+        ],
+        after: ['If you need to reschedule or have questions, please contact us directly. Thank you for your business.'],
+        signature: `${BIZ}<br>123 Main St, Vancouver, WA`,
+      }),
+    };
+  }
+
+  if (template === 'cardonfile') {
+    return {
+      subject: `One last step to confirm your appointment — ${BIZ}`,
+      html: plainEmail({
+        greeting: 'Hi Jordan,',
+        paragraphs: [
+          `Your appointment with <strong>${BIZ}</strong> on Thursday, August 20, 2026 at 10:00 AM is almost confirmed.`,
+          'We just need a card on file to complete the booking. <strong>We will not charge it</strong> — it is only held in case of a no-show, per our cancellation policy.',
+        ],
+        action: { label: 'Securely save a card on file', url: 'https://sorceintegrations.com/card-on-file/sample-token' },
+        after: ['That link expires in 48 hours. If you have any questions, just contact us directly.'],
+        signature: BIZ,
+      }),
+    };
+  }
+
+  if (template === 'reminder') {
+    return {
+      subject: 'Reminder: Full Car Detail on Thursday, August 20, 2026',
+      html: plainEmail({
+        greeting: 'Hi Jordan,',
+        paragraphs: ['This is a reminder that your appointment for <strong>Full Car Detail</strong> is coming up in <strong>24 hours</strong>.'],
+        details: [
+          { label: 'Service', value: 'Full Car Detail' },
+          { label: 'Date', value: 'Thursday, August 20, 2026' },
+          { label: 'Time', value: '10:00 AM' },
+          { label: 'Total', value: '$289.50' },
+        ],
+        after: [
+          '<strong>Cancellation policy:</strong> We ask for 24 hours notice to cancel or reschedule.',
+          'If you need to reschedule, please contact us directly.',
+        ],
+        signature: BIZ,
+      }),
     };
   }
 
@@ -156,12 +221,28 @@ async function viaPostmark({ to, from, subject, html, text }) {
   const { subject, html } = buildMessage(template);
   const text = htmlToText(html);
 
+  const imgs = (html.match(/<img/gi) || []).length;
+  const tbls = (html.match(/<table/gi) || []).length;
+  const grads = (html.match(/linear-gradient/gi) || []).length;
+
   console.log(`template : ${template}`);
   console.log(`from     : ${from}`);
   console.log(`subject  : ${subject}`);
+  console.log(`html     : ${html.length} bytes, ${(html.length / text.length).toFixed(1)}:1 vs text`);
   console.log(`text part: ${text.length} chars`);
+  console.log(`markup   : img=${imgs} table=${tbls} gradient=${grads}`);
   console.log(`providers: ${which}`);
   console.log('');
+
+  // --dry renders and measures without sending. Useful for checking a template before
+  // spending a send on a seed mailbox, since every message to one is a message that can't
+  // be un-sent and the mailbox is only useful while it stays unengaged.
+  if (process.argv.includes('--dry')) {
+    console.log('--dry: nothing sent.');
+    console.log('--- text/plain ---');
+    console.log(text);
+    return;
+  }
 
   const senders = [];
   if (which === 'both' || which === 'sendgrid') senders.push(viaSendGrid);
