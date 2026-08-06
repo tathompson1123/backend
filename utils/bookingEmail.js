@@ -2,6 +2,7 @@ const sgMail = require('@sendgrid/mail');
 const { pool } = require('../config/database');
 const { TRANSACTIONAL_EMAIL, ownerAlertReplyTo } = require('../utils/emailFrom');
 const { escapeHtml: esc } = require('../utils/escapeHtml');
+const { plainEmail } = require('../utils/emailLayout');
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -88,18 +89,21 @@ async function sendBookingEmails(opts) {
     const hasTax = taxAmount > 0;
     const taxPct = opts.taxRate ? (opts.taxRate * 100).toFixed(2).replace(/\.?0+$/, '') : null;
 
-    const detailsHtml = `
-      <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
-        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:40%;">Booking #</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(opts.bookingNumber)}</td></tr>
-        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(opts.serviceName)}</td></tr>
-        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(formattedDate)}</td></tr>
-        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(timeDisplay)}</td></tr>
-        ${location ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Place</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(location)}</td></tr>` : ''}
-        ${hasTax ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Subtotal</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">$${subtotal.toFixed(2)}</td></tr>` : ''}
-        ${hasTax ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Tax${taxPct ? ` (${taxPct}%)` : ''}</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">$${taxAmount.toFixed(2)}</td></tr>` : ''}
-        ${total > 0 ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Total</td><td style="padding:10px 12px;border-bottom:1px solid #eee;font-weight:700;">$${total.toFixed(2)}</td></tr>` : ''}
-        ${opts.notes ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Notes</td><td style="padding:10px 12px;">${esc(opts.notes)}</td></tr>` : ''}
-      </table>`;
+    // Labelled lines rather than the striped table this used to be. See utils/emailLayout:
+    // the 600px-card shape with colour bands and nested tables is what got a discovery
+    // confirmation junked by two separate ESPs while a plain email from the same address
+    // reached the inbox.
+    const details = [
+      { label: 'Booking #', value: esc(opts.bookingNumber) },
+      { label: 'Service', value: esc(opts.serviceName) },
+      { label: 'Date', value: esc(formattedDate) },
+      { label: 'Time', value: esc(timeDisplay) },
+      location ? { label: 'Place', value: esc(location) } : null,
+      hasTax ? { label: 'Subtotal', value: `$${subtotal.toFixed(2)}` } : null,
+      hasTax ? { label: `Tax${taxPct ? ` (${taxPct}%)` : ''}`, value: `$${taxAmount.toFixed(2)}` } : null,
+      total > 0 ? { label: 'Total', value: `$${total.toFixed(2)}` } : null,
+      opts.notes ? { label: 'Notes', value: esc(opts.notes) } : null,
+    ].filter(Boolean);
 
     // Plain-text version of the details — a text/html multipart email is far less
     // likely to be filtered to spam than an HTML-only one.
@@ -145,26 +149,19 @@ async function sendBookingEmails(opts) {
           + `\n\n${detailsText}\n\n`
           + `If you need to reschedule or have questions, please contact us directly.\n`
           + `Thank you for your business!\n\n${businessName || ''}${businessAddress ? `\n${businessAddress}` : ''}`,
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-            <div style="background:${isUpdated ? '#d97706' : '#1d4ed8'};padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-              <h1 style="color:#fff;margin:0;font-size:1.5rem;">${isUpdated ? 'Booking Updated' : 'Booking Confirmed!'}</h1>
-            </div>
-            <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-              <p style="font-size:1rem;margin-top:0;">Hi ${esc(opts.customerName)},</p>
-              <p>${isUpdated
-                ? `Your booking with <strong>${esc(businessName || 'us')}</strong> has been updated. Here are your new details:`
-                : `Your booking with <strong>${esc(businessName || 'us')}</strong> is confirmed. Here are your details:`
-              }</p>
-              ${detailsHtml}
-              <p style="color:#6b7280;font-size:0.9rem;margin-top:2rem;">
-                If you need to reschedule or have questions, please contact us directly.<br>
-                Thank you for your business!
-              </p>
-              <p style="color:#6b7280;font-size:0.9rem;margin:0;">${esc(businessName || '')}</p>
-              ${businessAddress ? `<p style="color:#9ca3af;font-size:0.8rem;margin:0.25rem 0 0;">${esc(businessAddress)}</p>` : ''}
-            </div>
-          </div>`,
+        html: plainEmail({
+          greeting: `Hi ${esc(opts.customerName)},`,
+          paragraphs: [
+            isUpdated
+              ? `Your booking with <strong>${esc(businessName || 'us')}</strong> has been updated. Here are your new details.`
+              : `Your booking with <strong>${esc(businessName || 'us')}</strong> is confirmed. Here are your details.`,
+          ],
+          details,
+          after: [
+            'If you need to reschedule or have questions, please contact us directly. Thank you for your business.',
+          ],
+          signature: [esc(businessName || ''), esc(businessAddress || '')].filter(Boolean).join('<br>'),
+        }),
       });
     }
 
@@ -182,16 +179,13 @@ async function sendBookingEmails(opts) {
           : `New Booking: ${opts.serviceName} — ${opts.customerName}`,
         text: `${isUpdated ? 'Booking Updated' : 'New Booking Received'}\n\n`
           + `Customer: ${customerDetails}\n\n${detailsText}`,
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-            <div style="background:${isUpdated ? '#d97706' : '#16a34a'};padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-              <h1 style="color:#fff;margin:0;font-size:1.5rem;">${isUpdated ? 'Booking Updated' : 'New Booking Received'}</h1>
-            </div>
-            <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-              <p style="font-size:1rem;margin-top:0;"><strong>Customer:</strong> ${esc(customerDetails)}</p>
-              ${detailsHtml}
-            </div>
-          </div>`,
+        html: plainEmail({
+          paragraphs: [
+            isUpdated ? 'A booking has been updated.' : 'You have a new booking.',
+            `<strong>Customer:</strong> ${esc(customerDetails)}`,
+          ],
+          details,
+        }),
       });
     }
 
@@ -250,14 +244,11 @@ async function sendSmsBookingConfirmationRequest(opts) {
           .replace(/BOOKING_REQUEST\|[^\n]+\n?/g, '')
           .trim();
         if (!cleanContent) return '';
-        const bg = isCustomer ? '#eff6ff' : '#f8fafc';
-        const border = isCustomer ? '#bfdbfe' : '#e2e8f0';
-        const labelColor = isCustomer ? '#1d4ed8' : '#475569';
-        return `
-          <div style="margin:0 0 10px 0;padding:10px 12px;background:${bg};border:1px solid ${border};border-radius:8px;">
-            <div style="font-size:11px;font-weight:600;color:${labelColor};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">${esc(label)}</div>
-            <div style="font-size:14px;color:#1f2937;white-space:pre-wrap;line-height:1.45;">${esc(cleanContent)}</div>
-          </div>`;
+        // Was a tinted bubble per message. The speaker's name in bold carries the same
+        // information without a coloured box each, which is a lot of markup for a long
+        // thread and part of what pushed these emails into a marketing shape.
+        return `<p style="margin:0 0 8px;"><strong>${esc(label)}:</strong> `
+          + `<span style="white-space:pre-wrap;">${esc(cleanContent)}</span></p>`;
       }).join('');
     }
 
@@ -272,29 +263,22 @@ async function sendSmsBookingConfirmationRequest(opts) {
       // Usually an SMS-only lead, so this normally falls back to our inbox.
       replyTo: ownerAlertReplyTo(opts.customerEmail, opts.customerName),
       subject: `Action needed: confirm a booking from your SMS agent — ${opts.customerName || opts.customerPhone}`,
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#1a1a1a;">
-          <div style="background:#d97706;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-            <h1 style="color:#fff;margin:0;font-size:1.4rem;">Booking Needs Confirmation</h1>
-          </div>
-          <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-            <p style="font-size:1rem;margin-top:0;">
-              Your SMS lead agent reached a booking agreement with a customer. This is <strong>not yet on your schedule</strong> —
-              reach out to confirm and add it manually.
-            </p>
-            <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
-              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:35%;">Customer</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(customerDetails)}</td></tr>
-              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(opts.serviceName || 'Not specified')}</td></tr>
-              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(formattedDate)}</td></tr>
-              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;">${esc(formattedTime)}</td></tr>
-            </table>
-            <a href="${dashboardUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px;">View Lead in Dashboard</a>
-            ${transcriptHtml ? `
-              <h2 style="font-size:1rem;font-weight:600;color:#1f2937;margin:2rem 0 0.75rem 0;">Conversation Transcript</h2>
-              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">${transcriptHtml}</div>` : ''}
-            <p style="color:#6b7280;font-size:0.85rem;margin:1.5rem 0 0 0;">${esc(businessName || 'Your business')}</p>
-          </div>
-        </div>`,
+      html: plainEmail({
+        paragraphs: [
+          'Your SMS lead agent reached a booking agreement with a customer. This is <strong>not yet on your schedule</strong> — reach out to confirm and add it manually.',
+        ],
+        details: [
+          { label: 'Customer', value: esc(customerDetails) },
+          { label: 'Service', value: esc(opts.serviceName || 'Not specified') },
+          { label: 'Date', value: esc(formattedDate) },
+          { label: 'Time', value: esc(formattedTime) },
+        ],
+        action: { label: 'View the lead in your dashboard', url: dashboardUrl },
+        // Transcript stays, minus the per-message tinted bubbles — the labels carry who
+        // said what without needing a coloured box each.
+        after: transcriptHtml ? [`<strong>Conversation transcript</strong>${transcriptHtml}`] : [],
+        signature: esc(businessName || 'Your business'),
+      }),
     });
     console.log(`📧 SMS booking confirmation email sent for user ${opts.userId} — lead: ${opts.customerName || opts.customerPhone}`);
   } catch (err) {
@@ -339,26 +323,17 @@ async function sendSmsCampaignReplyNotification(opts) {
       // Campaign replies arrive over SMS, so there is no customer address here.
       replyTo: ownerAlertReplyTo(),
       subject: `New reply to your SMS campaign — ${opts.customerName || opts.customerPhone}`,
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-          <div style="background:#16a34a;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-            <h1 style="color:#fff;margin:0;font-size:1.4rem;">Someone Replied to Your SMS Campaign</h1>
-          </div>
-          <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-            <p style="font-size:1rem;margin-top:0;"><strong>${esc(who)}</strong> replied to your text blast. They've been added to your Leads.</p>
-            <div style="margin:1.25rem 0;padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
-              <div style="font-size:11px;font-weight:600;color:#15803d;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Their reply</div>
-              <div style="font-size:15px;color:#1f2937;white-space:pre-wrap;line-height:1.5;">${esc(opts.replyText) || '(no text)'}</div>
-            </div>
-            ${opts.campaignMessage ? `
-              <div style="margin:0 0 1.5rem 0;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
-                <div style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">The offer they replied to</div>
-                <div style="font-size:14px;color:#475569;white-space:pre-wrap;line-height:1.45;">${esc(opts.campaignMessage)}</div>
-              </div>` : ''}
-            <a href="${dashboardUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px;">View Lead in Dashboard</a>
-            <p style="color:#6b7280;font-size:0.85rem;margin:1.5rem 0 0 0;">${esc(businessName) || 'Your business'}</p>
-          </div>
-        </div>`,
+      html: plainEmail({
+        paragraphs: [
+          `<strong>${esc(who)}</strong> replied to your text blast. They've been added to your Leads.`,
+          `<strong>Their reply:</strong> <span style="white-space:pre-wrap;">${esc(opts.replyText) || '(no text)'}</span>`,
+          opts.campaignMessage
+            ? `<strong>The offer they replied to:</strong> <span style="white-space:pre-wrap;">${esc(opts.campaignMessage)}</span>`
+            : '',
+        ],
+        action: { label: 'View the lead in your dashboard', url: dashboardUrl },
+        signature: esc(businessName) || 'Your business',
+      }),
     });
     console.log(`📧 SMS campaign reply email sent for user ${opts.userId} — ${opts.customerName || opts.customerPhone}`);
   } catch (err) {

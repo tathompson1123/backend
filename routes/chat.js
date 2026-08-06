@@ -156,6 +156,7 @@ async function getAvailableSlotsForDate(userId, serviceId, bookingDate, duration
 }
 
 const { escapeHtml } = require('../utils/escapeHtml');
+const { plainEmail } = require('../utils/emailLayout');
 
 async function sendAttentionEmail({ userId, customerName, customerPhone, conversationId }) {
   if (!process.env.SENDGRID_API_KEY) return;
@@ -186,51 +187,29 @@ async function sendAttentionEmail({ userId, customerName, customerPhone, convers
             .replace(/ATTENTION_REQUEST\|[^\n]+\n?/g, '')
             .trim();
           if (!cleanContent) return '';
-          const bg = isCustomer ? '#eff6ff' : '#f8fafc';
-          const border = isCustomer ? '#bfdbfe' : '#e2e8f0';
-          const labelColor = isCustomer ? '#1d4ed8' : '#475569';
-          return `
-            <div style="margin:0 0 10px 0;padding:10px 12px;background:${bg};border:1px solid ${border};border-radius:8px;">
-              <div style="font-size:11px;font-weight:600;color:${labelColor};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">${escapeHtml(label)}</div>
-              <div style="font-size:14px;color:#1f2937;white-space:pre-wrap;line-height:1.45;">${escapeHtml(cleanContent)}</div>
-            </div>`;
+          // Speaker name in bold instead of a tinted bubble per message — same information,
+          // a fraction of the markup. See utils/emailLayout for why that matters.
+          return `<p style="margin:0 0 8px;"><strong>${escapeHtml(label)}:</strong> `
+            + `<span style="white-space:pre-wrap;">${escapeHtml(cleanContent)}</span></p>`;
         }).join('');
 
     await sgMail.send({
       to: ownerEmail,
       from: { name: 'SORCE Chat Alerts', email: TRANSACTIONAL_EMAIL },
       subject: `Action needed: ${customerName} wants a call back`,
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#1a1a1a;">
-          <div style="background:#dc2626;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-            <h1 style="color:#fff;margin:0;font-size:1.4rem;">Customer Needs Attention</h1>
-          </div>
-          <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-            <p style="font-size:1rem;margin-top:0;">
-              A customer on your website chat asked to be called back or had a question your chat agent couldn't fully answer.
-              Reach out to them as soon as possible.
-            </p>
-            <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
-              <tr>
-                <td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:35%;">Name</td>
-                <td style="padding:10px 12px;border-bottom:1px solid #eee;">${escapeHtml(customerName)}</td>
-              </tr>
-              <tr>
-                <td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Phone</td>
-                <td style="padding:10px 12px;">${escapeHtml(customerPhone)}</td>
-              </tr>
-            </table>
-
-            <h2 style="font-size:1rem;font-weight:600;color:#1f2937;margin:1.5rem 0 0.75rem 0;">Conversation Transcript</h2>
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
-              ${transcriptHtml}
-            </div>
-
-            <p style="color:#6b7280;font-size:0.85rem;margin:1.5rem 0 0 0;">
-              Business: ${escapeHtml(businessName || 'Your business')} &nbsp;|&nbsp; Conversation #${conversationId}
-            </p>
-          </div>
-        </div>`,
+      html: plainEmail({
+        paragraphs: [
+          "A customer on your website chat asked to be called back, or had a question your chat agent couldn't fully answer. Reach out to them as soon as possible.",
+        ],
+        details: [
+          { label: 'Name', value: escapeHtml(customerName) },
+          { label: 'Phone', value: escapeHtml(customerPhone) },
+        ],
+        after: [
+          transcriptHtml ? `<strong>Conversation transcript</strong>${transcriptHtml}` : '',
+        ],
+        signature: `${escapeHtml(businessName || 'Your business')} &middot; conversation #${conversationId}`,
+      }),
     });
     console.log(`📧 Attention email sent for user ${userId} — customer: ${customerName}`);
   } catch (err) {
@@ -968,24 +947,21 @@ REAL-TIME AVAILABILITY:
               from: { name: owner.business_name || 'Your Service Provider', email: TRANSACTIONAL_EMAIL },
               replyTo: owner.email ? { email: owner.email } : undefined,
               subject: `One last step to confirm your appointment — ${owner.business_name || 'Us'}`,
-              html: `
-                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-                  <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-                    <h1 style="color:#fff;margin:0;font-size:1.5rem;">Almost Confirmed!</h1>
-                  </div>
-                  <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-                    <p style="font-size:1rem;margin-top:0;">Hi ${escapeHtml(customerName.trim())},</p>
-                    <p>Your appointment with <strong>${escapeHtml(owner.business_name || 'us')}</strong> on ${escapeHtml(formattedDate)} at ${escapeHtml(formattedTime)} is almost confirmed!</p>
-                    <p>We just need a card on file to complete your booking. <strong>We will not charge your card</strong> — it is only kept on file in case of a no-show per our cancellation policy.</p>
-                    <div style="text-align:center;margin:2rem 0;">
-                      <a href="${cardLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:600;">
-                        Securely Save Card on File
-                      </a>
-                    </div>
-                    <p style="color:#6b7280;font-size:0.85rem;">This link expires in 48 hours.</p>
-                    <p style="color:#6b7280;font-size:0.85rem;margin:0;">${escapeHtml(owner.business_name || '')}</p>
-                  </div>
-                </div>`,
+              // This one asks a customer for card details, so it has to read like the
+              // business wrote it rather than like a template. The banner and the big
+              // coloured button were working against that as well as against the filter:
+              // a payment request that looks mass-produced is the shape people are told to
+              // distrust.
+              html: plainEmail({
+                greeting: `Hi ${escapeHtml(customerName.trim())},`,
+                paragraphs: [
+                  `Your appointment with <strong>${escapeHtml(owner.business_name || 'us')}</strong> on ${escapeHtml(formattedDate)} at ${escapeHtml(formattedTime)} is almost confirmed.`,
+                  'We just need a card on file to complete the booking. <strong>We will not charge it</strong> — it is only held in case of a no-show, per our cancellation policy.',
+                ],
+                action: { label: 'Securely save a card on file', url: cardLink },
+                after: ['That link expires in 48 hours.'],
+                signature: escapeHtml(owner.business_name || ''),
+              }),
             }).catch(e => console.error('Card on file email error:', e.message));
           }
 
@@ -997,16 +973,13 @@ REAL-TIME AVAILABILITY:
               to: owner.email,
               from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
               subject: `Card on file link sent to ${customerName.trim()}`,
-              html: `
-                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-                  <div style="background:#d97706;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
-                    <h2 style="color:#fff;margin:0;font-size:1.25rem;">Card on File Link Sent</h2>
-                  </div>
-                  <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-                    <p style="margin-top:0;">Your chat agent sent a secure card-on-file link to <strong>${customerName.trim()}</strong> (${customerEmail.trim()}) for their ${formattedDate} at ${formattedTime} appointment.</p>
-                    <p style="color:#6b7280;font-size:0.9rem;">The booking will be automatically confirmed once they save their card. The link expires in 48 hours.</p>
-                  </div>
-                </div>`,
+              // Customer name and email were interpolated raw here.
+              html: plainEmail({
+                paragraphs: [
+                  `Your chat agent sent a secure card-on-file link to <strong>${escapeHtml(customerName.trim())}</strong> (${escapeHtml(customerEmail.trim())}) for their ${escapeHtml(formattedDate)} at ${escapeHtml(formattedTime)} appointment.`,
+                  'The booking confirms automatically once they save a card. The link expires in 48 hours.',
+                ],
+              }),
             }).catch(e => console.error('Owner card link notification error:', e.message));
           }
 
