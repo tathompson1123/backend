@@ -1586,6 +1586,51 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
       )
     `);
     await pool.query('CREATE INDEX IF NOT EXISTS idx_email_campaigns_user ON email_campaigns(user_id, created_at DESC)');
+
+    // Self-hosted campaign click tracking. Replaces SendGrid's redirector, which served
+    // links over plain HTTP from a domain whose certificate doesn't match it, and kept the
+    // resulting data somewhere this codebase could never read. See utils/campaignLinks.
+    //
+    // One row per distinct destination per campaign — a few rows, not one per recipient.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS campaign_links (
+        id SERIAL PRIMARY KEY,
+        campaign_id INTEGER REFERENCES email_campaigns(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        token VARCHAR(16) UNIQUE NOT NULL,
+        destination TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_campaign_links_campaign ON campaign_links(campaign_id)');
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_campaign_links_dest
+                      ON campaign_links(campaign_id, destination)`);
+
+    // Also the send log. Which addresses a campaign actually went to was not recorded
+    // anywhere, so "who did we email" was unanswerable once the customer list moved on.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS campaign_recipients (
+        id SERIAL PRIMARY KEY,
+        campaign_id INTEGER REFERENCES email_campaigns(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        email VARCHAR(255) NOT NULL,
+        token VARCHAR(16) UNIQUE NOT NULL,
+        sent_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_campaign_recipients_unique
+                      ON campaign_recipients(campaign_id, LOWER(email))`);
+
+    // Every click, not just the first — repeat clicks are signal, and the dashboard
+    // distinguishes total from unique by counting distinct recipients.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS campaign_link_clicks (
+        id SERIAL PRIMARY KEY,
+        campaign_id INTEGER REFERENCES email_campaigns(id) ON DELETE CASCADE,
+        link_id INTEGER REFERENCES campaign_links(id) ON DELETE CASCADE,
+        recipient_id INTEGER REFERENCES campaign_recipients(id) ON DELETE CASCADE,
+        clicked_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_campaign_clicks_campaign ON campaign_link_clicks(campaign_id, clicked_at DESC)');
+
     console.log('✅ Email campaign tables verified');
   } catch (e) {
     console.warn('⚠️ Could not verify email campaign tables:', e.message);

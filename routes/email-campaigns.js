@@ -11,6 +11,7 @@ const jwt = require('jsonwebtoken');
 const { BULK_EMAIL } = require('../utils/emailFrom');
 
 const UNSUB_SECRET = process.env.JWT_SECRET || process.env.UNSUB_SECRET || 'sorce-unsubscribe-secret';
+const { ensureLinkTokens, ensureRecipientToken, rewriteHtml } = require('../utils/campaignLinks');
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.VITE_APP_URL || 'https://sorceintegrations.com';
 
 if (process.env.SENDGRID_API_KEY) {
@@ -409,20 +410,42 @@ async function sendCampaign(userId, config, campaignId) {
   }
 
   if (validRecipients.length > 0) {
-    const messages = validRecipients.map(customer => {
+    // Mint one token per distinct destination in the campaign, before the per-recipient
+    // loop — the same destination must resolve to the same token for everyone, or the
+    // dashboard can't aggregate clicks by link.
+    const linkTokens = await ensureLinkTokens(pool, { campaignId, userId, html: c.body_html })
+      .catch(e => { console.error(`📧 Campaign ${campaignId}: link tokens failed:`, e.message); return new Map(); });
+
+    const messages = [];
+    for (const customer of validRecipients) {
       const unsubUrl = buildUnsubscribeUrl(customer.email, userId);
-      const htmlWithUnsub = applyUnsubscribeUrl(c.body_html, unsubUrl, fromName);
-      return {
+      let html = applyUnsubscribeUrl(c.body_html, unsubUrl, fromName);
+
+      // Tracking must never cost a send. If the recipient row or the rewrite fails, the
+      // email still goes out with its original links — one missing click attribution is
+      // invisible, a campaign that didn't send is not.
+      try {
+        const recipientToken = await ensureRecipientToken(pool, { campaignId, userId, email: customer.email });
+        if (recipientToken) html = rewriteHtml(html, linkTokens, recipientToken);
+      } catch (e) {
+        console.error(`📧 Campaign ${campaignId}: click tracking skipped for a recipient:`, e.message);
+      }
+
+      messages.push({
         to: customer.email,
         from: { name: fromName, email: BULK_EMAIL },
         replyTo: ownerReplyEmail ? { name: fromName, email: ownerReplyEmail } : undefined,
         subject: c.subject,
         text: c.body_text,
-        html: htmlWithUnsub,
+        html,
         headers: unsubscribeHeaders(customer.email, userId),
-        trackingSettings: { clickTracking: { enable: true }, openTracking: { enable: true } },
-      };
-    });
+        // Click tracking is ours now, so SendGrid's is off — leaving it on would rewrite
+        // our tracked links a second time, back onto url9694.sorceintegrations.com, whose
+        // certificate doesn't match it and which serves over plain HTTP. Open tracking
+        // stays: its pixel doesn't involve a certificate and the open rate is read.
+        trackingSettings: { clickTracking: { enable: false, enableText: false }, openTracking: { enable: true } },
+      });
+    }
 
     for (let i = 0; i < messages.length; i += 900) {
       emailSent += await sendBatchResilient(messages.slice(i, i + 900));
@@ -580,13 +603,99 @@ router.put('/config', authenticateToken, async (req, res) => {
 });
 
 // GET /api/email-campaigns/history
+//
+// Click counts ride along so the list can show engagement without a request per row.
+// LEFT JOIN on a subquery rather than a correlated count: campaigns with no clicks still
+// need to appear, and a campaign sent before this tracking existed simply reads zero.
 router.get('/history', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, subject, preview_text, status, sent_at, recipient_count, created_at FROM email_campaigns WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20',
+      `SELECT ec.id, ec.subject, ec.preview_text, ec.status, ec.sent_at,
+              ec.recipient_count, ec.created_at,
+              COALESCE(cl.total_clicks, 0)::int  AS total_clicks,
+              COALESCE(cl.unique_clickers, 0)::int AS unique_clickers
+         FROM email_campaigns ec
+         LEFT JOIN (
+           SELECT campaign_id,
+                  COUNT(*) AS total_clicks,
+                  COUNT(DISTINCT recipient_id) AS unique_clickers
+             FROM campaign_link_clicks
+            GROUP BY campaign_id
+         ) cl ON cl.campaign_id = ec.id
+        WHERE ec.user_id = $1
+        ORDER BY ec.created_at DESC
+        LIMIT 20`,
       [req.user.userId]
     );
     res.json({ campaigns: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/email-campaigns/:id/clicks — per-link totals and who clicked what.
+//
+// The per-recipient detail is the part SendGrid kept out of reach, and it's the part worth
+// having: knowing that eleven people clicked is a metric, knowing which eleven is a
+// follow-up list.
+router.get('/:id/clicks', authenticateToken, async (req, res) => {
+  try {
+    const owns = await pool.query(
+      'SELECT id, subject, recipient_count FROM email_campaigns WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.userId]
+    );
+    if (!owns.rows[0]) return res.status(404).json({ error: 'Campaign not found' });
+
+    const byLink = await pool.query(
+      `SELECT l.id, l.destination,
+              COUNT(c.id)::int AS clicks,
+              COUNT(DISTINCT c.recipient_id)::int AS unique_clickers
+         FROM campaign_links l
+         LEFT JOIN campaign_link_clicks c ON c.link_id = l.id
+        WHERE l.campaign_id = $1
+        GROUP BY l.id, l.destination
+        ORDER BY clicks DESC, l.id`,
+      [req.params.id]
+    );
+
+    const byRecipient = await pool.query(
+      `SELECT r.email,
+              COUNT(c.id)::int AS clicks,
+              MIN(c.clicked_at) AS first_click,
+              MAX(c.clicked_at) AS last_click
+         FROM campaign_link_clicks c
+         JOIN campaign_recipients r ON r.id = c.recipient_id
+        WHERE c.campaign_id = $1
+        GROUP BY r.email
+        ORDER BY clicks DESC, last_click DESC
+        LIMIT 500`,
+      [req.params.id]
+    );
+
+    // Delivered count comes from the send log rather than email_campaigns.recipient_count,
+    // which is written once at send time and says nothing about campaigns sent before this
+    // tracking existed.
+    const sent = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM campaign_recipients WHERE campaign_id = $1',
+      [req.params.id]
+    );
+
+    const uniqueClickers = byRecipient.rows.length;
+    const delivered = sent.rows[0]?.n || owns.rows[0].recipient_count || 0;
+
+    res.json({
+      success: true,
+      campaign: owns.rows[0],
+      delivered,
+      totalClicks: byLink.rows.reduce((n, r) => n + r.clicks, 0),
+      uniqueClickers,
+      clickRate: delivered ? Number(((uniqueClickers / delivered) * 100).toFixed(1)) : null,
+      links: byLink.rows,
+      recipients: byRecipient.rows,
+      // Distinguishes "nobody clicked" from "this campaign predates click tracking", which
+      // otherwise look identical and would have people chasing a reporting bug.
+      tracked: sent.rows[0]?.n > 0,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

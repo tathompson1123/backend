@@ -1195,6 +1195,42 @@ router.get('/rc/:token', async (req, res) => {
   }
 });
 
+// GET /api/public/cc/:linkToken/:recipientToken
+// Tracked redirect for campaign links. The public URL is
+// sorceintegrations.com/c/<linkToken>/<recipientToken>, which Vercel forwards here.
+//
+// Recording must never cost the recipient their click. Everything that can fail — the
+// insert, a missing recipient row, the database being slow — degrades to sending them
+// onward, because a lost analytics row is invisible and a dead link in a campaign is not.
+router.get('/cc/:linkToken/:recipientToken', async (req, res) => {
+  let destination = null;
+  try {
+    const link = await pool.query(
+      'SELECT id, campaign_id, destination FROM campaign_links WHERE token = $1',
+      [req.params.linkToken]
+    );
+    if (!link.rows[0]) return res.redirect(302, process.env.FRONTEND_URL || 'https://sorceintegrations.com');
+    destination = link.rows[0].destination;
+
+    // Resolved against the same campaign so a token from one campaign can't attribute a
+    // click in another.
+    const recipient = await pool.query(
+      'SELECT id FROM campaign_recipients WHERE token = $1 AND campaign_id = $2',
+      [req.params.recipientToken, link.rows[0].campaign_id]
+    );
+
+    await pool.query(
+      `INSERT INTO campaign_link_clicks (campaign_id, link_id, recipient_id)
+       VALUES ($1, $2, $3)`,
+      [link.rows[0].campaign_id, link.rows[0].id, recipient.rows[0]?.id || null]
+    );
+  } catch (err) {
+    console.error('Campaign click tracking error:', err.message);
+  }
+  // Outside the try: a failure above must still send them where they were going.
+  return res.redirect(302, destination || process.env.FRONTEND_URL || 'https://sorceintegrations.com');
+});
+
 // ── Discovery calls: public self-booking on sorceintegrations.com ──
 
 // GET /api/public/discovery/slots?date=YYYY-MM-DD
