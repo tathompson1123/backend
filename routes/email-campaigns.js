@@ -616,11 +616,15 @@ router.get('/history', authenticateToken, async (req, res) => {
               COALESCE(cl.unique_clickers, 0)::int AS unique_clickers
          FROM email_campaigns ec
          LEFT JOIN (
-           SELECT campaign_id,
+           -- A click we couldn't attribute still counts, so the recipient join is a LEFT
+           -- one; only clicks positively identified as the owner's own test are dropped.
+           SELECT c.campaign_id,
                   COUNT(*) AS total_clicks,
-                  COUNT(DISTINCT recipient_id) AS unique_clickers
-             FROM campaign_link_clicks
-            GROUP BY campaign_id
+                  COUNT(DISTINCT c.recipient_id) AS unique_clickers
+             FROM campaign_link_clicks c
+             LEFT JOIN campaign_recipients r ON r.id = c.recipient_id
+            WHERE r.id IS NULL OR NOT r.is_test
+            GROUP BY c.campaign_id
          ) cl ON cl.campaign_id = ec.id
         WHERE ec.user_id = $1
         ORDER BY ec.created_at DESC
@@ -646,12 +650,21 @@ router.get('/:id/clicks', authenticateToken, async (req, res) => {
     );
     if (!owns.rows[0]) return res.status(404).json({ error: 'Campaign not found' });
 
+    // Test clicks are excluded in the JOIN condition rather than a WHERE clause. Filtering
+    // in WHERE drops the whole row, so a link whose only clicks were test ones would vanish
+    // from the list entirely instead of showing zero — which is precisely the state right
+    // after someone sends themselves a test.
     const byLink = await pool.query(
       `SELECT l.id, l.destination,
               COUNT(c.id)::int AS clicks,
               COUNT(DISTINCT c.recipient_id)::int AS unique_clickers
          FROM campaign_links l
-         LEFT JOIN campaign_link_clicks c ON c.link_id = l.id
+         LEFT JOIN campaign_link_clicks c
+                ON c.link_id = l.id
+               AND NOT EXISTS (
+                     SELECT 1 FROM campaign_recipients r
+                      WHERE r.id = c.recipient_id AND r.is_test
+                   )
         WHERE l.campaign_id = $1
         GROUP BY l.id, l.destination
         ORDER BY clicks DESC, l.id`,
@@ -665,7 +678,7 @@ router.get('/:id/clicks', authenticateToken, async (req, res) => {
               MAX(c.clicked_at) AS last_click
          FROM campaign_link_clicks c
          JOIN campaign_recipients r ON r.id = c.recipient_id
-        WHERE c.campaign_id = $1
+        WHERE c.campaign_id = $1 AND NOT r.is_test
         GROUP BY r.email
         ORDER BY clicks DESC, last_click DESC
         LIMIT 500`,
@@ -676,7 +689,7 @@ router.get('/:id/clicks', authenticateToken, async (req, res) => {
     // which is written once at send time and says nothing about campaigns sent before this
     // tracking existed.
     const sent = await pool.query(
-      'SELECT COUNT(*)::int AS n FROM campaign_recipients WHERE campaign_id = $1',
+      'SELECT COUNT(*)::int AS n FROM campaign_recipients WHERE campaign_id = $1 AND NOT is_test',
       [req.params.id]
     );
 
@@ -1078,7 +1091,33 @@ router.post('/test-send', authenticateToken, async (req, res) => {
     // Apply the same unsubscribe-URL swap that the live send path uses, otherwise the test
     // email lands with the literal href="#unsubscribe" placeholder and the link does nothing.
     const unsubUrl = buildUnsubscribeUrl(config.from_email, req.user.userId);
-    const htmlWithUnsub = applyUnsubscribeUrl(emailHtml, unsubUrl, config.from_name);
+    let html = applyUnsubscribeUrl(emailHtml, unsubUrl, config.from_name);
+
+    // And the same link rewriting, so a test send is actually a test of what recipients
+    // get. Without this the test kept SendGrid's account-level click tracking, which meant
+    // the one email you send to check your campaign was the only one still going out with
+    // the 350-character broken-certificate redirector — the opposite of a useful test.
+    //
+    // Needs a draft: campaign_links and campaign_recipients are keyed to a campaign row, so
+    // an ad-hoc preview built from raw blocks has nothing to attribute against. Those still
+    // get clickTracking off, so they show real destinations rather than rewritten ones.
+    let tracked = false;
+    if (draftId) {
+      try {
+        const linkTokens = await ensureLinkTokens(pool, {
+          campaignId: draftId, userId: req.user.userId, html,
+        });
+        const recipientToken = await ensureRecipientToken(pool, {
+          campaignId: draftId, userId: req.user.userId, email: config.from_email, isTest: true,
+        });
+        if (recipientToken && linkTokens.size) {
+          html = rewriteHtml(html, linkTokens, recipientToken);
+          tracked = true;
+        }
+      } catch (e) {
+        console.error('Campaign test-send link tracking skipped:', e.message);
+      }
+    }
 
     await sgMail.send({
       to: config.from_email,
@@ -1086,10 +1125,14 @@ router.post('/test-send', authenticateToken, async (req, res) => {
       replyTo: { name: config.from_name || '', email: config.from_email },
       subject: `[TEST] ${emailSubject}`,
       text: emailText,
-      html: htmlWithUnsub,
+      html,
+      // Matches the live path. Leaving SendGrid's click tracking on would rewrite our
+      // tracked links a second time onto url9694.sorceintegrations.com, whose certificate
+      // doesn't match it.
+      trackingSettings: { clickTracking: { enable: false, enableText: false }, openTracking: { enable: true } },
     });
 
-    res.json({ success: true, sentTo: config.from_email });
+    res.json({ success: true, sentTo: config.from_email, tracked });
   } catch (e) {
     const sgErrors = e?.response?.body?.errors;
     const detail = Array.isArray(sgErrors) && sgErrors.length

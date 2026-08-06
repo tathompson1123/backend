@@ -1618,6 +1618,10 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
       )`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_campaign_recipients_unique
                       ON campaign_recipients(campaign_id, LOWER(email))`);
+    // Test sends go to the owner's own address through the same path, so their clicks
+    // would otherwise land in the campaign's numbers — inflating delivered, skewing the
+    // click rate, and putting the owner at the top of their own "who clicked" list.
+    await pool.query(`ALTER TABLE campaign_recipients ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE`);
 
     // Every click, not just the first — repeat clicks are signal, and the dashboard
     // distinguishes total from unique by counting distinct recipients.

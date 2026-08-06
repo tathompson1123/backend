@@ -97,7 +97,11 @@ async function ensureLinkTokens(pool, { campaignId, userId, html }) {
 // One row per recipient per campaign. This is also the send log — which addresses a campaign
 // actually went to was not recorded anywhere before, so a click had nothing to attribute
 // against and "who did we email" was unanswerable after the fact.
-async function ensureRecipientToken(pool, { campaignId, userId, email }) {
+// isTest marks the owner's own address from /test-send. The row still exists so the test
+// link resolves and the redirect can be verified end to end, but every stat query filters
+// it out — otherwise testing your own campaign puts you at the top of your own "who
+// clicked" list and quietly inflates the click rate.
+async function ensureRecipientToken(pool, { campaignId, userId, email, isTest = false }) {
   const existing = await pool.query(
     'SELECT token FROM campaign_recipients WHERE campaign_id = $1 AND LOWER(email) = LOWER($2)',
     [campaignId, email]
@@ -108,11 +112,11 @@ async function ensureRecipientToken(pool, { campaignId, userId, email }) {
     const candidate = randomToken(attempt < 4 ? 8 : 10);
     try {
       const saved = await pool.query(
-        `INSERT INTO campaign_recipients (campaign_id, user_id, email, token)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO campaign_recipients (campaign_id, user_id, email, token, is_test)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (token) DO NOTHING
          RETURNING token`,
-        [campaignId, userId, email, candidate]
+        [campaignId, userId, email, candidate, isTest]
       );
       if (saved.rows[0]) return saved.rows[0].token;
     } catch {
