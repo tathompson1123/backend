@@ -83,6 +83,8 @@ const serviceRoutes = require('./routes/services');
 const serviceCategoryRoutes = require('./routes/service-categories');
 const bookingWidgetConfigRoutes = require('./routes/booking-widget-config');
 const { TRANSACTIONAL_EMAIL } = require('./utils/emailFrom');
+const { escapeHtml } = require('./utils/escapeHtml');
+const { plainEmail } = require('./utils/emailLayout');
 const employeeRoutes = require('./routes/employees');
 const websiteRoutes = require('./routes/website');
 const aiAgentRoutes = require('./routes/ai-agents');
@@ -2518,11 +2520,9 @@ cron.schedule('*/15 * * * *', async () => {
               .replace('{{time}}', formatTime(booking.start_time))
             : `This is a reminder that your appointment for <strong>${serviceName}</strong> is coming up in <strong>${reminderLabel}</strong>.`;
 
+          // Amber callout box replaced with a plain labelled line — see utils/emailLayout.
           const cancellationBlock = (policyEnabled && policyText)
-            ? `<div style="margin-top:1.5rem;padding:1rem;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;">
-                 <p style="margin:0;font-weight:600;font-size:0.85rem;color:#92400e;">Cancellation Policy</p>
-                 <p style="margin:0.25rem 0 0;font-size:0.85rem;color:#78350f;">${policyText}</p>
-               </div>`
+            ? `<strong>Cancellation policy:</strong> ${escapeHtml(policyText)}`
             : '';
 
           await sgMail.send({
@@ -2530,25 +2530,25 @@ cron.schedule('*/15 * * * *', async () => {
             from: { name: booking.business_name || 'Your Service Provider', email: TRANSACTIONAL_EMAIL },
             replyTo: booking.owner_email ? { email: booking.owner_email } : undefined,
             subject: `Reminder: ${serviceName} on ${formatDate(booking.booking_date)}`,
-            html: `
-              <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-                <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-                  <h1 style="color:#fff;margin:0;font-size:1.5rem;">Appointment Reminder</h1>
-                </div>
-                <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-                  <p style="font-size:1rem;margin-top:0;">Hi ${booking.customer_name},</p>
-                  <p>${bodyText}</p>
-                  <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
-                    <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:40%;">Service</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${serviceName}</td></tr>
-                    <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${formatDate(booking.booking_date)}</td></tr>
-                    <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${formatTime(booking.start_time)}</td></tr>
-                    ${booking.total_amount ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Total</td><td style="padding:10px 12px;">$${parseFloat(booking.total_amount).toFixed(2)}</td></tr>` : ''}
-                  </table>
-                  ${cancellationBlock}
-                  <p style="color:#6b7280;font-size:0.9rem;margin-top:1.5rem;">If you need to reschedule, please contact us directly.</p>
-                  <p style="color:#6b7280;font-size:0.9rem;margin:0;">${booking.business_name || ''}</p>
-                </div>
-              </div>`
+            html: plainEmail({
+              greeting: `Hi ${escapeHtml(booking.customer_name)},`,
+              // bodyText is either a template the business wrote (with its own markup) or
+              // our default sentence, so it is not escaped here.
+              paragraphs: [bodyText],
+              details: [
+                { label: 'Service', value: escapeHtml(serviceName) },
+                { label: 'Date', value: escapeHtml(formatDate(booking.booking_date)) },
+                { label: 'Time', value: escapeHtml(formatTime(booking.start_time)) },
+                booking.total_amount
+                  ? { label: 'Total', value: `$${parseFloat(booking.total_amount).toFixed(2)}` }
+                  : null,
+              ].filter(Boolean),
+              after: [
+                cancellationBlock,
+                'If you need to reschedule, please contact us directly.',
+              ],
+              signature: escapeHtml(booking.business_name || ''),
+            })
           });
 
           await pool.query(

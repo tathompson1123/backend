@@ -6,6 +6,8 @@ const { sendPushToOwner } = require('../utils/pushNotifications');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
 const { getSquareClient, findOrCreateSquareCustomer, saveCardOnFile } = require('../utils/squareCardOnFile');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { escapeHtml: esc } = require('../utils/escapeHtml');
+const { plainEmail } = require('../utils/emailLayout');
 
 // All routes are public (no auth). businessId = user_id.
 
@@ -835,15 +837,15 @@ router.post('/bookings/create', async (req, res) => {
               to: owner.email,
               from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
               subject: `Card saved on file — ${customerInfo.name} is confirmed`,
-              html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-                <div style="background:#059669;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
-                  <h2 style="color:#fff;margin:0;font-size:1.25rem;">&#10003; Card on File Saved</h2>
-                </div>
-                <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-                  <p style="margin-top:0;"><strong>${customerInfo.name}</strong> saved a card on file during booking and their appointment is now confirmed.</p>
-                  <p><strong>Booking #${bookingNumber}</strong> — ${dateStr} at ${timeStr}</p>
-                </div>
-              </div>`,
+              html: plainEmail({
+                paragraphs: [
+                  `<strong>${esc(customerInfo.name)}</strong> saved a card on file during booking, and their appointment is now confirmed.`,
+                ],
+                details: [
+                  { label: 'Booking', value: `#${esc(bookingNumber)}` },
+                  { label: 'When', value: `${esc(dateStr)} at ${esc(timeStr)}` },
+                ],
+              }),
             }).catch(e => console.error('Owner card saved notification error:', e.message));
           }
         }
@@ -874,35 +876,29 @@ router.post('/bookings/create', async (req, res) => {
             from: { name: owner.business_name || 'Your Service Provider', email: TRANSACTIONAL_EMAIL },
             replyTo: owner.email ? { email: owner.email } : undefined,
             subject: `One last step to confirm your appointment — ${owner.business_name || 'Us'}`,
-            html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-              <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-                <h1 style="color:#fff;margin:0;font-size:1.5rem;">Almost Confirmed!</h1>
-              </div>
-              <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-                <p style="font-size:1rem;margin-top:0;">Hi ${customerInfo.name},</p>
-                <p>Your appointment with <strong>${owner.business_name || 'us'}</strong> on ${dateStr} at ${timeStr} is almost confirmed!</p>
-                <p>We just need a card on file to complete your booking. <strong>We will not charge your card</strong> — it is only kept on file per our cancellation policy.</p>
-                <div style="text-align:center;margin:2rem 0;">
-                  <a href="${cardLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:600;">Securely Save Card on File</a>
-                </div>
-                <p style="color:#6b7280;font-size:0.85rem;">This link expires in 48 hours.</p>
-              </div>
-            </div>`,
+            // Asks a customer for card details, so it reads as if the business wrote it.
+            html: plainEmail({
+              greeting: `Hi ${esc(customerInfo.name)},`,
+              paragraphs: [
+                `Your appointment with <strong>${esc(owner.business_name || 'us')}</strong> on ${esc(dateStr)} at ${esc(timeStr)} is almost confirmed.`,
+                'We just need a card on file to complete the booking. <strong>We will not charge it</strong> — it is only held per our cancellation policy.',
+              ],
+              action: { label: 'Securely save a card on file', url: cardLink },
+              after: ['That link expires in 48 hours.'],
+              signature: esc(owner.business_name || ''),
+            }),
           }).catch(e => console.error('Card on file email error:', e.message));
           if (owner.email) {
             sgMail.send({
               to: owner.email,
               from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
               subject: `Card on file link sent to ${customerInfo.name}`,
-              html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-                <div style="background:#d97706;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
-                  <h2 style="color:#fff;margin:0;font-size:1.25rem;">Card on File Link Sent</h2>
-                </div>
-                <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-                  <p style="margin-top:0;">A secure card-on-file link was sent to <strong>${customerInfo.name}</strong> (${customerInfo.email}) for their ${dateStr} at ${timeStr} appointment.</p>
-                  <p style="color:#6b7280;font-size:0.9rem;">Booking #${bookingNumber} will be confirmed once they save their card. The link expires in 48 hours.</p>
-                </div>
-              </div>`,
+              html: plainEmail({
+                paragraphs: [
+                  `A secure card-on-file link was sent to <strong>${esc(customerInfo.name)}</strong> (${esc(customerInfo.email)}) for their ${esc(dateStr)} at ${esc(timeStr)} appointment.`,
+                  `Booking #${esc(bookingNumber)} confirms once they save a card. The link expires in 48 hours.`,
+                ],
+              }),
             }).catch(e => console.error('Owner card link notification error:', e.message));
           }
         }
@@ -1127,17 +1123,13 @@ router.post('/card-on-file/:token/save', async (req, res) => {
           to: owner.email,
           from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
           subject: `Card saved — ${row.customer_name}'s booking is confirmed`,
-          html: `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-              <div style="background:#16a34a;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
-                <h2 style="color:#fff;margin:0;font-size:1.25rem;">Card on File Saved ✓</h2>
-              </div>
-              <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-                <p style="margin-top:0;"><strong>${row.customer_name}</strong> has saved a ${cardBrand} card ending in ${lastFour} for their booking${dateStr ? ` on ${dateStr}` : ''}.</p>
-                <p style="color:#16a34a;font-weight:600;">Their booking (#${row.booking_number}) is now confirmed.</p>
-                <p style="color:#6b7280;font-size:0.9rem;">You can view the booking details in your SORCE dashboard.</p>
-              </div>
-            </div>`,
+          html: plainEmail({
+            paragraphs: [
+              `<strong>${esc(row.customer_name)}</strong> has saved a ${esc(cardBrand)} card ending in ${esc(lastFour)} for their booking${dateStr ? ` on ${esc(dateStr)}` : ''}.`,
+              `Their booking (#${esc(row.booking_number)}) is now confirmed.`,
+              'You can view the details in your SORCE dashboard.',
+            ],
+          }),
         }).catch(e => console.error('Owner card saved notification error:', e.message));
       }).catch(() => {});
     }

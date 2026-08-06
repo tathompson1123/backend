@@ -9,6 +9,8 @@ if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const { normalizeServiceList, resolveBookingServices } = require('../utils/bookingServices');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { escapeHtml: esc } = require('../utils/escapeHtml');
+const { plainEmail } = require('../utils/emailLayout');
 
 // Resolve the business's IANA timezone from their saved location (state + zip).
 // Used so the dashboard can render booking timestamps (created_at) in the owner's
@@ -751,24 +753,17 @@ router.post('/:id/send-card-link', authenticateToken, async (req, res) => {
         from: { name: booking.business_name || 'Your Service Provider', email: TRANSACTIONAL_EMAIL },
         replyTo: booking.owner_email ? { email: booking.owner_email } : undefined,
         subject: `One last step to confirm your appointment — ${booking.business_name || 'Us'}`,
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-            <div style="background:#1d4ed8;padding:2rem;text-align:center;border-radius:8px 8px 0 0;">
-              <h1 style="color:#fff;margin:0;font-size:1.5rem;">Almost Confirmed!</h1>
-            </div>
-            <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-              <p style="font-size:1rem;margin-top:0;">Hi ${booking.customer_name},</p>
-              <p>Your appointment with <strong>${booking.business_name || 'us'}</strong>${dateStr ? ` on ${dateStr}` : ''} is almost confirmed!</p>
-              <p>We just need a card on file to complete your booking. <strong>We will not charge your card</strong> — it is only kept on file in case of a no-show per our cancellation policy.</p>
-              <div style="text-align:center;margin:2rem 0;">
-                <a href="${cardLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:600;">
-                  Securely Save Card on File
-                </a>
-              </div>
-              <p style="color:#6b7280;font-size:0.85rem;">This link expires in 48 hours. If you have any questions, please contact us directly.</p>
-              <p style="color:#6b7280;font-size:0.85rem;margin:0;">${booking.business_name || ''}</p>
-            </div>
-          </div>`,
+        // Asks a customer for card details, so it reads as if the business wrote it.
+        html: plainEmail({
+          greeting: `Hi ${esc(booking.customer_name)},`,
+          paragraphs: [
+            `Your appointment with <strong>${esc(booking.business_name || 'us')}</strong>${dateStr ? ` on ${esc(dateStr)}` : ''} is almost confirmed.`,
+            'We just need a card on file to complete the booking. <strong>We will not charge it</strong> — it is only held in case of a no-show, per our cancellation policy.',
+          ],
+          action: { label: 'Securely save a card on file', url: cardLink },
+          after: ['That link expires in 48 hours. If you have any questions, just contact us directly.'],
+          signature: esc(booking.business_name || ''),
+        }),
       });
     }
 
@@ -780,21 +775,17 @@ router.post('/:id/send-card-link', authenticateToken, async (req, res) => {
       const dateStr = parsedDate && !isNaN(parsedDate)
         ? parsedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
         : '';
-      const serviceLine = booking.service_name ? ` for <strong>${booking.service_name}</strong>` : '';
+      const serviceLine = booking.service_name ? ` for <strong>${esc(booking.service_name)}</strong>` : '';
       sgMail.send({
         to: booking.owner_email,
         from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
         subject: `Card on file link sent to ${booking.customer_name}`,
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-            <div style="background:#d97706;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
-              <h2 style="color:#fff;margin:0;font-size:1.25rem;">Card on File Link Sent</h2>
-            </div>
-            <div style="padding:1.5rem 2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-              <p style="margin-top:0;">A secure card-on-file link has been sent to <strong>${booking.customer_name}</strong> (${booking.customer_email})${dateStr ? ` for their ${dateStr} appointment` : ''}.</p>
-              <p style="color:#6b7280;font-size:0.9rem;">Booking #${booking.booking_number}${serviceLine} will be automatically confirmed once they save their card. The link expires in 48 hours.</p>
-            </div>
-          </div>`,
+        html: plainEmail({
+          paragraphs: [
+            `A secure card-on-file link has been sent to <strong>${esc(booking.customer_name)}</strong> (${esc(booking.customer_email)})${dateStr ? ` for their ${esc(dateStr)} appointment` : ''}.`,
+            `Booking #${esc(booking.booking_number)}${serviceLine} confirms automatically once they save a card. The link expires in 48 hours.`,
+          ],
+        }),
       }).catch(e => console.error('Owner card link notification error:', e.message));
     }
 
