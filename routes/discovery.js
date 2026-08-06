@@ -522,6 +522,96 @@ router.delete('/leads/:id', requireAnalytics, async (req, res) => {
   }
 });
 
+// POST /api/discovery/leads/:id/book — graduate a pipeline lead to a booked call.
+//
+// The mirror of syncLeadForCall, and deliberately not built on it. That function matches
+// a lead by email then phone, which is right when a stranger books themselves off the
+// public page and we have to guess who they are. Here the rep has one row on screen and
+// clicked it, so guessing is a downgrade: phone formats are inconsistent across the
+// pipeline, a prospect can book under a different address than we hold, and the fallback
+// on no match is to INSERT — so the failure mode is a duplicate lead and a "Demo Set" row
+// that still reads unbooked. Linking by the id we were handed can't do either.
+//
+// Setting a lead's status to demo_scheduled by hand used to be the only route to this
+// state, and it created no call at all: the lead claimed a demo was set while the calendar
+// and the Discovery Calls tab knew nothing about it.
+router.post('/leads/:id/book', requireAnalytics, async (req, res) => {
+  try {
+    const {
+      scheduledAt, durationMinutes, timezone, assignedTo, notes,
+      sendNotifications = true,
+    } = req.body || {};
+    if (!scheduledAt) return res.status(400).json({ error: 'A date and time is required' });
+
+    const leadRes = await pool.query('SELECT * FROM sorce_leads WHERE id = $1', [req.params.id]);
+    if (!leadRes.rows.length) return res.status(404).json({ error: 'Lead not found' });
+    const lead = leadRes.rows[0];
+
+    // Same floor as POST /calls — a booking nobody can be told about isn't one.
+    if (!lead.email && !lead.phone) {
+      return res.status(400).json({
+        error: 'Add a phone number or email to this lead first so we can send the invite',
+      });
+    }
+
+    // Already on the calendar. Handing the existing call back lets the UI offer a
+    // reschedule rather than quietly standing up a second meeting for the same person.
+    // Cancelled and no-show calls don't count — those leads are meant to be re-booked.
+    if (lead.discovery_call_id) {
+      const live = await pool.query(
+        `SELECT * FROM discovery_calls
+          WHERE id = $1 AND status NOT IN ('cancelled', 'no_show')`,
+        [lead.discovery_call_id]
+      );
+      if (live.rows.length) {
+        return res.status(409).json({
+          error: 'This lead already has a call booked',
+          call: live.rows[0],
+        });
+      }
+    }
+
+    // Whoever already owns the lead keeps it unless the form says otherwise, so booking
+    // doesn't silently reassign a prospect to whoever happened to schedule the meeting.
+    const rep = assignedTo || lead.assigned_to || req.analytics?.tm || null;
+
+    // The lead's own notes are pipeline history, not a briefing for this call, so they
+    // aren't copied across — the call carries only what the rep writes here.
+    const created = await pool.query(
+      `INSERT INTO discovery_calls
+         (name, email, phone, company, scheduled_at, duration_minutes, timezone,
+          assigned_to, notes, source, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'lead',$10)
+       RETURNING *`,
+      [lead.name, lead.email || null, lead.phone || null, lead.company || null,
+       scheduledAt, durationMinutes || DEFAULT_SLOT_MINUTES,
+       timezone || 'America/New_York', rep, notes?.trim() || null, req.analytics?.tm || null]
+    );
+    const call = created.rows[0];
+
+    await pool.query(
+      `UPDATE sorce_leads
+          SET status = 'demo_scheduled', discovery_call_id = $2,
+              assigned_to = COALESCE(assigned_to, $3),
+              last_contacted_at = NOW(), updated_at = NOW()
+        WHERE id = $1`,
+      [lead.id, call.id, rep]
+    );
+
+    const delivery = sendNotifications ? await dispatchConfirmations(call) : null;
+
+    // Return the re-projected lead so the row can update in place — it now carries
+    // call_scheduled_at and the Zoom link the Booked Meetings view reads.
+    const full = await pool.query(
+      `SELECT ${LEAD_SELECT} ${LEAD_FROM} WHERE sl.id = $1`, [lead.id]
+    );
+    res.json({ success: true, call, lead: full.rows[0], delivery });
+  } catch (err) {
+    console.error('Book call from lead error:', err.message);
+    res.status(500).json({ error: 'Failed to book the call' });
+  }
+});
+
 /* ─────────────────────────── DISCOVERY CALLS ─────────────────────────── */
 
 // GET /api/discovery/calls
