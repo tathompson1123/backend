@@ -492,28 +492,41 @@ router.post('/admin/test-email', async (req, res) => {
     ? { name: fromName || 'SORCE', email: String(from).trim() }
     : FROM_EMAIL;
 
+  // Reads like the booking confirmation the subject promises, and says nothing about
+  // being a test.
+  //
+  // The previous body explained itself: "this is a deliverability test", "if this reached
+  // your inbox rather than your spam folder". Filters weight those tokens — a message
+  // discussing spam filtering is a well-known false positive — so the one email whose job
+  // is to measure placement was skewing its own measurement. It went to Junk at a clean
+  // Outlook mailbox while ordinary booking alerts from the same identity did not, which is
+  // exactly the wrong way round to be useful.
+  //
+  // The sending address stays in the footer. It's the one thing needed to tell which
+  // identity was used, and it costs nothing.
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111827;">
       <p style="margin:0 0 16px;font-size:16px;">Hi there,</p>
       <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
-        This is a deliverability test from SORCE. It is shaped like the mail we actually
-        send &mdash; a booking confirmation or a new-lead alert &mdash; so that any spam
-        score you run against it reflects real traffic rather than a bare test message.
+        Your appointment is confirmed. We've put the details below so you have them to hand,
+        and we'll send a reminder the day before.
       </p>
       <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
-        Sent from <strong>${sender.email}</strong>. If this reached your inbox rather than
-        your spam folder, this sending identity is in good standing.
+        If anything needs to change, just reply to this message and we'll sort it out.
       </p>
-      <p style="margin:0;color:#6b7280;font-size:13px;">SORCE Integrations</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Thanks for your business.</p>
+      <p style="margin:0;color:#6b7280;font-size:13px;">SORCE Integrations &middot; sent from ${sender.email}</p>
     </div>`;
 
   const text = `Hi there,
 
-This is a deliverability test from SORCE. It is shaped like the mail we actually send - a booking confirmation or a new-lead alert - so that any spam score you run against it reflects real traffic rather than a bare test message.
+Your appointment is confirmed. We've put the details below so you have them to hand, and we'll send a reminder the day before.
 
-Sent from ${sender.email}. If this reached your inbox rather than your spam folder, this sending identity is in good standing.
+If anything needs to change, just reply to this message and we'll sort it out.
 
-SORCE Integrations`;
+Thanks for your business.
+
+SORCE Integrations - sent from ${sender.email}`;
 
   try {
     const response = await sgMail.send({
