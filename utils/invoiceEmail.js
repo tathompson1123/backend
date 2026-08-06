@@ -1,3 +1,5 @@
+const { escapeHtml: esc } = require('./escapeHtml');
+
 /**
  * Generates polished invoice email HTML.
  *
@@ -27,9 +29,12 @@ function buildInvoiceEmailHtml(opts) {
   const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const amt = (v) => parseFloat(v || 0).toFixed(2);
 
+  // String() guards a null business_name — .toUpperCase() on it threw and took the whole
+  // invoice send down with a 500.
+  const businessUpper = String(businessName || 'your service provider').toUpperCase();
   const headline = isReminder
-    ? `PAYMENT REMINDER FROM ${businessName.toUpperCase()}`
-    : `YOU'VE RECEIVED AN INVOICE FROM ${businessName.toUpperCase()}`;
+    ? `PAYMENT REMINDER FROM ${businessUpper}`
+    : `YOU'VE RECEIVED AN INVOICE FROM ${businessUpper}`;
 
   // Line items rows
   const itemRows = items.map(it => {
@@ -38,7 +43,7 @@ function buildInvoiceEmailHtml(opts) {
     const lineTotal = parseFloat(it.amount) || (qty * price);
     return `
       <tr>
-        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;color:#374151;font-size:14px;">${it.description || '-'}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;color:#374151;font-size:14px;">${esc(it.description || '-')}</td>
         <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:14px;text-align:center;">${qty}</td>
         <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:14px;text-align:right;">$${amt(price)}</td>
         <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;color:#111827;font-size:14px;text-align:right;font-weight:600;">$${amt(lineTotal)}</td>
@@ -60,8 +65,8 @@ function buildInvoiceEmailHtml(opts) {
         <!-- Header -->
         <tr>
           <td style="background-color:#d97706;background:linear-gradient(135deg,#d97706,#f59e0b);padding:36px 40px;text-align:center;">
-            <h1 style="margin:0 0 8px;color:#ffffff;font-size:22px;font-weight:800;letter-spacing:1px;">${headline}</h1>
-            <p style="margin:0;color:rgba(255,255,255,0.85);font-size:14px;">Invoice ${invoiceNumber}</p>
+            <h1 style="margin:0 0 8px;color:#ffffff;font-size:22px;font-weight:800;letter-spacing:1px;">${esc(headline)}</h1>
+            <p style="margin:0;color:rgba(255,255,255,0.85);font-size:14px;">Invoice ${esc(invoiceNumber)}</p>
           </td>
         </tr>
 
@@ -69,11 +74,11 @@ function buildInvoiceEmailHtml(opts) {
         <tr>
           <td style="padding:32px 40px 0;">
             <p style="margin:0;color:#374151;font-size:16px;line-height:1.6;">
-              Hi ${customerName || 'there'},
+              Hi ${esc(customerName || 'there')},
             </p>
             <p style="margin:8px 0 0;color:#6b7280;font-size:15px;line-height:1.6;">
               ${isReminder
-                ? `This is a friendly reminder that your invoice <strong>${invoiceNumber}</strong> is still outstanding.`
+                ? `This is a friendly reminder that your invoice <strong>${esc(invoiceNumber)}</strong> is still outstanding.`
                 : `Please find your invoice details below.`}
             </p>
           </td>
@@ -91,7 +96,7 @@ function buildInvoiceEmailHtml(opts) {
                     <tr>
                       <td style="vertical-align:top;">
                         <p style="margin:0;color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Invoice</p>
-                        <p style="margin:4px 0 0;color:#111827;font-size:16px;font-weight:700;font-family:monospace;">${invoiceNumber}</p>
+                        <p style="margin:4px 0 0;color:#111827;font-size:16px;font-weight:700;font-family:monospace;">${esc(invoiceNumber)}</p>
                       </td>
                       <td style="vertical-align:top;text-align:right;">
                         <p style="margin:0;color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Date</p>
@@ -157,7 +162,7 @@ function buildInvoiceEmailHtml(opts) {
         <tr>
           <td style="padding:0 40px 16px;">
             <p style="margin:0 0 4px;color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Notes</p>
-            <p style="margin:0;color:#6b7280;font-size:14px;line-height:1.5;">${notes}</p>
+            <p style="margin:0;color:#6b7280;font-size:14px;line-height:1.5;">${esc(notes)}</p>
           </td>
         </tr>
         ` : ''}
@@ -178,7 +183,7 @@ function buildInvoiceEmailHtml(opts) {
               If you have questions about this invoice, reply to this email.
             </p>
             <p style="margin:8px 0 0;color:#d1d5db;font-size:11px;">
-              Sent by ${businessName} via SORCE
+              Sent by ${esc(businessName || 'your service provider')} via SORCE
             </p>
           </td>
         </tr>

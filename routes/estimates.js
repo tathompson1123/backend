@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { escapeHtml: esc } = require('../utils/escapeHtml');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 
@@ -254,7 +255,7 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
     const linksHtml = estimateLinks.filter(l => l.url).length > 0
       ? `<div style="margin:16px 0;"><strong style="color:#374151;">Links:</strong><ul style="padding-left:20px;margin:8px 0;">
            ${estimateLinks.filter(l => l.url).map(l =>
-             `<li style="margin:4px 0;"><a href="${l.url}" style="color:#d97706;">${l.label || l.url}</a></li>`
+             `<li style="margin:4px 0;"><a href="${esc(l.url)}" style="color:#d97706;">${esc(l.label || l.url)}</a></li>`
            ).join('')}
          </ul></div>`
       : '';
@@ -264,8 +265,8 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
            ${estimateAttachments.filter(a => a.url).map(a => {
              const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(a.url);
              return isImg
-               ? `<div><img src="${a.url}" alt="${a.name || ''}" style="max-width:180px;max-height:120px;border-radius:6px;border:1px solid #e5e7eb;"/>${a.name ? `<p style="font-size:11px;color:#9ca3af;margin:3px 0 0;">${a.name}</p>` : ''}</div>`
-               : `<a href="${a.url}" style="color:#d97706;font-size:13px;">${a.name || a.url}</a>`;
+               ? `<div><img src="${esc(a.url)}" alt="${esc(a.name || '')}" style="max-width:180px;max-height:120px;border-radius:6px;border:1px solid #e5e7eb;"/>${a.name ? `<p style="font-size:11px;color:#9ca3af;margin:3px 0 0;">${esc(a.name)}</p>` : ''}</div>`
+               : `<a href="${esc(a.url)}" style="color:#d97706;font-size:13px;">${esc(a.name || a.url)}</a>`;
            }).join('')}
          </div></div>`
       : '';
@@ -280,20 +281,20 @@ router.post('/:id/send', authenticateToken, async (req, res) => {
         subject: `Estimate ${estimate.estimate_number} from ${estimate.business_name}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-            <h2 style="color:#d97706;">${estimate.business_name}</h2>
-            <p>Hi ${estimate.customer_name},</p>
+            <h2 style="color:#d97706;">${esc(estimate.business_name)}</h2>
+            <p>Hi ${esc(estimate.customer_name)},</p>
             <p>Please review your estimate.</p>
             <div style="background:#f9fafb;border-radius:8px;padding:20px;margin:20px 0;">
-              <p style="margin:0;"><strong>Estimate:</strong> ${estimate.estimate_number}</p>
+              <p style="margin:0;"><strong>Estimate:</strong> ${esc(estimate.estimate_number)}</p>
               <p style="margin:8px 0 0;"><strong>Total:</strong> $${parseFloat(estimate.total_amount).toFixed(2)}</p>
-              ${validUntilStr ? `<p style="margin:8px 0 0;"><strong>Valid Until:</strong> ${validUntilStr}</p>` : ''}
+              ${validUntilStr ? `<p style="margin:8px 0 0;"><strong>Valid Until:</strong> ${esc(validUntilStr)}</p>` : ''}
             </div>
             <div style="text-align:center;margin:30px 0;">
               <a href="${viewUrl}" style="background-color:#d97706;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;">View Estimate</a>
             </div>
             ${linksHtml}
             ${attachmentsHtml}
-            ${estimate.notes ? `<p style="color:#666;font-size:14px;"><strong>Notes:</strong> ${estimate.notes}</p>` : ''}
+            ${estimate.notes ? `<p style="color:#666;font-size:14px;"><strong>Notes:</strong> ${esc(estimate.notes)}</p>` : ''}
           </div>
         `
       });
@@ -338,8 +339,8 @@ router.post('/:id/remind', authenticateToken, async (req, res) => {
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
           <h2 style="color:#d97706;">Estimate Reminder</h2>
-          <p>Hi ${estimate.customer_name},</p>
-          <p>Just a friendly reminder to review your estimate <strong>${estimate.estimate_number}</strong> for <strong>$${parseFloat(estimate.total_amount).toFixed(2)}</strong>.</p>
+          <p>Hi ${esc(estimate.customer_name)},</p>
+          <p>Just a friendly reminder to review your estimate <strong>${esc(estimate.estimate_number)}</strong> for <strong>$${parseFloat(estimate.total_amount).toFixed(2)}</strong>.</p>
           <div style="text-align:center;margin:30px 0;">
             <a href="${viewUrl}" style="background-color:#d97706;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;">View Estimate</a>
           </div>

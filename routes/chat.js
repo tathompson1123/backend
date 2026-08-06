@@ -155,14 +155,7 @@ async function getAvailableSlotsForDate(userId, serviceId, bookingDate, duration
   return available;
 }
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+const { escapeHtml } = require('../utils/escapeHtml');
 
 async function sendAttentionEmail({ userId, customerName, customerPhone, conversationId }) {
   if (!process.env.SENDGRID_API_KEY) return;
@@ -981,8 +974,8 @@ REAL-TIME AVAILABILITY:
                     <h1 style="color:#fff;margin:0;font-size:1.5rem;">Almost Confirmed!</h1>
                   </div>
                   <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-                    <p style="font-size:1rem;margin-top:0;">Hi ${customerName.trim()},</p>
-                    <p>Your appointment with <strong>${owner.business_name || 'us'}</strong> on ${formattedDate} at ${formattedTime} is almost confirmed!</p>
+                    <p style="font-size:1rem;margin-top:0;">Hi ${escapeHtml(customerName.trim())},</p>
+                    <p>Your appointment with <strong>${escapeHtml(owner.business_name || 'us')}</strong> on ${escapeHtml(formattedDate)} at ${escapeHtml(formattedTime)} is almost confirmed!</p>
                     <p>We just need a card on file to complete your booking. <strong>We will not charge your card</strong> — it is only kept on file in case of a no-show per our cancellation policy.</p>
                     <div style="text-align:center;margin:2rem 0;">
                       <a href="${cardLink}" style="background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:600;">
@@ -990,7 +983,7 @@ REAL-TIME AVAILABILITY:
                       </a>
                     </div>
                     <p style="color:#6b7280;font-size:0.85rem;">This link expires in 48 hours.</p>
-                    <p style="color:#6b7280;font-size:0.85rem;margin:0;">${owner.business_name || ''}</p>
+                    <p style="color:#6b7280;font-size:0.85rem;margin:0;">${escapeHtml(owner.business_name || '')}</p>
                   </div>
                 </div>`,
             }).catch(e => console.error('Card on file email error:', e.message));

@@ -11,7 +11,9 @@ const {
   last10, phoneVariants, findLeadIdByPhone, resolveThread,
 } = require('../utils/smsThread');
 const twilio = require('twilio');
-const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { TRANSACTIONAL_EMAIL, ownerAlertReplyTo } = require('../utils/emailFrom');
+// Customer SMS text and model output both land inside owner alert HTML.
+const { escapeHtml: esc } = require('../utils/escapeHtml');
 
 // Auto-heal Twilio webhook URL for a phone number (non-blocking, fire-and-forget)
 function selfHealWebhook(phoneSid, phoneNumber) {
@@ -320,21 +322,24 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
             await sgMail.send({
               to: rr.owner_email,
               from: { name: 'SORCE', email: TRANSACTIONAL_EMAIL },
-              replyTo: rr.owner_email,
-              subject: `Worth a look: ${firstName} mentioned something`,
+              // SMS-only lead, so there is no customer address to reply to — this goes to
+              // our inbox rather than back at the owner. See ownerAlertReplyTo.
+              replyTo: ownerAlertReplyTo(),
+              // Names the sender and the actual subject of the note. The old version
+              // ("Worth a look: Pj mentioned something") was a curiosity gap with no
+              // brand and no referent, which is a shape spam filters score against.
+              subject: `SORCE: service issue reported by ${firstName}`,
+              // Deliberately plain. The earlier amber callout box, uppercase eyebrow and
+              // italic pull-quote read as promotional/lead-gen markup on a short message
+              // with no images; this is styled like the operational note it is.
               html: `
-                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-                  <p style="margin:0 0 4px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;">Happy customer, but worth knowing</p>
-                  <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${firstName} was satisfied — and mentioned this</h2>
-                  <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:14px;margin-bottom:16px;">
-                    <p style="margin:0;color:#92400e;font-size:15px;font-weight:600;">${verdict.issue}</p>
-                  </div>
-                  <p style="margin:0 0 6px;font-size:13px;color:#6b7280;">What they said:</p>
-                  <p style="margin:0 0 16px;color:#374151;font-size:15px;font-style:italic;">"${Body}"</p>
-                  <p style="margin:0;color:#6b7280;font-size:13px;">
-                    They were happy overall, so we've asked them for a review as normal.
-                    Reach them on ${From} if you want to follow up.
-                  </p>
+                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f2937;font-size:15px;line-height:1.55;">
+                  <p style="margin:0 0 16px;">${esc(firstName)} was happy with the service and has been asked for a review as normal, but mentioned something worth following up on:</p>
+                  <p style="margin:0 0 16px;padding:0 0 0 12px;border-left:3px solid #d1d5db;">${esc(verdict.issue)}</p>
+                  <p style="margin:0 0 6px;">What they said:</p>
+                  <p style="margin:0 0 16px;padding:0 0 0 12px;border-left:3px solid #d1d5db;">${esc(Body)}</p>
+                  <p style="margin:0 0 16px;">You can reach ${esc(firstName)} on ${esc(From)}.</p>
+                  <p style="margin:0;color:#6b7280;font-size:13px;">Sent by SORCE for ${esc(rr.business_name || 'your business')}.</p>
                 </div>`,
             });
             console.log(`📨 Operational note emailed to ${rr.owner_email}: ${verdict.issue}`);
@@ -362,8 +367,10 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
               await sgMail.send({
                 to: rr.owner_email,
                 from: { name: `${rr.business_name || 'SORCE'} via SORCE`, email: TRANSACTIONAL_EMAIL },
-                replyTo: rr.owner_email,
-                subject: `⚠️ Unhappy customer — ${firstName}`,
+                replyTo: ownerAlertReplyTo(),
+                // No leading emoji: it marks a message as promotional to inbox filters,
+                // and this is the one alert that most needs to land.
+                subject: `SORCE: unhappy customer — ${firstName}`,
                 text: `${rr.customer_name || rr.c_name || 'A customer'} replied negatively to your review request.\n\n`
                   + `Their message:\n"${Body}"\n\n`
                   + `We replied that you're escalating it to your manager. Reach out at ${From} if you want to act on it.`,

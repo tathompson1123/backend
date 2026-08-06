@@ -1,6 +1,7 @@
 const sgMail = require('@sendgrid/mail');
 const { pool } = require('../config/database');
-const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { TRANSACTIONAL_EMAIL, ownerAlertReplyTo } = require('../utils/emailFrom');
+const { escapeHtml: esc } = require('../utils/escapeHtml');
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -89,15 +90,15 @@ async function sendBookingEmails(opts) {
 
     const detailsHtml = `
       <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
-        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:40%;">Booking #</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${opts.bookingNumber}</td></tr>
-        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${opts.serviceName}</td></tr>
-        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${formattedDate}</td></tr>
-        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${timeDisplay}</td></tr>
-        ${location ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Place</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${location}</td></tr>` : ''}
+        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:40%;">Booking #</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(opts.bookingNumber)}</td></tr>
+        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(opts.serviceName)}</td></tr>
+        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(formattedDate)}</td></tr>
+        <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(timeDisplay)}</td></tr>
+        ${location ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Place</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(location)}</td></tr>` : ''}
         ${hasTax ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Subtotal</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">$${subtotal.toFixed(2)}</td></tr>` : ''}
         ${hasTax ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Tax${taxPct ? ` (${taxPct}%)` : ''}</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">$${taxAmount.toFixed(2)}</td></tr>` : ''}
         ${total > 0 ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Total</td><td style="padding:10px 12px;border-bottom:1px solid #eee;font-weight:700;">$${total.toFixed(2)}</td></tr>` : ''}
-        ${opts.notes ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Notes</td><td style="padding:10px 12px;">${opts.notes}</td></tr>` : ''}
+        ${opts.notes ? `<tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Notes</td><td style="padding:10px 12px;">${esc(opts.notes)}</td></tr>` : ''}
       </table>`;
 
     // Plain-text version of the details — a text/html multipart email is far less
@@ -150,18 +151,18 @@ async function sendBookingEmails(opts) {
               <h1 style="color:#fff;margin:0;font-size:1.5rem;">${isUpdated ? 'Booking Updated' : 'Booking Confirmed!'}</h1>
             </div>
             <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-              <p style="font-size:1rem;margin-top:0;">Hi ${opts.customerName},</p>
+              <p style="font-size:1rem;margin-top:0;">Hi ${esc(opts.customerName)},</p>
               <p>${isUpdated
-                ? `Your booking with <strong>${businessName || 'us'}</strong> has been updated. Here are your new details:`
-                : `Your booking with <strong>${businessName || 'us'}</strong> is confirmed. Here are your details:`
+                ? `Your booking with <strong>${esc(businessName || 'us')}</strong> has been updated. Here are your new details:`
+                : `Your booking with <strong>${esc(businessName || 'us')}</strong> is confirmed. Here are your details:`
               }</p>
               ${detailsHtml}
               <p style="color:#6b7280;font-size:0.9rem;margin-top:2rem;">
                 If you need to reschedule or have questions, please contact us directly.<br>
                 Thank you for your business!
               </p>
-              <p style="color:#6b7280;font-size:0.9rem;margin:0;">${businessName || ''}</p>
-              ${businessAddress ? `<p style="color:#9ca3af;font-size:0.8rem;margin:0.25rem 0 0;">${businessAddress}</p>` : ''}
+              <p style="color:#6b7280;font-size:0.9rem;margin:0;">${esc(businessName || '')}</p>
+              ${businessAddress ? `<p style="color:#9ca3af;font-size:0.8rem;margin:0.25rem 0 0;">${esc(businessAddress)}</p>` : ''}
             </div>
           </div>`,
       });
@@ -173,7 +174,8 @@ async function sendBookingEmails(opts) {
       emails.push({
         to: ownerEmail,
         from: { name: 'SORCE Bookings', email: fromEmail },
-        replyTo: ownerEmail ? { email: ownerEmail } : undefined,
+        // Reply reaches the customer who just booked, which is who the owner would want.
+        replyTo: ownerAlertReplyTo(opts.customerEmail, opts.customerName),
         trackingSettings,
         subject: isUpdated
           ? `Booking Updated: ${opts.serviceName} — ${opts.customerName}`
@@ -186,7 +188,7 @@ async function sendBookingEmails(opts) {
               <h1 style="color:#fff;margin:0;font-size:1.5rem;">${isUpdated ? 'Booking Updated' : 'New Booking Received'}</h1>
             </div>
             <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-              <p style="font-size:1rem;margin-top:0;"><strong>Customer:</strong> ${customerDetails}</p>
+              <p style="font-size:1rem;margin-top:0;"><strong>Customer:</strong> ${esc(customerDetails)}</p>
               ${detailsHtml}
             </div>
           </div>`,
@@ -253,8 +255,8 @@ async function sendSmsBookingConfirmationRequest(opts) {
         const labelColor = isCustomer ? '#1d4ed8' : '#475569';
         return `
           <div style="margin:0 0 10px 0;padding:10px 12px;background:${bg};border:1px solid ${border};border-radius:8px;">
-            <div style="font-size:11px;font-weight:600;color:${labelColor};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">${label}</div>
-            <div style="font-size:14px;color:#1f2937;white-space:pre-wrap;line-height:1.45;">${cleanContent}</div>
+            <div style="font-size:11px;font-weight:600;color:${labelColor};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">${esc(label)}</div>
+            <div style="font-size:14px;color:#1f2937;white-space:pre-wrap;line-height:1.45;">${esc(cleanContent)}</div>
           </div>`;
       }).join('');
     }
@@ -267,7 +269,8 @@ async function sendSmsBookingConfirmationRequest(opts) {
     await sgMail.send({
       to: ownerEmail,
       from: { name: 'SORCE SMS Agent', email: TRANSACTIONAL_EMAIL },
-      replyTo: { email: ownerEmail },
+      // Usually an SMS-only lead, so this normally falls back to our inbox.
+      replyTo: ownerAlertReplyTo(opts.customerEmail, opts.customerName),
       subject: `Action needed: confirm a booking from your SMS agent — ${opts.customerName || opts.customerPhone}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#1a1a1a;">
@@ -280,16 +283,16 @@ async function sendSmsBookingConfirmationRequest(opts) {
               reach out to confirm and add it manually.
             </p>
             <table style="width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:15px;">
-              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:35%;">Customer</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${customerDetails}</td></tr>
-              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${opts.serviceName || 'Not specified'}</td></tr>
-              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${formattedDate}</td></tr>
-              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;">${formattedTime}</td></tr>
+              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;width:35%;">Customer</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(customerDetails)}</td></tr>
+              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(opts.serviceName || 'Not specified')}</td></tr>
+              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(formattedDate)}</td></tr>
+              <tr><td style="padding:10px 12px;background:#f8f9fa;font-weight:600;">Time</td><td style="padding:10px 12px;">${esc(formattedTime)}</td></tr>
             </table>
             <a href="${dashboardUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px;">View Lead in Dashboard</a>
             ${transcriptHtml ? `
               <h2 style="font-size:1rem;font-weight:600;color:#1f2937;margin:2rem 0 0.75rem 0;">Conversation Transcript</h2>
               <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">${transcriptHtml}</div>` : ''}
-            <p style="color:#6b7280;font-size:0.85rem;margin:1.5rem 0 0 0;">${businessName || 'Your business'}</p>
+            <p style="color:#6b7280;font-size:0.85rem;margin:1.5rem 0 0 0;">${esc(businessName || 'Your business')}</p>
           </div>
         </div>`,
     });
@@ -329,12 +332,12 @@ async function sendSmsCampaignReplyNotification(opts) {
 
     const who = [opts.customerName, opts.customerPhone].filter(Boolean).join(' · ') || 'A customer';
     const dashboardUrl = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/dashboard?view=leads`;
-    const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     await sgMail.send({
       to: ownerEmail,
       from: { name: 'SORCE SMS Campaign', email: TRANSACTIONAL_EMAIL },
-      replyTo: { email: ownerEmail },
+      // Campaign replies arrive over SMS, so there is no customer address here.
+      replyTo: ownerAlertReplyTo(),
       subject: `New reply to your SMS campaign — ${opts.customerName || opts.customerPhone}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
