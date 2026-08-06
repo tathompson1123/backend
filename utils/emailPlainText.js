@@ -71,11 +71,39 @@ function addPlainText(msg) {
 // having it land in the inbox is worth a lot. So default open tracking off, and only
 // when the caller hasn't decided for itself. Campaigns set trackingSettings explicitly,
 // so their open rates keep working untouched.
+// Click tracking is the worse half of the same problem, and it was left on.
+//
+// The account default is click=True, so every send that doesn't opt out has its links
+// rewritten to url9694.sorceintegrations.com/ls/click?upn=<350 characters of base64>.
+// That branded domain has no valid certificate, so the rewritten link is emitted as
+// http:// — a plain-text, 350-character, opaque redirector standing in for what should be
+// a clean https://us05web.zoom.us/... link. With enableText on it lands in the text/plain
+// part too, three times over, which is most of what a filter sees on a short message.
+//
+// A discovery confirmation that arrived in Junk at a clean Outlook mailbox carried exactly
+// that: auth all passing, SCL 5, and a body dominated by obfuscated HTTP redirectors.
+// It also means the prospect's Zoom link and a customer's payment link both travel through
+// an untrusted HTTP hop, which is its own problem regardless of filtering.
+//
+// Knowing that someone clicked a booking confirmation is worth very little. Both defaults
+// go off, independently, so a caller that has decided about one still gets a sane default
+// for the other. Campaigns set both explicitly and keep their tracking untouched.
 function defaultTrackingOff(msg) {
   if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return msg;
   const current = msg.trackingSettings || {};
-  if (current.openTracking !== undefined) return msg;
-  return { ...msg, trackingSettings: { ...current, openTracking: { enable: false } } };
+  const next = { ...current };
+  let changed = false;
+  if (current.openTracking === undefined) {
+    next.openTracking = { enable: false };
+    changed = true;
+  }
+  if (current.clickTracking === undefined) {
+    // enableText matters as much as enable: without it the text/plain part keeps the
+    // rewritten links even when the HTML is left alone.
+    next.clickTracking = { enable: false, enableText: false };
+    changed = true;
+  }
+  return changed ? { ...msg, trackingSettings: next } : msg;
 }
 
 function applyDefaults(msg) {
