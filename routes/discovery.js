@@ -809,7 +809,8 @@ router.post('/calls/:id/resend', requireAnalytics, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM discovery_calls WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Call not found' });
-    const outcome = await dispatchConfirmations(result.rows[0], { force: true });
+    const channel = ['sms', 'email', 'both'].includes(req.body?.channel) ? req.body.channel : 'both';
+    const outcome = await dispatchConfirmations(result.rows[0], { force: true, channel });
     res.json({ success: true, ...outcome });
   } catch (err) {
     res.status(500).json({ error: 'Failed to resend confirmation' });
@@ -889,8 +890,13 @@ async function ensureZoomMeeting(call) {
 
 // Fire the confirmation text + email, recording what actually made it out so the
 // dashboard can show which channel failed rather than silently swallowing it.
-async function dispatchConfirmations(call, { force = false } = {}) {
-  const result = { smsSent: false, emailSent: false, errors: [] };
+// channel narrows what gets re-fired. The recovery case that needs it: the text was
+// dropped because A2P wasn't verified yet while the email went out fine, so forcing both
+// would send a second identical confirmation email just to deliver the missing text.
+async function dispatchConfirmations(call, { force = false, channel = 'both' } = {}) {
+  const result = { smsSent: false, emailSent: false, errors: [], channel };
+  const wantSms = channel !== 'email';
+  const wantEmail = channel !== 'sms';
 
   // Before anything goes out, so the link is in the very first message they get.
   call = await ensureZoomMeeting(call);
@@ -903,7 +909,7 @@ async function dispatchConfirmations(call, { force = false } = {}) {
       )).rows[0]
     : null;
 
-  if (call.phone && (force || !call.confirmation_sms_sent)) {
+  if (wantSms && call.phone && (force || !call.confirmation_sms_sent)) {
     try {
       await sendDiscoverySMS(call.phone, confirmationSMS(call, rep));
       await pool.query('UPDATE discovery_calls SET confirmation_sms_sent = true WHERE id = $1', [call.id]);
@@ -914,7 +920,7 @@ async function dispatchConfirmations(call, { force = false } = {}) {
     }
   }
 
-  if (call.email && (force || !call.confirmation_email_sent)) {
+  if (wantEmail && call.email && (force || !call.confirmation_email_sent)) {
     try {
       await sendConfirmationEmail(call, rep);
       await pool.query('UPDATE discovery_calls SET confirmation_email_sent = true WHERE id = $1', [call.id]);

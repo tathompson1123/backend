@@ -128,36 +128,52 @@ async function checkDiscoverySmsSetup() {
       };
     }
 
-    // 10DLC registration travels with the number's Messaging Service, so an unregistered
-    // number is only visible by looking at the service's campaign — not the number itself.
-    if (poolSid) {
-      const [inPool, campaigns] = await Promise.all([
-        client.messaging.v1.services(poolSid).phoneNumbers.list({ limit: 100 }),
-        client.messaging.v1.services(poolSid).usAppToPerson.list({ limit: 5 }),
-      ]);
-      const registered = inPool.some(n => n.phoneNumber === from);
-      const campaign = campaigns[0] || null;
+    // 10DLC registration travels with the number's Messaging Service, so a number's
+    // campaign is only visible through whichever service holds it — never the number.
+    //
+    // Find that service rather than assuming TWILIO_MESSAGING_SERVICE_SID. The account has
+    // more than one: that env var points at the shared pool carrying customers' dedicated
+    // numbers, while SORCE's own number sits in its own service under its own campaign.
+    // Checking only the configured service reported a correctly registered SORCE number as
+    // unregistered, which is worse than not checking — it tells you to fix something that
+    // isn't broken.
+    const services = await client.messaging.v1.services.list({ limit: 20 });
+    let owning = null;
+    for (const svc of services) {
+      const nums = await client.messaging.v1.services(svc.sid).phoneNumbers.list({ limit: 100 });
+      if (nums.some(n => n.phoneNumber === from)) { owning = svc; break; }
+    }
 
-      if (!registered) {
-        return {
-          ok: false, level: 'warn', mode: 'dedicated', from,
-          summary: `${from} has no verified A2P campaign yet`,
-          detail: `The number is on the account but not in the Messaging Service that carries the verified campaign, so carriers will most likely drop the text with error 30034 — Twilio will still report it as queued. Expect it to start working once the campaign it was submitted under is verified.`,
-        };
-      }
-      if (campaign && campaign.campaignStatus !== 'VERIFIED') {
-        return {
-          ok: false, level: 'warn', mode: 'dedicated', from,
-          summary: `A2P campaign is ${campaign.campaignStatus}, not verified`,
-          detail: `Texts from ${from} are likely to be dropped by carriers with error 30034 until the campaign clears.`,
-        };
-      }
+    if (!owning) {
+      return {
+        ok: false, level: 'warn', mode: 'dedicated', from,
+        summary: `${from} is not in any Messaging Service`,
+        detail: `A number outside every service has no A2P campaign behind it, so carriers will most likely drop the text with error 30034 while Twilio still reports it queued.`,
+      };
+    }
+
+    const campaigns = await client.messaging.v1.services(owning.sid).usAppToPerson.list({ limit: 5 });
+    const campaign = campaigns[0] || null;
+
+    if (!campaign) {
+      return {
+        ok: false, level: 'warn', mode: 'dedicated', from,
+        summary: `No A2P campaign on "${owning.friendlyName}"`,
+        detail: `${from} sits in that Messaging Service, but it carries no US A2P campaign — carriers will most likely drop the text with error 30034.`,
+      };
+    }
+    if (campaign.campaignStatus !== 'VERIFIED') {
+      return {
+        ok: false, level: 'warn', mode: 'dedicated', from,
+        summary: `A2P campaign is ${campaign.campaignStatus}, not verified`,
+        detail: `Texts from ${from} are likely to be dropped with error 30034 until campaign ${campaign.campaignId} on "${owning.friendlyName}" clears.`,
+      };
     }
 
     return {
       ok: true, level: 'ok', mode: 'dedicated', from,
       summary: `Texts will send from ${from}`,
-      detail: null,
+      detail: `Campaign ${campaign.campaignId} on "${owning.friendlyName}" is verified.`,
     };
   } catch (err) {
     return {
