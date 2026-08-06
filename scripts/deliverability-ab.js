@@ -114,6 +114,11 @@ async function viaPostmark({ to, from, subject, html, text }) {
       // polices that separation and suspends accounts that blur it.
       MessageStream: 'outbound',
       TrackOpens: false,
+      // Explicit, not inherited from the server's default. SendGrid's link rewriting was
+      // turned off because it was the likely cause of the junking — leaving Postmark's on
+      // would reintroduce the same variable pointing the other way and invalidate the
+      // comparison.
+      TrackLinks: 'None',
     }),
   });
   const j = await res.json().catch(() => ({}));
