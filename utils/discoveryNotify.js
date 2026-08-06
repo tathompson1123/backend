@@ -222,134 +222,58 @@ function reminder2hSMS(call, rep) {
     : head + `${who} will call you on this number. Talk soon!`;
 }
 
+// Deliberately plain, and that is a measured decision rather than an aesthetic one.
+//
+// The previous version was junked at a cold Outlook mailbox by two unrelated ESPs, with
+// SPF, DKIM, DMARC and compauth all passing on both. A four-sentence plain email from the
+// same address, same domain, through those same two providers, reached the inbox of that
+// same mailbox. So nothing about the sender was the problem — the difference was entirely
+// this template:
+//
+//   - a remote image on first contact, which is tracking-pixel shaped and was the single
+//     largest thing to remove
+//   - 6.6KB of nested-table chrome wrapping 975 characters of text
+//   - the Zoom URL printed twice, once as a button and again as raw text
+//   - a passcode sitting immediately beside a raw link, which is a credential-in-email
+//     pattern filters are tuned to distrust
+//   - three "what we'll cover" sales bullets in what is meant to be a confirmation
+//
+// So this keeps only what the prospect needs in order to attend, in markup close to what
+// actually landed. If the intro video is ever recorded it goes in as a plain link — a
+// thumbnail would put a remote image back and undo the fix.
 function confirmationEmailHtml(call, rep) {
   const when = formatWhen(call.scheduled_at, call.timezone);
-  const repName = rep?.name || 'Your SORCE specialist';
-  const repTitle = rep?.title || 'Growth Specialist, SORCE';
-  const repPhoto = rep?.photo_url || `${SITE_URL}/sorce-logo-120.png`;
-  const repBio = rep?.bio || 'They work with service businesses every day on reviews, booking and lead follow-up.';
+  const repName = rep?.name || 'your SORCE specialist';
+  const repTitle = rep?.title || '';
+  const repBio = rep?.bio || '';
+  const mins = call.duration_minutes || 30;
 
-  const videoBlock = VIDEO_URL ? `
-    <tr><td style="padding:0 32px 28px;">
-      <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#111827;">Watch this before we talk (2 min)</p>
-      <a href="${VIDEO_URL}" style="display:block;text-decoration:none;">
-        <img src="${VIDEO_THUMB}" alt="Watch our intro video" width="536"
-             style="width:100%;max-width:536px;border-radius:12px;display:block;border:1px solid #e5e7eb;" />
-        <span style="display:inline-block;margin-top:12px;background:#d97706;color:#ffffff;padding:12px 24px;
-                     border-radius:8px;font-weight:bold;font-size:15px;">▶ Play the intro video</span>
-      </a>
-      <p style="margin:12px 0 0;font-size:13px;color:#6b7280;">A quick hello and exactly what we'll cover on the call.</p>
-    </td></tr>` : `
-    <tr><td style="padding:0 32px 28px;">
-      <div style="border:1px dashed #d1d5db;border-radius:12px;padding:24px;text-align:center;background:#f9fafb;">
-        <p style="margin:0;font-size:14px;color:#6b7280;">Our intro video is on its way — we'll send it before the call.</p>
-      </div>
-    </td></tr>`;
+  // The passcode gets its own paragraph rather than trailing the link. htmlToText expands
+  // an anchor into "label: url", so keeping them on one line reproduced exactly the
+  // url-then-credential adjacency this rewrite is meant to remove — it just moved it from
+  // the HTML into the text/plain part, where filters read it just as easily. Zoom's join
+  // URL already carries ?pwd=, so this line only matters to someone typing the meeting ID.
+  const where = call.zoom_join_url
+    ? `<p style="margin:0 0 16px;">It's on Zoom &mdash; <a href="${call.zoom_join_url}" style="color:#1d4ed8;">join here</a>. We've texted you the link as well.</p>`
+      + (call.zoom_passcode ? `<p style="margin:0 0 16px;">If it asks for a passcode, it's ${call.zoom_passcode}.</p>` : '')
+    : `<p style="margin:0 0 16px;">We'll call you at ${call.phone || 'the number you gave us'}.</p>`;
 
-  return `
-<!DOCTYPE html>
-<html><body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 12px;">
-    <tr><td align="center">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0"
-             style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);">
+  const who = [repName, repTitle].filter(Boolean).join(', ');
+  const video = VIDEO_URL
+    ? `<p style="margin:0 0 16px;">Before we talk, here's a two-minute intro: <a href="${VIDEO_URL}" style="color:#1d4ed8;">watch it here</a>.</p>`
+    : '';
 
-        <!-- bgcolor + background-color before the gradient: Outlook and several Gmail
-             paths drop CSS gradients entirely, and without a solid fallback the header
-             rendered as white text on a white background. Same pattern invoiceEmail
-             already uses. -->
-        <tr><td bgcolor="#d97706" style="background-color:#d97706;background:linear-gradient(135deg,#d97706,#2563eb);padding:32px;text-align:center;">
-          <p style="margin:0;color:#ffffff;font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9;">SORCE</p>
-          <h1 style="margin:8px 0 0;color:#ffffff;font-size:26px;">Your discovery call is booked</h1>
-        </td></tr>
-
-        <tr><td style="padding:32px 32px 20px;">
-          <p style="margin:0 0 16px;font-size:16px;color:#374151;">Hi ${firstNameOf(call.name)},</p>
-          <p style="margin:0;font-size:16px;color:#374151;line-height:1.6;">
-            You're all set. Here are the details, plus a quick intro to who you'll be speaking with.
-          </p>
-        </td></tr>
-
-        <tr><td style="padding:0 32px 24px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-                 style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;">
-            <tr><td style="padding:20px;">
-              <p style="margin:0 0 10px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">When</p>
-              <p style="margin:0 0 18px;font-size:18px;font-weight:bold;color:#111827;">${when}</p>
-              <p style="margin:0 0 10px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">How long</p>
-              <p style="margin:0 0 18px;font-size:16px;color:#111827;">${call.duration_minutes || 30} minutes</p>
-              <p style="margin:0 0 10px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">Where</p>
-              ${call.zoom_join_url ? `
-              <p style="margin:0 0 14px;font-size:16px;color:#111827;">On Zoom — we've texted you this link too.</p>
-              <!-- bgcolor + solid background-color so the button survives clients that
-                   drop CSS backgrounds, same reason as the header above. -->
-              <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                <td bgcolor="#2563eb" style="background-color:#2563eb;border-radius:8px;">
-                  <a href="${call.zoom_join_url}"
-                     style="display:inline-block;padding:13px 28px;color:#ffffff;text-decoration:none;font-weight:bold;font-size:16px;">
-                    Join the Zoom call
-                  </a>
-                </td>
-              </tr></table>
-              <p style="margin:12px 0 0;font-size:13px;color:#6b7280;word-break:break-all;">
-                Or paste this in: ${call.zoom_join_url}${call.zoom_passcode ? `<br/>Passcode: <strong>${call.zoom_passcode}</strong>` : ''}
-              </p>` : `
-              <p style="margin:0;font-size:16px;color:#111827;">
-                We'll call you at <strong>${call.phone || 'the number you provided'}</strong>
-              </p>`}
-            </td></tr>
-          </table>
-        </td></tr>
-
-        <tr><td style="padding:0 32px 24px;">
-          <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#111827;">Who you'll be speaking with</p>
-          <table role="presentation" cellpadding="0" cellspacing="0" width="100%"
-                 style="border:1px solid #e5e7eb;border-radius:12px;">
-            <tr>
-              <td width="88" style="padding:16px 0 16px 16px;vertical-align:top;">
-                <img src="${repPhoto}" alt="${repName}" width="72" height="72"
-                     style="width:72px;height:72px;border-radius:50%;object-fit:cover;display:block;background:#f3f4f6;" />
-              </td>
-              <td style="padding:16px;vertical-align:top;">
-                <p style="margin:0;font-size:17px;font-weight:bold;color:#111827;">${repName}</p>
-                <p style="margin:2px 0 8px;font-size:14px;color:#d97706;font-weight:600;">${repTitle}</p>
-                <p style="margin:0;font-size:14px;color:#4b5563;line-height:1.5;">${repBio}</p>
-              </td>
-            </tr>
-          </table>
-        </td></tr>
-
-        ${videoBlock}
-
-        <tr><td style="padding:0 32px 32px;">
-          <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#111827;">What we'll cover</p>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            ${[
-              'Where leads are currently slipping through the cracks in your business',
-              'How automated Google reviews and hands-free booking would work for you',
-              'A straight answer on whether SORCE is a fit — no pressure either way',
-            ].map(item => `
-            <tr><td style="padding:6px 0;font-size:15px;color:#374151;line-height:1.5;">
-              <span style="color:#059669;font-weight:bold;">✓</span>&nbsp; ${item}
-            </td></tr>`).join('')}
-          </table>
-        </td></tr>
-
-        <tr><td style="padding:0 32px 32px;">
-          <p style="margin:0;font-size:14px;color:#6b7280;line-height:1.6;">
-            Need to reschedule or cancel? Just reply to this email and we'll sort it out.
-          </p>
-        </td></tr>
-
-        <tr><td style="background:#111827;padding:24px 32px;text-align:center;">
-          <p style="margin:0;color:#9ca3af;font-size:13px;">SORCE — built for service businesses</p>
-          <p style="margin:6px 0 0;color:#6b7280;font-size:12px;">
-            <a href="${SITE_URL}" style="color:#9ca3af;">sorceintegrations.com</a>
-          </p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
+  return `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;">
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1f2937;font-size:15px;line-height:1.55;">
+    <p style="margin:0 0 16px;">Hi ${firstNameOf(call.name)},</p>
+    <p style="margin:0 0 16px;">Your discovery call is confirmed for <strong>${when}</strong>, and should take about ${mins} minutes.</p>
+    ${where}
+    <p style="margin:0 0 16px;">You'll be speaking with ${who}.${repBio ? ` ${repBio}` : ''}</p>
+    ${video}
+    <p style="margin:0 0 16px;">Need to reschedule or cancel, just reply to this email and we'll sort it out.</p>
+    <p style="margin:0;color:#6b7280;font-size:13px;">SORCE Integrations</p>
+  </div>
 </body></html>`;
 }
 
