@@ -73,6 +73,101 @@ async function sendDiscoverySMS(to, body) {
   return { sid: result.sid, status: result.status };
 }
 
+// Answers "will the confirmation text actually arrive?" before a call is booked, rather
+// than after. Deliberately sits next to sendDiscoverySMS and mirrors its branching, so a
+// change to one is obvious next to the other.
+//
+// Config alone can't answer it, which is the whole reason this does network calls:
+//
+//  - A typo'd SORCE_SMS_FROM looks perfectly healthy to a config check and then fails at
+//    send time with Twilio 21606, "not a valid sending number".
+//  - Worse, a US 10DLC number whose A2P campaign isn't verified is accepted by Twilio,
+//    comes back `queued`, and is then dropped by the carrier with 30034. Nothing throws.
+//    dispatchConfirmations records that as a success and the badge goes green, so this is
+//    the only place the problem can be caught at all.
+//
+// Twilio being unreachable must never block a booking, so a failed lookup degrades to
+// "configured but unchecked" instead of reporting a fault that may not exist.
+async function checkDiscoverySmsSetup() {
+  const configured = process.env.SORCE_SMS_FROM || null;
+  const poolSid = process.env.TWILIO_MESSAGING_SERVICE_SID || null;
+
+  if (!configured && !poolSid) {
+    return {
+      ok: false, level: 'error', mode: 'none', from: null,
+      summary: 'No confirmation text will be sent',
+      detail: 'Neither SORCE_SMS_FROM nor TWILIO_MESSAGING_SERVICE_SID is set, so there is nothing to send from. The booking and its email will still go through.',
+    };
+  }
+
+  if (!configured) {
+    return {
+      ok: true, level: 'warn', mode: 'pool', from: null,
+      summary: 'Texts will go out from a shared number',
+      detail: "SORCE_SMS_FROM isn't set, so Twilio picks from the Messaging Service pool — which holds customers' dedicated numbers. The prospect may be texted by an unrelated business, and because replies route on the receiving number, their answer would land in that business's account and be read by its SMS agent.",
+    };
+  }
+
+  const from = toE164(configured);
+  if (!from) {
+    return {
+      ok: false, level: 'error', mode: 'dedicated', from: configured,
+      summary: 'The SORCE sending number is malformed',
+      detail: `SORCE_SMS_FROM is set to "${configured}", which isn't a usable phone number.`,
+    };
+  }
+
+  try {
+    const client = getClient();
+    const owned = await client.incomingPhoneNumbers.list({ phoneNumber: from, limit: 1 });
+    if (!owned.length) {
+      return {
+        ok: false, level: 'error', mode: 'dedicated', from,
+        summary: `${from} isn't on this Twilio account`,
+        detail: `Twilio will reject the send with error 21606. Check SORCE_SMS_FROM against the numbers the account actually owns.`,
+      };
+    }
+
+    // 10DLC registration travels with the number's Messaging Service, so an unregistered
+    // number is only visible by looking at the service's campaign — not the number itself.
+    if (poolSid) {
+      const [inPool, campaigns] = await Promise.all([
+        client.messaging.v1.services(poolSid).phoneNumbers.list({ limit: 100 }),
+        client.messaging.v1.services(poolSid).usAppToPerson.list({ limit: 5 }),
+      ]);
+      const registered = inPool.some(n => n.phoneNumber === from);
+      const campaign = campaigns[0] || null;
+
+      if (!registered) {
+        return {
+          ok: false, level: 'warn', mode: 'dedicated', from,
+          summary: `${from} has no verified A2P campaign yet`,
+          detail: `The number is on the account but not in the Messaging Service that carries the verified campaign, so carriers will most likely drop the text with error 30034 — Twilio will still report it as queued. Expect it to start working once the campaign it was submitted under is verified.`,
+        };
+      }
+      if (campaign && campaign.campaignStatus !== 'VERIFIED') {
+        return {
+          ok: false, level: 'warn', mode: 'dedicated', from,
+          summary: `A2P campaign is ${campaign.campaignStatus}, not verified`,
+          detail: `Texts from ${from} are likely to be dropped by carriers with error 30034 until the campaign clears.`,
+        };
+      }
+    }
+
+    return {
+      ok: true, level: 'ok', mode: 'dedicated', from,
+      summary: `Texts will send from ${from}`,
+      detail: null,
+    };
+  } catch (err) {
+    return {
+      ok: true, level: 'warn', mode: 'dedicated', from, unchecked: true,
+      summary: `Set to send from ${from}, unconfirmed`,
+      detail: `Couldn't reach Twilio to check the number and its campaign (${err.message}), so this is the configured value rather than a verified one.`,
+    };
+  }
+}
+
 const firstNameOf = (name) => String(name || 'there').trim().split(/\s+/)[0];
 
 // Text is the primary channel for the Zoom link on purpose: it can't land in a spam
@@ -258,6 +353,7 @@ module.exports = {
   toE164,
   formatWhen,
   sendDiscoverySMS,
+  checkDiscoverySmsSetup,
   sendConfirmationEmail,
   confirmationSMS,
   reminder24hSMS,

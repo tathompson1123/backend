@@ -12,6 +12,7 @@ if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
 const {
   sendDiscoverySMS, sendConfirmationEmail, confirmationSMS, formatWhen,
+  checkDiscoverySmsSetup,
 } = require('../utils/discoveryNotify');
 const { isZoomConfigured, createMeeting, updateMeeting, deleteMeeting, checkZoomSetup } = require('../utils/zoom');
 
@@ -288,6 +289,18 @@ router.get('/zoom/status', requireAnalytics, requireAdmin, async (req, res) => {
     res.json({ success: true, ...(await checkZoomSetup()) });
   } catch (err) {
     res.status(500).json({ success: false, ok: false, error: err.message });
+  }
+});
+
+// Whether a confirmation text will actually arrive, checked before booking rather than
+// discovered afterwards. Not requireAdmin: the whole team books calls, so the whole team
+// needs to know when the text isn't going to land.
+router.get('/sms/status', requireAnalytics, async (req, res) => {
+  try {
+    res.json({ success: true, ...(await checkDiscoverySmsSetup()) });
+  } catch (err) {
+    // A broken preflight must not read as broken SMS — it's the check that failed.
+    res.status(500).json({ success: false, level: 'unknown', error: err.message });
   }
 });
 
