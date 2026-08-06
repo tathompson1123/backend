@@ -44,6 +44,23 @@ function arg(name, fallback = null) {
 // Fixed dummy data. Deliberately not randomised: two runs should differ only by provider,
 // and a changing body would let content variation masquerade as a provider difference.
 function buildMessage(template) {
+  // Strips every content variable at once: no images, no links, no redirectors, no
+  // gradients, no tables, no unicode marks. Same domain, same provider, same mailbox.
+  //
+  // It separates two things nothing else can. If this reaches the inbox while the real
+  // template doesn't, the template's content is the problem and the sending setup is fine.
+  // If even this is junked, content work is wasted effort — the domain or the IP is what's
+  // being judged, and no amount of template editing will move it.
+  if (template === 'minimal') {
+    return {
+      subject: 'Your appointment on Thursday, August 20',
+      html: `<p>Hi Jordan,</p>
+<p>This is a reminder that your appointment is booked for Thursday, August 20 at 10:00 AM. It should take about 30 minutes.</p>
+<p>If you need to move it or cancel, reply to this message and we will take care of it.</p>
+<p>Thanks,<br>SORCE Integrations</p>`,
+    };
+  }
+
   if (template === 'invoice') {
     return {
       subject: 'Invoice INV-1043 from Thompson\'s Auto Detailing',
