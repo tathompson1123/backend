@@ -371,6 +371,9 @@ module.exports = {
   sendDiscoverySMS,
   checkDiscoverySmsSetup,
   sendConfirmationEmail,
+  // Exported so the deliverability harness can test the real template rather than a
+  // lookalike — a test on approximated HTML tells you nothing about production mail.
+  confirmationEmailHtml,
   confirmationSMS,
   reminder24hSMS,
   reminder2hSMS,
