@@ -1,25 +1,37 @@
-// Two separate sending identities, and the reason matters.
+// Two separate sending identities, and which mail goes on which one is the whole point.
 //
-// Everything used to send as noreply@sorceintegrations.com and reached the inbox.
-// Moving it all to help@sorceintegrations.com pushed owner alerts into spam — not
-// because the address is wrong, but because a From address is its own reputation
-// record at Gmail. noreply@ had months of delivered-and-opened history; help@ started
-// from nothing and inherited none of it.
+// Splitting them is right: when one identity carried marketing blasts, review chases and
+// "you have a new lead" alerts together, a single complaint-heavy campaign could push a
+// business owner's alerts into spam. Promotional mail can no longer drag transactional
+// mail down.
 //
-// The deeper problem is that one identity carried everything. Marketing blasts, review
-// chases and "you have a new lead" alerts all shared a reputation, so a single
-// complaint-heavy campaign could push a business owner's alerts into spam. Splitting
-// them means promotional mail can never drag transactional mail down again.
+// What was wrong was the direction. Transactional went onto a brand-new subdomain,
+// notify@mail.sorceintegrations.com, and every one of those emails went to Junk at
+// Microsoft — three different templates in two days, all with SPF, DKIM, DMARC and
+// compauth passing. The headers were unambiguous: SCL:5, SFV:SPM, CAT:SPM, BCL:0,
+// IPV:NLI. Nothing wrong with the mail; no reputation behind the sender. At 7-32 emails a
+// day on a shared SendGrid pool there is no volume to build any with, either.
 //
-// Both default to the current address so nothing moves until the DNS for the new
-// subdomain is actually verified in SendGrid. Point the env vars at it once it is:
+// A From address is its own reputation record. Moving noreply@ to help@ cost the inbox
+// once, and moving help@ to a new subdomain cost it again. So put the mail that MUST land
+// on the identity that already has history, and put the mail that can afford weeks of
+// inconsistent delivery on the new subdomain while it warms up. That is the opposite of
+// what was done, and it still keeps the two apart:
 //
-//   SENDGRID_TRANSACTIONAL_FROM=notify@mail.sorceintegrations.com
-//   SENDGRID_BULK_FROM=news@marketing.sorceintegrations.com
+//   SENDGRID_TRANSACTIONAL_FROM=noreply@sorceintegrations.com      <- months of history
+//   SENDGRID_BULK_FROM=news@marketing.sorceintegrations.com        <- new, warming
 //
-// Setting either before its domain is authenticated will send unsigned mail, which is
-// worse than the problem being fixed — verify in SendGrid first.
-const LEGACY_FROM = 'help@sorceintegrations.com';
+// Two things also make mail.sorceintegrations.com a weaker identity than the root domain
+// on paper, and both are worth fixing before anything transactional moves back onto it:
+// it has no MX and no A record, so filters see a From domain that cannot receive mail,
+// and it has no SPF TXT of its own. Neither breaks authentication — the envelope passes
+// on em5237.mail.sorceintegrations.com via SendGrid's CNAME — but "domain can't receive
+// mail" is a signal receivers do score.
+//
+// The default is noreply@ rather than help@ deliberately: if the env var is ever unset,
+// the fallback should be the address with the best history, not the one that already lost
+// the inbox once.
+const LEGACY_FROM = 'noreply@sorceintegrations.com';
 
 const TRANSACTIONAL_EMAIL = process.env.SENDGRID_TRANSACTIONAL_FROM || LEGACY_FROM;
 const BULK_EMAIL = process.env.SENDGRID_BULK_FROM || LEGACY_FROM;
