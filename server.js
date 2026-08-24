@@ -166,6 +166,9 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/payment-connections', paymentConnectionRoutes);
 app.use('/api/pay', paymentPublicRoutes);
 
+const serviceDescriptionRoutes = require('./routes/service-descriptions');
+app.use('/api/service-descriptions', serviceDescriptionRoutes);
+
 const statusTemplateRoutes = require('./routes/status-templates');
 app.use('/api/status-templates', statusTemplateRoutes);
 
@@ -322,6 +325,62 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     )`);
     await pool.query("ALTER TABLE invoice_items_catalog ADD COLUMN IF NOT EXISTS taxable BOOLEAN DEFAULT false");
     await pool.query("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS taxable BOOLEAN DEFAULT true");
+    // Per-line service description, typed at booking time. Carries through to the
+    // invoice line item so the customer sees what was actually done, not just the
+    // catalog service name.
+    await pool.query("ALTER TABLE booking_items ADD COLUMN IF NOT EXISTS description TEXT");
+    // invoice_items historically stuffed the service name into `description`. Square,
+    // PayPal and QuickBooks all take a name AND a description, so split them: `name`
+    // is the service, `description` is what was actually done. Backfilled below for
+    // rows written before the split.
+    await pool.query("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS name VARCHAR(255)");
+    await pool.query("UPDATE invoice_items SET name = LEFT(description, 255) WHERE name IS NULL AND description IS NOT NULL");
+    // Was VARCHAR(500), but per-line descriptions are allowed up to 1000 chars
+    // (utils/bookingServices.js MAX_DESCRIPTION_LENGTH) — a long one would fail the
+    // insert with 22001 and take the whole invoice down.
+    await pool.query("ALTER TABLE invoice_items ALTER COLUMN description TYPE TEXT");
+    // Reusable descriptions per service. service_id NULL = preset offered for every
+    // service. Exactly one row per service may be is_default (enforced below); that
+    // one pre-fills the description box when the service is added to a booking.
+    await pool.query(`CREATE TABLE IF NOT EXISTS service_description_presets (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      service_id INTEGER REFERENCES services(id) ON DELETE CASCADE,
+      label VARCHAR(120) NOT NULL,
+      body TEXT NOT NULL,
+      is_default BOOLEAN DEFAULT false,
+      sort_order INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query("CREATE INDEX IF NOT EXISTS sdp_user_service_idx ON service_description_presets(user_id, service_id, sort_order)");
+    // One default per service (and one user-level default for the NULL-service row).
+    await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS sdp_one_default_per_service ON service_description_presets(user_id, service_id) WHERE is_default AND service_id IS NOT NULL");
+    await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS sdp_one_global_default ON service_description_presets(user_id) WHERE is_default AND service_id IS NULL");
+    // QuickBooks Online. Unlike Square/Clover this is an accounting system, so it
+    // stores a realm (company) id alongside the OAuth pair. Intuit refresh tokens
+    // themselves expire (~100 days), hence the second expiry column.
+    await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS quickbooks_realm_id TEXT");
+    await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS quickbooks_access_token TEXT");
+    await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS quickbooks_refresh_token TEXT");
+    await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS quickbooks_token_expires_at TIMESTAMPTZ");
+    await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS quickbooks_refresh_expires_at TIMESTAMPTZ");
+    await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS quickbooks_invoice_id VARCHAR(255)");
+    // Deep link to the unsent/draft invoice inside the processor's own dashboard,
+    // so "Create Draft Invoice" can hand the user somewhere to go review it.
+    await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS processor_draft_url TEXT");
+    // Claim stamp for draft creation. The auto-draft fires the moment a booking is
+    // created, so it can now race a user pressing the manual button on the same
+    // booking — and each adapter mints its own idempotency key, so two winners means
+    // two drafts in the merchant's account. Claimed atomically; the 2-minute staleness
+    // window in invoiceDrafts.js releases it if a dyno dies mid-call.
+    await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS draft_claimed_at TIMESTAMPTZ");
+    // Auto-draft a processor invoice for every new booking — dashboard, employee app
+    // and public website alike. On by default: a merchant who has connected
+    // Square/Stripe/PayPal/QuickBooks wants the invoice waiting for them, and it is a
+    // DRAFT, so nothing reaches the customer until they send it. Users with no
+    // draft-capable connection are unaffected.
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_draft_invoices BOOLEAN DEFAULT true");
     // Owner to-do list, shared between web dashboard and employee admin app
     await pool.query(`CREATE TABLE IF NOT EXISTS admin_todos (
       id SERIAL PRIMARY KEY,

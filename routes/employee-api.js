@@ -6,7 +6,12 @@ const { authenticateEmployee, requirePermission } = require('../config/employee-
 const multer = require('multer');
 const { v2: cloudinary } = require('cloudinary');
 const { sendPushToTeam, sendPushToEmployee } = require('../utils/pushNotifications');
-const { normalizeServiceList, resolveBookingServices } = require('../utils/bookingServices');
+const { normalizeServiceList, resolveBookingServices, fetchBookingDescriptions } = require('../utils/bookingServices');
+const { validateCustomerContact } = require('../utils/customerContact');
+const { listPresets: listServiceDescriptionPresets } = require('./service-descriptions');
+const { handleDraftFromBooking } = require('./invoices');
+const { getDraftCapableConnections } = require('../payment/invoiceDrafts');
+const { queueAutoDraftInvoice } = require('../utils/autoDraftInvoice');
 const { sendBookingEmails } = require('../utils/bookingEmail');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
@@ -137,6 +142,7 @@ router.get('/my-bookings', requirePermission('view_bookings'), async (req, res) 
               'duration', bi.service_duration,
               'price', bi.service_price,
               'quantity', bi.quantity,
+              'description', bi.description,
               'is_addon', COALESCE(bi.is_addon, false)
             ) ORDER BY COALESCE(bi.is_addon, false), bi.id
           ) FILTER (WHERE bi.id IS NOT NULL),
@@ -200,6 +206,7 @@ router.get('/my-bookings/:id', requirePermission('view_bookings'), async (req, r
               'duration', bi.service_duration,
               'price', bi.service_price,
               'quantity', bi.quantity,
+              'description', bi.description,
               'is_addon', COALESCE(bi.is_addon, false)
             ) ORDER BY COALESCE(bi.is_addon, false), bi.id
           ) FILTER (WHERE bi.id IS NOT NULL),
@@ -517,6 +524,29 @@ router.get('/invoice-catalog', requirePermission('process_payments'), async (req
       catalog: catalogRes.rows,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/employee/draft-targets - Which processors this user can draft into.
+// Mirrors GET /api/invoices/draft-targets so the app can show or hide the button.
+router.get('/draft-targets', requirePermission('process_payments'), async (req, res) => {
+  try {
+    res.json(await getDraftCapableConnections(req.employee.userId));
+  } catch (error) {
+    console.error('Error loading draft targets:', error.message);
+    res.status(500).json({ error: 'Failed to load payment connections' });
+  }
+});
+
+// POST /api/employee/my-bookings/:id/draft-invoice - Create a DRAFT invoice in the
+// owner's payment processor from the field. Same handler the dashboard button uses,
+// so both surfaces produce identical drafts. Nothing is emailed to the customer.
+router.post('/my-bookings/:id/draft-invoice', requirePermission('process_payments'), async (req, res) => {
+  await handleDraftFromBooking({
+    userId: req.employee.userId,
+    bookingId: req.params.id,
+    processor: req.body?.processor,
+    res,
+  });
 });
 
 // POST /api/employee/my-bookings/:id/invoice - Auto-create invoice from booking
@@ -1015,6 +1045,21 @@ router.get('/services', async (req, res) => {
   } catch (error) {
     console.error('Error fetching employee services:', error.message);
     res.status(500).json({ error: 'Failed to fetch services' });
+  }
+});
+
+// GET /api/employee/service-descriptions - Reusable line-item description presets.
+// Read-only mirror of GET /api/service-descriptions so the app's Add Booking form
+// offers the same saved descriptions as the dashboard. Managing them stays on the
+// dashboard; employees pick, they don't curate.
+router.get('/service-descriptions', async (req, res) => {
+  try {
+    const { userId } = req.employee;
+    const presets = await listServiceDescriptionPresets(userId, req.query.serviceId);
+    res.json({ presets });
+  } catch (error) {
+    console.error('Error fetching service descriptions:', error.message);
+    res.status(500).json({ error: 'Failed to load description presets' });
   }
 });
 
@@ -1658,8 +1703,15 @@ router.post('/bookings', async (req, res) => {
     );
     const addons = normalizeServiceList(additionalServices);
 
-    if (!customerName || mains.length === 0 || !bookingDate || !startTime || !endTime) {
-      return res.status(400).json({ error: 'customerName, at least one main service, bookingDate, startTime, endTime required' });
+    if (mains.length === 0 || !bookingDate || !startTime || !endTime) {
+      return res.status(400).json({ error: 'At least one main service, bookingDate, startTime and endTime are required' });
+    }
+
+    // Email and phone are both mandatory here, same as the dashboard — see
+    // utils/customerContact.js.
+    const contact = validateCustomerContact({ name: customerName, email: customerEmail, phone: customerPhone });
+    if (!contact.ok) {
+      return res.status(400).json({ error: contact.error });
     }
 
     const resolved = await resolveBookingServices({ userId, mains, addons });
@@ -1667,6 +1719,13 @@ router.post('/bookings', async (req, res) => {
     if (resolvedMains.length === 0) return res.status(404).json({ error: 'Service not found' });
 
     const subtotal = resolved.reduce((sum, s) => sum + s.price, 0);
+    // Apply the same sales tax the dashboard applies. Without this the app wrote
+    // total_amount = subtotal, so the identical booking totalled differently
+    // depending on where it was taken, and the invoice inherited the wrong figure.
+    const taxRes = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
+    const taxRate = parseFloat(taxRes.rows[0]?.default_tax_rate || 0);
+    const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
+    const totalWithTax = subtotal + taxAmount;
     const assignTo = assignedEmployeeId || employeeId;
 
     const bnRes = await pool.query('SELECT generate_booking_number() as number');
@@ -1715,23 +1774,28 @@ router.post('/bookings', async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO bookings (user_id, employee_id, booking_number, customer_id, customer_name, customer_email, customer_phone,
-        customer_address, customer_notes, booking_date, start_time, end_time, status, subtotal, total_amount, job_notes, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',$13,$14,$15,'manual')
+        customer_address, customer_notes, booking_date, start_time, end_time, status, subtotal, tax_rate, tax_amount, total_amount, job_notes, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',$13,$14,$15,$16,$17,'manual')
        RETURNING *`,
-      [userId, assignTo, bookingNumber, customerId, customerName, customerEmail||null, customerPhone||null,
+      [userId, assignTo, bookingNumber, customerId, contact.name, contact.email, contact.phone,
        customerAddress||null, customerNotes||null, bookingDate, startTime, endTime,
-       subtotal, subtotal, notes||null]
+       subtotal, taxRate, taxAmount, totalWithTax, notes||null]
     );
     const booking = result.rows[0];
 
     // booking_items.subtotal is NOT NULL — for quantity-1 line items it equals service_price.
     for (const svc of resolved) {
       await pool.query(
-        `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal, is_addon)
-         VALUES ($1,$2,$3,$4,$5,1,$6,$7)`,
-        [booking.id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon]
+        `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal, is_addon, description)
+         VALUES ($1,$2,$3,$4,$5,1,$6,$7,$8)`,
+        [booking.id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon, svc.description]
       );
     }
+
+    // Same auto-draft as the web dashboard — a booking taken in the field should leave
+    // a draft invoice waiting in the owner's processor. Fire-and-forget, after the
+    // booking_items inserts the invoice lines are built from.
+    queueAutoDraftInvoice({ userId, bookingId: booking.id, source: 'employee-app' });
 
     // Send booking confirmation emails (non-blocking) — mirrors the web create path so
     // bookings made from the employee app notify the customer too. Was missing, so
@@ -1743,16 +1807,16 @@ router.post('/bookings', async (req, res) => {
     sendBookingEmails({
       userId,
       bookingNumber,
-      customerName,
-      customerEmail,
-      customerPhone,
+      customerName: contact.name,
+      customerEmail: contact.email,
+      customerPhone: contact.phone,
       serviceName: serviceLabel,
       bookingDate,
       startTime,
       endTime,
-      price: subtotal,
+      price: totalWithTax,
       subtotal,
-      total: subtotal,
+      total: totalWithTax,
       notes: customerNotes,
     }).catch(() => {});
 
@@ -1788,7 +1852,17 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
       return res.status(400).json({ error: 'bookingDate, startTime, and at least one main service required' });
     }
 
-    const resolved = await resolveBookingServices({ userId: null, mains, addons });
+    // An edit must not be able to strip the contact details a create now requires.
+    const contact = validateCustomerContact({ name: customerName, email: customerEmail, phone: customerPhone });
+    if (!contact.ok) {
+      return res.status(400).json({ error: contact.error });
+    }
+
+    // This edit deletes and re-inserts every booking_items row, so hand the resolver
+    // what's already stored — otherwise a payload that omits `description` (a plain
+    // reschedule from the app) reverts the line to the service's default preset.
+    const existingDescriptions = await fetchBookingDescriptions(id);
+    const resolved = await resolveBookingServices({ userId: null, mains, addons, existingDescriptions });
     const resolvedMains = resolved.filter(s => !s.is_addon);
     if (resolvedMains.length === 0) return res.status(404).json({ error: 'Service not found' });
     const primaryService = resolvedMains[0];
@@ -1836,9 +1910,9 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
         bookingDate,
         startTime,
         computedEndTime,
-        customerName ?? null,
-        customerEmail ?? null,
-        customerPhone ?? null,
+        contact.name,
+        contact.email,
+        contact.phone,
         customerAddress ?? null,
         customerNotes ?? null,
         notes ?? null,
@@ -1855,11 +1929,10 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
     const booking = bookingResult.rows[0];
 
     // Mirror the web PUT: keep the customers row in sync.
-    if (booking.customer_id && (customerName || customerEmail || customerPhone)) {
+    if (booking.customer_id) {
       await pool.query(
-        `UPDATE customers SET name = COALESCE($1, name), email = COALESCE($2, email), phone = COALESCE($3, phone)
-         WHERE id = $4`,
-        [customerName ?? null, customerEmail ?? null, customerPhone ?? null, booking.customer_id]
+        `UPDATE customers SET name = $1, email = $2, phone = $3 WHERE id = $4`,
+        [contact.name, contact.email, contact.phone, booking.customer_id]
       );
     }
 
@@ -1867,9 +1940,9 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
     await pool.query('DELETE FROM booking_items WHERE booking_id = $1', [id]);
     for (const svc of resolved) {
       await pool.query(
-        `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal, is_addon)
-         VALUES ($1,$2,$3,$4,$5,1,$6,$7)`,
-        [id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon]
+        `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal, is_addon, description)
+         VALUES ($1,$2,$3,$4,$5,1,$6,$7,$8)`,
+        [id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon, svc.description]
       );
     }
 

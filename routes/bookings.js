@@ -6,7 +6,9 @@ const { sendPushToEmployee, sendPushToOwner } = require('../utils/pushNotificati
 const { sendBookingEmails } = require('../utils/bookingEmail');
 const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-const { normalizeServiceList, resolveBookingServices } = require('../utils/bookingServices');
+const { normalizeServiceList, resolveBookingServices, fetchBookingDescriptions } = require('../utils/bookingServices');
+const { validateCustomerContact } = require('../utils/customerContact');
+const { queueAutoDraftInvoice } = require('../utils/autoDraftInvoice');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 const { escapeHtml: esc } = require('../utils/escapeHtml');
@@ -96,6 +98,7 @@ router.get('/', authenticateToken, async (req, res) => {
               'duration', bi.service_duration,
               'price', bi.service_price,
               'quantity', bi.quantity,
+              'description', bi.description,
               'is_addon', COALESCE(bi.is_addon, false)
             ) ORDER BY COALESCE(bi.is_addon, false), bi.id
           ) FILTER (WHERE bi.id IS NOT NULL),
@@ -168,6 +171,12 @@ router.post('/create', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    // Email and phone are both mandatory — see utils/customerContact.js.
+    const contact = validateCustomerContact(customerInfo);
+    if (!contact.ok) {
+      return res.status(400).json({ error: contact.error });
+    }
+
     const resolved = await resolveBookingServices({ userId, mains, addons });
     const resolvedMains = resolved.filter(s => !s.is_addon);
     if (resolvedMains.length === 0) {
@@ -234,7 +243,7 @@ router.post('/create', authenticateToken, async (req, res) => {
       `INSERT INTO customers (user_id, name, email, phone)
        VALUES ($1, $2, $3, $4)
        RETURNING id`,
-      [userId, customerInfo.name, customerInfo.email, customerInfo.phone]
+      [userId, contact.name, contact.email, contact.phone]
     );
     const customerIdToUse = customerResult.rows[0].id;
 
@@ -249,8 +258,8 @@ router.post('/create', authenticateToken, async (req, res) => {
       RETURNING *`,
       [
         userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
-        subtotal, totalWithTax, customerInfo.name, customerInfo.email,
-        customerInfo.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null,
+        subtotal, totalWithTax, contact.name, contact.email,
+        contact.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null,
         'manual', (referralSource && String(referralSource).trim()) || null
       ]
     );
@@ -261,14 +270,21 @@ router.post('/create', authenticateToken, async (req, res) => {
       await pool.query(
         `INSERT INTO booking_items (
           booking_id, service_id, service_name, service_duration,
-          service_price, quantity, subtotal, is_addon
+          service_price, quantity, subtotal, is_addon, description
         )
-        VALUES ($1, $2, $3, $4, $5, 1, $6, $7)`,
-        [booking.id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon]
+        VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8)`,
+        [booking.id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon, svc.description]
       );
     }
 
     await updateCustomerFromBooking(booking, userId);
+
+    // Push a DRAFT invoice into the merchant's processor (Square, or whichever
+    // connection is primary). Fire-and-forget: this makes a network call to the
+    // processor, and a booking must never fail — or wait — on that. Must come after
+    // the booking_items inserts above, since the invoice lines are built from them.
+    // Nothing is emailed to the customer; the draft waits for the owner to send it.
+    queueAutoDraftInvoice({ userId, bookingId: booking.id, source: 'dashboard' });
 
     const empResult = await pool.query('SELECT name FROM employees WHERE id = $1', [assignedEmployeeId]);
 
@@ -376,7 +392,17 @@ router.put('/:id', authenticateToken, async (req, res) => {
         : (Array.isArray(additionalServiceIds) ? additionalServiceIds : [])
     );
 
-    const resolved = await resolveBookingServices({ userId: null, mains, addons });
+    // An edit must not be able to strip the contact details a create now requires.
+    const contact = validateCustomerContact(customerInfo);
+    if (!contact.ok) {
+      return res.status(400).json({ error: contact.error });
+    }
+
+    // This edit deletes and re-inserts every booking_items row, so hand the resolver
+    // what's already stored — otherwise a payload that omits `description` reverts the
+    // line to the service's default preset and loses what was typed.
+    const existingDescriptions = await fetchBookingDescriptions(id);
+    const resolved = await resolveBookingServices({ userId: null, mains, addons, existingDescriptions });
     const resolvedMains = resolved.filter(s => !s.is_addon);
     if (resolvedMains.length === 0) {
       return res.status(404).json({ error: 'Service not found' });
@@ -422,9 +448,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
         bookingDate,
         startTime,
         endTime,
-        customerInfo?.name,
-        customerInfo?.email,
-        customerInfo?.phone,
+        contact.name,
+        contact.email,
+        contact.phone,
         customerInfo?.address,
         notes,
         employeeId,
@@ -449,7 +475,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         `UPDATE customers
          SET name = $1, email = $2, phone = $3
          WHERE id = $4`,
-        [customerInfo.name, customerInfo.email, customerInfo.phone, booking.customer_id]
+        [contact.name, contact.email, contact.phone, booking.customer_id]
       );
     }
 
@@ -458,9 +484,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     for (const svc of resolved) {
       await pool.query(
-        `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal, is_addon)
-         VALUES ($1, $2, $3, $4, $5, 1, $6, $7)`,
-        [id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon]
+        `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal, is_addon, description)
+         VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8)`,
+        [id, svc.id, svc.name, svc.duration_hours, svc.price, svc.price, svc.is_addon, svc.description]
       );
     }
 

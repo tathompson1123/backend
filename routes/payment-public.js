@@ -15,7 +15,7 @@ router.get('/:token', async (req, res) => {
               i.payment_processor, i.user_id,
               u.business_name,
               json_agg(json_build_object(
-                'description', ii.description, 'quantity', ii.quantity,
+                'name', ii.name, 'description', ii.description, 'quantity', ii.quantity,
                 'unit_price', ii.unit_price, 'amount', ii.amount
               )) FILTER (WHERE ii.id IS NOT NULL) as items
        FROM invoices i

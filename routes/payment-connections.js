@@ -5,6 +5,7 @@ const { authenticateToken } = require('../config/middleware');
 const { getConnectionsForUser, getProcessor, StripeConnectProcessor, SquareProcessor, CloverProcessor } = require('../payment/ProcessorFactory');
 const PayPalProcessor = require('../payment/PayPalProcessor');
 const { syncSquarePayments, syncSquareInvoices } = require('../utils/squareSync');
+const quickbooksAuth = require('../utils/quickbooksAuth');
 
 // GET /api/payment-connections - List all connections
 router.get('/', authenticateToken, async (req, res) => {
@@ -36,6 +37,9 @@ router.get('/:processor/oauth-url', authenticateToken, async (req, res) => {
         break;
       case 'clover':
         url = CloverProcessor.getOAuthUrl(userId);
+        break;
+      case 'quickbooks':
+        url = quickbooksAuth.getOAuthUrl(userId);
         break;
       default:
         return res.status(400).json({ error: 'Unknown processor' });
@@ -188,6 +192,26 @@ router.get('/clover/callback', async (req, res) => {
   }
 });
 
+// GET /api/payment-connections/quickbooks/callback - Intuit OAuth 2.0 callback.
+// Intuit returns realmId (the company id) as a query param alongside the code; both
+// are required to call the Accounting API, so a missing realmId is a hard failure.
+router.get('/quickbooks/callback', async (req, res) => {
+  const dashboard = `${process.env.FRONTEND_URL}/dashboard?tab=payment-settings`;
+  try {
+    const { code, realmId, state: userId, error: oauthError } = req.query;
+
+    if (oauthError) return res.redirect(`${dashboard}&error=${encodeURIComponent(oauthError)}`);
+    if (!code || !realmId || !userId) return res.redirect(`${dashboard}&error=quickbooks_failed`);
+
+    await quickbooksAuth.exchangeCodeForTokens(Number(userId), code, realmId);
+
+    res.redirect(`${dashboard}&connected=quickbooks`);
+  } catch (error) {
+    console.error('QuickBooks OAuth callback error:', error.message);
+    res.redirect(`${dashboard}&error=quickbooks_failed`);
+  }
+});
+
 // POST /api/payment-connections/:processor/connect - Manual connection (PayPal)
 router.post('/:processor/connect', authenticateToken, async (req, res) => {
   try {
@@ -267,6 +291,11 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Connection not found' });
 
     const processor = result.rows[0].processor;
+
+    // Tell Intuit the grant is gone. Best-effort — never blocks the disconnect.
+    if (processor === 'quickbooks') {
+      await quickbooksAuth.revokeQuickBooksToken(result.rows[0].quickbooks_refresh_token);
+    }
 
     // Remove synced transactions from this processor
     const delPayments = await pool.query(

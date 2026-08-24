@@ -7,7 +7,9 @@ const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
 const { getSquareClient, findOrCreateSquareCustomer, saveCardOnFile } = require('../utils/squareCardOnFile');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 const { escapeHtml: esc } = require('../utils/escapeHtml');
+const { queueAutoDraftInvoice } = require('../utils/autoDraftInvoice');
 const { plainEmail } = require('../utils/emailLayout');
+const { fetchDefaultDescriptions } = require('../utils/bookingServices');
 
 // All routes are public (no auth). businessId = user_id.
 
@@ -767,6 +769,9 @@ router.post('/bookings/create', async (req, res) => {
       } catch (e) { /* employees table may not exist — leave unassigned */ }
     }
 
+    // Hoisted so the auto-draft gate below cannot drift from what was stored.
+    const bookingStatus = (isCardOnFile && !cofSavedCard) ? 'pending' : 'confirmed';
+
     // Create booking
     const bookingResult = await pool.query(
       `INSERT INTO bookings (user_id, customer_id, booking_number, booking_date, start_time, end_time,
@@ -780,12 +785,15 @@ router.post('/bookings/create', async (req, res) => {
         customerNotes || '',
         assignedEmployeeId,
         totalPrice, totalWithTax, bizTaxRate, bizTaxAmount,
-        (isCardOnFile && !cofSavedCard) ? 'pending' : 'confirmed',
+        bookingStatus,
         cofSavedCard ? 'saved' : (isCardOnFile ? 'pending' : null),
       ]
     );
 
-    // Create booking items for each service
+    // Create booking items for each service. The public widget has no description
+    // box, so fall back to each service's default preset — otherwise an invoice built
+    // from this booking has bare lines.
+    const publicDescriptions = await fetchDefaultDescriptions(businessId, servicesResult.rows.map(s => s.id));
     for (const service of servicesResult.rows) {
       const isMain = service.id === Number(serviceId);
       const svcPrice = isMain && variantRow ? parseFloat(variantRow.price || 0) : parseFloat(service.price || 0);
@@ -795,9 +803,21 @@ router.post('/bookings/create', async (req, res) => {
       const vId = isMain && variantRow ? variantRow.id : null;
       const vName = isMain && variantRow ? variantRow.name : null;
       await pool.query(
-        'INSERT INTO booking_items (booking_id, service_id, service_name, service_price, service_duration, quantity, subtotal, variant_id, variant_name) VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8)',
-        [bookingResult.rows[0].id, service.id, service.name, svcPrice, svcDuration, svcPrice, vId, vName]
+        'INSERT INTO booking_items (booking_id, service_id, service_name, service_price, service_duration, quantity, subtotal, variant_id, variant_name, description) VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9)',
+        [bookingResult.rows[0].id, service.id, service.name, svcPrice, svcDuration, svcPrice, vId, vName,
+         publicDescriptions.get(Number(service.id)) || null]
       );
+    }
+
+    // Auto-draft into the business's processor, same as the dashboard. Confirmed
+    // bookings only: one still waiting on a card-on-file isn't a job yet, and drafting
+    // it would leave an invoice behind for a booking that may never firm up.
+    if (bookingStatus === 'confirmed') {
+      queueAutoDraftInvoice({
+        userId: businessId,
+        bookingId: bookingResult.rows[0].id,
+        source: 'public-website',
+      });
     }
 
     // Card on file: update customer record and send emails (inline), or email link (fallback)

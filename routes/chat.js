@@ -9,6 +9,7 @@ const { logClaudeUsage } = require('../utils/claudeUsage');
 const { isUnlimitedAccount } = require('../utils/unlimitedAccounts');
 const sgMail = require('@sendgrid/mail');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { fetchDefaultDescriptions } = require('../utils/bookingServices');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 function formatSlotTime(slot) {
@@ -429,16 +430,20 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
 
     const booking = bookingResult.rows[0];
 
-    // Create booking items — one row per selected service
+    // Create booking items — one row per selected service.
+    // The chat agent has no description box, so fall back to each service's default
+    // preset; otherwise an invoice built from this booking has bare lines.
+    const chatDescriptions = await fetchDefaultDescriptions(userId, allServices.map(s => s.id));
     for (const svc of allServices) {
       const svcPrice = parseFloat(svc.price) || 0;
       await pool.query(
         `INSERT INTO booking_items (
           booking_id, service_id, service_name, service_duration,
-          service_price, quantity, subtotal
+          service_price, quantity, subtotal, description
         )
-        VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-        [booking.id, svc.id, svc.name, svc.duration_hours, svcPrice, svcPrice]
+        VALUES ($1, $2, $3, $4, $5, 1, $6, $7)`,
+        [booking.id, svc.id, svc.name, svc.duration_hours, svcPrice, svcPrice,
+         chatDescriptions.get(Number(svc.id)) || null]
       );
     }
 

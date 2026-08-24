@@ -6,6 +6,9 @@ const { authenticateToken } = require('../config/middleware');
 const { getProcessorForUser } = require('../payment/ProcessorFactory');
 const { syncSquareInvoices } = require('../utils/squareSync');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { createInvoiceFromBooking } = require('../utils/invoiceFromBooking');
+const { createDraftInvoice, getDraftCapableConnections, DraftInvoiceError } = require('../payment/invoiceDrafts');
+const { setAutoDraftEnabled } = require('../utils/autoDraftInvoice');
 
 // GET /api/invoices - List invoices
 router.get('/', authenticateToken, async (req, res) => {
@@ -27,7 +30,7 @@ router.get('/', authenticateToken, async (req, res) => {
     let query = `
       SELECT i.*,
         json_agg(json_build_object(
-          'id', ii.id, 'description', ii.description,
+          'id', ii.id, 'name', ii.name, 'description', ii.description,
           'quantity', ii.quantity, 'unit_price', ii.unit_price, 'amount', ii.amount
         )) FILTER (WHERE ii.id IS NOT NULL) as items
       FROM invoices i
@@ -111,6 +114,36 @@ router.get('/catalog', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/invoices/draft-targets - Which processors this user can draft into.
+// The UI calls this to decide whether to show the "Create Draft Invoice" button and
+// which processors to offer.
+// MUST stay above GET /:id — Express matches in registration order, and a bare /:id
+// registered first swallows this path and tries to look up an invoice with id
+// 'draft-targets'.
+router.get('/draft-targets', authenticateToken, async (req, res) => {
+  try {
+    res.json(await getDraftCapableConnections(req.user.userId));
+  } catch (error) {
+    console.error('Error loading draft targets:', error.message);
+    res.status(500).json({ error: 'Failed to load payment connections' });
+  }
+});
+
+// PUT /api/invoices/auto-draft - Turn per-booking auto-drafting on or off.
+// MUST stay above PUT /:id for the same registration-order reason as draft-targets.
+router.put('/auto-draft', authenticateToken, async (req, res) => {
+  try {
+    if (typeof req.body?.enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled must be true or false' });
+    }
+    const enabled = await setAutoDraftEnabled(req.user.userId, req.body.enabled);
+    res.json({ success: true, autoDraft: enabled });
+  } catch (error) {
+    console.error('Error updating auto-draft setting:', error.message);
+    res.status(500).json({ error: 'Failed to update setting' });
+  }
+});
+
 // GET /api/invoices/:id - Invoice detail
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
@@ -120,7 +153,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT i.*,
         json_agg(json_build_object(
-          'id', ii.id, 'description', ii.description,
+          'id', ii.id, 'name', ii.name, 'description', ii.description,
           'quantity', ii.quantity, 'unit_price', ii.unit_price, 'amount', ii.amount, 'service_id', ii.service_id
         )) FILTER (WHERE ii.id IS NOT NULL) as items
        FROM invoices i
@@ -201,84 +234,113 @@ router.post('/', authenticateToken, async (req, res) => {
 // POST /api/invoices/from-booking/:bookingId - Auto-generate invoice from booking
 router.post('/from-booking/:bookingId', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const { bookingId } = req.params;
-
-    // Get booking with items
-    const bookingResult = await pool.query(
-      `SELECT b.*, json_agg(json_build_object(
-        'service_name', bi.service_name, 'service_price', bi.service_price,
-        'quantity', bi.quantity, 'service_id', bi.service_id
-       )) as items
-       FROM bookings b
-       LEFT JOIN booking_items bi ON b.id = bi.booking_id
-       WHERE b.id = $1 AND b.user_id = $2
-       GROUP BY b.id`,
-      [bookingId, userId]
-    );
-
-    if (bookingResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Booking not found' });
-    }
-
-    const booking = bookingResult.rows[0];
-
-    // Check if invoice already exists for this booking
-    const existingInvoice = await pool.query(
-      'SELECT id, invoice_number FROM invoices WHERE booking_id = $1',
-      [bookingId]
-    );
-
-    if (existingInvoice.rows.length > 0) {
-      return res.status(409).json({
-        error: 'Invoice already exists for this booking',
-        invoiceId: existingInvoice.rows[0].id,
-        invoiceNumber: existingInvoice.rows[0].invoice_number
+    const result = await createInvoiceFromBooking(req.user.userId, req.params.bookingId);
+    if (result.error) {
+      return res.status(result.status).json({
+        error: result.error,
+        invoiceId: result.invoiceId,
+        invoiceNumber: result.invoiceNumber,
       });
     }
-
-    // Generate invoice
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const randomSuffix = crypto.randomBytes(2).toString('hex').toUpperCase();
-    const invoiceNumber = `INV-${dateStr}-${randomSuffix}`;
-    const paymentLinkToken = crypto.randomBytes(32).toString('hex');
-    const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-
-    const invoiceResult = await pool.query(
-      `INSERT INTO invoices (
-        user_id, booking_id, customer_id, invoice_number, customer_name, customer_email, customer_phone,
-        subtotal, total_amount, amount_due, status, due_date, payment_link_token
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'draft', $11, $12)
-      RETURNING *`,
-      [userId, bookingId, booking.customer_id, invoiceNumber, booking.customer_name,
-       booking.customer_email, booking.customer_phone, booking.subtotal || booking.total_amount,
-       booking.total_amount, booking.total_amount, dueDate, paymentLinkToken]
-    );
-
-    const invoice = invoiceResult.rows[0];
-
-    // Create line items from booking items
-    const bookingItems = booking.items || [];
-    for (const item of bookingItems) {
-      if (item.service_name) {
-        await pool.query(
-          `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount, service_id)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [invoice.id, item.service_name, item.quantity || 1, item.service_price, item.service_price * (item.quantity || 1), item.service_id]
-        );
-      }
-    }
-
-    // Link invoice to booking
-    await pool.query(
-      "UPDATE bookings SET invoice_id = $1, payment_status = 'invoiced' WHERE id = $2",
-      [invoice.id, bookingId]
-    );
-
-    res.json({ success: true, invoice });
+    res.json({ success: true, invoice: result.invoice });
   } catch (error) {
     console.error('Error creating invoice from booking:', error.message);
     res.status(500).json({ error: 'Failed to create invoice' });
+  }
+});
+
+// POST /api/invoices/draft-from-booking/:bookingId - The button.
+// Builds the local invoice from the booking (or reuses the one already linked), then
+// creates a DRAFT in the chosen processor. Nothing is emailed to the customer — the
+// merchant reviews and sends from inside Square/Stripe/PayPal/QuickBooks.
+router.post('/draft-from-booking/:bookingId', authenticateToken, async (req, res) => {
+  await handleDraftFromBooking({
+    userId: req.user.userId,
+    bookingId: req.params.bookingId,
+    processor: req.body?.processor,
+    res,
+  });
+});
+
+// Shared by the dashboard route above and the employee-app route in employee-api.js.
+async function handleDraftFromBooking({ userId, bookingId, processor, res }) {
+  try {
+    // Default to the user's primary draft-capable connection when none was named.
+    let target = String(processor || '').toLowerCase();
+    if (!target) {
+      const { capable, cloverOnly } = await getDraftCapableConnections(userId);
+      if (cloverOnly) {
+        return res.status(400).json({
+          error: 'Clover has no invoicing API, so a draft cannot be created there. '
+            + 'Connect Square, Stripe, PayPal or QuickBooks to use this button.',
+          code: 'UNSUPPORTED_PROCESSOR',
+        });
+      }
+      if (capable.length === 0) {
+        return res.status(400).json({
+          error: 'No payment processor connected. Connect one in Payment Settings first.',
+          code: 'NOT_CONNECTED',
+        });
+      }
+      target = capable[0];
+    }
+
+    const built = await createInvoiceFromBooking(userId, bookingId, { reuseExisting: true });
+    if (built.error) {
+      return res.status(built.status).json({ error: built.error });
+    }
+
+    const draft = await createDraftInvoice({
+      userId,
+      processor: target,
+      invoice: built.invoice,
+      items: built.items,
+    });
+
+    res.json({
+      success: true,
+      invoiceId: built.invoice.id,
+      invoiceNumber: built.invoice.invoice_number,
+      reusedExistingInvoice: built.reused,
+      ...draft,
+    });
+  } catch (error) {
+    if (error instanceof DraftInvoiceError) {
+      return res.status(400).json({ error: error.message, code: error.code });
+    }
+    console.error('Error creating draft invoice from booking:', error.message);
+    res.status(500).json({ error: error.message || 'Failed to create draft invoice' });
+  }
+}
+
+// POST /api/invoices/:id/draft/:processor - Create a draft from an existing invoice.
+router.post('/:id/draft/:processor', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const invoiceResult = await pool.query(
+      'SELECT * FROM invoices WHERE id = $1 AND user_id = $2',
+      [req.params.id, userId]
+    );
+    if (invoiceResult.rows.length === 0) return res.status(404).json({ error: 'Invoice not found' });
+
+    const items = await pool.query(
+      'SELECT * FROM invoice_items WHERE invoice_id = $1 ORDER BY id',
+      [req.params.id]
+    );
+
+    const draft = await createDraftInvoice({
+      userId,
+      processor: req.params.processor,
+      invoice: invoiceResult.rows[0],
+      items: items.rows,
+    });
+    res.json({ success: true, ...draft });
+  } catch (error) {
+    if (error instanceof DraftInvoiceError) {
+      return res.status(400).json({ error: error.message, code: error.code });
+    }
+    console.error('Error creating draft invoice:', error.message);
+    res.status(500).json({ error: error.message || 'Failed to create draft invoice' });
   }
 });
 
@@ -338,9 +400,14 @@ router.put('/:id', authenticateToken, async (req, res) => {
     await pool.query('DELETE FROM invoice_items WHERE invoice_id = $1', [id]);
     for (const item of items) {
       await pool.query(
-        `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount, service_id, taxable)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [id, item.description, item.quantity, item.unitPrice, item.quantity * item.unitPrice, item.serviceId || null, item.taxable !== false]
+        // Carry `name` through — the editor may only send a description, but nulling
+        // the column would leave processor drafts using the description as the line
+        // name. Falling back to the description matches how buildLines resolves it.
+        `INSERT INTO invoice_items (invoice_id, name, description, quantity, unit_price, amount, service_id, taxable)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, (item.name || item.description || '').slice(0, 255), item.description,
+         item.quantity, item.unitPrice, item.quantity * item.unitPrice,
+         item.serviceId || null, item.taxable !== false]
       );
     }
 
@@ -926,3 +993,5 @@ router.delete('/catalog/:itemId', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
+// Reused by routes/employee-api.js so the app's button behaves identically.
+module.exports.handleDraftFromBooking = handleDraftFromBooking;

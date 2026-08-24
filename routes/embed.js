@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { sendBookingEmails } = require('../utils/bookingEmail');
 const { sendPushToOwner } = require('../utils/pushNotifications');
+const { fetchDefaultDescriptions } = require('../utils/bookingServices');
 
 // ─── Helper: Look up user by site key ───────────────────
 async function getUserBySiteKey(siteKey) {
@@ -247,10 +248,14 @@ router.post('/book/:siteKey', async (req, res) => {
     // NOT NULL (same pattern that bit the other create paths). Adding service_duration too
     // so this line matches what bookings.js / employee-api.js write.
     const svcPrice = service.price || 0;
+    // There's no description box on the embed widget, so fall back to the service's
+    // default preset — otherwise an invoice built from this booking has a bare line.
+    const embedDescriptions = await fetchDefaultDescriptions(user.id, [service.id]);
     await pool.query(
-      `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal)
-       VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-      [bookingResult.rows[0].id, service.id, service.name, service.duration_hours, svcPrice, svcPrice]
+      `INSERT INTO booking_items (booking_id, service_id, service_name, service_duration, service_price, quantity, subtotal, description)
+       VALUES ($1, $2, $3, $4, $5, 1, $6, $7)`,
+      [bookingResult.rows[0].id, service.id, service.name, service.duration_hours, svcPrice, svcPrice,
+       embedDescriptions.get(Number(service.id)) || null]
     );
 
     // Also create a lead

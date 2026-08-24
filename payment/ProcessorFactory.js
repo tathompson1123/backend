@@ -3,6 +3,11 @@ const SquareProcessor = require('./SquareProcessor');
 const PayPalProcessor = require('./PayPalProcessor');
 const CloverProcessor = require('./CloverProcessor');
 
+// QuickBooks is an accounting system, not a payment processor — it can hold a
+// connection (for drafting invoices) but can never take a payment, so it must be
+// kept out of every checkout path.
+const NON_PAYMENT_PROCESSORS = ['quickbooks'];
+
 function getProcessor(connection) {
   switch (connection.processor) {
     case 'stripe':
@@ -13,6 +18,8 @@ function getProcessor(connection) {
       return new PayPalProcessor(connection);
     case 'clover':
       return new CloverProcessor(connection);
+    case 'quickbooks':
+      throw new Error('QuickBooks cannot process payments — it is used for invoicing only');
     default:
       throw new Error(`Unknown payment processor: ${connection.processor}`);
   }
@@ -30,6 +37,11 @@ async function getProcessorForUser(userId, pool, preferredProcessor = null) {
     query += ' AND processor = $2';
     params.push(preferredProcessor);
   } else {
+    // Without an explicit preference this picks the primary connection — which must
+    // never land on QuickBooks, or the public pay page would 500 instead of offering
+    // a checkout.
+    params.push(NON_PAYMENT_PROCESSORS);
+    query += ` AND NOT (processor = ANY($${params.length}))`;
     query += ' ORDER BY is_primary DESC, created_at ASC';
   }
 
@@ -59,5 +71,6 @@ module.exports = {
   StripeConnectProcessor,
   SquareProcessor,
   PayPalProcessor,
-  CloverProcessor
+  CloverProcessor,
+  NON_PAYMENT_PROCESSORS
 };
