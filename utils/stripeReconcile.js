@@ -132,7 +132,8 @@ module.exports = { reconcileAllSubscriptions, reconcileUser, PAYING };
 // Phone numbers are reported, never bought — provisioning costs money and belongs to
 // a deliberate decision, not a repair script.
 const AMOUNT_TO_PLAN = {
-  9900: 'pro', 9995: 'pro',
+  19500: 'pro',
+  9900: 'pro', 9995: 'pro',   // legacy Pro pricing, before $195
   17500: 'scale', 17595: 'scale',
   2995: 'basic', // legacy only
 };
@@ -172,7 +173,11 @@ async function backfillFromStripe({ dryRun = true } = {}) {
     }
 
     const amount = sub.items?.data?.[0]?.price?.unit_amount;
-    const plan = AMOUNT_TO_PLAN[amount] || user.plan || null;
+    // Scale is quoted per customer, so a custom amount won't be in the table. The plan
+    // staff stamped on the subscription is the next best source of truth, ahead of
+    // whatever the user row already says.
+    const metaPlan = ['pro', 'scale', 'basic'].includes(sub.metadata?.plan) ? sub.metadata.plan : null;
+    const plan = AMOUNT_TO_PLAN[amount] || metaPlan || user.plan || null;
     const periodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
 
     let lastPaidAt = null;

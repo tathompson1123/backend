@@ -22,9 +22,13 @@ const SITE_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 
 // Price ids per plan. Falls back to building the price inline so this works before
 // the ids are configured, though real Stripe Prices are tidier in reporting.
+//
+// Scale is quoted per customer against their volume, so it carries `custom: true`:
+// its monthly amount comes from whoever closed the call, and the fixed amount here
+// is only the fallback if they didn't name one.
 const PLAN_PRICES = {
-  pro:   { env: 'STRIPE_PRICE_PRO',   amount: parseInt(process.env.PLAN_AMOUNT_PRO   || '9995',  10), label: 'SORCE Pro' },
-  scale: { env: 'STRIPE_PRICE_SCALE', amount: parseInt(process.env.PLAN_AMOUNT_SCALE || '17595', 10), label: 'SORCE Scale' },
+  pro:   { env: 'STRIPE_PRICE_PRO',   amount: parseInt(process.env.PLAN_AMOUNT_PRO   || '19500', 10), label: 'SORCE Pro' },
+  scale: { env: 'STRIPE_PRICE_SCALE', amount: parseInt(process.env.PLAN_AMOUNT_SCALE || '17595', 10), label: 'SORCE Scale', custom: true },
 };
 
 const requireAnalytics = (req, res, next) => {
@@ -47,20 +51,39 @@ const requireAdmin = (req, res, next) => {
   return res.status(403).json({ error: 'Admin access required' });
 };
 
-function planLineItem(plan) {
+// `monthlyAmount` is in dollars and only honoured for a custom-priced plan — it's the
+// number agreed on the call. A configured Stripe Price id is skipped when a quote is
+// given, because the whole point is that this customer's price isn't the list one.
+function planLineItem(plan, monthlyAmount) {
   const cfg = PLAN_PRICES[plan];
   if (!cfg) return null;
+
+  const quoted = cfg.custom && Number(monthlyAmount) > 0
+    ? Math.round(Number(monthlyAmount) * 100)
+    : null;
+
   const priceId = process.env[cfg.env];
-  if (priceId) return { price: priceId, quantity: 1 };
+  if (priceId && !quoted) return { price: priceId, quantity: 1 };
   return {
     quantity: 1,
     price_data: {
       currency: 'usd',
-      unit_amount: cfg.amount,
+      unit_amount: quoted || cfg.amount,
       recurring: { interval: 'month' },
       product_data: { name: cfg.label },
     },
   };
+}
+
+// Stripe rejects a subscription under 50c and its error text is opaque — say it plainly.
+function quoteError(plan, monthlyAmount) {
+  if (!PLAN_PRICES[plan]?.custom) return null;
+  const amt = Number(monthlyAmount);
+  if (!monthlyAmount) return null;              // fall back to the list amount
+  if (!Number.isFinite(amt) || amt < 0.5) {
+    return 'A Scale quote has to be at least $0.50/month';
+  }
+  return null;
 }
 
 // Find or create the Stripe customer for a SORCE user.
@@ -112,7 +135,7 @@ router.get('/search', requireAnalytics, requireAdmin, async (req, res) => {
 // first invoice. Optionally texted/emailed straight to them.
 router.post('/checkout-link', requireAnalytics, requireAdmin, async (req, res) => {
   try {
-    const { userId, email, name, plan, offerAmount, offerDescription, trialDays, send } = req.body;
+    const { userId, email, name, plan, monthlyAmount, offerAmount, offerDescription, trialDays, send } = req.body;
     if (!plan && !offerAmount) {
       return res.status(400).json({ error: 'Pick a plan, an offer amount, or both' });
     }
@@ -120,11 +143,13 @@ router.post('/checkout-link', requireAnalytics, requireAdmin, async (req, res) =
     if (!plan && Number(offerAmount) > 0 && Number(offerAmount) < 0.5) {
       return res.status(400).json({ error: 'The smallest charge Stripe accepts is $0.50' });
     }
+    const badQuote = plan ? quoteError(plan, monthlyAmount) : null;
+    if (badQuote) return res.status(400).json({ error: badQuote });
 
     const { user, customerId } = await resolveCustomer({ userId, email, name });
 
     const lineItems = [];
-    const planItem = plan ? planLineItem(plan) : null;
+    const planItem = plan ? planLineItem(plan, monthlyAmount) : null;
     if (planItem) lineItems.push(planItem);
 
     // The front end offer — named so it reads properly on the Stripe invoice.
@@ -197,10 +222,12 @@ router.post('/setup-intent', requireAnalytics, requireAdmin, async (req, res) =>
 // default, drops the front end offer on as a pending invoice item, then subscribes.
 router.post('/subscribe', requireAnalytics, requireAdmin, async (req, res) => {
   try {
-    const { customerId, paymentMethodId, userId, plan, offerAmount, offerDescription, trialDays } = req.body;
+    const { customerId, paymentMethodId, userId, plan, monthlyAmount, offerAmount, offerDescription, trialDays } = req.body;
     if (!customerId || !paymentMethodId) {
       return res.status(400).json({ error: 'Missing customer or payment method' });
     }
+    const badQuote = plan ? quoteError(plan, monthlyAmount) : null;
+    if (badQuote) return res.status(400).json({ error: badQuote });
 
     // Card on file, and the default for everything that follows.
     await stripe.customers.update(customerId, {
@@ -220,7 +247,7 @@ router.post('/subscribe', requireAnalytics, requireAdmin, async (req, res) => {
 
     let subscription = null;
     if (plan) {
-      const item = planLineItem(plan);
+      const item = planLineItem(plan, monthlyAmount);
       subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [item.price ? { price: item.price } : { price_data: item.price_data }],

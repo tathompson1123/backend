@@ -13,20 +13,32 @@ const PLAN_ORDER = { basic: 1, pro: 2, scale: 3 };
 // Prices in cents, overridable without a deploy. These must match the Stripe
 // prices exactly — the webhook maps a subscription's amount back to a plan name,
 // so a mismatch leaves the plan unset.
+//
+// Scale is no longer a fixed price: it's quoted per customer against their volume,
+// so its subscriptions are created by staff from /analytics at whatever was agreed.
+// The amount below is only a fallback for a Scale sub created without a quote, and
+// nothing self-serve charges it — see SELF_SERVE_PLANS.
 const PLAN_AMOUNTS = {
-  pro:   parseInt(process.env.PLAN_AMOUNT_PRO   || '9995', 10),
+  pro:   parseInt(process.env.PLAN_AMOUNT_PRO   || '19500', 10),
   scale: parseInt(process.env.PLAN_AMOUNT_SCALE || '17595', 10),
 };
+
+// Plans a customer can buy themselves. Scale is deliberately absent — a usage-based
+// price can't be picked off a card, so those go through sales.
+const SELF_SERVE_PLANS = ['pro'];
 
 // Maps a Stripe subscription's price back to a plan name. Tolerant of the older
 // .95 pricing as well as the current amounts, because a subscription created under
 // old pricing must still resolve to a plan rather than silently returning nothing.
+// Custom-quoted Scale amounts won't be in here by design — callers fall back to the
+// plan on the subscription's metadata rather than treating "unknown" as a downgrade.
 function planFromAmount(amount) {
   if (!amount) return null;
   const table = {
     [PLAN_AMOUNTS.pro]: 'pro',
     [PLAN_AMOUNTS.scale]: 'scale',
-    9900: 'pro', 9995: 'pro',
+    9900: 'pro', 9995: 'pro',   // legacy Pro pricing, before $195
+    19500: 'pro',
     17500: 'scale', 17595: 'scale',
     2995: 'basic',  // legacy only — no longer sold
   };
@@ -53,11 +65,20 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
     const { plan } = req.body;
     const userId = req.user.userId;
 
+    // Scale is priced on the customer's volume, so there's no amount to put on a
+    // checkout — those go to sales. Returned as its own signal so the frontend can
+    // open the enquiry form rather than showing a dead "invalid plan" error.
+    if (plan === 'scale') {
+      return res.status(400).json({
+        error: 'Scale is tailored to your customer volume — talk to us for a quote',
+        contactSales: true,
+      });
+    }
+
     // Basic is no longer sold. Legacy accounts on it keep working — PLAN_ORDER and
     // the revenue maps still recognise it — but it can't be bought.
     const prices = {
       pro: { amount: PLAN_AMOUNTS.pro, name: 'Pro Plan' },
-      scale: { amount: PLAN_AMOUNTS.scale, name: 'Scale Plan' },
       expert: { amount: PLAN_AMOUNTS.pro, name: 'Expert Plan' }
     };
 
@@ -113,7 +134,7 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
     // ─── New subscriber (or returning after cancellation): checkout session ───
     // Trial enforcement: one free trial ever (check stripe_customer_id existence)
     const hadSubscription = !!user.stripe_customer_id;
-    const trialDays = hadSubscription ? 0 : { pro: 7, scale: 7 }[plan] || 0;
+    const trialDays = hadSubscription ? 0 : { pro: 7 }[plan] || 0;
 
     const sessionParams = {
       payment_method_types: ['card'],
@@ -391,7 +412,11 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     }
     try {
       const priceAmount = subscription.items?.data?.[0]?.price?.unit_amount;
-      const newPlan = planFromAmount(priceAmount);
+      // A custom-quoted Scale amount won't be in the amount table, so trust the plan
+      // staff stamped on the subscription before giving up. Without this, every
+      // Scale sub priced to its customer's volume looks like an unknown plan here.
+      const metaPlan = PLAN_ORDER[subscription.metadata?.plan] ? subscription.metadata.plan : null;
+      const newPlan = planFromAmount(priceAmount) || metaPlan;
       if (newPlan) {
         if (subscription.status === 'trialing') {
           // During trial, only update base_plan to preserve effective plan
@@ -428,11 +453,18 @@ router.post('/create-embedded-checkout', authenticateToken, async (req, res) => 
     );
     const user = userResult.rows[0];
 
+    // Scale is quoted against the customer's volume — see /create-checkout-session.
+    if (plan === 'scale') {
+      return res.status(400).json({
+        error: 'Scale is tailored to your customer volume — talk to us for a quote',
+        contactSales: true,
+      });
+    }
+
     // Basic is no longer sold. Legacy accounts on it keep working — PLAN_ORDER and
     // the revenue maps still recognise it — but it can't be bought.
     const prices = {
       pro: { amount: PLAN_AMOUNTS.pro, name: 'Pro Plan' },
-      scale: { amount: PLAN_AMOUNTS.scale, name: 'Scale Plan' },
       expert: { amount: PLAN_AMOUNTS.pro, name: 'Expert Plan' }
     };
 
@@ -443,7 +475,7 @@ router.post('/create-embedded-checkout', authenticateToken, async (req, res) => 
 
     // Trial enforcement: one free trial ever
     const hadSubscription = !!user.stripe_customer_id;
-    const trialDays = hadSubscription ? 0 : { pro: 7, scale: 7 }[plan] || 0;
+    const trialDays = hadSubscription ? 0 : { pro: 7 }[plan] || 0;
 
     const sessionParams = {
       payment_method_types: ['card'],
@@ -517,10 +549,14 @@ router.get('/subscription', authenticateToken, async (req, res) => {
     
     if (user.stripe_subscription_id) {
       const subscription = await stripe.subscriptions.retrieve(user.stripe_subscription_id);
+      // The real amount they're on, in cents. Plans with a list price don't need it, but
+      // a quoted Scale customer has no other way to see what they actually pay.
+      const amount = subscription.items?.data?.[0]?.price?.unit_amount ?? null;
       res.json({
         plan: user.plan,
         status: subscription.status,
         current_period_end: subscription.current_period_end,
+        amount,
       });
     } else {
       res.json({ plan: user.plan, status: 'none' });
@@ -699,16 +735,21 @@ router.post('/contact-sales', authenticateToken, async (req, res) => {
 // POST - Enterprise inquiry (public — no auth required, works from pricing page too)
 router.post('/enterprise-inquiry', async (req, res) => {
   try {
-    const { name, email, phone, company, reason, details } = req.body;
+    // `volume` is what Scale is actually priced on, so it rides along with the rest
+    // and lands in the notification — a quote can't be written without it.
+    const { name, email, phone, company, reason, details, volume } = req.body;
     if (!name || !email || !phone) {
       return res.status(400).json({ error: 'Name, email, and phone are required' });
     }
 
+    const notes = [volume ? `Monthly volume: ${volume}` : null, details || null]
+      .filter(Boolean).join('\n');
+
     // Store in DB (reuse contact_sales_requests with a type column if available, else ignore)
     await pool.query(
       `INSERT INTO contact_sales_requests (user_id, name, phone, reason, flaws, feedback, plan, created_at)
-       VALUES (NULL, $1, $2, $3, $4, $5, 'enterprise', NOW())`,
-      [name, phone, reason || 'Enterprise inquiry', company ? `Company: ${company}` : null, details || null]
+       VALUES (NULL, $1, $2, $3, $4, $5, 'scale', NOW())`,
+      [name, phone, reason || 'Scale plan quote', company ? `Company: ${company}` : null, notes || null]
     ).catch(() => {}); // table may not exist yet — non-blocking
 
     // Email the SORCE team
@@ -718,20 +759,21 @@ router.post('/enterprise-inquiry', async (req, res) => {
       sgMail.send({
         to: 'support@sorceintegrations.com',
         from: { name: 'SORCE Sales', email: TRANSACTIONAL_EMAIL },
-        subject: `Enterprise Inquiry — ${company || name}`,
+        subject: `Scale Plan Quote — ${company || name}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-            <h2 style="color:#7c3aed;">Enterprise Plan Inquiry</h2>
+            <h2 style="color:#7c3aed;">Scale Plan Quote Request</h2>
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
               <tr><td style="padding:8px;background:#f9fafb;font-weight:600;width:35%;">Name</td><td style="padding:8px;border-bottom:1px solid #eee;">${name}</td></tr>
               <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Company</td><td style="padding:8px;border-bottom:1px solid #eee;">${company || '—'}</td></tr>
               <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Email</td><td style="padding:8px;border-bottom:1px solid #eee;">${email}</td></tr>
               <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Phone</td><td style="padding:8px;border-bottom:1px solid #eee;">${phone}</td></tr>
+              <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Monthly volume</td><td style="padding:8px;border-bottom:1px solid #eee;">${volume || '—'}</td></tr>
               <tr><td style="padding:8px;background:#f9fafb;font-weight:600;">Reason / Use Case</td><td style="padding:8px;border-bottom:1px solid #eee;">${reason || '—'}</td></tr>
               <tr><td style="padding:8px;background:#f9fafb;font-weight:600;vertical-align:top;">Details</td><td style="padding:8px;white-space:pre-wrap;">${details || '—'}</td></tr>
             </table>
           </div>`,
-      }).catch(e => console.error('Enterprise inquiry email error:', e.message));
+      }).catch(e => console.error('Scale quote email error:', e.message));
     }
 
     res.json({ success: true });
