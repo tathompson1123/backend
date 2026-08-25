@@ -118,6 +118,25 @@ function trimPercent(percent) {
   return String(parseFloat(percent.toFixed(4)));
 }
 
+/**
+ * Work out the tax to hand a processor natively: the percentage, and which lines it
+ * applies to. Every adapter uses this so they can't drift apart on the rate or on
+ * which lines are in the base.
+ *
+ * @returns {{percent: number, taxableBase: number, hasTaxableLines: boolean, applies: boolean}}
+ */
+function resolveLineTax(invoice, lines) {
+  const taxable = lines.filter(line => line.taxable);
+  const taxableBase = Math.round(taxable.reduce((sum, line) => sum + line.amount, 0) * 100) / 100;
+  const percent = taxPercentage(invoice, taxableBase);
+  return {
+    percent,
+    taxableBase,
+    hasTaxableLines: taxable.length > 0,
+    applies: percent > 0 && taxable.length > 0,
+  };
+}
+
 function dueDateString(invoice) {
   const due = invoice.due_date
     ? new Date(invoice.due_date)
@@ -214,20 +233,17 @@ async function createSquareDraft({ userId, invoice, items }) {
   // it as tax on the invoice — the merchant's tax reporting in Square then sees it as
   // tax rather than as another service sold. LINE_ITEM scope (rather than ORDER) is
   // what lets non-taxable fees sit outside the base.
-  const taxableBase = lines
-    .filter(line => line.taxable)
-    .reduce((sum, line) => sum + line.amount, 0);
-  const taxPercent = taxPercentage(invoice, taxableBase);
+  const tax = resolveLineTax(invoice, lines);
 
   // Discounts go in the order's `discounts` array, NOT as a negative line item —
   // Square rejects a negative base_price_money with INVALID_VALUE.
   const order = { locationId, customerId, lineItems };
-  if (taxPercent > 0 && lineItems.some(item => item.appliedTaxes)) {
+  if (tax.applies) {
     order.taxes = [{
       uid: SALES_TAX_UID,
       name: 'Sales Tax',
       // Square wants a percentage string ("7.25"), not a fraction or an amount.
-      percentage: trimPercent(taxPercent),
+      percentage: trimPercent(tax.percent),
       scope: 'LINE_ITEM',
       type: 'ADDITIVE',
     }];
@@ -333,25 +349,29 @@ async function createStripeDraft({ userId, invoice, items }) {
     metadata: { local_invoice_id: String(invoice.id), invoice_number: invoice.invoice_number },
   }, opts);
 
+  // Sales tax is a Stripe TaxRate attached to the taxable lines, not a line of its own,
+  // so Stripe reports it as tax and the invoice shows a proper tax row. Non-taxable
+  // lines simply don't reference the rate, which is how a "No Tax" fee stays out of
+  // the base.
+  const lines = buildLines(invoice, items);
+  const tax = resolveLineTax(invoice, lines);
+  const taxRateId = tax.applies
+    ? await findOrCreateStripeTaxRate(stripe, opts, tax.percent)
+    : null;
+
   // Stripe invoice items expose a single description field, so fold the service name
   // and the typed description together.
-  for (const line of buildLines(invoice, items)) {
-    await stripe.invoiceItems.create({
+  for (const line of lines) {
+    const params = {
       customer: customerId,
       invoice: draft.id,
       quantity: line.quantity,
       unit_amount: cents(line.unitPrice),
       currency: 'usd',
       description: line.description ? `${line.name} — ${line.description}` : line.name,
-    }, opts);
-  }
-
-  const taxAmount = cents(invoice.tax_amount);
-  if (taxAmount > 0) {
-    await stripe.invoiceItems.create(
-      { customer: customerId, invoice: draft.id, amount: taxAmount, currency: 'usd', description: 'Sales Tax' },
-      opts
-    );
+    };
+    if (taxRateId && line.taxable) params.tax_rates = [taxRateId];
+    await stripe.invoiceItems.create(params, opts);
   }
   const discountAmount = cents(invoice.discount_amount);
   if (discountAmount > 0) {
@@ -367,6 +387,30 @@ async function createStripeDraft({ userId, invoice, items }) {
     reviewUrl: `https://dashboard.stripe.com/${conn.stripe_account_id}/invoices/${draft.id}`,
     message: 'Draft invoice created in Stripe. Review it there, then finalize and send.',
   };
+}
+
+// Stripe TaxRate objects are immutable and permanent — the percentage can never be
+// edited — so creating one per invoice would litter the merchant's account with
+// duplicates. Look for a matching rate first and only create when there isn't one.
+// These live on the connected account, so each merchant accumulates just their own.
+async function findOrCreateStripeTaxRate(stripe, opts, percent) {
+  const DISPLAY_NAME = 'Sales Tax';
+  // Stripe stores percentage as a number with up to 4 decimal places.
+  const target = Math.round(percent * 10000) / 10000;
+
+  const existing = await stripe.taxRates.list({ active: true, limit: 100 }, opts);
+  const match = existing.data.find(rate =>
+    !rate.inclusive &&
+    rate.display_name === DISPLAY_NAME &&
+    Math.round(rate.percentage * 10000) / 10000 === target
+  );
+  if (match) return match.id;
+
+  const created = await stripe.taxRates.create(
+    { display_name: DISPLAY_NAME, percentage: target, inclusive: false },
+    opts
+  );
+  return created.id;
 }
 
 // ── PayPal ───────────────────────────────────────────────────────────────────
@@ -392,15 +436,11 @@ async function createPayPalDraft({ userId, invoice, items }) {
   const { given, family } = splitName(invoice.customer_name);
   const lines = buildLines(invoice, items);
 
-  // PayPal's per-item `tax` is a PERCENTAGE, which it then recomputes per line. Deriving
-  // a percentage from our flat tax_amount drifts by cents across multiple lines, drops
-  // the tax entirely when the subtotal is 0, and interacts badly with
-  // tax_calculated_after_discount. Send tax as its own line instead, exactly as the
-  // Square and Stripe adapters do, so the draft total matches the invoice to the penny.
-  const taxAmount = money(invoice.tax_amount);
-  if (taxAmount > 0) {
-    lines.push({ name: 'Sales Tax', description: null, quantity: 1, unitPrice: taxAmount, amount: taxAmount });
-  }
+  // PayPal's per-item `tax` is a PERCENTAGE, so it needs the rate rather than our flat
+  // tax_amount — deriving a percentage from an amount was what made this unreliable
+  // before, and resolveLineTax now supplies the real one. Applied per line so a
+  // "No Tax" fee simply carries no tax object.
+  const tax = resolveLineTax(invoice, lines);
 
   const payload = {
     detail: {
@@ -422,8 +462,19 @@ async function createPayPalDraft({ userId, invoice, items }) {
         unit_amount: { currency_code: 'USD', value: line.unitPrice.toFixed(2) },
       };
       if (line.description) item.description = line.description.slice(0, 1000);
+      if (tax.applies && line.taxable) {
+        item.tax = { name: 'Sales Tax', percent: trimPercent(tax.percent) };
+      }
       return item;
     }),
+    // Be explicit rather than inheriting PayPal's defaults. tax_inclusive false means
+    // the percentages above are added on top; tax_calculated_after_discount false keeps
+    // the base the same one our own tax_amount was computed from, so a discounted
+    // invoice doesn't quietly tax a different figure than the local record.
+    configuration: {
+      tax_inclusive: false,
+      tax_calculated_after_discount: false,
+    },
   };
 
   // Set only when there's something to say. PayPal's string fields are validated with
@@ -520,28 +571,51 @@ async function createQuickBooksDraft({ userId, invoice, items }) {
   // Description carries the detail, which is what shows on the printed invoice.
   const itemRef = await findOrCreateServiceItem(request);
 
-  const toSalesLine = (line) => ({
-    DetailType: 'SalesItemLineDetail',
-    Amount: line.amount,
-    Description: (line.description ? `${line.name} — ${line.description}` : line.name).slice(0, 4000),
-    SalesItemLineDetail: {
+  // Whether this company even does sales tax, and whether QuickBooks computes it
+  // itself. Read once per draft; a failure here falls back to the explicit tax line
+  // below rather than posting a draft with no tax on it at all.
+  const taxPrefs = await readQuickBooksTaxPrefs(request);
+
+  const sourceLines = buildLines(invoice, items);
+  const tax = resolveLineTax(invoice, sourceLines);
+
+  // Native tax means marking each line taxable or not and letting QuickBooks apply the
+  // company's tax code, rather than selling the customer a "Sales Tax" service. Only
+  // possible when the company actually has sales tax turned on.
+  const useNativeTax = taxPrefs.usingSalesTax && tax.applies;
+
+  const toSalesLine = (line) => {
+    const detail = {
       ItemRef: { value: itemRef },
       Qty: line.quantity,
       UnitPrice: line.unitPrice,
-    },
-  });
+    };
+    // TAX / NON is how QuickBooks expresses per-line taxability, so a "No Tax" fee
+    // stays out of the base exactly as it does on the other processors.
+    if (useNativeTax) {
+      detail.TaxCodeRef = { value: line.taxable ? 'TAX' : 'NON' };
+    }
+    return {
+      DetailType: 'SalesItemLineDetail',
+      Amount: line.amount,
+      Description: (line.description ? `${line.name} — ${line.description}` : line.name).slice(0, 4000),
+      SalesItemLineDetail: detail,
+    };
+  };
 
-  const lines = buildLines(invoice, items).map(toSalesLine);
+  const lines = sourceLines.map(toSalesLine);
 
-  // Tax as an explicit sales line, not TxnTaxDetail.TotalTax. US companies on
-  // Automated Sales Tax (the default for new QBO companies) compute TxnTaxDetail
-  // server-side and silently discard a TotalTax sent on create, which would post the
-  // draft short by the whole tax amount.
-  const qboTax = money(invoice.tax_amount);
-  if (qboTax > 0) {
-    lines.push(toSalesLine({
-      name: 'Sales Tax', description: null, quantity: 1, unitPrice: qboTax, amount: qboTax,
-    }));
+  // Fallback only. Automated Sales Tax companies compute TxnTaxDetail server-side and
+  // silently discard a TotalTax sent on create, so when native tax isn't available the
+  // tax has to ride as an explicit sales line or the draft posts short by the whole
+  // tax amount.
+  if (!useNativeTax) {
+    const qboTax = money(invoice.tax_amount);
+    if (qboTax > 0) {
+      lines.push(toSalesLine({
+        name: 'Sales Tax', description: null, quantity: 1, unitPrice: qboTax, amount: qboTax, taxable: false,
+      }));
+    }
   }
 
   const discount = money(invoice.discount_amount);
@@ -565,6 +639,16 @@ async function createQuickBooksDraft({ userId, invoice, items }) {
     EmailStatus: 'NotSet',
   };
 
+  if (useNativeTax) {
+    // Automated Sales Tax works out the rate from the addresses on the transaction, so
+    // it is handed the taxability and left to compute. A manual-sales-tax company has
+    // no such engine, so it needs the tax code named explicitly — without one the
+    // TAX-marked lines would post with zero tax.
+    if (!taxPrefs.partnerTaxEnabled && taxPrefs.taxCodeRef) {
+      payload.TxnTaxDetail = { TxnTaxCodeRef: { value: taxPrefs.taxCodeRef } };
+    }
+  }
+
   const created = await request('/invoice', { method: 'POST', body: JSON.stringify(payload) });
   const qboInvoice = created.Invoice;
 
@@ -574,6 +658,28 @@ async function createQuickBooksDraft({ userId, invoice, items }) {
     reviewUrl: `${quickBooksAppBase()}/app/invoice?txnId=${qboInvoice.Id}`,
     message: 'Draft invoice created in QuickBooks. Review it there, then send.',
   };
+}
+
+/**
+ * Read the company's sales-tax setup.
+ *
+ * partnerTaxEnabled true means Automated Sales Tax — QuickBooks owns the rate and
+ * computes it from the transaction's addresses, so its figure can legitimately differ
+ * from ours. Never throws: a company we can't read is treated as "no native tax" so
+ * the caller falls back to an explicit tax line rather than dropping the tax.
+ */
+async function readQuickBooksTaxPrefs(request) {
+  try {
+    const prefs = await request('/preferences');
+    const taxPrefs = prefs?.Preferences?.TaxPrefs || {};
+    return {
+      usingSalesTax: taxPrefs.UsingSalesTax === true,
+      partnerTaxEnabled: taxPrefs.PartnerTaxEnabled === true,
+      taxCodeRef: taxPrefs.TaxGroupCodeRef?.value ? String(taxPrefs.TaxGroupCodeRef.value) : null,
+    };
+  } catch {
+    return { usingSalesTax: false, partnerTaxEnabled: false, taxCodeRef: null };
+  }
 }
 
 // QBO sales lines can't exist without an Item. One shared service item keeps the
