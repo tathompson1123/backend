@@ -50,8 +50,12 @@ function buildLines(invoice, items) {
       // `description`, so the name falls back to it — compare against the resolved
       // name, not item.name, or those rows render "Full Detail / Full Detail".
       const rawName = item.name || item.description || 'Service';
-      let description = item.description && item.description !== rawName
-        ? String(item.description)
+      // Trimmed, and null rather than blank when there's nothing left: a
+      // whitespace-only description satisfies every processor's 1-character minimum
+      // while rendering as an empty note on the invoice.
+      const trimmedDescription = String(item.description || '').trim();
+      let description = trimmedDescription && trimmedDescription !== rawName
+        ? trimmedDescription
         : null;
       if (!isWholeQuantity) {
         const note = `Qty ${rawQuantity} × $${rawUnitPrice.toFixed(2)}`;
@@ -197,28 +201,33 @@ async function createSquareDraft({ userId, invoice, items }) {
     idempotencyKey: randomUUID(),
   });
 
+  const squareInvoice = {
+    location_id: locationId,
+    order_id: orderResult.order.id,
+    primary_recipient: { customer_id: customerId },
+    payment_requests: [{ request_type: 'BALANCE', due_date: dueDateString(invoice) }],
+    accepted_payment_methods: {
+      card: true,
+      square_gift_card: false,
+      bank_account: false,
+      buy_now_pay_later: false,
+      cash_app_pay: false,
+    },
+    delivery_method: 'EMAIL',
+    title: `Invoice for ${invoice.customer_name || invoice.customer_email}`,
+  };
+
+  // Square rejects description: "" with VALUE_TOO_SHORT (minimum 1 character) rather
+  // than treating it as absent, so the key is omitted entirely when there are no
+  // notes — which is the common case for a booking nobody typed a note on. Trimmed
+  // first so whitespace-only notes don't sneak past as a "present" value.
+  const squareDescription = String(invoice.notes || '').trim();
+  if (squareDescription) squareInvoice.description = squareDescription.slice(0, 500);
+
   const response = await fetch(`${base}/v2/invoices`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      idempotency_key: randomUUID(),
-      invoice: {
-        location_id: locationId,
-        order_id: orderResult.order.id,
-        primary_recipient: { customer_id: customerId },
-        payment_requests: [{ request_type: 'BALANCE', due_date: dueDateString(invoice) }],
-        accepted_payment_methods: {
-          card: true,
-          square_gift_card: false,
-          bank_account: false,
-          buy_now_pay_later: false,
-          cash_app_pay: false,
-        },
-        delivery_method: 'EMAIL',
-        title: `Invoice for ${invoice.customer_name || invoice.customer_email}`,
-        description: (invoice.notes || '').slice(0, 500),
-      },
-    }),
+    body: JSON.stringify({ idempotency_key: randomUUID(), invoice: squareInvoice }),
   });
   const data = await response.json();
   if (!response.ok) {
@@ -353,7 +362,6 @@ async function createPayPalDraft({ userId, invoice, items }) {
       invoice_number: invoice.invoice_number,
       invoice_date: new Date().toISOString().split('T')[0],
       currency_code: 'USD',
-      note: invoice.notes || '',
       payment_term: { term_type: 'DUE_ON_DATE', due_date: dueDateString(invoice) },
     },
     primary_recipients: [{
@@ -372,6 +380,12 @@ async function createPayPalDraft({ userId, invoice, items }) {
       return item;
     }),
   };
+
+  // Set only when there's something to say. PayPal's string fields are validated with
+  // a minimum length too, so a blank note is a present-but-invalid value rather than
+  // an absent one — the same trap Square's description sprang.
+  const paypalNote = String(invoice.notes || '').trim();
+  if (paypalNote) payload.detail.note = paypalNote.slice(0, 4000);
 
   const discount = money(invoice.discount_amount);
   if (discount > 0) {

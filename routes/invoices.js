@@ -686,12 +686,17 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
           },
           delivery_method: 'EMAIL',
           title: `Invoice for ${invoice.customer_name || invoice.customer_email}`,
-          description: [
-            invoice.notes?.trim() || null,
-            ownerEmail ? `If you have questions about this invoice, reply to ${ownerEmail}.` : null,
-          ].filter(Boolean).join('\n\n').slice(0, 500),
+          // Assigned after the literal, and only when non-empty — Square rejects
+          // description: "" with VALUE_TOO_SHORT, which is what happens when the
+          // invoice has no notes and the owner has no email on file.
         },
       };
+
+      const sqDescription = [
+        invoice.notes?.trim() || null,
+        ownerEmail ? `If you have questions about this invoice, reply to ${ownerEmail}.` : null,
+      ].filter(Boolean).join('\n\n').slice(0, 500);
+      if (sqDescription) invoiceBody.invoice.description = sqDescription;
 
       const createResp = await fetch(`${sqBase}/v2/invoices`, {
         method: 'POST', headers: sqHdrs, body: JSON.stringify(invoiceBody),
@@ -871,7 +876,12 @@ router.post('/:id/send-paypal', authenticateToken, async (req, res) => {
           invoice_number: invoice.invoice_number,
           invoice_date: new Date().toISOString().split('T')[0],
           currency_code: 'USD',
-          note: invoice.notes || '',
+          // Omitted when blank: PayPal validates a minimum length on note, so '' is
+          // a present-but-invalid value rather than an absent one — the same trap
+          // Square's description sprang.
+          ...(String(invoice.notes || '').trim()
+            ? { note: String(invoice.notes).trim().slice(0, 4000) }
+            : {}),
           payment_term: { term_type: 'DUE_ON_DATE', due_date: dueDate },
         },
         primary_recipients: [{
