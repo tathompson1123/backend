@@ -61,7 +61,13 @@ function buildLines(invoice, items) {
         const note = `Qty ${rawQuantity} × $${rawUnitPrice.toFixed(2)}`;
         description = description ? `${description} (${note})` : note;
       }
-      return { name: String(rawName).slice(0, 255), description, quantity, unitPrice, amount };
+      // taxable drives which lines Square applies the tax to. Defaults to true so a
+      // row written before the column existed is still taxed as it always was.
+      return {
+        name: String(rawName).slice(0, 255),
+        description, quantity, unitPrice, amount,
+        taxable: item.taxable !== false,
+      };
     });
 
   // An invoice with no line items still has to bill the right amount. Use the
@@ -78,6 +84,7 @@ function buildLines(invoice, items) {
       quantity: 1,
       unitPrice: fallback,
       amount: fallback,
+      taxable: true,
     });
   }
   return lines;
@@ -89,6 +96,26 @@ function money(value) {
 
 function cents(value) {
   return Math.round((parseFloat(value) || 0) * 100);
+}
+
+// Stable uid so the order-level tax and the line items that reference it agree.
+const SALES_TAX_UID = 'sorce-sales-tax';
+
+// Resolve the tax rate as a percentage. invoices.tax_rate is stored as a fraction
+// (0.07 = 7%), but legacy rows carry a tax_amount with no usable rate, so fall back to
+// deriving it from the taxable base. Returns 0 when there is no tax to apply.
+function taxPercentage(invoice, taxableBase) {
+  const rate = parseFloat(invoice.tax_rate);
+  // Guard against a row that stored 7 to mean 7% — a real rate is never above 1.
+  if (Number.isFinite(rate) && rate > 0) return rate > 1 ? rate : rate * 100;
+  const amount = parseFloat(invoice.tax_amount) || 0;
+  if (amount > 0 && taxableBase > 0) return (amount / taxableBase) * 100;
+  return 0;
+}
+
+// Square accepts up to 4 decimal places on a tax percentage; trailing zeros are noise.
+function trimPercent(percent) {
+  return String(parseFloat(percent.toFixed(4)));
 }
 
 function dueDateString(invoice) {
@@ -169,24 +196,42 @@ async function createSquareDraft({ userId, invoice, items }) {
 
   // Square line items carry a name and an optional note — use both so the typed
   // description shows up under the service name rather than replacing it.
-  const lineItems = buildLines(invoice, items).map(line => {
+  const lines = buildLines(invoice, items);
+  const lineItems = lines.map(line => {
     const item = {
       name: line.name,
       quantity: String(line.quantity),
       basePriceMoney: { amount: BigInt(cents(line.unitPrice)), currency: 'USD' },
     };
     if (line.description) item.note = line.description.slice(0, 500);
+    // Only taxable lines reference the tax below, so a non-taxable fee (a card
+    // surcharge, typically) is left out of the tax base.
+    if (line.taxable) item.appliedTaxes = [{ taxUid: SALES_TAX_UID }];
     return item;
   });
 
-  const taxCents = cents(invoice.tax_amount);
-  if (taxCents > 0) {
-    lineItems.push({ name: 'Sales Tax', quantity: '1', basePriceMoney: { amount: BigInt(taxCents), currency: 'USD' } });
-  }
+  // Sales tax is a real Square tax, not a line item, so Square computes and displays
+  // it as tax on the invoice — the merchant's tax reporting in Square then sees it as
+  // tax rather than as another service sold. LINE_ITEM scope (rather than ORDER) is
+  // what lets non-taxable fees sit outside the base.
+  const taxableBase = lines
+    .filter(line => line.taxable)
+    .reduce((sum, line) => sum + line.amount, 0);
+  const taxPercent = taxPercentage(invoice, taxableBase);
 
   // Discounts go in the order's `discounts` array, NOT as a negative line item —
   // Square rejects a negative base_price_money with INVALID_VALUE.
   const order = { locationId, customerId, lineItems };
+  if (taxPercent > 0 && lineItems.some(item => item.appliedTaxes)) {
+    order.taxes = [{
+      uid: SALES_TAX_UID,
+      name: 'Sales Tax',
+      // Square wants a percentage string ("7.25"), not a fraction or an amount.
+      percentage: trimPercent(taxPercent),
+      scope: 'LINE_ITEM',
+      type: 'ADDITIVE',
+    }];
+  }
   const discountCents = cents(invoice.discount_amount);
   if (discountCents > 0) {
     order.discounts = [{
