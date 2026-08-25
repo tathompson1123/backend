@@ -9,6 +9,7 @@ if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const { normalizeServiceList, resolveBookingServices, fetchBookingDescriptions } = require('../utils/bookingServices');
 const { validateCustomerContact } = require('../utils/customerContact');
 const { queueAutoDraftInvoice } = require('../utils/autoDraftInvoice');
+const { resolveFeeTotals } = require('../utils/catalogFees');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 const { escapeHtml: esc } = require('../utils/escapeHtml');
@@ -189,9 +190,15 @@ router.post('/create', authenticateToken, async (req, res) => {
     const taxResult = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
     const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
 
-    const subtotal = resolved.reduce((sum, s) => sum + s.price, 0);
-    const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
-    const totalWithTax = subtotal + taxAmount;
+    const serviceSubtotal = resolved.reduce((sum, s) => sum + s.price, 0);
+
+    // Standing fees (processing fee, supplies) are charged on staff-created bookings,
+    // so the booking total already matches the invoice raised from it. `subtotal` comes
+    // back fee-inclusive and pre-tax, and the tax base skips fees marked "No Tax".
+    const totals = await resolveFeeTotals({ userId, serviceSubtotal, taxRate });
+    const subtotal = totals.subtotal;
+    const taxAmount = totals.taxAmount;
+    const totalWithTax = totals.total;
 
     // End time spans the sum of all service durations (mains + add-ons), matching the
     // "Total Duration" the form shows the user — otherwise multi-service bookings would
@@ -248,17 +255,23 @@ router.post('/create', authenticateToken, async (req, res) => {
     const customerIdToUse = customerResult.rows[0].id;
 
     const bookingResult = await pool.query(
+      // tax_rate/tax_amount are stored explicitly now. They were left null here, so the
+      // invoice had to infer tax from (total - subtotal) — which stops being safe once a
+      // fee sits in that gap too.
       `INSERT INTO bookings (
         user_id, customer_id, booking_number, booking_date, start_time, end_time,
-        subtotal, total_amount, customer_name, customer_email,
+        subtotal, tax_rate, tax_amount, total_amount, fee_total, fees,
+        customer_name, customer_email,
         customer_phone, customer_notes, status, employee_id, group_id,
         source, referral_source
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING *`,
       [
         userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
-        subtotal, totalWithTax, contact.name, contact.email,
+        subtotal, taxRate, taxAmount, totalWithTax,
+        totals.feeTotal, totals.feeLines.length > 0 ? JSON.stringify(totals.feeLines) : null,
+        contact.name, contact.email,
         contact.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null,
         'manual', (referralSource && String(referralSource).trim()) || null
       ]
@@ -306,8 +319,11 @@ router.post('/create', authenticateToken, async (req, res) => {
       bookingDate,
       startTime,
       endTime,
-      price: subtotal,
-      subtotal,
+      price: serviceSubtotal,
+      // The service subtotal, with fees itemised separately — folding them into one
+      // subtotal would bill the customer for a fee the email never names.
+      subtotal: serviceSubtotal,
+      fees: totals.feeLines,
       taxRate,
       taxAmount,
       total: totalWithTax,
@@ -412,9 +428,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const taxResult = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
     const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
 
-    const subtotal = resolved.reduce((sum, s) => sum + s.price, 0);
-    const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
-    const totalAmount = subtotal + taxAmount;
+    // Re-apply standing fees. The edit rewrites subtotal and total_amount outright, so
+    // without this an unrelated change — a reschedule — would quietly drop the fee the
+    // booking was taken with. Fees are re-resolved against the new service subtotal
+    // rather than the old snapshot, since the services themselves may have changed.
+    const serviceSubtotal = resolved.reduce((sum, s) => sum + s.price, 0);
+    const totals = await resolveFeeTotals({ userId, serviceSubtotal, taxRate });
+    const subtotal = totals.subtotal;
+    const taxAmount = totals.taxAmount;
+    const totalAmount = totals.total;
 
     // end_time spans the sum of all service durations (mains + add-ons) — see POST /create.
     const totalDurationHours = resolved.reduce((sum, s) => sum + (s.duration_hours || 0), 0);
@@ -441,6 +463,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
            subtotal = $12,
            tax_amount = $13,
            total_amount = $14,
+           tax_rate = $17,
+           fee_total = $18,
+           fees = $19,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $15 AND user_id = $16
        RETURNING *`,
@@ -460,7 +485,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
         taxAmount,
         totalAmount,
         id,
-        userId
+        userId,
+        taxRate,
+        totals.feeTotal,
+        totals.feeLines.length > 0 ? JSON.stringify(totals.feeLines) : null
       ]
     );
 

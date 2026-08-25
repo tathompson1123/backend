@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { pool } = require('../config/database');
+const { round2, resolveFeeTotals, readFeeSnapshot } = require('./catalogFees');
 
 // Turn a booking into a local invoice + invoice_items.
 //
@@ -66,37 +67,41 @@ async function createInvoiceFromBooking(userId, bookingId, options = {}) {
   // Carry the booking's tax across. Dropping it left line items summing to the
   // subtotal while total_amount included tax, so every processor draft came out
   // with a line/total mismatch.
-  const serviceSubtotal = parseFloat(booking.subtotal ?? booking.total_amount ?? 0);
-  const bookingTotal = parseFloat(booking.total_amount ?? serviceSubtotal);
+  // bookings.subtotal is pre-tax INCLUDING any fees the booking applied, so the fee
+  // portion is backed out here — otherwise the fee lines below would be charged on top
+  // of a base that already contains them.
+  const bookingSubtotal = parseFloat(booking.subtotal ?? booking.total_amount ?? 0);
+  const bookingFeeTotal = parseFloat(booking.fee_total ?? 0) || 0;
+  const serviceSubtotal = round2(Math.max(0, bookingSubtotal - bookingFeeTotal));
+  const bookingTotal = parseFloat(booking.total_amount ?? bookingSubtotal);
   let taxRate = parseFloat(booking.tax_rate ?? 0);
   let bookingTaxAmount = parseFloat(booking.tax_amount ?? 0);
-  if (!bookingTaxAmount && bookingTotal > serviceSubtotal) {
-    // Older rows recorded a tax-inclusive total but not the tax itself.
-    bookingTaxAmount = Math.round((bookingTotal - serviceSubtotal) * 100) / 100;
+  if (!bookingTaxAmount && bookingTotal > bookingSubtotal) {
+    // Older rows recorded a tax-inclusive total but not the tax itself. Compared
+    // against the fee-inclusive subtotal so a fee is never mistaken for tax.
+    bookingTaxAmount = round2(bookingTotal - bookingSubtotal);
     if (!taxRate && serviceSubtotal > 0) taxRate = bookingTaxAmount / serviceSubtotal;
   }
 
-  // Standing fees the business has configured (processing fee, supplies, …). These
-  // are on the invoice, not the booking, so the invoice total can exceed the total
-  // quoted at booking time — which is the point of a processing fee.
-  const feeLines = buildFeeLines(await loadCatalogFees(userId), serviceSubtotal);
-  const feeTotal = round2(feeLines.reduce((sum, f) => sum + f.amount, 0));
+  // Bill exactly the fees the booking was quoted at, so the invoice can never exceed
+  // the confirmation the customer already has.
+  //
+  // With no snapshot, whether to fall back to the catalog depends on where the booking
+  // came from. A staff-created booking predating fees should still pick them up. An
+  // online one must NOT: the customer saw a total and confirmed it, and online bookings
+  // deliberately don't carry fees, so adding one here would be the surprise charge that
+  // keeping them off those bookings was meant to avoid.
+  const snapshot = readFeeSnapshot(booking);
+  const staffCreated = booking.source === 'manual';
+  const totals = await resolveFeeTotals({
+    userId, serviceSubtotal, taxRate,
+    feeLines: snapshot || (staffCreated ? undefined : []),
+  });
 
-  const subtotal = round2(serviceSubtotal + feeTotal);
-
-  // Tax base excludes non-taxable fees. invoice_items_catalog.taxable defaults to
-  // false, so a processing fee is untaxed unless the business marks it otherwise —
-  // taxing a card surcharge is usually wrong.
-  const taxableFeeTotal = round2(
-    feeLines.filter(f => f.taxable).reduce((sum, f) => sum + f.amount, 0)
-  );
-  const taxableBase = round2(serviceSubtotal + taxableFeeTotal);
-
-  // Recomputed rather than copied from the booking, because the taxable base changes
-  // once taxable fees are added. With no fees this lands on exactly the booking's own
-  // tax amount, so nothing shifts for the common case. The fallback preserves legacy
-  // rows that carry a tax amount but no usable rate.
-  const taxAmount = taxRate > 0 ? round2(taxableBase * taxRate) : bookingTaxAmount;
+  const { feeLines, subtotal, taxableBase } = totals;
+  // resolveFeeTotals derives tax from the rate. The fallback preserves legacy rows
+  // that carry a tax amount but no usable rate to derive it from.
+  const taxAmount = taxRate > 0 ? totals.taxAmount : bookingTaxAmount;
   const total = round2(subtotal + taxAmount);
 
   // All three writes go in one transaction. Without it, a failed line-item insert
@@ -170,68 +175,4 @@ async function createInvoiceFromBooking(userId, bookingId, options = {}) {
   }
 }
 
-function round2(value) {
-  return Math.round((parseFloat(value) || 0) * 100) / 100;
-}
-
-/** Active standing fees for this business, in display order. */
-async function loadCatalogFees(userId) {
-  const result = await pool.query(
-    `SELECT name, amount_type, amount, taxable
-       FROM invoice_items_catalog
-      WHERE user_id = $1 AND active = true
-      ORDER BY category, name`,
-    [userId]
-  );
-  return result.rows;
-}
-
-/**
- * Turn catalog rows into invoice line items.
- *
- * Percentage fees are charged on `base` — the PRE-TAX subtotal — so a 3.5% card
- * processing fee never charges a percentage of sales tax. Fixed fees are added to that
- * base first, since they're part of what's being processed; percentage fees are not,
- * so two of them can't compound and their order doesn't change the result.
- *
- * @param {{name: string, amount_type: string, amount: string|number, taxable: boolean}[]} fees
- * @param {number} base pre-tax subtotal of the service lines
- * @returns {{name: string, description: string|null, amount: number, taxable: boolean}[]}
- */
-function buildFeeLines(fees, base) {
-  const fixed = [];
-  const percentage = [];
-  for (const fee of fees || []) {
-    if (!fee?.name) continue;
-    const amount = parseFloat(fee.amount);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    // 'percent' as well as 'percentage' — the employee app reads both spellings, so
-    // rows could carry either.
-    const isPercent = fee.amount_type === 'percentage' || fee.amount_type === 'percent';
-    (isPercent ? percentage : fixed).push({ ...fee, amount });
-  }
-
-  const lines = fixed.map(fee => ({
-    name: String(fee.name).slice(0, 255),
-    description: null,
-    amount: round2(fee.amount),
-    taxable: !!fee.taxable,
-  }));
-
-  const percentBase = round2(base + lines.reduce((sum, l) => sum + l.amount, 0));
-  for (const fee of percentage) {
-    const amount = round2(percentBase * (fee.amount / 100));
-    if (amount <= 0) continue;
-    lines.push({
-      name: String(fee.name).slice(0, 255),
-      // The rate belongs in the description, not the name — the name is what the
-      // processor prints as the line title, and "(3.5%)" glued on gets truncated.
-      description: `${fee.amount}% of $${percentBase.toFixed(2)}`,
-      amount,
-      taxable: !!fee.taxable,
-    });
-  }
-  return lines;
-}
-
-module.exports = { createInvoiceFromBooking, buildFeeLines, loadCatalogFees };
+module.exports = { createInvoiceFromBooking };

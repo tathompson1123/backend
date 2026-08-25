@@ -89,6 +89,13 @@ async function sendBookingEmails(opts) {
     const hasTax = taxAmount > 0;
     const taxPct = opts.taxRate ? (opts.taxRate * 100).toFixed(2).replace(/\.?0+$/, '') : null;
 
+    // Standing fees, itemised. A fee rolled silently into the subtotal is a charge the
+    // customer can't account for, so each one gets its own line, and the subtotal row
+    // appears whenever there are fees even if there's no tax to show.
+    const fees = (Array.isArray(opts.fees) ? opts.fees : [])
+      .filter(fee => fee && Number(fee.amount) > 0);
+    const showBreakdown = hasTax || fees.length > 0;
+
     // Labelled lines rather than the striped table this used to be. See utils/emailLayout:
     // the 600px-card shape with colour bands and nested tables is what got a discovery
     // confirmation junked by two separate ESPs while a plain email from the same address
@@ -99,7 +106,8 @@ async function sendBookingEmails(opts) {
       { label: 'Date', value: esc(formattedDate) },
       { label: 'Time', value: esc(timeDisplay) },
       location ? { label: 'Place', value: esc(location) } : null,
-      hasTax ? { label: 'Subtotal', value: `$${subtotal.toFixed(2)}` } : null,
+      showBreakdown ? { label: 'Subtotal', value: `$${subtotal.toFixed(2)}` } : null,
+      ...fees.map(fee => ({ label: esc(fee.name), value: `$${Number(fee.amount).toFixed(2)}` })),
       hasTax ? { label: `Tax${taxPct ? ` (${taxPct}%)` : ''}`, value: `$${taxAmount.toFixed(2)}` } : null,
       total > 0 ? { label: 'Total', value: `$${total.toFixed(2)}` } : null,
       opts.notes ? { label: 'Notes', value: esc(opts.notes) } : null,
@@ -113,7 +121,8 @@ async function sendBookingEmails(opts) {
       `Date: ${formattedDate}`,
       `Time: ${timeDisplay}`,
       location ? `Place: ${location}` : null,
-      hasTax ? `Subtotal: $${subtotal.toFixed(2)}` : null,
+      showBreakdown ? `Subtotal: $${subtotal.toFixed(2)}` : null,
+      ...fees.map(fee => `${fee.name}: $${Number(fee.amount).toFixed(2)}`),
       hasTax ? `Tax${taxPct ? ` (${taxPct}%)` : ''}: $${taxAmount.toFixed(2)}` : null,
       total > 0 ? `Total: $${total.toFixed(2)}` : null,
       opts.notes ? `Notes: ${opts.notes}` : null,

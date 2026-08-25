@@ -381,6 +381,15 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     // DRAFT, so nothing reaches the customer until they send it. Users with no
     // draft-capable connection are unaffected.
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_draft_invoices BOOLEAN DEFAULT true");
+    // Standing fees (processing fee, supplies) applied to a booking. fee_total is the
+    // fee portion of bookings.subtotal, which stays pre-tax and fee-INCLUSIVE so
+    // subtotal + tax_amount = total_amount still holds. fees is the snapshot of what
+    // was applied, so the invoice bills what the customer was quoted even if the fee
+    // catalog changes afterwards. Only staff-created bookings carry these — an online
+    // booking shows the customer a total before confirming, so a fee that appeared
+    // only afterwards would be a surprise charge.
+    await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS fee_total DECIMAL(10,2) DEFAULT 0");
+    await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS fees JSONB");
     // Owner to-do list, shared between web dashboard and employee admin app
     await pool.query(`CREATE TABLE IF NOT EXISTS admin_todos (
       id SERIAL PRIMARY KEY,

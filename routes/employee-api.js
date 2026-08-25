@@ -12,6 +12,7 @@ const { listPresets: listServiceDescriptionPresets } = require('./service-descri
 const { handleDraftFromBooking } = require('./invoices');
 const { getDraftCapableConnections } = require('../payment/invoiceDrafts');
 const { queueAutoDraftInvoice } = require('../utils/autoDraftInvoice');
+const { resolveFeeTotals } = require('../utils/catalogFees');
 const { sendBookingEmails } = require('../utils/bookingEmail');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
@@ -1718,14 +1719,17 @@ router.post('/bookings', async (req, res) => {
     const resolvedMains = resolved.filter(s => !s.is_addon);
     if (resolvedMains.length === 0) return res.status(404).json({ error: 'Service not found' });
 
-    const subtotal = resolved.reduce((sum, s) => sum + s.price, 0);
-    // Apply the same sales tax the dashboard applies. Without this the app wrote
-    // total_amount = subtotal, so the identical booking totalled differently
-    // depending on where it was taken, and the invoice inherited the wrong figure.
+    const serviceSubtotal = resolved.reduce((sum, s) => sum + s.price, 0);
+    // Apply the same sales tax and the same standing fees the dashboard applies.
+    // Without this the app wrote total_amount = subtotal, so the identical booking
+    // totalled differently depending on where it was taken, and the invoice inherited
+    // the wrong figure.
     const taxRes = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
     const taxRate = parseFloat(taxRes.rows[0]?.default_tax_rate || 0);
-    const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
-    const totalWithTax = subtotal + taxAmount;
+    const totals = await resolveFeeTotals({ userId, serviceSubtotal, taxRate });
+    const subtotal = totals.subtotal;
+    const taxAmount = totals.taxAmount;
+    const totalWithTax = totals.total;
     const assignTo = assignedEmployeeId || employeeId;
 
     const bnRes = await pool.query('SELECT generate_booking_number() as number');
@@ -1774,12 +1778,15 @@ router.post('/bookings', async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO bookings (user_id, employee_id, booking_number, customer_id, customer_name, customer_email, customer_phone,
-        customer_address, customer_notes, booking_date, start_time, end_time, status, subtotal, tax_rate, tax_amount, total_amount, job_notes, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',$13,$14,$15,$16,$17,'manual')
+        customer_address, customer_notes, booking_date, start_time, end_time, status, subtotal, tax_rate, tax_amount, total_amount,
+        fee_total, fees, job_notes, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',$13,$14,$15,$16,$17,$18,$19,'manual')
        RETURNING *`,
       [userId, assignTo, bookingNumber, customerId, contact.name, contact.email, contact.phone,
        customerAddress||null, customerNotes||null, bookingDate, startTime, endTime,
-       subtotal, taxRate, taxAmount, totalWithTax, notes||null]
+       subtotal, taxRate, taxAmount, totalWithTax,
+       totals.feeTotal, totals.feeLines.length > 0 ? JSON.stringify(totals.feeLines) : null,
+       notes||null]
     );
     const booking = result.rows[0];
 
@@ -1814,8 +1821,12 @@ router.post('/bookings', async (req, res) => {
       bookingDate,
       startTime,
       endTime,
-      price: totalWithTax,
-      subtotal,
+      price: serviceSubtotal,
+      // Service subtotal with fees itemised, so the email names every charge.
+      subtotal: serviceSubtotal,
+      fees: totals.feeLines,
+      taxRate,
+      taxAmount,
       total: totalWithTax,
       notes: customerNotes,
     }).catch(() => {});
@@ -1867,12 +1878,16 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
     if (resolvedMains.length === 0) return res.status(404).json({ error: 'Service not found' });
     const primaryService = resolvedMains[0];
 
-    const subtotal = resolved.reduce((sum, s) => sum + s.price, 0);
+    const serviceSubtotal = resolved.reduce((sum, s) => sum + s.price, 0);
 
     const taxResult = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
     const taxRate = parseFloat(taxResult.rows[0]?.default_tax_rate || 0);
-    const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
-    const totalAmount = subtotal + taxAmount;
+    // Re-apply standing fees, same as the web PUT — this rewrites subtotal and
+    // total_amount outright, so skipping it would drop the fee on any edit.
+    const totals = await resolveFeeTotals({ userId, serviceSubtotal, taxRate });
+    const subtotal = totals.subtotal;
+    const taxAmount = totals.taxAmount;
+    const totalAmount = totals.total;
 
     // Compute end_time off the sum of all line durations unless the caller provided one
     // explicitly (the app already shows a computed end_time, so we trust it when sent).
@@ -1903,6 +1918,9 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
            subtotal = $12,
            tax_amount = $13,
            total_amount = $14,
+           tax_rate = $17,
+           fee_total = $18,
+           fees = $19,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $15 AND user_id = $16
        RETURNING *`,
@@ -1923,6 +1941,9 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
         totalAmount,
         id,
         userId,
+        taxRate,
+        totals.feeTotal,
+        totals.feeLines.length > 0 ? JSON.stringify(totals.feeLines) : null,
       ]
     );
     if (bookingResult.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
