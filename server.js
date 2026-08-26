@@ -413,6 +413,11 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
       created_at TIMESTAMP DEFAULT NOW()
     )`);
     await pool.query("CREATE INDEX IF NOT EXISTS wrap_mockups_user_created_idx ON wrap_mockups(user_id, created_at DESC)");
+    // Customer artwork used as reference (logo, job photos), and the palette that was
+    // applied — brand colours are pulled from the artwork, so recording which ones were
+    // used is the only way to explain a mockup after the fact.
+    await pool.query("ALTER TABLE wrap_mockups ADD COLUMN IF NOT EXISTS artwork_urls JSONB");
+    await pool.query("ALTER TABLE wrap_mockups ADD COLUMN IF NOT EXISTS brand_colors JSONB");
     // Owner to-do list, shared between web dashboard and employee admin app
     await pool.query(`CREATE TABLE IF NOT EXISTS admin_todos (
       id SERIAL PRIMARY KEY,

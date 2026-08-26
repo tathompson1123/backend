@@ -37,7 +37,15 @@ photograph of the real vehicle. Write it zone by zone (hood / side panel / rear)
 exact colours as hex, give the exact text strings verbatim, and state the typography
 weight and the contrast relationship. Always instruct it to preserve the vehicle's
 shape, angle, wheels and lighting. If a logo is supplied it must be reproduced
-faithfully and never redrawn or restyled.`;
+faithfully and never redrawn or restyled.
+
+The input may include artworkCount and artworkNames — customer-supplied images (a logo,
+sometimes real job photos). When artwork is present, say in each image_prompt where the
+logo sits and how large. Photographs are only ever a small inset beside or behind a solid
+contrast panel: never the backdrop for text, and never tiled across the vehicle.
+
+primaryColor and accentColor may have been sampled from that artwork rather than typed in,
+so treat them as the brand's real colours and build each direction around them.`;
 
 // The tool is the output contract. Claude is forced to call it, so the response is a
 // validated object rather than text that has to be parsed.

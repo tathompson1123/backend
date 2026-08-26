@@ -99,21 +99,38 @@ async function renderBaseVehicle({ year, make, model, trim }) {
  * vehicle, and three variants that each show a different van are useless for comparing
  * designs side by side.
  */
-async function paintWrap({ baseImage, imagePrompt, logo }) {
+async function paintWrap({ baseImage, imagePrompt, references = [] }) {
   const parts = [];
+  const refs = (references || []).filter(r => r?.buffer);
 
-  const instruction = `${imagePrompt}
+  // The attached artwork is described in order and by kind, so the model can tell a
+  // logo from a job photo. Without this it treats every attachment as equally
+  // paintable and will smear a photograph across the whole panel.
+  let refNote = '';
+  if (refs.length === 1) {
+    refNote = '\n- One artwork image is attached after the vehicle photo.'
+      + ' If it is a logo, reproduce it faithfully: same shapes, same colours, same proportions.'
+      + ' Never redraw, restyle, recolour or add text to a logo.'
+      + ' If it is a photograph, use it only small and behind a solid contrast panel, never as the background for text.';
+  } else if (refs.length > 1) {
+    const listed = refs.map((r, i) => '(' + (i + 1) + ') ' + (r.label || 'artwork')).join(', ');
+    refNote = '\n- ' + refs.length + ' artwork images are attached after the vehicle photo, in this order: ' + listed + '.'
+      + '\n- Any logo among them must be reproduced faithfully: same shapes, same colours, same proportions. Never redraw, restyle, recolour or add text to a logo.'
+      + '\n- Use at most ONE photographic image, kept small, and only behind or beside a solid contrast panel. Text never sits directly on a photo.'
+      + '\n- Do not tile, collage or repeat the artwork across the vehicle.';
+  }
 
-MANDATORY CONSTRAINTS:
-- Preserve the vehicle exactly as photographed: same model, shape, angle, position in frame, wheels, windows, background and lighting. Change only the graphics applied to the bodywork.
-- The wrap must follow the body's curves and panel lines like real vinyl, not float as a flat overlay.
-- Every text string must be spelled exactly as given and be crisply legible.${logo ? `
-- A logo image is attached. Reproduce it faithfully — same shapes, same colours, same proportions. Do not redraw, restyle, recolour or add text to it.` : ''}`;
+  const instruction = imagePrompt + '\n\nMANDATORY CONSTRAINTS:'
+    + '\n- Preserve the vehicle exactly as photographed: same model, shape, angle, position in frame, wheels, windows, background and lighting. Change only the graphics applied to the bodywork.'
+    + "\n- The wrap must follow the body's curves and panel lines like real vinyl, not float as a flat overlay."
+    + '\n- Every text string must be spelled exactly as given and be crisply legible.'
+    + refNote;
 
   parts.push({ text: instruction });
+  // Vehicle photo first — it is the image being edited, not a reference.
   parts.push({ inlineData: { mimeType: 'image/png', data: baseImage.toString('base64') } });
-  if (logo) {
-    parts.push({ inlineData: { mimeType: logo.mimeType || 'image/png', data: logo.buffer.toString('base64') } });
+  for (const ref of refs) {
+    parts.push({ inlineData: { mimeType: ref.mimeType || 'image/png', data: ref.buffer.toString('base64') } });
   }
 
   return generateImage(parts);
