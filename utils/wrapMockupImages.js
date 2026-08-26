@@ -17,6 +17,8 @@
 // cost is exact-trim fidelity — the model renders a convincing Transit, but won't
 // reliably distinguish a 2019 from a 2023.
 
+const { sniffImageType } = require('./imageType');
+
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // Image generation lives on the image-preview models; the plain text models reject it.
@@ -225,7 +227,13 @@ async function paintWrap({ baseImage, imagePrompt, references = [] }) {
   // Vehicle photo first — it is the image being edited, not a reference.
   parts.push({ inlineData: { mimeType: 'image/png', data: baseImage.toString('base64') } });
   for (const ref of refs) {
-    parts.push({ inlineData: { mimeType: ref.mimeType || 'image/png', data: ref.buffer.toString('base64') } });
+    // Sniffed for the same reason as the brief step: the declared type can be wrong.
+    parts.push({
+      inlineData: {
+        mimeType: sniffImageType(ref.buffer) || ref.mimeType || 'image/png',
+        data: ref.buffer.toString('base64'),
+      },
+    });
   }
 
   return generateImage(parts);

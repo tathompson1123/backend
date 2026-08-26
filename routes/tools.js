@@ -90,7 +90,8 @@ router.post(
       } = req.body || {};
 
       if (!businessName?.trim()) return res.status(400).json({ error: 'Business name is required' });
-      if (!service?.trim()) return res.status(400).json({ error: 'A primary service is required' });
+      // service is optional on purpose — the trade is read off the name and logo. Only the
+      // name and the vehicle are genuinely needed.
       if (!year || !make?.trim() || !model?.trim()) {
         return res.status(400).json({ error: 'Vehicle year, make and model are required' });
       }
@@ -161,26 +162,28 @@ router.post(
         accentDerived: useDetected ? !!detected.accentDerived : false,
       };
 
-      // 3. The creative decisions — which message leads, and how each variant differs.
-      const brief = await generateWrapBrief({
-        businessName, service, tagline, phone, website,
-        primaryColor: resolvedColors.primary,
-        accentColor: resolvedColors.accent,
-        vehicle,
-        artworkCount: artwork.length,
-        artworkNames: artwork.map(f => f.originalname),
-      }, userId);
-
-      // 4. One base photo, reused for all three variants. Generating a fresh vehicle per
-      //    variant would give three different vans, which defeats comparing designs.
-      const baseImage = await renderBaseVehicle({ year, make, model, trim });
-      const sourcePhotoUrl = (await uploadBuffer(baseImage, `${stamp}-base`)).secure_url;
-
       const references = artwork.map(file => ({
         buffer: file.buffer,
         mimeType: file.mimetype,
         label: file.originalname || 'artwork',
       }));
+
+      // 3. The creative decisions. Claude is shown the artwork itself, so it reads the
+      //    trade, the palette and the brand's character rather than being told them.
+      const brief = await generateWrapBrief({
+        businessName,
+        service: service?.trim() || undefined,
+        tagline: tagline?.trim() || undefined,
+        phone, website,
+        primaryColor: resolvedColors.primary,
+        accentColor: resolvedColors.accent,
+        vehicle,
+      }, userId, references);
+
+      // 4. One base photo, reused for all three variants. Generating a fresh vehicle per
+      //    variant would give three different vans, which defeats comparing designs.
+      const baseImage = await renderBaseVehicle({ year, make, model, trim });
+      const sourcePhotoUrl = (await uploadBuffer(baseImage, `${stamp}-base`)).secure_url;
 
       // 5. Paint each variant. Sequential on purpose — the image model is the slow,
       //    rate-limited step, and a partial set is more useful than a 429 storm.
@@ -216,7 +219,8 @@ router.post(
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, created_at`,
         [userId, businessName.trim(), vehicle, sourcePhotoUrl, JSON.stringify(variants),
-         brief.creative_summary || null, brief.dominant_message || null,
+         brief.creative_summary || null,
+         [brief.inferred_trade, brief.dominant_message].filter(Boolean).join(' — ') || null,
          customerEmail?.trim() || null,
          JSON.stringify(artworkUploads), JSON.stringify(resolvedColors)]
       );
@@ -227,6 +231,8 @@ router.post(
         vehicle,
         creativeSummary: brief.creative_summary,
         dominantMessage: brief.dominant_message,
+        inferredTrade: brief.inferred_trade,
+        brandRead: brief.brand_read,
         sourcePhotoUrl,
         variants,
         // So the UI can show which colours were actually used and pre-fill the pickers.

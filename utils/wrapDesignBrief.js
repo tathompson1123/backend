@@ -13,10 +13,33 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { logClaudeUsage } = require('./claudeUsage');
+const { sniffImageType } = require('./imageType');
 
 const MODEL = 'claude-opus-5';
 
-const SYSTEM_PROMPT = `You are a vehicle wrap design director. Given a business's details, produce THREE distinct wrap directions.
+// What the Messages API accepts as an image block. Anything else (SVG, HEIC, PDF) is
+// skipped for the brief rather than failing the run — it still reaches the image model.
+const VISION_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+const SYSTEM_PROMPT = `You are a vehicle wrap design director. You are given very little — a business
+name, a phone number, a website, and the customer's existing logo or artwork — and you
+design their branding from that. Produce THREE distinct wrap directions.
+
+YOU ARE SHOWN THE ARTWORK. Read it before deciding anything:
+- What trade is this? Usually the name or the logo says it outright; if not, the imagery
+  will (a wrench, a roofline, a tap). Put your answer in inferred_trade — that word or
+  phrase goes on the vehicle, because a viewer who can't tell what the business does has
+  seen a failed wrap. Only if it is genuinely unreadable should you fall back to something
+  broad.
+- What are the brand's real colours? Take them from the logo, not from a guess. Ignore the
+  white or transparent background it sits on.
+- What is its character — trusted and traditional, or modern and sharp? Match it. A
+  hand-drawn script logo and a hard geometric one call for different wraps.
+- If the logo contains a tagline or established phrase, you may reuse it. Never invent a
+  claim (no "lowest prices", no "24/7", no "licensed & insured") unless it appears in what
+  you were given — you'd be putting a promise on a van the business never made.
+
+A "service" field may be absent, and that is normal. Infer it rather than asking.
 
 WHAT MAKES A WRAP WORK: brutal hierarchy and a disciplined palette. Not decoration. A
 stranger at 40mph must know WHO this is and WHAT THEY DO before the vehicle has passed.
@@ -97,6 +120,14 @@ const BRIEF_TOOL = {
         type: 'string',
         description: 'Two or three sentences on the big idea, for the salesperson to read out.',
       },
+      inferred_trade: {
+        type: 'string',
+        description: 'The trade this business is in, read from the name and artwork (e.g. "Plumbing", "Garage Door Service"). This is what goes on the vehicle as the descriptor.',
+      },
+      brand_read: {
+        type: 'string',
+        description: 'One or two sentences on what the artwork says about the brand: its palette, its character, and how formal or friendly it reads.',
+      },
       dominant_message: {
         type: 'string',
         description: 'The single service or claim chosen to lead with, and one line on why.',
@@ -117,7 +148,7 @@ const BRIEF_TOOL = {
         },
       },
     },
-    required: ['creative_summary', 'dominant_message', 'variants'],
+    required: ['creative_summary', 'inferred_trade', 'brand_read', 'dominant_message', 'variants'],
   },
 };
 
@@ -126,11 +157,29 @@ const BRIEF_TOOL = {
  * @param {number} userId for cost attribution
  * @returns {Promise<{creative_summary: string, dominant_message: string, variants: object[]}>}
  */
-async function generateWrapBrief(business, userId) {
+async function generateWrapBrief(business, userId, artwork = []) {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY is not configured on the server');
   }
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  // Show Claude the actual logo. Describing it in words was the weak link: the trade,
+  // the brand's character and which colours are really the brand's are all things you
+  // can only judge by looking.
+  const content = [];
+  for (const item of artwork) {
+    if (!item?.buffer) continue;
+    // The real type, not the declared one — the API rejects a mismatch, and an upload's
+    // Content-Type comes from its file extension.
+    const mediaType = sniffImageType(item.buffer);
+    if (!mediaType || !VISION_TYPES.includes(mediaType)) continue;
+    content.push({
+      type: 'image',
+      source: { type: 'base64', media_type: mediaType, data: item.buffer.toString('base64') },
+    });
+    content.push({ type: 'text', text: `(above: ${item.label || 'artwork'})` });
+  }
+  content.push({ type: 'text', text: JSON.stringify(business, null, 1) });
 
   const response = await anthropic.messages.create({
     model: MODEL,
@@ -139,10 +188,7 @@ async function generateWrapBrief(business, userId) {
     tools: [BRIEF_TOOL],
     // Forcing the tool is what makes the output structured rather than prose.
     tool_choice: { type: 'tool', name: 'submit_wrap_brief' },
-    messages: [{
-      role: 'user',
-      content: JSON.stringify(business, null, 1),
-    }],
+    messages: [{ role: 'user', content }],
   });
 
   logClaudeUsage(userId, MODEL, response.usage, 'wrap_mockup_brief');
