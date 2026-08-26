@@ -86,7 +86,7 @@ router.post(
         businessName, service, tagline, phone, website,
         primaryColor, accentColor,
         year, make, model, trim,
-        customerEmail, autoColors,
+        customerEmail, autoColors, designMode,
       } = req.body || {};
 
       if (!businessName?.trim()) return res.status(400).json({ error: 'Business name is required' });
@@ -178,6 +178,9 @@ router.post(
         primaryColor: resolvedColors.primary,
         accentColor: resolvedColors.accent,
         vehicle,
+        // 'evolve' respects what they already have; 'reinvent' starts over. Default bold,
+        // since a business asking for a mockup usually wants to see something better.
+        designMode: designMode === 'evolve' ? 'evolve' : 'reinvent',
       }, userId, references);
 
       // 4. One base photo, reused for all three variants. Generating a fresh vehicle per
@@ -233,6 +236,9 @@ router.post(
         dominantMessage: brief.dominant_message,
         inferredTrade: brief.inferred_trade,
         brandRead: brief.brand_read,
+        brandWarning: brief.brand_warning || undefined,
+        ctaType: brief.cta_type,
+        designMode: designMode === 'evolve' ? 'evolve' : 'reinvent',
         sourcePhotoUrl,
         variants,
         // So the UI can show which colours were actually used and pre-fill the pickers.
