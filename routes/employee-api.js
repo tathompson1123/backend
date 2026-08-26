@@ -596,8 +596,41 @@ router.post('/my-bookings/:id/invoice', requirePermission('process_payments'), a
         }));
 
     const taxRate = customTaxRate != null ? parseFloat(customTaxRate) : 0;
-    const subtotal = lineItems.reduce((s, i) => s + (parseFloat(i.unitPrice) || 0) * (parseInt(i.quantity) || 1), 0);
-    const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
+
+    // Resolve each line's taxability before totalling. This path taxed every line, so a
+    // fee the business marked "No Tax" in the fee catalog was taxed anyway.
+    //
+    // The app builds its fee lines from the catalog but doesn't carry the flag through,
+    // so when a line doesn't state one it's matched back to the catalog by name — the
+    // app labels them "Processing Fee (3.5%)", hence stripping a trailing percentage
+    // before comparing. This keeps already-installed app builds correct rather than
+    // waiting on a release, and is a no-op once a line sends taxable explicitly.
+    const feeCatalogRes = await pool.query(
+      'SELECT name, taxable FROM invoice_items_catalog WHERE user_id = $1 AND active = true',
+      [userId]
+    );
+    const catalogTaxable = new Map(
+      feeCatalogRes.rows.map(r => [String(r.name).trim().toLowerCase(), r.taxable !== false])
+    );
+    const resolveTaxable = (item) => {
+      if (typeof item.taxable === 'boolean') return item.taxable;
+      const label = String(item.description || '')
+        .replace(/\s*\([\d.]+%\)\s*$/, '')
+        .trim()
+        .toLowerCase();
+      const fromCatalog = catalogTaxable.get(label);
+      return fromCatalog === undefined ? true : fromCatalog;
+    };
+
+    const priced = lineItems.map(item => {
+      const qty = parseInt(item.quantity) || 1;
+      const price = parseFloat(item.unitPrice) || 0;
+      return { ...item, qty, price, amount: price * qty, taxable: resolveTaxable(item) };
+    });
+
+    const subtotal = priced.reduce((sum, i) => sum + i.amount, 0);
+    const taxableSubtotal = priced.reduce((sum, i) => i.taxable ? sum + i.amount : sum, 0);
+    const taxAmount = Math.round(taxableSubtotal * taxRate * 100) / 100;
     const total = subtotal + taxAmount;
 
     const client = await pool.connect();
@@ -624,14 +657,14 @@ router.post('/my-bookings/:id/invoice', requirePermission('process_payments'), a
 
       const invoice = invoiceResult.rows[0];
 
-      // Create line items
-      for (const item of lineItems) {
-        const qty = parseInt(item.quantity) || 1;
-        const price = parseFloat(item.unitPrice) || 0;
+      // Create line items. taxable is stored explicitly — leaving it to the column
+      // default (true) is what made every fee here taxable.
+      for (const item of priced) {
         await client.query(
-          `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, amount)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [invoice.id, item.description, qty, price, price * qty]
+          `INSERT INTO invoice_items (invoice_id, name, description, quantity, unit_price, amount, taxable)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [invoice.id, String(item.description || '').slice(0, 255), item.description,
+           item.qty, item.price, item.amount, item.taxable]
         );
       }
 

@@ -31,7 +31,11 @@ router.get('/', authenticateToken, async (req, res) => {
       SELECT i.*,
         json_agg(json_build_object(
           'id', ii.id, 'name', ii.name, 'description', ii.description,
-          'quantity', ii.quantity, 'unit_price', ii.unit_price, 'amount', ii.amount
+          'quantity', ii.quantity, 'unit_price', ii.unit_price, 'amount', ii.amount,
+          -- taxable MUST be returned. The editor treats a missing key as taxable, so
+          -- omitting it silently taxes a "No Tax" fee -- and saving the invoice then
+          -- writes that back as fact.
+          'taxable', ii.taxable
         )) FILTER (WHERE ii.id IS NOT NULL) as items
       FROM invoices i
       LEFT JOIN invoice_items ii ON i.id = ii.invoice_id
@@ -154,7 +158,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
       `SELECT i.*,
         json_agg(json_build_object(
           'id', ii.id, 'name', ii.name, 'description', ii.description,
-          'quantity', ii.quantity, 'unit_price', ii.unit_price, 'amount', ii.amount, 'service_id', ii.service_id
+          'quantity', ii.quantity, 'unit_price', ii.unit_price, 'amount', ii.amount, 'service_id', ii.service_id,
+          'taxable', ii.taxable
         )) FILTER (WHERE ii.id IS NOT NULL) as items
        FROM invoices i
        LEFT JOIN invoice_items ii ON i.id = ii.invoice_id
