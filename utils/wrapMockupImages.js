@@ -20,7 +20,14 @@
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // Image generation lives on the image-preview models; the plain text models reject it.
-const IMAGE_MODEL = 'gemini-3-pro-image-preview';
+//
+// Flash, not pro, and deliberately: gemini-3-pro-image has NO free-tier quota
+// ("limit: 0"), so it 429s on every request until billing is enabled. Flash is also the
+// model the proof-of-concept renders were made with, so it's the one actually known to
+// hold text legibly and preserve the vehicle on an edit.
+//
+// Override with GEMINI_IMAGE_MODEL once billing is on, if pro is worth the cost.
+const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image-preview';
 
 class WrapImageError extends Error {
   constructor(message, code = 'IMAGE_FAILED') {
@@ -61,7 +68,27 @@ async function generateImage(parts) {
 
   if (!res.ok) {
     const detail = body?.error?.message || text.slice(0, 300);
-    throw new WrapImageError(`Gemini image request failed (${res.status}): ${detail}`);
+
+    // A 429 has two very different meanings and Google words them identically, right
+    // down to a "please retry in Ns" that cannot possibly help. "limit: 0" means the
+    // model has no quota on this billing tier at all — retrying forever won't fix it,
+    // so say what will.
+    if (res.status === 429) {
+      if (/limit:s*0/.test(detail)) {
+        throw new WrapImageError(
+          `${IMAGE_MODEL} has no quota on this Google AI billing tier, so every request is refused ` +
+          `(the "retry in Ns" in Google's message is misleading — the limit is 0, not exhausted). ` +
+          `Either enable billing on the Google AI project, or set GEMINI_IMAGE_MODEL to a model your tier allows.`,
+          'QUOTA_UNAVAILABLE'
+        );
+      }
+      throw new WrapImageError(
+        `Gemini rate limit hit on ${IMAGE_MODEL}. This one is temporary — wait a moment and generate again.`,
+        'RATE_LIMITED'
+      );
+    }
+
+    throw new WrapImageError(`Gemini image request failed (${res.status}) on ${IMAGE_MODEL}: ${detail}`);
   }
 
   const candidate = body?.candidates?.[0];
