@@ -10,3 +10,6 @@ scripts/.deliverability-log.jsonl
 # the extract/parse scripts write here, and it contains customers' conversations.
 scripts/iphone/data/
 *.sms.db
+
+# Wrap mockup test renders (evidence, not source)
+scripts/wrap-test/

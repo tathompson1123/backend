@@ -169,6 +169,10 @@ app.use('/api/pay', paymentPublicRoutes);
 const serviceDescriptionRoutes = require('./routes/service-descriptions');
 app.use('/api/service-descriptions', serviceDescriptionRoutes);
 
+// Limited-release tooling. Every route inside is gated on users.feature_tools_enabled.
+const toolRoutes = require('./routes/tools');
+app.use('/api/tools', toolRoutes);
+
 const statusTemplateRoutes = require('./routes/status-templates');
 app.use('/api/status-templates', statusTemplateRoutes);
 
@@ -390,6 +394,25 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     // only afterwards would be a surprise charge.
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS fee_total DECIMAL(10,2) DEFAULT 0");
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS fees JSONB");
+    // Limited-release Tools tab. Default false so a new account never picks up
+    // in-progress tooling by accident; switched on per account.
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_tools_enabled BOOLEAN DEFAULT false");
+    // Vehicle wrap concepts generated in the Tools tab. variants holds the rendered
+    // set (id, label, rationale, imageUrl) so a concept can be re-sent without paying
+    // to regenerate it, and doubles as the rate-limit ledger.
+    await pool.query(`CREATE TABLE IF NOT EXISTS wrap_mockups (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      business_name TEXT NOT NULL,
+      vehicle TEXT NOT NULL,
+      source_photo_url TEXT,
+      variants JSONB,
+      creative_summary TEXT,
+      dominant_message TEXT,
+      customer_email TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query("CREATE INDEX IF NOT EXISTS wrap_mockups_user_created_idx ON wrap_mockups(user_id, created_at DESC)");
     // Owner to-do list, shared between web dashboard and employee admin app
     await pool.query(`CREATE TABLE IF NOT EXISTS admin_todos (
       id SERIAL PRIMARY KEY,
