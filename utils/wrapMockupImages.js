@@ -48,59 +48,114 @@ function apiKey() {
   return key;
 }
 
+/** Sleep helper for the retry loop below. */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Google returns a RetryInfo detail with the delay it wants ("22.78s"). Honour it
+// rather than guessing a backoff.
+function suggestedDelayMs(body) {
+  const details = body?.error?.details || [];
+  for (const d of details) {
+    const raw = d?.retryDelay;
+    if (typeof raw === 'string') {
+      const seconds = parseFloat(raw.replace(/s$/, ''));
+      if (Number.isFinite(seconds) && seconds > 0) return Math.round(seconds * 1000);
+    }
+  }
+  return null;
+}
+
+// A run is four image calls, so one per-minute trip would otherwise kill the whole
+// thing. Retry inside the call instead of asking the user to start over.
+//
+// Bounded deliberately: these retries sit inside a single HTTP request, and four calls
+// each backing off generously can push the response past a proxy's timeout, which loses
+// the whole run rather than one image. Two waits of at most 20s per call keeps the worst
+// case around three minutes including generation time. If the free tier is being hit
+// this hard, billing is the fix, not a longer wait.
+const MAX_ATTEMPTS = 3;
+const MAX_WAIT_PER_ATTEMPT_MS = 20000;
+
 /**
- * One Gemini call. `parts` is the content array: text plus any inline images.
+ * One Gemini image generation, with retries on transient rate limits.
+ * `parts` is the content array: text plus any inline images.
  * Returns the first image the model produced, as a Buffer.
  */
 async function generateImage(parts) {
-  const res = await fetch(`${GEMINI_ENDPOINT}/${IMAGE_MODEL}:generateContent?key=${apiKey()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
-      generationConfig: { responseModalities: ['IMAGE'] },
-    }),
-  });
+  let waitedMs = 0;
 
-  const text = await res.text();
-  let body;
-  try { body = JSON.parse(text); } catch { body = null; }
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const res = await fetch(`${GEMINI_ENDPOINT}/${IMAGE_MODEL}:generateContent?key=${apiKey()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts }],
+        generationConfig: { responseModalities: ['IMAGE'] },
+      }),
+    });
 
-  if (!res.ok) {
+    const text = await res.text();
+    let body;
+    try { body = JSON.parse(text); } catch { body = null; }
+
+    if (res.ok) {
+      const candidate = body?.candidates?.[0];
+      // A safety block returns 200 with no image and a finishReason, so an empty parts
+      // array is a real outcome to report rather than a crash.
+      const imagePart = (candidate?.content?.parts || []).find(p => p.inlineData?.data);
+      if (!imagePart) {
+        const reason = candidate?.finishReason || body?.promptFeedback?.blockReason || 'no image returned';
+        throw new WrapImageError(`Gemini returned no image (${reason})`);
+      }
+      return Buffer.from(imagePart.inlineData.data, 'base64');
+    }
+
     const detail = body?.error?.message || text.slice(0, 300);
 
-    // A 429 has two very different meanings and Google words them identically, right
-    // down to a "please retry in Ns" that cannot possibly help. "limit: 0" means the
-    // model has no quota on this billing tier at all — retrying forever won't fix it,
-    // so say what will.
-    if (res.status === 429) {
-      if (/limit:s*0/.test(detail)) {
-        throw new WrapImageError(
-          `${IMAGE_MODEL} has no quota on this Google AI billing tier, so every request is refused ` +
-          `(the "retry in Ns" in Google's message is misleading — the limit is 0, not exhausted). ` +
-          `Either enable billing on the Google AI project, or set GEMINI_IMAGE_MODEL to a model your tier allows.`,
-          'QUOTA_UNAVAILABLE'
-        );
-      }
+    if (res.status !== 429) {
+      throw new WrapImageError(`Gemini image request failed (${res.status}) on ${IMAGE_MODEL}: ${detail}`);
+    }
+
+    // "limit: 0" means the model has no allowance on this billing tier at all. Google
+    // still attaches a retry delay, which can never help — don't burn attempts on it.
+    if (/limit:\s*0\b/.test(detail)) {
       throw new WrapImageError(
-        `Gemini rate limit hit on ${IMAGE_MODEL}. This one is temporary — wait a moment and generate again.`,
+        `${IMAGE_MODEL} has no quota on this Google AI billing tier, so every request is refused ` +
+        `(the "retry in Ns" in Google's message is misleading — the limit is 0, not exhausted). ` +
+        `Either enable billing on the Google AI project, or set GEMINI_IMAGE_MODEL to a model your tier allows.`,
+        'QUOTA_UNAVAILABLE'
+      );
+    }
+
+    // A daily cap won't clear within a request either.
+    if (/per\s*_?day/i.test(detail)) {
+      throw new WrapImageError(
+        `Daily Gemini image quota is used up on ${IMAGE_MODEL}. It resets on Google's schedule — ` +
+        `enable billing on the Google AI project to lift it.`,
+        'QUOTA_DAILY'
+      );
+    }
+
+    if (attempt === MAX_ATTEMPTS) {
+      throw new WrapImageError(
+        `Gemini rate limit on ${IMAGE_MODEL} did not clear after ${attempt} attempts ` +
+        `(waited ${Math.round(waitedMs / 1000)}s). The free tier allows very few image requests per minute; ` +
+        `enabling billing on the Google AI project is the durable fix.`,
         'RATE_LIMITED'
       );
     }
 
-    throw new WrapImageError(`Gemini image request failed (${res.status}) on ${IMAGE_MODEL}: ${detail}`);
+    // Google's own delay when offered, otherwise exponential backoff.
+    const wait = Math.min(suggestedDelayMs(body) || (2000 * Math.pow(2, attempt - 1)), MAX_WAIT_PER_ATTEMPT_MS);
+    waitedMs += wait;
+    console.log(`[wrap-mockup] rate limited on ${IMAGE_MODEL}, waiting ${Math.round(wait / 1000)}s (attempt ${attempt}/${MAX_ATTEMPTS})`);
+    await sleep(wait);
   }
 
-  const candidate = body?.candidates?.[0];
-  // A safety block returns 200 with no image and a finishReason, so an empty parts
-  // array is a real outcome to report rather than a crash.
-  const imagePart = (candidate?.content?.parts || []).find(p => p.inlineData?.data);
-  if (!imagePart) {
-    const reason = candidate?.finishReason || body?.promptFeedback?.blockReason || 'no image returned';
-    throw new WrapImageError(`Gemini returned no image (${reason})`);
-  }
-
-  return Buffer.from(imagePart.inlineData.data, 'base64');
+  // Unreachable — the loop either returns or throws.
+  throw new WrapImageError('Gemini image generation failed');
 }
 
 /**
