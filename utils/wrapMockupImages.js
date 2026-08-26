@@ -159,17 +159,28 @@ async function generateImage(parts) {
 }
 
 /**
- * A clean side-profile photo of the vehicle, to be wrapped.
- * Plain background and even light on purpose — a busy scene makes the wrap harder to
- * read and harder for the edit step to keep consistent.
+ * The vehicle photo the wrap gets painted onto.
+ *
+ * A three-quarter hero angle under dramatic light, NOT a flat side profile on seamless
+ * grey. The earlier version asked for "plain white, even neutral daylight, seamless grey
+ * background" and got exactly that: a parts-catalogue photo no design could look
+ * impressive on. Presentation renders sell on staging as much as on the artwork, and the
+ * angle still shows the whole side panel, so the design stays legible and all three
+ * variants stay comparable because they share this one photo.
  */
 async function renderBaseVehicle({ year, make, model, trim }) {
   const vehicle = [year, make, model, trim].filter(Boolean).join(' ');
-  const prompt = `Photorealistic commercial vehicle photograph of a plain white ${vehicle}, ` +
-    `exact side profile view, side-on to the camera, whole vehicle in frame. ` +
-    `Even neutral daylight, clean light grey seamless studio background, vehicle parked on smooth grey floor. ` +
-    `No text, no graphics, no logos, no livery anywhere on the vehicle — completely blank white paintwork ready to be wrapped. ` +
-    `Sharp focus, no motion blur, no people, no other vehicles.`;
+  const prompt = 'Photorealistic professional vehicle-wrap presentation render of a plain '
+    + 'white ' + vehicle + ', shot at a three-quarter front hero angle, turned about 25 degrees '
+    + 'toward the camera so the full side panel and the front are both clearly visible. '
+    + 'Whole vehicle in frame, wheels straight.\n\n'
+    + 'Cinematic studio lighting: a strong rim light along the roofline, soft highlights '
+    + 'running the length of the bodywork, a subtle dark-to-light gradient backdrop, and a '
+    + 'glossy floor with a soft reflection beneath the vehicle. Premium commercial '
+    + 'photography, high contrast, shallow depth of field on the background.\n\n'
+    + 'The bodywork is completely blank: no text, no graphics, no logos, no livery, no '
+    + 'pinstripes anywhere. Clean white paint ready to be wrapped. Sharp focus, no motion '
+    + 'blur, no people, no other vehicles.';
 
   return generateImage([{ text: prompt }]);
 }
@@ -193,19 +204,21 @@ async function paintWrap({ baseImage, imagePrompt, references = [] }) {
     refNote = '\n- One artwork image is attached after the vehicle photo.'
       + ' If it is a logo, reproduce it faithfully: same shapes, same colours, same proportions.'
       + ' Never redraw, restyle, recolour or add text to a logo.'
-      + ' If it is a photograph, use it only small and behind a solid contrast panel, never as the background for text.';
+      + ' If it is a photograph, it is either a full-bleed duotone field tinted to the brand colours filling one zone, with text on a solid panel over it, or it is left out entirely. Never a small inset.';
   } else if (refs.length > 1) {
     const listed = refs.map((r, i) => '(' + (i + 1) + ') ' + (r.label || 'artwork')).join(', ');
     refNote = '\n- ' + refs.length + ' artwork images are attached after the vehicle photo, in this order: ' + listed + '.'
       + '\n- Any logo among them must be reproduced faithfully: same shapes, same colours, same proportions. Never redraw, restyle, recolour or add text to a logo.'
-      + '\n- Use at most ONE photographic image, kept small, and only behind or beside a solid contrast panel. Text never sits directly on a photo.'
+      + '\n- Use at most ONE photographic image, and only as a full-bleed duotone field tinted to the brand colours filling a single zone, with text on a solid panel over it. Never a small inset or thumbnail. If it cannot be used at full bleed, leave it out.'
       + '\n- Do not tile, collage or repeat the artwork across the vehicle.';
   }
 
   const instruction = imagePrompt + '\n\nMANDATORY CONSTRAINTS:'
     + '\n- Preserve the vehicle exactly as photographed: same model, shape, angle, position in frame, wheels, windows, background and lighting. Change only the graphics applied to the bodywork.'
     + "\n- The wrap must follow the body's curves and panel lines like real vinyl, not float as a flat overlay."
-    + '\n- Every text string must be spelled exactly as given and be crisply legible.'
+    + '\n- Every text string must be spelled exactly as given and be crisply legible, and every text element must sit wholly within ONE flat field of colour — no lettering crossing a colour boundary.'
+    + '\n- The business name is the largest element on the vehicle by a wide margin, and whatever the business does must be readable at a glance.'
+    + '\n- The phone number appears exactly once. No thin pinstripe along the bottom, no plain rectangle of colour floating on an otherwise white body, no swooshes or flourishes used as filler.'
     + refNote;
 
   parts.push({ text: instruction });
