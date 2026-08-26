@@ -5,3 +5,8 @@ node_modules
 
 # Deliverability test log — seed addresses and message IDs, local only
 scripts/.deliverability-log.jsonl
+
+# Extracted iPhone Messages data. Real message history must never be committed —
+# the extract/parse scripts write here, and it contains customers' conversations.
+scripts/iphone/data/
+*.sms.db
