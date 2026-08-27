@@ -78,6 +78,15 @@ follows the body's curves and panel lines; every text string spelled exactly as 
 Display type on a saturated field needs a heavy outline or layered offset. **Outlined
 lettering may cross a colour boundary and stay legible; unoutlined lettering may not.**
 
+**Size by containment, never by ratio.** The image model reliably honours "fills its own
+black block edge to edge, spanning the full width of that block" and reliably ignores
+"two-thirds the cap height of the wordmark" or "12% of panel height". Give every important
+element its own colour field and say it fills that field. This bites hardest on the call to
+action: specify it as a block that the number spans, not as a percentage.
+
+**Only mention a logo if one was actually supplied.** Telling the model to reproduce a
+supplied logo when there isn't one invites it to invent a mark.
+
 Use `mcp__nanobanana-mcp__gemini_generate_image` for the base and
 `mcp__nanobanana-mcp__gemini_edit_image` for each direction, passing the logo via
 `reference_images` so the real mark is reproduced rather than invented. Prefer the `flash`

@@ -140,9 +140,19 @@ THE THREE DIRECTIONS must be genuinely different bets, not restyles:
 Each image_prompt is an instruction for an image model painting the wrap onto a photograph of
 the real vehicle. Write it zone by zone (front/hood, side panel, rear, and the one vehicle
 detail carrying the accent), give exact hex colours, give the exact text strings verbatim,
-state the relative SIZE of each element, and say which flat colour field each text element
-sits on. Always instruct it to preserve the vehicle's shape, angle, wheels and lighting, and
-to keep text crisp and correctly spelled. A supplied logo must be reproduced faithfully and
+say which flat colour field each text element sits on, and give SIZE BY CONTAINMENT rather
+than by ratio. Always instruct it to preserve the vehicle's shape, angle, wheels and
+lighting, and to keep text crisp and correctly spelled.
+
+SIZE BY CONTAINMENT, NOT BY RATIO. An image model reliably honours "fills its own black
+block edge to edge, spanning the full width of that block" and reliably ignores "two-thirds
+the cap height of the wordmark" or "12% of panel height". So give each important element its
+own colour field and say it fills that field. This matters most for the call to action: put
+it in a block of its own and have it span the block, rather than specifying a percentage.
+
+ONLY mention a logo if artwork was actually supplied. With no artwork, say nothing about a
+logo at all — telling the image model to "reproduce the supplied logo" when none exists
+invites it to invent one. When artwork IS supplied, it must be reproduced faithfully and
 never redrawn or restyled.
 
 The input may include artworkCount and artworkNames — customer-supplied images. When artwork is
