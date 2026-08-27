@@ -14,6 +14,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { logClaudeUsage } = require('./claudeUsage');
 const { sniffImageType } = require('./imageType');
+const { buildReferenceBlock } = require('./wrapDesignSystem');
 
 const MODEL = 'claude-opus-5';
 
@@ -185,6 +186,10 @@ const BRIEF_TOOL = {
         type: 'string',
         description: 'The single service or claim chosen to lead with, and one line on why.',
       },
+      self_critique: {
+        type: 'string',
+        description: 'Before finalising, test the three directions: would these be the same for ANY business in this trade? Does any of them land on the anti-default list? Name what you changed as a result. If nothing needed changing, say why they are already specific to THIS business.',
+      },
       variants: {
         type: 'array',
         minItems: 3,
@@ -194,14 +199,23 @@ const BRIEF_TOOL = {
           properties: {
             id: { type: 'string', enum: ['bold_contrast', 'minimal_clean', 'rear_focus_cta'] },
             label: { type: 'string' },
+            color_strategy: {
+              type: 'string',
+              enum: ['saturated_field', 'complementary_split', 'dark_anchor', 'committed_two_tone', 'material_field'],
+              description: 'Which named colour strategy this direction uses. Use a different one per direction where the brand allows.',
+            },
+            signature: {
+              type: 'string',
+              description: 'The ONE thing this vehicle will be remembered by, and which source it came from (name wordplay, local identity, trade artifact, character, badge). Specific, not a category.',
+            },
             rationale: { type: 'string', description: 'One sentence on what this direction is betting on.' },
             image_prompt: { type: 'string', description: 'Zone-by-zone instruction for the image model.' },
           },
-          required: ['id', 'label', 'rationale', 'image_prompt'],
+          required: ['id', 'label', 'color_strategy', 'signature', 'rationale', 'image_prompt'],
         },
       },
     },
-    required: ['creative_summary', 'inferred_trade', 'brand_read', 'cta_type', 'dominant_message', 'variants'],
+    required: ['creative_summary', 'inferred_trade', 'brand_read', 'cta_type', 'dominant_message', 'self_critique', 'variants'],
   },
 };
 
@@ -233,6 +247,13 @@ async function generateWrapBrief(business, userId, artwork = []) {
     content.push({ type: 'text', text: `(above: ${item.label || 'artwork'})` });
   }
   content.push({ type: 'text', text: JSON.stringify(business, null, 1) });
+  content.push({
+    type: 'text',
+    text: buildReferenceBlock(
+      [business.businessName, business.service].filter(Boolean).join(' '),
+      business.designIntensity
+    ),
+  });
 
   const response = await anthropic.messages.create({
     model: MODEL,
