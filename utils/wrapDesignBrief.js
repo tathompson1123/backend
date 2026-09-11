@@ -407,6 +407,9 @@ async function generateWrapBrief(business, userId, artwork = []) {
   if (brief.variants.length === 0) {
     throw new Error('Wrap brief came back with no usable design directions');
   }
+  // Non-enumerable so it cannot leak into the JSONB the route stores or the JSON it
+  // returns, but is still there for the test harness and for per-run spend reporting.
+  Object.defineProperty(brief, 'usage', { value: response.usage, enumerable: false });
   return brief;
 }
 

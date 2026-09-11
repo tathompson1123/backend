@@ -14,6 +14,9 @@ const { authenticateToken } = require('../config/middleware');
 const { generateWrapBrief } = require('../utils/wrapDesignBrief');
 const { renderBaseVehicle, paintWrap, WrapImageError } = require('../utils/wrapMockupImages');
 const { extractBrandColors } = require('../utils/brandColors');
+const { scrapeSite, fetchImage, ScrapeError } = require('../utils/siteScrape');
+const { scanBrand } = require('../utils/brandScan');
+const { sniffImageType } = require('../utils/imageType');
 
 // Artwork is small; memory storage avoids writing to Railway's ephemeral disk.
 // Up to MAX_ARTWORK images: a logo plus a couple of real job photos is the useful case,
@@ -30,6 +33,11 @@ const upload = multer({
 
 // A mockup run is three image generations. This is a spend guard, not a licence check.
 const RUNS_PER_DAY = 25;
+
+// A brand scan is a Puppeteer launch plus one vision call — cheaper than a mockup run, but
+// it is also the one endpoint here that fetches a URL the caller supplies, so it gets a
+// tighter cap of its own rather than sharing the mockup budget.
+const SCANS_PER_DAY = 40;
 
 // Wrap copy that the customer supplies. Capped because these are printed on a vehicle:
 // past seven services the block stops being readable at 40mph, and the wrap is worse for
@@ -347,6 +355,119 @@ router.get('/wrap-mockups', authenticateToken, requireToolsAccess, async (req, r
   } catch (error) {
     console.error('Failed to list wrap mockups:', error.message);
     res.status(500).json({ error: 'Failed to load mockups' });
+  }
+});
+
+// POST /api/tools/brand-scan - Read a business's website and prefill the wrap form from it.
+//
+// Returns a prefill, never a mockup: the salesperson reviews and corrects it before any
+// image generation runs. Nothing here is stored — the scan itself is thrown away once the
+// response is sent, and only a row in wrap_brand_scans records that it happened, for the
+// rate limit. The logo and photo candidates come back as data URLs rather than remote links
+// so the frontend can drop them straight into the same file list the manual upload uses,
+// with no separate download step and no Cloudinary asset created for a scan nobody acts on.
+router.post('/brand-scan', authenticateToken, requireToolsAccess, async (req, res) => {
+  const userId = req.user.userId;
+  const rawUrl = (req.body?.url || '').trim();
+  if (!rawUrl) return res.status(400).json({ error: 'A website address is required' });
+
+  try {
+    const rate = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM wrap_brand_scans
+        WHERE user_id = $1 AND created_at > NOW() - INTERVAL '24 hours'`,
+      [userId]
+    );
+    if (rate.rows[0].n >= SCANS_PER_DAY) {
+      return res.status(429).json({
+        error: `Daily limit of ${SCANS_PER_DAY} site scans reached. Try again tomorrow.`,
+        code: 'RATE_LIMITED',
+      });
+    }
+
+    const site = await scrapeSite(rawUrl);
+
+    // Download the top logo candidates so Claude sees real pixels, not just a URL and an
+    // alt tag — that is what lets it distinguish the real mark from a payment badge sitting
+    // next to it in the header.
+    const logoDownloads = [];
+    for (const candidate of site.logos.slice(0, 3)) {
+      try {
+        const { buffer } = await fetchImage(candidate.src, 3 * 1024 * 1024);
+        logoDownloads.push({ index: logoDownloads.length, buffer, meta: candidate });
+      } catch (err) {
+        console.warn(`[brand-scan] logo candidate download failed: ${err.message}`);
+      }
+    }
+
+    // Recorded before the Claude call so a slow or failed scan still counts against the
+    // limit — the Puppeteer launch is most of the cost either way.
+    await pool.query(
+      'INSERT INTO wrap_brand_scans (user_id, url) VALUES ($1, $2)',
+      [userId, site.finalUrl]
+    );
+
+    const scan = await scanBrand(site, logoDownloads, userId);
+
+    // Only the logo Claude actually pointed at goes back — not every candidate that was
+    // downloaded, so the form can't be prefilled with a mark the model itself rejected.
+    let logo = null;
+    if (Number.isInteger(scan.logo_index) && scan.logo_index >= 0) {
+      const chosen = logoDownloads[scan.logo_index];
+      if (chosen) {
+        const mediaType = sniffImageType(chosen.buffer) || 'image/png';
+        logo = {
+          dataUrl: `data:${mediaType};base64,${chosen.buffer.toString('base64')}`,
+          name: (chosen.meta.src.split('/').pop() || 'logo').split('?')[0],
+        };
+      }
+    }
+
+    // Photos are fetched only for the handful of indexes Claude picked, not the whole
+    // candidate list — the ranking in siteScrape already narrowed it, this narrows further.
+    const photos = [];
+    for (const idx of (scan.photo_indexes || []).slice(0, 3)) {
+      const candidate = site.photos[idx];
+      if (!candidate) continue;
+      try {
+        const { buffer } = await fetchImage(candidate.src, 4 * 1024 * 1024);
+        const mediaType = sniffImageType(buffer) || 'image/jpeg';
+        photos.push({
+          dataUrl: `data:${mediaType};base64,${buffer.toString('base64')}`,
+          name: (candidate.src.split('/').pop() || 'photo').split('?')[0],
+        });
+      } catch (err) {
+        console.warn(`[brand-scan] photo download failed: ${err.message}`);
+      }
+    }
+
+    res.json({
+      sourceUrl: site.finalUrl,
+      engine: site.engine,
+      businessName: scan.business_name || undefined,
+      trade: scan.trade || undefined,
+      tagline: scan.tagline || undefined,
+      phone: scan.phone || undefined,
+      website: scan.website || undefined,
+      serviceArea: scan.service_area || undefined,
+      yearsInBusiness: scan.years_in_business || undefined,
+      socialHandle: scan.social_handle || undefined,
+      services: scan.services || [],
+      credentials: scan.credentials || [],
+      // A preview only — real brand colours are (re)computed from the logo file at generate
+      // time via the same Cloudinary extraction manual uploads already go through.
+      brandColorsPreview: scan.brand_colors || undefined,
+      brandRead: scan.brand_read || undefined,
+      missing: scan.missing || [],
+      logo,
+      photos,
+    });
+  } catch (error) {
+    if (error instanceof ScrapeError) {
+      const status = error.code === 'BLOCKED_HOST' ? 400 : 422;
+      return res.status(status).json({ error: error.message, code: error.code });
+    }
+    console.error('[brand-scan] failed:', error.message);
+    res.status(500).json({ error: 'Could not read that website', detail: error.message });
   }
 });
 

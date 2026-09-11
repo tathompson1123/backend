@@ -418,6 +418,16 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     // used is the only way to explain a mockup after the fact.
     await pool.query("ALTER TABLE wrap_mockups ADD COLUMN IF NOT EXISTS artwork_urls JSONB");
     await pool.query("ALTER TABLE wrap_mockups ADD COLUMN IF NOT EXISTS brand_colors JSONB");
+    // One row per website brand-scan, purely as the rate-limit ledger — the scan result
+    // itself is returned straight to the client and prefilled into the mockup form, not
+    // stored, so there is nothing here worth keeping beyond how many ran today.
+    await pool.query(`CREATE TABLE IF NOT EXISTS wrap_brand_scans (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      url TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query("CREATE INDEX IF NOT EXISTS wrap_brand_scans_user_created_idx ON wrap_brand_scans(user_id, created_at DESC)");
     // Owner to-do list, shared between web dashboard and employee admin app
     await pool.query(`CREATE TABLE IF NOT EXISTS admin_todos (
       id SERIAL PRIMARY KEY,
