@@ -1,11 +1,25 @@
-// Paint a wrap onto a vehicle photo using Gemini's image model.
+// Paint a wrap onto a vehicle mockup using Gemini's image model.
 //
 // Two steps, because a wrap mockup needs a believable vehicle first:
 //
-//   1. renderBaseVehicle() generates a clean side-profile photo of the year/make/model.
-//   2. paintWrap() edits that photo, applying one design direction — and, when the
-//      customer supplied a logo, passes it as a second image so the model reproduces
-//      the real mark instead of inventing one.
+//   1. renderBaseVehicle() generates a THREE-VIEW LAYOUT SHEET of the year/make/model —
+//      side profile, front and rear of the same blank white vehicle on one clean sheet.
+//   2. paintWrap() edits that sheet, applying one design direction across all three views —
+//      and, when the customer supplied a logo, passes it as a further image so the model
+//      reproduces the real mark instead of inventing one.
+//
+// WHY A LAYOUT SHEET, not a single hero angle. The wrap-shop mockups this tool is judged
+// against are all three-view sheets, and for a reason: the rear is the panel a driver stares
+// at for ninety seconds at a stop light, and it carries the densest content. A single
+// three-quarter render never shows it, so half the design was being generated blind and
+// never presented. Three separate renders per variant would cost 10 image calls a run
+// instead of 4; one sheet keeps the cost identical to the old single-angle version.
+//
+// WHY FLAT MOCKUP STAGING, not a cinematic hero shot. An earlier version asked for a rim
+// light along the roofline, shallow depth of field and a glossy floor reflection. It made
+// handsome photographs in which the artwork — the entire deliverable — was soft, dimmed at
+// the edges and half in shadow. Wrap presentation sheets are lit flat and evenly for the
+// same reason a proof is: the design has to be read, not admired.
 //
 // Gemini is called over raw REST rather than through @google/genai. The dependency
 // isn't in this project and the request shape here is small and stable, so adding a
@@ -161,70 +175,110 @@ async function generateImage(parts) {
 }
 
 /**
- * The vehicle photo the wrap gets painted onto.
+ * The blank vehicle sheet the wrap gets painted onto.
  *
- * A three-quarter hero angle under dramatic light, NOT a flat side profile on seamless
- * grey. The earlier version asked for "plain white, even neutral daylight, seamless grey
- * background" and got exactly that: a parts-catalogue photo no design could look
- * impressive on. Presentation renders sell on staging as much as on the artwork, and the
- * angle still shows the whole side panel, so the design stays legible and all three
- * variants stay comparable because they share this one photo.
+ * Three orthographic-style views of ONE vehicle on a single sheet: side profile across the
+ * top, front and rear beneath it. Flat, even, shadowless lighting on a plain light
+ * background, because the artwork is the deliverable and staging that competes with it is
+ * staging that hides it.
+ *
+ * Generated once per run and reused for all three variants — a fresh vehicle per variant
+ * would give three different vans, which defeats comparing designs side by side.
  */
 async function renderBaseVehicle({ year, make, model, trim }) {
   const vehicle = [year, make, model, trim].filter(Boolean).join(' ');
-  const prompt = 'Photorealistic professional vehicle-wrap presentation render of a plain '
-    + 'white ' + vehicle + ', shot at a three-quarter front hero angle, turned about 25 degrees '
-    + 'toward the camera so the full side panel and the front are both clearly visible. '
-    + 'Whole vehicle in frame, wheels straight.\n\n'
-    + 'Cinematic studio lighting: a strong rim light along the roofline, soft highlights '
-    + 'running the length of the bodywork, a subtle dark-to-light gradient backdrop, and a '
-    + 'glossy floor with a soft reflection beneath the vehicle. Premium commercial '
-    + 'photography, high contrast, shallow depth of field on the background.\n\n'
-    + 'The bodywork is completely blank: no text, no graphics, no logos, no livery, no '
-    + 'pinstripes anywhere. Clean white paint ready to be wrapped. Sharp focus, no motion '
-    + 'blur, no people, no other vehicles.';
+  const prompt = 'A professional vehicle-wrap design mockup template sheet for a plain white '
+    + vehicle + ', laid out as a print-ready presentation sheet.\n\n'
+    + 'LAYOUT — three views of the SAME vehicle on one sheet, against a plain very light grey '
+    + 'studio background:\n'
+    + '- Across the top half: the full SIDE PROFILE, shot square-on at 90 degrees, the entire '
+    + 'vehicle in frame from front bumper to rear bumper, wheels straight, no perspective '
+    + 'distortion. This is the largest view.\n'
+    + '- Bottom left: the FRONT view, square-on, showing the full grille, bumper, hood face '
+    + 'and both mirrors.\n'
+    + '- Bottom right: the REAR view, square-on, showing the full rear doors or tailgate and '
+    + 'rear bumper.\n'
+    + '- Clear even spacing between the views. Each view complete and uncropped.\n\n'
+    + 'LIGHTING AND FINISH: flat, even, neutral studio lighting across every panel, as on a '
+    + 'wrap shop\'s design proof. No dramatic rim lighting, no cast shadows, no glossy floor '
+    + 'reflections, no background gradient, no depth-of-field blur. Every panel is evenly lit '
+    + 'and in sharp focus edge to edge. Clean, crisp, technical.\n\n'
+    + 'The bodywork is completely blank: pure white paint, no text, no graphics, no logos, no '
+    + 'livery, no pinstripes, no badges anywhere on any view. Ready to be wrapped.\n\n'
+    + 'No people, no other vehicles, no watermark, no caption text, no labels, no dimension '
+    + 'lines, no title on the sheet.';
 
   return generateImage([{ text: prompt }]);
 }
 
 /**
- * Apply one design direction to the base photo.
+ * Apply one design direction to the base sheet.
  *
- * The preservation clause is load-bearing: without it the model tends to re-stage the
- * vehicle, and three variants that each show a different van are useless for comparing
- * designs side by side.
+ * The preservation clause is load-bearing twice over here: without it the model re-stages
+ * the vehicle (three variants that each show a different van are useless for comparison),
+ * and it also collapses the three-view layout back into a single hero shot.
+ *
+ * @param {Buffer} baseImage the three-view sheet from renderBaseVehicle
+ * @param {string} imagePrompt the assembled per-view instruction from the brief
+ * @param {Array<{buffer: Buffer, mimeType: string, label: string}>} references customer artwork
+ * @param {'bold'|'simple'} intensity which treatment — decides the coverage rule
  */
-async function paintWrap({ baseImage, imagePrompt, references = [] }) {
+async function paintWrap({ baseImage, imagePrompt, references = [], intensity = 'bold' }) {
   const parts = [];
   const refs = (references || []).filter(r => r?.buffer);
+  const bold = intensity !== 'simple';
 
   // The attached artwork is described in order and by kind, so the model can tell a
   // logo from a job photo. Without this it treats every attachment as equally
   // paintable and will smear a photograph across the whole panel.
   let refNote = '';
   if (refs.length === 1) {
-    refNote = '\n- One artwork image is attached after the vehicle photo.'
+    refNote = '\n- One artwork image is attached after the vehicle sheet.'
       + ' If it is a logo, reproduce it faithfully: same shapes, same colours, same proportions.'
-      + ' Never redraw, restyle, recolour or add text to a logo.'
+      + ' Never redraw, restyle, recolour or add text to a logo. It is a separate element from any'
+      + ' mascot described above; both appear.'
       + ' If it is a photograph, it is either a full-bleed duotone field tinted to the brand colours filling one zone, with text on a solid panel over it, or it is left out entirely. Never a small inset.';
   } else if (refs.length > 1) {
     const listed = refs.map((r, i) => '(' + (i + 1) + ') ' + (r.label || 'artwork')).join(', ');
-    refNote = '\n- ' + refs.length + ' artwork images are attached after the vehicle photo, in this order: ' + listed + '.'
-      + '\n- Any logo among them must be reproduced faithfully: same shapes, same colours, same proportions. Never redraw, restyle, recolour or add text to a logo.'
+    refNote = '\n- ' + refs.length + ' artwork images are attached after the vehicle sheet, in this order: ' + listed + '.'
+      + '\n- Any logo among them must be reproduced faithfully: same shapes, same colours, same proportions. Never redraw, restyle, recolour or add text to a logo. It is a separate element from any mascot described above; both appear.'
       + '\n- Use at most ONE photographic image, and only as a full-bleed duotone field tinted to the brand colours filling a single zone, with text on a solid panel over it. Never a small inset or thumbnail. If it cannot be used at full bleed, leave it out.'
       + '\n- Do not tile, collage or repeat the artwork across the vehicle.';
   }
 
+  // Coverage is the difference between a wrap and a decal job, and it is the one rule that
+  // genuinely differs by treatment: the dense look demands every panel, the restrained look
+  // earns its effect from empty base colour.
+  const coverage = bold
+    ? '\n- The wrap covers 100% of the painted bodywork on EVERY view, edge to edge: hood, roof, '
+      + 'doors, full side, rear, front and rear bumpers, mirror caps and the pillars between the '
+      + 'windows. No bare white body panel is visible anywhere unless white is a deliberate field '
+      + 'in the design. Graphics run across panel gaps and door seams uninterrupted, as real vinyl does.'
+    : '\n- Every view carries the base colour across the full body, including hood and bumpers. '
+      + 'Empty space is in the base colour, never in bare white paint.';
+
   const instruction = imagePrompt + '\n\nMANDATORY CONSTRAINTS:'
-    + '\n- Preserve the vehicle exactly as photographed: same model, shape, angle, position in frame, wheels, windows, background and lighting. Change only the graphics applied to the bodywork.'
+    + '\n- Keep the THREE-VIEW LAYOUT exactly as in the attached sheet: the side profile across the '
+    + 'top, the front at bottom left, the rear at bottom right, each in the same position, at the '
+    + 'same size and at the same angle. Do not merge them, do not re-stage the vehicle at a new '
+    + 'angle, do not drop a view, do not add a view.'
+    + '\n- Preserve the vehicle exactly as shown: same model, shape, proportions, wheels, windows, '
+    + 'background and flat even lighting. Change only the graphics applied to the bodywork.'
+    + '\n- All three views show the SAME design: identical colours, identical wordmark treatment, '
+    + 'identical mascot. They are three sides of one vehicle, not three design options.'
+    + coverage
     + "\n- The wrap must follow the body's curves and panel lines like real vinyl, not float as a flat overlay."
-    + '\n- Every text string must be spelled exactly as given and be crisply legible, and every text element must sit wholly within ONE flat field of colour — no lettering crossing a colour boundary.'
-    + '\n- The business name is the largest element on the vehicle by a wide margin, and whatever the business does must be readable at a glance.'
-    + '\n- The phone number appears exactly once. No thin pinstripe along the bottom, no plain rectangle of colour floating on an otherwise white body, no swooshes or flourishes used as filler.'
+    + '\n- Every text string must be spelled exactly as given and be crisply legible. Text sits wholly '
+    + 'within ONE flat field of colour, or carries a heavy contrasting keyline if it crosses a boundary.'
+    + '\n- The business name is the largest element on the vehicle by a wide margin, and whatever the '
+    + 'business does must be readable at a glance on every view.'
+    + '\n- Do not add any text that was not specified above — no invented services, credentials, '
+    + 'slogans, ratings or licence numbers.'
+    + '\n- No watermark, no caption, no title, no dimension lines and no labels on the sheet itself.'
     + refNote;
 
   parts.push({ text: instruction });
-  // Vehicle photo first — it is the image being edited, not a reference.
+  // Vehicle sheet first — it is the image being edited, not a reference.
   parts.push({ inlineData: { mimeType: 'image/png', data: baseImage.toString('base64') } });
   for (const ref of refs) {
     // Sniffed for the same reason as the brief step: the declared type can be wrong.

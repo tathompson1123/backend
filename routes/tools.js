@@ -31,6 +31,36 @@ const upload = multer({
 // A mockup run is three image generations. This is a spend guard, not a licence check.
 const RUNS_PER_DAY = 25;
 
+// Wrap copy that the customer supplies. Capped because these are printed on a vehicle:
+// past seven services the block stops being readable at 40mph, and the wrap is worse for
+// having them.
+const MAX_SERVICES = 7;
+const MAX_BADGES = 6;
+
+/**
+ * A list field off multipart/form-data. The frontend sends JSON, but a form post or a
+ * curl call reasonably sends "a, b, c" — accept both rather than silently dropping the
+ * content that makes a dense wrap possible.
+ */
+function parseList(raw, limit) {
+  if (!raw) return [];
+  let items = [];
+  if (Array.isArray(raw)) {
+    items = raw;
+  } else if (typeof raw === 'string') {
+    const text = raw.trim();
+    if (text.startsWith('[')) {
+      try { items = JSON.parse(text); } catch { items = text.split(','); }
+    } else {
+      items = text.split(',');
+    }
+  }
+  return items
+    .map(s => String(s == null ? '' : s).trim())
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
 function configureCloudinary() {
   cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -87,6 +117,7 @@ router.post(
         primaryColor, accentColor,
         year, make, model, trim,
         customerEmail, autoColors, designMode, designIntensity,
+        services, badges, serviceArea, yearsInBusiness, socialHandle,
       } = req.body || {};
 
       if (!businessName?.trim()) return res.status(400).json({ error: 'Business name is required' });
@@ -168,7 +199,26 @@ router.post(
         label: file.originalname || 'artwork',
       }));
 
-      // 3. The creative decisions. Claude is shown the artwork itself, so it reads the
+      // 'evolve' respects what they already have; 'reinvent' starts over. Default bold,
+      // since a business asking for a mockup usually wants to see something better.
+      const mode = designMode === 'evolve' ? 'evolve' : 'reinvent';
+      // Orthogonal to designMode: one is how far to depart, the other how loud to be.
+      // 'bold' is the dense trade-truck treatment, 'simple' the restrained premium one.
+      const intensity = designIntensity === 'simple' ? 'simple' : 'bold';
+
+      // 3. What the customer actually wants printed. This is the input that decides whether
+      //    a wrap looks full or sparse: with no services and no badges the design has
+      //    nothing to fill panels with, and neither Claude nor the image model may invent
+      //    them, because they would be printing claims the business never made.
+      const wrapContent = {
+        services: parseList(services, MAX_SERVICES),
+        badges: parseList(badges, MAX_BADGES),
+        serviceArea: serviceArea?.trim() || undefined,
+        yearsInBusiness: yearsInBusiness?.trim() || undefined,
+        socialHandle: socialHandle?.trim() || undefined,
+      };
+
+      // 4. The creative decisions. Claude is shown the artwork itself, so it reads the
       //    trade, the palette and the brand's character rather than being told them.
       const brief = await generateWrapBrief({
         businessName,
@@ -178,30 +228,49 @@ router.post(
         primaryColor: resolvedColors.primary,
         accentColor: resolvedColors.accent,
         vehicle,
-        // 'evolve' respects what they already have; 'reinvent' starts over. Default bold,
-        // since a business asking for a mockup usually wants to see something better.
-        designMode: designMode === 'evolve' ? 'evolve' : 'reinvent',
-        // Orthogonal to designMode: one is how far to depart, the other how loud to be.
-        designIntensity: designIntensity === 'simple' ? 'simple' : 'bold',
+        designMode: mode,
+        designIntensity: intensity,
+        content: wrapContent,
       }, userId, references);
 
-      // 4. One base photo, reused for all three variants. Generating a fresh vehicle per
-      //    variant would give three different vans, which defeats comparing designs.
+      // 5. One base sheet — side, front and rear of the same blank vehicle — reused for all
+      //    three variants. Generating a fresh vehicle per variant would give three different
+      //    vans, which defeats comparing designs.
       const baseImage = await renderBaseVehicle({ year, make, model, trim });
       const sourcePhotoUrl = (await uploadBuffer(baseImage, `${stamp}-base`)).secure_url;
 
-      // 5. Paint each variant. Sequential on purpose — the image model is the slow,
+      // 6. Paint each variant. Sequential on purpose — the image model is the slow,
       //    rate-limited step, and a partial set is more useful than a 429 storm.
       const variants = [];
       const failures = [];
       for (const variant of brief.variants) {
         try {
-          const painted = await paintWrap({ baseImage, imagePrompt: variant.image_prompt, references });
+          const painted = await paintWrap({
+            baseImage,
+            imagePrompt: variant.image_prompt,
+            references,
+            intensity,
+          });
           const uploaded = await uploadBuffer(painted, `${stamp}-${variant.id}`);
           variants.push({
             id: variant.id,
             label: variant.label,
             rationale: variant.rationale,
+            // The UI already renders these two; they were being dropped here, so the
+            // signature and strategy never reached the screen.
+            signature: variant.signature,
+            color_strategy: variant.color_strategy,
+            // The content manifest, so the salesperson can check what will be printed
+            // against what the customer actually said before sending it on.
+            palette: variant.palette,
+            wordmark: variant.wordmark,
+            tradeDescriptor: variant.trade_descriptor,
+            tagline: variant.tagline || undefined,
+            servicesShown: variant.services_shown,
+            credentialsShown: variant.credentials_shown,
+            phoneDisplay: variant.phone_display || undefined,
+            websiteDisplay: variant.website_display || undefined,
+            mascot: variant.mascot || undefined,
             imageUrl: uploaded.secure_url,
           });
         } catch (err) {
@@ -240,8 +309,10 @@ router.post(
         brandRead: brief.brand_read,
         brandWarning: brief.brand_warning || undefined,
         ctaType: brief.cta_type,
-        designMode: designMode === 'evolve' ? 'evolve' : 'reinvent',
-        designIntensity: designIntensity === 'simple' ? 'simple' : 'bold',
+        designMode: mode,
+        designIntensity: intensity,
+        // Echoed back so the UI can show what was actually used after the caps were applied.
+        wrapContent,
         sourcePhotoUrl,
         variants,
         // So the UI can show which colours were actually used and pre-fill the pickers.

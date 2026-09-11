@@ -1,10 +1,16 @@
 // Turn a business's details into three vehicle-wrap design directions.
 //
-// Claude does the judgment here — deciding which single service to lead with, and
-// writing the zone-by-zone instruction the image model paints from. The design rules
-// come from a wrap-teardown critique: a wrap has about three seconds to land on
-// someone in traffic, so one message, huge contact info, and the rear panel doing the
-// heavy lifting.
+// Claude does the judgment here — reading the trade off the artwork, choosing what to lead
+// with, and writing the zone-by-zone instruction the image model paints from.
+//
+// WHAT LIVES WHERE. This system prompt holds only the rules that are true under BOTH
+// treatments. Everything that differs between the dense trade-truck look and the restrained
+// premium look — element count, colour count, mascots, service lists, drop shadows, whether
+// contact details may repeat — lives in wrapDesignSystem's intensity blocks, which are
+// injected per run. An earlier version had all of it here as one static set of rules, and
+// because those rules were written for the restrained treatment they forbade almost
+// everything that makes a trade-truck wrap work: the output came back sparse no matter what
+// intensity was asked for.
 //
 // Structured output is via FORCED TOOL USE rather than output_config.format: this repo
 // is on @anthropic-ai/sdk 0.32.1, which predates that parameter. Forcing a tool means
@@ -33,6 +39,12 @@ A WRAP HAS FOUR JOBS. Judge every decision against these, in order:
   4. Give ONE clear direction for where to go next.
 A wrap that is merely attractive has done job 1 and failed the other three.
 
+THE REFERENCE BLOCK AT THE END OF THE INPUT IS AUTHORITATIVE on how dense the design should
+be: how many elements, how many colours, whether there is a mascot, whether there is a
+services list, and what may be repeated. Read it before you design anything, and follow it
+over any general instinct toward restraint. This prompt sets the thinking; that block sets
+the treatment.
+
 DESIGN MODE. The input carries designMode, and it changes how far you may go:
 
 - designMode "evolve" — the business likes what it has and wants it respected. Keep their
@@ -42,7 +54,7 @@ DESIGN MODE. The input carries designMode, and it changes how far you may go:
   In this mode EVERY colour must be traceable to the supplied artwork — a darker or lighter
   value of one of their colours is fine, a brand-new hue is not. If their palette has no
   bright colour to spotlight with, use a light/dark value contrast instead of inventing one.
-  WHERE THIS CONFLICTS WITH THE COLOUR GUIDANCE BELOW, THIS SECTION WINS.
+  WHERE THIS CONFLICTS WITH THE COLOUR GUIDANCE ELSEWHERE, THIS SECTION WINS.
 
 - designMode "reinvent" — the business wants a real branded vehicle and has given you
   permission to start over. Treat the supplied logo as ONE element to place, not as the
@@ -60,50 +72,38 @@ YOU ARE SHOWN THE ARTWORK. Read it before deciding anything:
   "SSP Coatings" with a Spartan helmet), set brand_warning saying so plainly: a wrap can only
   do so much, and the money is better spent on the brand first. Design the best wrap you can
   regardless.
-- Never invent a claim ("lowest prices", "24/7", "licensed & insured") unless it appears in
-  what you were given. You would be putting a promise on a van the business never made.
 
-COLOUR — THIS IS WHAT MAKES A WRAP CARRY AT DISTANCE:
-- A DARK, COMMITTED BASE over most of the body: black, charcoal, deep navy, deep forest.
-  A mid-tone body (mid blue, mid grey) is the single most common reason a wrap looks flat —
-  it neither anchors nor pops.
-- A LITTLE white or off-white, for the large type.
-- ONE high-chroma accent — yellow, orange, red, electric cyan, lime — used on a SMALL area
-  only, to pull the eye to the two or three things that matter most: the trade word, the call
-  to action, a rule under the name. It is a spotlight, not a second base colour.
-- Work that same accent into ONE physical detail of the vehicle so the design looks made for
-  this van rather than pasted onto it — a wheel detail, a mirror cap, a bumper line, the roof
-  rack. This is the touch that separates a real wrap from a decal job.
-- Three colours total in the WRAP DESIGN. Never four. The logo's own colours do not count
-  against this — it is reproduced faithfully as supplied.
-- A muted two-tone (grey and beige) can also read as bold when the split is committed and the
-  shapes are clean — but only when the two tones differ strongly in value.
-- In "evolve" mode, apply this by deepening and rebalancing THEIR colours rather than
-  replacing them: darken the base, reserve their brightest hue as the small-area accent.
+NEVER INVENT A FACTUAL CLAIM. "Licensed & insured", "24/7", "free estimates", "family owned",
+"30 years experience", a star rating, a review count, a licence number, a guarantee — none of
+these go on the vehicle unless they appear in the CONTENT INVENTORY you were given. You would
+be printing a promise on someone's van that the business never made, and they would drive it
+for five years. The same applies to services: name only the services you were actually given.
+A TAGLINE is different — it is creative, not factual — and you may write one.
+
+THE LOGO AND THE MASCOT ARE DIFFERENT THINGS. The logo is the customer's property: it is
+reproduced faithfully, never redrawn, restyled, recoloured or relettered, and it is only ever
+mentioned if artwork was actually supplied. A mascot is original artwork you commission for
+this wrap; if the reference block permits one, drawing it does not conflict with logo
+fidelity, and both appear on the vehicle. With no artwork supplied, say nothing about a logo
+at all — telling the image model to "reproduce the supplied logo" when none exists invites it
+to invent one.
 
 MESSAGE — SELL THE OUTCOME, NOT THE COMMODITY:
 - Lead with what the customer's life looks like afterwards, not the process. "Building your
   better outdoor lifestyle" beats "fence and deck stain". "Does your garage floor need a
   makeover?" beats a list of coating types. People do not want a deck; they want to live
   outdoors better.
-- Use the open space for ONE short line aimed at the customer — a question or an offer — never
-  a feature list and never more photographs of the work.
-- A tagline should be short and rhythmic if used at all ("Done once. Done right.").
+- A tagline should be short and rhythmic ("Done once. Done right.").
 
-WHAT GOES ON THE VEHICLE — nothing else:
-  business name (largest element by a wide margin), trade descriptor directly beneath it if
-  the name does not state the trade, ONE outcome line, ONE primary call to action, and at most
-  one credential. Five elements maximum.
-
-THE CALL TO ACTION — one, unmistakable, and the second-largest thing on the wrap:
+THE CALL TO ACTION — one per view, unmistakable, and the second-largest thing on that view:
 - For CONSIDERED purchases (remodelling, design-build, decks, landscaping, coatings, roof
   replacement) lead with the WEBSITE. These buyers want to size a company up before speaking
-  to anyone, and a website does more of the selling than a phone call. A phone number may
-  appear once, smaller.
+  to anyone, and a website does more of the selling than a phone call.
 - For URGENT trades (plumbing, HVAC, electrical, water damage, locksmith, towing) lead with
   the PHONE, large. When something is broken now, nobody browses.
-- Set cta_type to "website" or "phone" and say which in the rationale. Never give both equal
-  weight, and never repeat either on the same view — mixed CTAs are why a viewer does nothing.
+- Set cta_type to "website" or "phone" and say which in the rationale. The leading CTA may
+  appear on more than one view — a driver only ever sees one view at a time — but two
+  competing calls to action within a single view is why a viewer does nothing.
 
 MATCH THE AESTHETIC TO THE TRADE, and never chase "cool" for its own sake:
 - A roofer should look clean and pristine. A rugged, cracked, broken-apart treatment is cool
@@ -113,36 +113,32 @@ MATCH THE AESTHETIC TO THE TRADE, and never chase "cool" for its own sake:
   to work on their home. Push refinement.
 - For FUNCTIONAL trades (fencing, hauling, drain clearing) the buyer asks "will it work" —
   clarity and trustworthiness matter more than sophistication.
-- Signal longevity with classic typography, never with dated effects. Bevels, drop shadows,
-  glossy gradients and textured backgrounds read as old, not established. A modern take on a
-  classic is the target.
 
-SERVICE LISTS: avoid. If the trade genuinely is not clear without one, integrate it into the
-wrap's own geometry — inside a shape the design already has — so it reads as designed rather
-than pasted on. Never a bulleted list.
+THE THREE DIRECTIONS must be genuinely different bets, not restyles. Each names what is the
+HERO of that design — the thing the eye lands on first:
+- signature_led: the signature device is the hero and everything else is arranged around it.
+  Under the dense treatment that is the mascot, at panel height; under the restrained
+  treatment it is a single large geometric mark.
+- wordmark_led: the business name itself, at maximum possible scale, IS the design. It spans
+  the side. The signature is small or absent and the field geometry supports the type.
+- field_led: the colour geometry is the hero — an unexpected split, a material field, a
+  locality scene — with the name placed into it rather than sitting on top of it.
 
-EXPLICITLY FORBIDDEN, because these are the exact ways this goes wrong: a mid-tone body with
-no dark anchor and no hot accent; thin pinstripes along the rocker; a plain floating rectangle
-panel on a white body; small inset photographs; a photograph used at all unless it is a
-full-bleed field with exactly ONE colour and one CTA over it; several colours competing; the
-phone number or website appearing twice on one view; swooshes, waves or flourishes as filler;
-a large dead area with no colour commitment; bulleted service lists; script or
-condensed-italic fonts for contact details.
+=== WRITING THE IMAGE PROMPTS ===
 
-THE THREE DIRECTIONS must be genuinely different bets, not restyles:
-- bold_contrast: dark full-bleed base, name at maximum scale in white, the hot accent
-  spotlighting the CTA and one vehicle detail. Maximum presence.
-- minimal_clean: light or off-white body, name enormous in the dark brand colour, ONE decisive
-  block of the accent anchoring the composition. Restrained in colour, never in scale.
-- rear_focus_cta: sides carry only name and trade; the rear is an oversized outcome line and
-  CTA in the accent. Quiet sides, loud back.
+The render is a THREE-VIEW LAYOUT SHEET: one image containing the vehicle's side profile, its
+front, and its rear, all of the same vehicle wrapped in the same design. You write four
+pieces, and they are assembled into the instruction the image model paints from:
 
-Each image_prompt is an instruction for an image model painting the wrap onto a photograph of
-the real vehicle. Write it zone by zone (front/hood, side panel, rear, and the one vehicle
-detail carrying the accent), give exact hex colours, give the exact text strings verbatim,
-say which flat colour field each text element sits on, and give SIZE BY CONTAINMENT rather
-than by ratio. Always instruct it to preserve the vehicle's shape, angle, wheels and
-lighting, and to keep text crisp and correctly spelled.
+- design_spec: the design that is common to all three views. Exact hex values with the role
+  each one plays, the field geometry and the divider device, the type treatment, the mascot
+  (if any) described precisely enough to be drawn the same way three times, and the
+  background scene or texture. This is what keeps the three views recognisably one design.
+- side_prompt, front_prompt, rear_prompt: what goes where on each view.
+
+In all four: give EXACT hex colours, give the exact text strings verbatim in quotes, and say
+which flat colour field each text element sits on. Always require the vehicle's shape, angle,
+wheels and lighting to be preserved, and the text to be crisp and correctly spelled.
 
 SIZE BY CONTAINMENT, NOT BY RATIO. An image model reliably honours "fills its own black
 block edge to edge, spanning the full width of that block" and reliably ignores "two-thirds
@@ -150,21 +146,25 @@ the cap height of the wordmark" or "12% of panel height". So give each important
 own colour field and say it fills that field. This matters most for the call to action: put
 it in a block of its own and have it span the block, rather than specifying a percentage.
 
-ONLY mention a logo if artwork was actually supplied. With no artwork, say nothing about a
-logo at all — telling the image model to "reproduce the supplied logo" when none exists
-invites it to invent one. When artwork IS supplied, it must be reproduced faithfully and
-never redrawn or restyled.
+CONSISTENCY ACROSS THE THREE VIEWS is the thing most likely to go wrong. Repeat the exact hex
+values and the exact wordmark treatment in each view prompt rather than writing "as on the
+side" — the image model does not reliably carry a reference across a long instruction.
 
 The input may include artworkCount and artworkNames — customer-supplied images. When artwork is
 present, say where the logo sits and how large. A photograph is only ever a full-bleed field
 with one colour and one CTA over it — never a small inset, never tiled.
 
 primaryColor and accentColor may have been sampled from the artwork rather than typed in, so
-treat them as the brand's real colours. If the sampled primary is a mid-tone, darken it for the
-base and reserve a brighter relative as the accent rather than using it flat.`;
+treat them as the brand's real colours. If the sampled primary is a mid-tone, darken or
+saturate it rather than using it flat — a mid-chroma body is the worst outcome available.`;
 
 // The tool is the output contract. Claude is forced to call it, so the response is a
 // validated object rather than text that has to be parsed.
+//
+// The per-variant content manifest (wordmark, services_shown, credentials_shown, phone/website
+// display strings) exists because prose prompts silently drop content. Making Claude commit to
+// each string as its own field means the assembled image prompt provably contains them, and
+// means the salesperson can see exactly what will be printed before spending a render.
 const BRIEF_TOOL = {
   name: 'submit_wrap_brief',
   description: 'Return the three wrap design directions.',
@@ -177,7 +177,7 @@ const BRIEF_TOOL = {
       },
       inferred_trade: {
         type: 'string',
-        description: 'The trade this business is in, read from the name and artwork (e.g. "Plumbing", "Garage Door Service"). This is what goes on the vehicle as the descriptor.',
+        description: 'The trade this business is in, read from the name and artwork. One to four words, exactly as it would be said out loud: "Plumbing", "Garage Door Service", "Heating & Cooling". No parenthetical list of services, no dash-and-explanation, no HTML entities — write an ampersand as "&".',
       },
       brand_read: {
         type: 'string',
@@ -198,7 +198,7 @@ const BRIEF_TOOL = {
       },
       self_critique: {
         type: 'string',
-        description: 'Before finalising, test the three directions: would these be the same for ANY business in this trade? Does any of them land on the anti-default list? Name what you changed as a result. If nothing needed changing, say why they are already specific to THIS business.',
+        description: 'Before finalising, test the three directions against the reference block. Would these be the same for ANY business in this trade? Does any land on the anti-defaults list? At the dense treatment, is any view under-filled or any panel left bare white? Name what you changed as a result.',
       },
       variants: {
         type: 'array',
@@ -207,11 +207,11 @@ const BRIEF_TOOL = {
         items: {
           type: 'object',
           properties: {
-            id: { type: 'string', enum: ['bold_contrast', 'minimal_clean', 'rear_focus_cta'] },
-            label: { type: 'string' },
+            id: { type: 'string', enum: ['signature_led', 'wordmark_led', 'field_led'] },
+            label: { type: 'string', description: 'A short name for this direction the salesperson can say out loud.' },
             color_strategy: {
               type: 'string',
-              enum: ['saturated_field', 'complementary_split', 'dark_anchor', 'committed_two_tone', 'material_field'],
+              enum: ['saturated_field', 'complementary_split', 'dark_anchor', 'committed_two_tone', 'material_field', 'heritage_field'],
               description: 'Which named colour strategy this direction uses. Use a different one per direction where the brand allows.',
             },
             signature: {
@@ -219,9 +219,69 @@ const BRIEF_TOOL = {
               description: 'The ONE thing this vehicle will be remembered by, and which source it came from (name wordplay, local identity, trade artifact, character, badge). Specific, not a category.',
             },
             rationale: { type: 'string', description: 'One sentence on what this direction is betting on.' },
-            image_prompt: { type: 'string', description: 'Zone-by-zone instruction for the image model.' },
+
+            palette: {
+              type: 'array',
+              minItems: 2,
+              description: 'Every colour in this design, with the job it does. Roles: field_primary, field_secondary, type, keyline, accent.',
+              items: {
+                type: 'object',
+                properties: {
+                  role: { type: 'string' },
+                  hex: { type: 'string', description: 'Six-digit hex, with the leading #.' },
+                },
+                required: ['role', 'hex'],
+              },
+            },
+            wordmark: {
+              type: 'string',
+              description: 'The business name exactly as it will be set on the vehicle, including capitalisation and any line break shown as " / ".',
+            },
+            trade_descriptor: {
+              type: 'string',
+              description: 'The words that tell a stranger what this business does, exactly as they will appear.',
+            },
+            tagline: {
+              type: 'string',
+              description: 'The tagline as it will appear, or an empty string if this direction uses none. Creative, never a factual claim.',
+            },
+            services_shown: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'The services printed on this design, verbatim from the supplied content inventory. Empty array if none were supplied or the treatment excludes them. Never invent one.',
+            },
+            credentials_shown: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'The credential badges printed on this design, verbatim from the supplied content inventory. Empty array if none were supplied. Never invent one.',
+            },
+            phone_display: {
+              type: 'string',
+              description: 'The phone number formatted exactly as it will be printed, or an empty string if this design carries none.',
+            },
+            website_display: {
+              type: 'string',
+              description: 'The website exactly as it will be printed, or an empty string if this design carries none.',
+            },
+            mascot: {
+              type: 'string',
+              description: 'The mascot described precisely enough to be drawn identically three times: what it is, its pose, what it holds, its colours, its drawing style. Empty string if this direction has none.',
+            },
+
+            design_spec: {
+              type: 'string',
+              description: 'The design common to all three views: exact hexes and their roles, field geometry and divider device, type treatment, mascot, background scene. This is what keeps the three views one design.',
+            },
+            side_prompt: { type: 'string', description: 'What goes where on the side profile view.' },
+            front_prompt: { type: 'string', description: 'What goes where on the front view, including hood, bumper and mirror caps.' },
+            rear_prompt: { type: 'string', description: 'What goes where on the rear view — usually the densest panel.' },
           },
-          required: ['id', 'label', 'color_strategy', 'signature', 'rationale', 'image_prompt'],
+          required: [
+            'id', 'label', 'color_strategy', 'signature', 'rationale',
+            'palette', 'wordmark', 'trade_descriptor', 'services_shown', 'credentials_shown',
+            'phone_display', 'website_display',
+            'design_spec', 'side_prompt', 'front_prompt', 'rear_prompt',
+          ],
         },
       },
     },
@@ -229,10 +289,45 @@ const BRIEF_TOOL = {
   },
 };
 
+// Claude occasionally HTML-escapes an ampersand inside a JSON string ("Heating &amp; Cooling").
+// Harmless in most outputs; not here. These strings are instructions to an image model about
+// text to print on a vehicle, and it prints what it is given — a five-year wrap reading
+// "HEATING &AMP; COOLING". Decoded on the way out, so it cannot reach the paint step whichever
+// field it lands in.
+const ENTITIES = { '&amp;': '&', '&quot;': '"', '&apos;': "'", '&#39;': "'", '&lt;': '<', '&gt;': '>', '&nbsp;': ' ' };
+
+function decodeEntities(value) {
+  if (typeof value === 'string') {
+    return value.replace(/&(?:amp|quot|apos|#39|lt|gt|nbsp);/g, m => ENTITIES[m] || m);
+  }
+  if (Array.isArray(value)) return value.map(decodeEntities);
+  return value;
+}
+
 /**
- * @param {object} business name, service, tagline, phone, website, colours, vehicle
+ * Fold the shared spec and the three view prompts into the single instruction paintWrap
+ * paints from. Assembled here rather than asked for as one field because a model writing
+ * one long prose prompt reliably shortchanges the rear view — separate required fields
+ * make skipping it impossible.
+ */
+function assembleImagePrompt(v) {
+  const section = (title, body) => (body ? `\n\n${title}\n${body}` : '');
+  return [
+    'Apply this wrap design to all three views of the vehicle in the layout sheet.',
+    section('THE DESIGN (identical across all three views):', v.design_spec),
+    section('SIDE PROFILE VIEW — the large view:', v.side_prompt),
+    section('FRONT VIEW:', v.front_prompt),
+    section('REAR VIEW:', v.rear_prompt),
+  ].join('');
+}
+
+/**
+ * @param {object} business name, service, tagline, phone, website, colours, vehicle,
+ *   designMode, designIntensity, and `content` — the supplied wrap copy
+ *   ({ services, badges, serviceArea, yearsInBusiness, socialHandle }).
  * @param {number} userId for cost attribution
- * @returns {Promise<{creative_summary: string, dominant_message: string, variants: object[]}>}
+ * @param {Array<{buffer: Buffer, mimeType: string, label: string}>} artwork
+ * @returns {Promise<object>} the brief, each variant carrying an assembled image_prompt
  */
 async function generateWrapBrief(business, userId, artwork = []) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -243,36 +338,37 @@ async function generateWrapBrief(business, userId, artwork = []) {
   // Show Claude the actual logo. Describing it in words was the weak link: the trade,
   // the brand's character and which colours are really the brand's are all things you
   // can only judge by looking.
-  const content = [];
+  const messageContent = [];
   for (const item of artwork) {
     if (!item?.buffer) continue;
     // The real type, not the declared one — the API rejects a mismatch, and an upload's
     // Content-Type comes from its file extension.
     const mediaType = sniffImageType(item.buffer);
     if (!mediaType || !VISION_TYPES.includes(mediaType)) continue;
-    content.push({
+    messageContent.push({
       type: 'image',
       source: { type: 'base64', media_type: mediaType, data: item.buffer.toString('base64') },
     });
-    content.push({ type: 'text', text: `(above: ${item.label || 'artwork'})` });
+    messageContent.push({ type: 'text', text: `(above: ${item.label || 'artwork'})` });
   }
-  content.push({ type: 'text', text: JSON.stringify(business, null, 1) });
-  content.push({
+  messageContent.push({ type: 'text', text: JSON.stringify(business, null, 1) });
+  messageContent.push({
     type: 'text',
     text: buildReferenceBlock(
       [business.businessName, business.service].filter(Boolean).join(' '),
-      business.designIntensity
+      business.designIntensity,
+      business.content || {}
     ),
   });
 
   const response = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 16000,
+    max_tokens: 24000,
     system: SYSTEM_PROMPT,
     tools: [BRIEF_TOOL],
     // Forcing the tool is what makes the output structured rather than prose.
     tool_choice: { type: 'tool', name: 'submit_wrap_brief' },
-    messages: [{ role: 'user', content }],
+    messages: [{ role: 'user', content: messageContent }],
   });
 
   logClaudeUsage(userId, MODEL, response.usage, 'wrap_mockup_brief');
@@ -288,7 +384,30 @@ async function generateWrapBrief(business, userId, artwork = []) {
   if (!Array.isArray(brief.variants) || brief.variants.length === 0) {
     throw new Error('Wrap brief came back with no variants');
   }
+
+  for (const key of ['inferred_trade', 'creative_summary', 'brand_read', 'brand_warning', 'dominant_message', 'self_critique']) {
+    brief[key] = decodeEntities(brief[key]);
+  }
+
+  // Drop anything with no paintable instruction rather than sending an empty prompt to the
+  // image model, which would return a blank white vehicle and burn a generation.
+  const PRINTED = [
+    'wordmark', 'trade_descriptor', 'tagline', 'services_shown', 'credentials_shown',
+    'phone_display', 'website_display', 'mascot',
+    'design_spec', 'side_prompt', 'front_prompt', 'rear_prompt',
+  ];
+  brief.variants = brief.variants
+    .map(v => {
+      const clean = { ...v };
+      for (const key of PRINTED) clean[key] = decodeEntities(clean[key]);
+      return { ...clean, image_prompt: assembleImagePrompt(clean) };
+    })
+    .filter(v => v.design_spec || v.side_prompt);
+
+  if (brief.variants.length === 0) {
+    throw new Error('Wrap brief came back with no usable design directions');
+  }
   return brief;
 }
 
-module.exports = { generateWrapBrief, MODEL };
+module.exports = { generateWrapBrief, assembleImagePrompt, MODEL };
