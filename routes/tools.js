@@ -20,7 +20,7 @@ const { sniffImageType } = require('../utils/imageType');
 
 // Artwork is small; memory storage avoids writing to Railway's ephemeral disk.
 // Up to MAX_ARTWORK images: a logo plus a couple of real job photos is the useful case,
-// and every extra image is more tokens on each of the three paint calls.
+// and every extra image is more tokens on each of the two paint calls.
 const MAX_ARTWORK = 5;
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -31,7 +31,8 @@ const upload = multer({
   },
 });
 
-// A mockup run is three image generations. This is a spend guard, not a licence check.
+// A mockup run is the base sheet plus two painted variants — three Gemini calls total.
+// This is a spend guard, not a licence check.
 const RUNS_PER_DAY = 25;
 
 // A brand scan is a Puppeteer launch plus one vision call — cheaper than a mockup run, but
@@ -110,7 +111,7 @@ router.get('/access', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/tools/wrap-mockup - Generate three wrap concepts on the customer's vehicle.
+// POST /api/tools/wrap-mockup - Generate two wrap concepts on the customer's vehicle.
 // multipart/form-data so the optional logo can ride along with the fields.
 router.post(
   '/wrap-mockup',
@@ -119,6 +120,10 @@ router.post(
   upload.array('images', MAX_ARTWORK),
   async (req, res) => {
     const userId = req.user.userId;
+    // Declared outside the try so the catch block can mark an in-progress reservation
+    // failed rather than leaving it stuck at 'generating' when something throws before the
+    // run reaches its normal failure/success updates.
+    let mockupId = null;
     try {
       const {
         businessName, service, tagline, phone, website,
@@ -152,6 +157,20 @@ router.post(
 
       const vehicle = [year, make, model, trim].filter(Boolean).join(' ');
       const artwork = req.files || [];
+
+      // Reserve the row now, before any paid work starts, not once the run finishes. The
+      // rate check above only sees rows that already exist — queuing several runs before
+      // the first one lands used to let every one of them past the same, already-stale
+      // count. A reservation closes that window; the run is updated in place below instead
+      // of inserted fresh.
+      const reservation = await pool.query(
+        `INSERT INTO wrap_mockups (user_id, business_name, vehicle, customer_email, status)
+         VALUES ($1, $2, $3, $4, 'generating')
+         RETURNING id, created_at`,
+        [userId, businessName.trim(), vehicle, customerEmail?.trim() || null]
+      );
+      mockupId = reservation.rows[0].id;
+      const createdAt = reservation.rows[0].created_at;
 
       configureCloudinary();
       // Returns the whole Cloudinary result, because the artwork uploads need `colors`
@@ -242,7 +261,7 @@ router.post(
       }, userId, references);
 
       // 5. One base sheet — side, front and rear of the same blank vehicle — reused for all
-      //    three variants. Generating a fresh vehicle per variant would give three different
+      //    two variants. Generating a fresh vehicle per variant would give two different
       //    vans, which defeats comparing designs.
       const baseImage = await renderBaseVehicle({ year, make, model, trim });
       const sourcePhotoUrl = (await uploadBuffer(baseImage, `${stamp}-base`)).secure_url;
@@ -288,28 +307,34 @@ router.post(
       }
 
       if (variants.length === 0) {
+        // The reservation still stands and still counts against today's quota — a Claude
+        // brief and up to two Gemini attempts were real spend even though nothing
+        // paintable came back. Marked failed rather than left at 'generating' forever, so
+        // history shows what happened instead of an eternal spinner.
+        await pool.query(
+          `UPDATE wrap_mockups SET status = 'failed', creative_summary = $2 WHERE id = $1`,
+          [mockupId, brief.creative_summary || null]
+        ).catch(() => {});
         return res.status(502).json({
           error: 'Every variant failed to render. Nothing was saved.',
           detail: failures[0]?.error,
         });
       }
 
-      const saved = await pool.query(
-        `INSERT INTO wrap_mockups
-           (user_id, business_name, vehicle, source_photo_url, variants, creative_summary,
-            dominant_message, customer_email, artwork_urls, brand_colors)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         RETURNING id, created_at`,
-        [userId, businessName.trim(), vehicle, sourcePhotoUrl, JSON.stringify(variants),
+      await pool.query(
+        `UPDATE wrap_mockups
+            SET source_photo_url = $2, variants = $3, creative_summary = $4,
+                dominant_message = $5, artwork_urls = $6, brand_colors = $7, status = 'done'
+          WHERE id = $1`,
+        [mockupId, sourcePhotoUrl, JSON.stringify(variants),
          brief.creative_summary || null,
          [brief.inferred_trade, brief.dominant_message].filter(Boolean).join(' — ') || null,
-         customerEmail?.trim() || null,
          JSON.stringify(artworkUploads), JSON.stringify(resolvedColors)]
       );
 
       res.json({
-        mockupId: saved.rows[0].id,
-        createdAt: saved.rows[0].created_at,
+        mockupId,
+        createdAt,
         vehicle,
         creativeSummary: brief.creative_summary,
         dominantMessage: brief.dominant_message,
@@ -326,11 +351,14 @@ router.post(
         // So the UI can show which colours were actually used and pre-fill the pickers.
         brandColors: resolvedColors,
         artwork: artworkUploads,
-        // Reported rather than hidden — three concepts were promised, and the UI says
+        // Reported rather than hidden — two concepts were promised, and the UI says
         // so when fewer came back.
         partial: failures.length > 0 ? failures : undefined,
       });
     } catch (error) {
+      if (mockupId) {
+        await pool.query("UPDATE wrap_mockups SET status = 'failed' WHERE id = $1", [mockupId]).catch(() => {});
+      }
       if (error instanceof WrapImageError) {
         return res.status(400).json({ error: error.message, code: error.code });
       }
@@ -346,7 +374,7 @@ router.get('/wrap-mockups', authenticateToken, requireToolsAccess, async (req, r
     const result = await pool.query(
       `SELECT id, business_name, vehicle, source_photo_url, variants,
               creative_summary, dominant_message, customer_email, created_at,
-              artwork_urls, brand_colors
+              artwork_urls, brand_colors, status
          FROM wrap_mockups WHERE user_id = $1
         ORDER BY created_at DESC LIMIT 40`,
       [req.user.userId]

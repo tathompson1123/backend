@@ -1,4 +1,4 @@
-// Turn a business's details into three vehicle-wrap design directions.
+// Turn a business's details into two vehicle-wrap design directions.
 //
 // Claude does the judgment here — reading the trade off the artwork, choosing what to lead
 // with, and writing the zone-by-zone instruction the image model paints from.
@@ -30,7 +30,7 @@ const VISION_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 const SYSTEM_PROMPT = `You are a vehicle wrap design director. You are given very little — a business
 name, a phone number, a website, and the customer's existing logo or artwork — and you
-design their branding from that. Produce THREE distinct wrap directions.
+design their branding from that. Produce TWO distinct wrap directions.
 
 A WRAP HAS FOUR JOBS. Judge every decision against these, in order:
   1. Catch the attention of the ideal client.
@@ -114,15 +114,16 @@ MATCH THE AESTHETIC TO THE TRADE, and never chase "cool" for its own sake:
 - For FUNCTIONAL trades (fencing, hauling, drain clearing) the buyer asks "will it work" —
   clarity and trustworthiness matter more than sophistication.
 
-THE THREE DIRECTIONS must be genuinely different bets, not restyles. Each names what is the
-HERO of that design — the thing the eye lands on first:
-- signature_led: the signature device is the hero and everything else is arranged around it.
-  Under the dense treatment that is the mascot, at panel height; under the restrained
-  treatment it is a single large geometric mark.
-- wordmark_led: the business name itself, at maximum possible scale, IS the design. It spans
-  the side. The signature is small or absent and the field geometry supports the type.
-- field_led: the colour geometry is the hero — an unexpected split, a material field, a
-  locality scene — with the name placed into it rather than sitting on top of it.
+THE TWO DIRECTIONS must be a genuine choice, not a restyle: one built around an original
+character, one without one.
+- character_led: an original mascot (see MASCOT SPECIFICATION) is the hero of this design, at
+  panel height, with everything else arranged around it. Under a treatment that bans mascots
+  (SIMPLE intensity has no character source available to it — see the reference block), this
+  direction leans on the boldest single geometric signature available instead: wordplay,
+  local identity, or a trade artifact. Never invent a mascot where the treatment forbids one.
+- wordmark_led: no mascot, ever, regardless of intensity. The business name itself, at maximum
+  possible scale, IS the design — it spans the side. Any signature stays small or absent, and
+  the field geometry supports the type rather than competing with it.
 
 === WRITING THE IMAGE PROMPTS ===
 
@@ -167,7 +168,7 @@ saturate it rather than using it flat — a mid-chroma body is the worst outcome
 // means the salesperson can see exactly what will be printed before spending a render.
 const BRIEF_TOOL = {
   name: 'submit_wrap_brief',
-  description: 'Return the three wrap design directions.',
+  description: 'Return the two wrap design directions.',
   input_schema: {
     type: 'object',
     properties: {
@@ -198,16 +199,16 @@ const BRIEF_TOOL = {
       },
       self_critique: {
         type: 'string',
-        description: 'Before finalising, test the three directions against the reference block. Would these be the same for ANY business in this trade? Does any land on the anti-defaults list? At the dense treatment, is any view under-filled or any panel left bare white? Name what you changed as a result.',
+        description: 'Before finalising, test the two directions against the reference block. Would these be the same for ANY business in this trade? Does any land on the anti-defaults list? At the dense treatment, is any view under-filled or any panel left bare white? Name what you changed as a result.',
       },
       variants: {
         type: 'array',
-        minItems: 3,
-        maxItems: 3,
+        minItems: 2,
+        maxItems: 2,
         items: {
           type: 'object',
           properties: {
-            id: { type: 'string', enum: ['signature_led', 'wordmark_led', 'field_led'] },
+            id: { type: 'string', enum: ['character_led', 'wordmark_led'] },
             label: { type: 'string', description: 'A short name for this direction the salesperson can say out loud.' },
             color_strategy: {
               type: 'string',

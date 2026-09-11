@@ -418,6 +418,12 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     // used is the only way to explain a mockup after the fact.
     await pool.query("ALTER TABLE wrap_mockups ADD COLUMN IF NOT EXISTS artwork_urls JSONB");
     await pool.query("ALTER TABLE wrap_mockups ADD COLUMN IF NOT EXISTS brand_colors JSONB");
+    // A row is now reserved the moment a run starts, not once it finishes, so the rate
+    // limit's COUNT(*) sees runs still in flight — queuing several before the first lands
+    // used to let every one of them past the same, already-stale count. DEFAULT 'done'
+    // backfills every pre-existing row, since those all completed under the old one-shot
+    // insert.
+    await pool.query("ALTER TABLE wrap_mockups ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'done'");
     // One row per website brand-scan, purely as the rate-limit ledger — the scan result
     // itself is returned straight to the client and prefilled into the mockup form, not
     // stored, so there is nothing here worth keeping beyond how many ran today.

@@ -12,8 +12,8 @@
 // against are all three-view sheets, and for a reason: the rear is the panel a driver stares
 // at for ninety seconds at a stop light, and it carries the densest content. A single
 // three-quarter render never shows it, so half the design was being generated blind and
-// never presented. Three separate renders per variant would cost 10 image calls a run
-// instead of 4; one sheet keeps the cost identical to the old single-angle version.
+// never presented. Three separate renders per variant would cost 7 image calls a run
+// instead of 3; one sheet keeps the cost identical to the old single-angle version.
 //
 // WHY FLAT MOCKUP STAGING, not a cinematic hero shot. An earlier version asked for a rim
 // light along the roofline, shallow depth of field and a glossy floor reflection. It made
@@ -83,13 +83,14 @@ function suggestedDelayMs(body) {
   return null;
 }
 
-// A run is four image calls, so one per-minute trip would otherwise kill the whole
-// thing. Retry inside the call instead of asking the user to start over.
+// A run is three image calls (one base sheet, two painted variants), so one per-minute
+// trip would otherwise kill the whole thing. Retry inside the call instead of asking the
+// user to start over.
 //
-// Bounded deliberately: these retries sit inside a single HTTP request, and four calls
+// Bounded deliberately: these retries sit inside a single HTTP request, and three calls
 // each backing off generously can push the response past a proxy's timeout, which loses
 // the whole run rather than one image. Two waits of at most 20s per call keeps the worst
-// case around three minutes including generation time. If the free tier is being hit
+// case to a couple of minutes including generation time. If the free tier is being hit
 // this hard, billing is the fix, not a longer wait.
 const MAX_ATTEMPTS = 3;
 const MAX_WAIT_PER_ATTEMPT_MS = 20000;
@@ -108,7 +109,17 @@ async function generateImage(parts) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts }],
-        generationConfig: { responseModalities: ['IMAGE'] },
+        // imageSize is requested but not guaranteed: gemini-3.1-flash-image-preview is
+        // documented to ignore it and return ~1K regardless (only gemini-3-pro-image-preview
+        // honours up to 4K, and pro has zero free-tier quota — see IMAGE_MODEL above). Sent
+        // anyway because an unsupported field is silently ignored, not rejected, so there is
+        // no downside, and Google may start honouring it on this model without a code change
+        // here. Do NOT rely on this actually raising resolution — the prompt-side legibility
+        // rules in wrapDesignSystem.js are the real mitigation for small, dense text.
+        generationConfig: {
+          responseModalities: ['IMAGE'],
+          imageConfig: { imageSize: '2K' },
+        },
       }),
     });
 
@@ -182,8 +193,8 @@ async function generateImage(parts) {
  * background, because the artwork is the deliverable and staging that competes with it is
  * staging that hides it.
  *
- * Generated once per run and reused for all three variants — a fresh vehicle per variant
- * would give three different vans, which defeats comparing designs side by side.
+ * Generated once per run and reused for both variants — a fresh vehicle per variant
+ * would give two different vans, which defeats comparing designs side by side.
  */
 async function renderBaseVehicle({ year, make, model, trim }) {
   const vehicle = [year, make, model, trim].filter(Boolean).join(' ');
@@ -215,7 +226,7 @@ async function renderBaseVehicle({ year, make, model, trim }) {
  * Apply one design direction to the base sheet.
  *
  * The preservation clause is load-bearing twice over here: without it the model re-stages
- * the vehicle (three variants that each show a different van are useless for comparison),
+ * the vehicle (two variants that each show a different van are useless for comparison),
  * and it also collapses the three-view layout back into a single hero shot.
  *
  * @param {Buffer} baseImage the three-view sheet from renderBaseVehicle

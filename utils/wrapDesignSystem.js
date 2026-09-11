@@ -201,6 +201,9 @@ const ANTI_DEFAULTS_BOLD = [
   'the design stopping at the doors, leaving hood, roof and bumpers plain',
   'a services list set in a light typeface with bullet dots — it should be stacked capitals in a solid panel, reading as a designed block',
   'the rear left near-empty while everything is crowded onto the side',
+  'the same item count crammed onto the front or rear as the side carries — those quadrants '
+    + 'are smaller, and text sized to fit there garbles into illegible noise rather than reading '
+    + 'as a wrap. Fewer, larger elements beat a complete but unreadable set',
 ];
 
 const ANTI_DEFAULTS_SIMPLE = [
@@ -469,22 +472,39 @@ function contentBlock(content = {}) {
 
 const VIEW_PLAN_BOLD = `PLAN ALL THREE VIEWS. The render is a layout sheet showing the side
 profile, the front and the rear of the same vehicle. Every view carries the wrap; none is left
-plain. Say in the image prompt what goes on each:
+plain. Say in the image prompt what goes on each.
 
-- SIDE: the largest statement of the business name with its trade descriptor, the mascot at
-  panel height in the rear third, the services block, the phone or website at full weight, and
-  the dominant field division sweeping the whole length. The logo sits on the front door or on
-  the nose of the field.
-- FRONT: hood and bumper wrapped in the field colours, the divider carried across the hood, a
-  compact lockup of the name or monogram above the grille, and the phone number across the
-  hood's leading edge or the band above the windscreen. Mirror caps in the accent.
-- REAR: the densest panel, and the one drivers read at a stop light. Business name again, the
-  services block, the phone at maximum size, the website beneath it, the credential strip if
-  one was supplied, the mascot repeated or cropped, and the tagline in a ribbon across the top.
+THE IMAGE MODEL HAS A FIXED RESOLUTION CEILING IT CANNOT EXCEED, and three views share one
+sheet — the side gets the most of it, the front and rear quadrants get much less. Every text
+element you place has to stay legible INSIDE that smaller space. Small dense text at this
+scale renders as a smear of broken, half-formed letterforms — worse than useless, because it
+reads as damage on a business's actual vehicle. LEGIBLE AND SPARSE BEATS COMPLETE AND GARBLED,
+every time. If an element cannot be given enough room in a given view to stay crisp, DROP it
+from that view rather than shrinking it in — say so plainly in that view's instruction ("front
+view carries no services list — not enough room to keep it legible at this scale").
+
+- SIDE: the most room of the three, and where the dense content actually belongs. The largest
+  statement of the business name with its trade descriptor, the mascot at panel height in the
+  rear third, the FULL services block (this is the one view that can actually hold it), the
+  phone or website at full weight, and the dominant field division sweeping the whole length.
+  The logo sits on the front door or on the nose of the field.
+- FRONT: the smallest, quietest view — do not crowd it. Hood and bumper wrapped in the field
+  colours, the divider carried across the hood, a compact lockup of the name or monogram above
+  the grille, and the phone number set LARGE across the hood's leading edge or the band above
+  the windscreen — large enough that it alone is legible at this view's size. Mirror caps in
+  the accent. Nothing else: no services list, no credential strip, no tagline here.
+- REAR: dense, but not as dense as the side — this quadrant is smaller, and a services list
+  repeated here at the same item count as the side is exactly the kind of small text that
+  garbles. Business name, the phone at maximum size (this is the view a stopped driver reads
+  longest, so the CTA matters most here), the website beneath it at a clearly smaller weight,
+  and ONE further device chosen for what will fit large enough to stay crisp — the mascot
+  cropped to head-and-shoulders, OR a short tagline in a ribbon, OR the credential strip if one
+  was supplied, but not all three stacked together. Never repeat the full services list here.
 
 Contact details MAY repeat across views — a driver only ever sees one view at a time, so the
 phone belongs on all three. What must not happen is two competing calls to action within a
-single view.`;
+single view, or any view holding more distinct text elements than it has room to render
+legibly.`;
 
 const VIEW_PLAN_SIMPLE = `PLAN ALL THREE VIEWS. The render is a layout sheet showing the side
 profile, the front and the rear of the same vehicle. Each view carries the base colour and its
@@ -577,7 +597,7 @@ ${contentBlock(content)}
 
 ${bold ? VIEW_PLAN_BOLD : VIEW_PLAN_SIMPLE}
 ${bold ? '\n' + MASCOT_SPEC + '\n' : ''}
-CHOOSE A COLOUR STRATEGY — a different one for each of the three directions where possible.
+CHOOSE A COLOUR STRATEGY — a different one for each of the two directions where possible.
 Boldness comes from CHROMA COMMITMENT, not from darkness. A fully saturated field reads
 boldly; a mid-chroma body commits to nothing and is the most common reason a wrap looks
 flat. Name the strategy you chose in each variant's rationale.
