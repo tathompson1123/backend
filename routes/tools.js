@@ -468,6 +468,15 @@ router.post('/brand-scan', authenticateToken, requireToolsAccess, async (req, re
       }
     }
 
+    // A fetch-engine scan can only see plain HTML — no JavaScript ran, so a logo, gallery
+    // or lazy-loaded image that a builder platform (Wix, Squarespace, GoDaddy) renders
+    // client-side is invisible to it. That degraded read used to be silent; surfaced here
+    // as the first "missing" note so the salesperson knows why a scan came back thin
+    // rather than assuming the tool just didn't try.
+    const missing = site.engine === 'fetch'
+      ? ['Read as plain HTML, not a rendered page — a logo or photos built by the page\'s own JavaScript may not have been visible to this scan.', ...(scan.missing || [])]
+      : (scan.missing || []);
+
     res.json({
       sourceUrl: site.finalUrl,
       engine: site.engine,
@@ -485,7 +494,7 @@ router.post('/brand-scan', authenticateToken, requireToolsAccess, async (req, re
       // time via the same Cloudinary extraction manual uploads already go through.
       brandColorsPreview: scan.brand_colors || undefined,
       brandRead: scan.brand_read || undefined,
-      missing: scan.missing || [],
+      missing,
       logo,
       photos,
     });

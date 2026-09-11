@@ -31,7 +31,14 @@ const VISION_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 // much as a page of text, the ranking in siteScrape is already decent, and the screenshot
 // corroborates which mark is really in the header.
 const LOGO_IMAGES_SHOWN = 3;
-const MAX_PAGE_TEXT = 14000;
+// NOT a second truncation on top of siteScrape's own cap — site.text is already bounded
+// there (currently 60000 chars). Re-slicing here to a much smaller number used to cut off
+// a large share of what siteScrape had just fetched: the homepage's text is collected in
+// full BEFORE the linked services/contact pages are appended after it, so anything on
+// those linked pages — very often exactly where a phone number, service list or
+// credential lives — was landing past a 14000-character cutoff and never reaching Claude
+// at all. Opus 5's context window makes that cap needless: the full 60000 characters is
+// under 15K tokens, trivial next to a 1M-token window.
 
 const SYSTEM_PROMPT = `You are preparing a vehicle-wrap brief by reading a service business's own
 website. Your job is EXTRACTION, not invention. Everything you return must already be on the
@@ -81,8 +88,15 @@ empty list is fine.
 TRADE. Name the trade in one to four words as it would be said out loud — "Plumbing", "Garage
 Door Service", "Heating & Cooling". No parenthetical service lists, no HTML entities.
 
-PHONE. Prefer a tel: link or the JSON-LD telephone over a number pattern-matched out of prose.
-Return it formatted the way the site displays it.
+PHONE. A tel: link or the JSON-LD telephone field is exact, so use one of those when either
+exists. But most small-business sites just print the number as plain text in a header or
+footer with no tel: link at all — that is NOT a reason to leave phone blank. Transcribing a
+number that is visibly printed on the page is reading, not inventing; do it exactly as
+confidently as you would a service name. If it is not in the text, tel: links or JSON-LD you
+were given, check the screenshot itself — the number is very often sitting in a header or
+footer band that is completely legible in the image even when it never made it into the page
+text you were handed. Only leave phone blank if it genuinely does not appear anywhere in
+what you were shown. Return it formatted the way the site displays it.
 
 TAGLINE. Only if the site actually has one. Do not write them one here — the wrap brief does
 that later, where it belongs.`;
@@ -226,7 +240,7 @@ async function scanBrand(site, logoImages, userId) {
 
   content.push({
     type: 'text',
-    text: `PAGE TEXT (homepage plus linked pages):\n\n${(site.text || '').slice(0, MAX_PAGE_TEXT)}`,
+    text: `PAGE TEXT (homepage plus linked pages):\n\n${site.text || ''}`,
   });
 
   const response = await anthropic.messages.create({

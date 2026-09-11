@@ -24,7 +24,12 @@ const net = require('net');
 const cheerio = require('cheerio');
 
 const NAV_TIMEOUT_MS = 30000;
-const MAX_TEXT_CHARS = 40000;
+// Bounds the homepage plus up to MAX_LINKED_PAGES more, combined. Generous on purpose —
+// brandScan sends this straight through to Opus 5 with no further truncation, and 60000
+// characters is under 15K tokens, trivial next to a 1M-token context window. A smaller cap
+// here would repeat the exact bug that was fixed on the brandScan side: content from a
+// later-fetched page silently never reaching the model.
+const MAX_TEXT_CHARS = 60000;
 const MAX_LINKED_PAGES = 4;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -125,6 +130,21 @@ function hostLooksPrivate(hostname) {
   return false;
 }
 
+/**
+ * Clean and dedupe the remainder of a set of tel: hrefs. Some call-tracking widgets double
+ * up the scheme in their own markup (a real href of "tel:%20tel:555-1234" is not rare),
+ * which otherwise reaches Claude as several noisy near-duplicates of the same number
+ * instead of one clean value. Applied in Node after extraction rather than inside the
+ * Puppeteer page.evaluate() callback, which runs in an isolated browser context with no
+ * closure access to a helper defined out here.
+ */
+function cleanTelList(rawList) {
+  const cleaned = (rawList || [])
+    .map(raw => String(raw || '').replace(/^(?:%20|\s)*tel:/i, '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(cleaned)).slice(0, 5);
+}
+
 // ── Shared helpers ───────────────────────────────────────────────────────────
 
 // Nav labels a service business puts its content behind. Ordered by how often the wrap
@@ -142,8 +162,13 @@ function scoreLogoCandidate(img) {
   if (img.top != null && img.top < 250) score += 2;
   if (/\.svg(\?|$)/.test(img.src)) score += 1;
   if (/\.png(\?|$)/.test(img.src)) score += 1;
-  // A logo is small and roughly bannerish. A 1600px-wide file in the header is the hero.
-  if (img.natW && img.natW >= 60 && img.natW <= 900) score += 2;
+  // A logo is DISPLAYED small and roughly bannerish. Judge by RENDERED size first — what the
+  // page actually shows — not the source file's native resolution: a logo uploaded as a
+  // 2000px PNG and scaled down by CSS to 150px is still a logo, and a natural-resolution-only
+  // check was missing exactly that common case. Natural width is the fallback for cheerio,
+  // where no rendered size is ever available.
+  if (img.w && img.w >= 40 && img.w <= 320) score += 3;
+  else if (img.natW && img.natW >= 60 && img.natW <= 900) score += 2;
   if (img.w && img.w > 700) score -= 4;
   if (img.inFooter) score -= 2;
   if (/hero|banner|slide|background|cover/.test(haystack)) score -= 3;
@@ -390,7 +415,7 @@ async function scrapeWithBrowser(url) {
       siteName: harvested.siteName,
       text: text.slice(0, MAX_TEXT_CHARS),
       jsonLd: parseJsonLd(html),
-      tel: harvested.tel,
+      tel: cleanTelList(harvested.tel),
       social: harvested.social,
       ...rankImages(harvested.images),
       screenshot,
@@ -461,7 +486,53 @@ async function scrapeWithFetch(url) {
 
   const hrefs = $('a[href]').map((_, el) => $(el).attr('href')).get();
   $('script, style, noscript, svg').remove();
-  const text = $('body').text().replace(/\s+/g, ' ').trim();
+  let text = $('body').text().replace(/\s+/g, ' ').trim();
+
+  // Follow the same handful of internal pages the browser engine would, so a Chromium
+  // failure doesn't ALSO mean losing the services/contact page's content on top of losing
+  // JS-rendered images — a plain GET works just as well as Puppeteer for a static page,
+  // and this was previously skipped outright, silently limiting the fallback to whatever
+  // fit on the homepage alone.
+  const links = [];
+  const seenPaths = new Set([finalUrl.pathname]);
+  $('nav a[href], header a[href], a[href]').each((_, el) => {
+    if (links.length >= MAX_LINKED_PAGES) return false;
+    let u;
+    try { u = new URL($(el).attr('href') || '', finalUrl.origin); } catch { return; }
+    if (u.origin !== finalUrl.origin) return;
+    if (seenPaths.has(u.pathname) || u.pathname === '/') return;
+    if (/\.(jpg|jpeg|png|gif|svg|pdf|css|js|ico|webp|mp4|mp3)$/i.test(u.pathname)) return;
+    const hay = (u.pathname + ' ' + ($(el).text() || '')).toLowerCase();
+    if (!PAGE_KEYWORDS.some(k => hay.includes(k))) return;
+    seenPaths.add(u.pathname);
+    links.push(u.href);
+  });
+
+  for (const link of links) {
+    if (text.length > MAX_TEXT_CHARS) break;
+    try {
+      const linkRes = await fetch(link, {
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+            '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SORCE-BrandScan/1.0 (+https://sorce.app)',
+          Accept: 'text/html,application/xhtml+xml',
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!linkRes.ok) continue;
+      // Re-checked for the same reason as the homepage itself — a redirect can land
+      // somewhere this scan should never fetch.
+      if (hostLooksPrivate(new URL(linkRes.url || link).hostname)) continue;
+      const linkHtml = await linkRes.text();
+      const $link = cheerio.load(linkHtml);
+      $link('script, style, noscript, svg').remove();
+      const linkText = $link('body').text().replace(/\s+/g, ' ').trim();
+      text += `\n\n--- ${link} ---\n\n${linkText}`;
+    } catch {
+      // A page that won't load isn't a reason to lose the ones that did.
+    }
+  }
 
   return {
     engine: 'fetch',
@@ -472,7 +543,7 @@ async function scrapeWithFetch(url) {
     siteName: $('meta[property="og:site_name"]').attr('content') || '',
     text: text.slice(0, MAX_TEXT_CHARS),
     jsonLd: parseJsonLd(html),
-    tel: Array.from(new Set(hrefs.filter(h => h?.startsWith('tel:')).map(h => h.slice(4)))).slice(0, 5),
+    tel: cleanTelList(hrefs.filter(h => h?.startsWith('tel:')).map(h => h.slice(4))),
     social: Array.from(new Set(hrefs.filter(h =>
       /(facebook|instagram|linkedin|youtube|tiktok|x\.com|twitter)\.com/i.test(h || '')))).slice(0, 8),
     ...rankImages(images),
@@ -489,13 +560,26 @@ async function scrapeWithFetch(url) {
  */
 async function scrapeSite(rawUrl) {
   const url = await assertPublicUrl(rawUrl);
-  try {
-    return await scrapeWithBrowser(url);
-  } catch (err) {
-    if (err instanceof ScrapeError) throw err;
-    console.warn(`[brand-scan] browser engine failed (${err.message}); falling back to fetch`);
-    return await scrapeWithFetch(url);
+
+  // One retry before giving up on the browser engine. A Chromium cold start or a single
+  // slow navigation on Railway is a transient blip, not a reason to fall back to cheerio
+  // for the whole scan — and cheerio genuinely cannot see a JS-rendered logo, gallery or
+  // lazy-loaded image, which is most of what these builder-platform sites are made of.
+  // Falling back on the first hiccup was very likely why logos and photos were going
+  // missing intermittently rather than consistently.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await scrapeWithBrowser(url);
+    } catch (err) {
+      if (err instanceof ScrapeError) throw err;
+      if (attempt === 2) {
+        console.warn(`[brand-scan] browser engine failed twice (${err.message}); falling back to fetch`);
+        break;
+      }
+      console.warn(`[brand-scan] browser engine failed (${err.message}); retrying once`);
+    }
   }
+  return await scrapeWithFetch(url);
 }
 
 /**
