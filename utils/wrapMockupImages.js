@@ -134,6 +134,18 @@ async function generateImage(parts) {
       const imagePart = (candidate?.content?.parts || []).find(p => p.inlineData?.data);
       if (!imagePart) {
         const reason = candidate?.finishReason || body?.promptFeedback?.blockReason || 'no image returned';
+        // NO_IMAGE means the request was accepted but the model just didn't produce an image
+        // on this attempt — Google's own guidance treats this as distinct from an actual
+        // content-policy block (IMAGE_SAFETY, SAFETY, or any real promptFeedback.blockReason)
+        // and recommends simply retrying. A genuine safety block is a decision that will not
+        // change on a retry, so only this ambiguous "produced nothing" outcome gets another
+        // attempt — retrying an actual policy rejection would just burn the attempt budget.
+        const retryableEmptyResult = (reason === 'NO_IMAGE' || reason === 'OTHER') && !body?.promptFeedback?.blockReason;
+        if (retryableEmptyResult && attempt < MAX_ATTEMPTS) {
+          console.log(`[wrap-mockup] ${IMAGE_MODEL} returned no image (${reason}), retrying (attempt ${attempt}/${MAX_ATTEMPTS})`);
+          await sleep(1500);
+          continue;
+        }
         throw new WrapImageError(`Gemini returned no image (${reason})`);
       }
       return Buffer.from(imagePart.inlineData.data, 'base64');
