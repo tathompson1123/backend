@@ -31,9 +31,9 @@ const upload = multer({
   },
 });
 
-// A mockup run is the base sheet plus two painted variants — three Gemini calls total.
-// This is a spend guard, not a licence check.
-const RUNS_PER_DAY = 25;
+// A mockup run is the base sheet plus two painted variants — three Gemini calls total,
+// plus one Claude brief call. This is a spend guard, not a licence check.
+const RUNS_PER_DAY = 200;
 
 // A brand scan is a Puppeteer launch plus one vision call — cheaper than a mockup run, but
 // it is also the one endpoint here that fetches a URL the caller supplies, so it gets a
