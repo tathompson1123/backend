@@ -192,6 +192,9 @@ const ANTI_DEFAULTS_UNIVERSAL = [
   'a credential, guarantee, rating or availability claim that was not supplied in the input',
   'a large dead area with no colour commitment',
   'gradients blending three or more hues into mud',
+  'a logo sitting in its own white or light rounded rectangle, card or badge — a shape whose '
+    + 'only job is holding the logo reads as a sticker applied after the design was finished, '
+    + 'no matter how faithfully the logo itself is reproduced',
 ];
 
 const ANTI_DEFAULTS_BOLD = [

@@ -152,8 +152,21 @@ values and the exact wordmark treatment in each view prompt rather than writing 
 side" — the image model does not reliably carry a reference across a long instruction.
 
 The input may include artworkCount and artworkNames — customer-supplied images. When artwork is
-present, say where the logo sits and how large. A photograph is only ever a full-bleed field
-with one colour and one CTA over it — never a small inset, never tiled.
+present, say where the logo sits and how large — AND say what it sits on, because this is
+where a wrap most often ends up looking like a sticker was slapped onto a finished design
+rather than designed in from the start:
+- First choice, and the common case: the logo sits DIRECTLY on one of the wrap's own colour
+  fields, no background shape behind it at all. Most logos already carry their own outline or
+  enough internal contrast to read on a solid field — say so, and say which field.
+- Only if the logo's own colours would genuinely vanish against every field in the palette
+  (e.g. dark text with no fill, on a dark base) does it get a background of its own — and that
+  background must be a real, load-bearing part of the wrap's geometry: a corner of the same
+  field split the divider already creates, or a panel bounded by the same angle as the main
+  divider, sized close to the logo's own bounding shape. Never a rounded rectangle, never a
+  card, never a shape that does not share an edge or an angle with something else already in
+  the design — a shape invented solely to hold the logo is what makes it read as pasted on.
+A photograph is only ever a full-bleed field with one colour and one CTA over it — never a
+small inset, never tiled.
 
 primaryColor and accentColor may have been sampled from the artwork rather than typed in, so
 treat them as the brand's real colours. If the sampled primary is a mid-tone, darken or

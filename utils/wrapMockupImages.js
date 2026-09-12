@@ -239,6 +239,21 @@ async function paintWrap({ baseImage, imagePrompt, references = [], intensity = 
   const refs = (references || []).filter(r => r?.buffer);
   const bold = intensity !== 'simple';
 
+  // The single most common way a logo reads as pasted-on rather than designed-in: giving it
+  // a background shape that exists for no reason other than to hold the logo — almost always
+  // a plain white or light rounded rectangle, because that is the easiest way to guarantee
+  // contrast. A shape with no other job in the composition reads as a sticker no matter how
+  // faithfully the logo itself is reproduced. Repeated regardless of artwork count because it
+  // is the fix for the failure mode actually seen, not a nice-to-have.
+  const logoIntegration = '\n- Do NOT put the logo in a rounded rectangle, a card, a badge, or any other shape '
+    + "invented solely to hold it — that shape has no other job in the design and reads as a sticker "
+    + "applied after the fact. Prefer placing the logo directly on one of the wrap's own colour fields "
+    + 'with no background shape at all. Only give it a background if its own colours would genuinely '
+    + "vanish against every field in the palette, and even then that background must be a real part of "
+    + "the wrap's structure already described above — a corner the divider naturally creates, a panel "
+    + 'sharing the divider\'s own angle — sized close to the logo itself, never a card floating with '
+    + 'generous padding around it.';
+
   // The attached artwork is described in order and by kind, so the model can tell a
   // logo from a job photo. Without this it treats every attachment as equally
   // paintable and will smear a photograph across the whole panel.
@@ -248,11 +263,13 @@ async function paintWrap({ baseImage, imagePrompt, references = [], intensity = 
       + ' If it is a logo, reproduce it faithfully: same shapes, same colours, same proportions.'
       + ' Never redraw, restyle, recolour or add text to a logo. It is a separate element from any'
       + ' mascot described above; both appear.'
+      + logoIntegration
       + ' If it is a photograph, it is either a full-bleed duotone field tinted to the brand colours filling one zone, with text on a solid panel over it, or it is left out entirely. Never a small inset.';
   } else if (refs.length > 1) {
     const listed = refs.map((r, i) => '(' + (i + 1) + ') ' + (r.label || 'artwork')).join(', ');
     refNote = '\n- ' + refs.length + ' artwork images are attached after the vehicle sheet, in this order: ' + listed + '.'
       + '\n- Any logo among them must be reproduced faithfully: same shapes, same colours, same proportions. Never redraw, restyle, recolour or add text to a logo. It is a separate element from any mascot described above; both appear.'
+      + logoIntegration
       + '\n- Use at most ONE photographic image, and only as a full-bleed duotone field tinted to the brand colours filling a single zone, with text on a solid panel over it. Never a small inset or thumbnail. If it cannot be used at full bleed, leave it out.'
       + '\n- Do not tile, collage or repeat the artwork across the vehicle.';
   }
