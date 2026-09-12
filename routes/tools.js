@@ -192,18 +192,44 @@ router.post(
 
       // 1. Artwork first, with colour extraction on. Cloudinary does the palette work,
       //    which avoids a native image dependency (sharp/canvas) in this project.
+      //
+      //    SVG artwork gets rasterized here too, in the same upload call: neither Claude's
+      //    vision nor Gemini's image endpoint accepts SVG as image input ("Unsupported MIME
+      //    type: image/svg+xml"), and a vector logo is common, not an edge case — it is the
+      //    default export format for most modern logo design, and the site-scan feature
+      //    feeds real-world logos into this exact path. Passing format: 'png' on upload
+      //    tells Cloudinary to rasterize a vector source rather than just relabel it, so
+      //    the bytes fetched back from secure_url afterward are a genuine PNG.
       const artworkUploads = [];
       const colorArrays = [];
+      const references = [];
       for (let i = 0; i < artwork.length; i++) {
         const file = artwork[i];
+        const isSvg = sniffImageType(file.buffer) === 'image/svg+xml';
         try {
-          const result = await uploadBuffer(file.buffer, `${stamp}-artwork-${i}`, { colors: true });
+          const result = await uploadBuffer(file.buffer, `${stamp}-artwork-${i}`, {
+            colors: true,
+            ...(isSvg ? { format: 'png' } : {}),
+          });
           artworkUploads.push({ url: result.secure_url, name: file.originalname });
           if (Array.isArray(result.colors)) colorArrays.push(result.colors);
+
+          if (isSvg) {
+            const rasterRes = await fetch(result.secure_url);
+            if (!rasterRes.ok) throw new Error(`rasterized fetch failed: ${rasterRes.status}`);
+            const rasterBuffer = Buffer.from(await rasterRes.arrayBuffer());
+            references.push({ buffer: rasterBuffer, mimeType: 'image/png', label: file.originalname || 'artwork' });
+          } else {
+            references.push({ buffer: file.buffer, mimeType: file.mimetype, label: file.originalname || 'artwork' });
+          }
         } catch (err) {
-          // Artwork is an input, not the deliverable — a failed upload shouldn't sink
-          // the run. The file is still passed to the image model from memory below.
+          // Artwork is an input, not the deliverable — a failed upload shouldn't sink the
+          // run. A non-SVG file still reaches the models from the original bytes already in
+          // memory; an SVG that failed to rasterize has no safe fallback bytes — sending the
+          // raw SVG through is exactly the error being fixed here — so it is dropped rather
+          // than reintroduced.
           console.error(`[wrap-mockup] artwork ${i} upload failed: ${err.message}`);
+          if (!isSvg) references.push({ buffer: file.buffer, mimeType: file.mimetype, label: file.originalname || 'artwork' });
         }
       }
 
@@ -219,12 +245,6 @@ router.post(
         palette: detected?.palette || [],
         accentDerived: useDetected ? !!detected.accentDerived : false,
       };
-
-      const references = artwork.map(file => ({
-        buffer: file.buffer,
-        mimeType: file.mimetype,
-        label: file.originalname || 'artwork',
-      }));
 
       // 'evolve' respects what they already have; 'reinvent' starts over. Default bold,
       // since a business asking for a mockup usually wants to see something better.

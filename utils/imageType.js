@@ -16,10 +16,21 @@ const SIGNATURES = [
   { type: 'image/gif', test: b => b.length > 6 && b.toString('latin1', 0, 3) === 'GIF' },
   // WEBP is a RIFF container: "RIFF" then 4 size bytes then "WEBP".
   { type: 'image/webp', test: b => b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP' },
+  // SVG is XML text, not a fixed magic-byte signature — there is often a BOM, an XML
+  // declaration or a DOCTYPE before the actual <svg> tag, so sniff a chunk of the head
+  // rather than the first few bytes. This isn't wanted as a paintable image (Gemini and
+  // Claude's vision both reject SVG outright), but it needs to be correctly IDENTIFIED as
+  // SVG rather than falling through to null — the callers that build a reference image
+  // decide separately whether to skip it or rasterize it; misidentifying it (or worse,
+  // mislabeling it as PNG/JPEG downstream) is the bug, not the format itself.
+  { type: 'image/svg+xml', test: b => /<svg[\s>]/i.test(b.slice(0, 1024).toString('latin1')) },
 ];
 
 /**
- * The real media type, or null when it isn't one of the formats we can pass on.
+ * The real media type, or null when it isn't a recognised image format at all. A returned
+ * type is not automatically safe to hand to a vision or image-generation model as-is —
+ * SVG in particular is identified but rejected outright by both Claude and Gemini; callers
+ * that need a paintable/vision-readable image must check for it and rasterize or skip it.
  * @param {Buffer} buffer
  * @returns {string|null}
  */
