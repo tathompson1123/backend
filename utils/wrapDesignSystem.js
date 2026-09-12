@@ -340,10 +340,13 @@ treatment counts elements down, this one counts them up. Where a rule elsewhere 
 restraint, this section overrides it.
 
 COVERAGE — the most important rule in this block.
-The wrap covers 100% of the painted bodywork, edge to edge: hood, roof, both doors, the full
+The wrap covers 100% of the painted BODYWORK, edge to edge: hood, roof, both doors, the full
 side, the rear, front and rear bumpers, mirror caps and the pillars between the windows. No
 bare white body panel is visible anywhere unless white is a deliberate field in the design.
-Graphics run across panel gaps and door seams uninterrupted, the way real vinyl does.
+Graphics run across panel gaps and door seams uninterrupted, the way real vinyl does. "Painted
+bodywork" excludes the grille's mesh or slatted insert, glass, wheels and tyres, chrome trim
+and door handles — none of that is a surface vinyl goes on, whatever coverage language is
+used elsewhere.
 
 COLOUR — four or five, not three.
 Two dominant saturated fields at full chroma, white for the large type, black or near-black
@@ -489,10 +492,14 @@ view carries no services list — not enough room to keep it legible at this sca
   phone or website at full weight, and the dominant field division sweeping the whole length.
   The logo sits on the front door or on the nose of the field.
 - FRONT: the smallest, quietest view — do not crowd it. Hood and bumper wrapped in the field
-  colours, the divider carried across the hood, a compact lockup of the name or monogram above
-  the grille, and the phone number set LARGE across the hood's leading edge or the band above
-  the windscreen — large enough that it alone is legible at this view's size. Mirror caps in
-  the accent. Nothing else: no services list, no credential strip, no tagline here.
+  colours, the divider carried across the hood, a compact lockup of the name or monogram
+  positioned clear of the grille opening — above it or to one side, never crossing into it —
+  and the phone number set LARGE across the hood's leading edge or the band above the
+  windscreen — large enough that it alone is legible at this view's size. Mirror caps in
+  the accent. THE GRILLE ITSELF IS NOT A SURFACE: its mesh or slatted insert and any badge
+  or emblem set into it stay exactly as photographed, in the vehicle's own finish — a wrap
+  cannot be applied to a perforated, three-dimensional opening, and no real installer tries.
+  Nothing else on this view: no services list, no credential strip, no tagline here.
 - REAR: dense, but not as dense as the side — this quadrant is smaller, and a services list
   repeated here at the same item count as the side is exactly the kind of small text that
   garbles. Business name, the phone at maximum size (this is the view a stopped driver reads
@@ -512,7 +519,9 @@ share of the design; none is left plain white.
 
 - SIDE: the name at maximum scale with the trade descriptor, and nothing else but the single
   geometric signature.
-- FRONT: the base colour carried across hood and bumper, a compact monogram or the name alone.
+- FRONT: the base colour carried across hood and bumper, a compact monogram or the name alone,
+  placed clear of the grille opening. The grille's own mesh and any badge set into it stay in
+  the vehicle's real finish — it is not a surface a wrap can cover.
 - REAR: the outcome line and the one call to action, large, in the accent field.
 
 One call to action per view, and it does not compete with a second.`;

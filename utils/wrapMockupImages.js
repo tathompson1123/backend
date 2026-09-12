@@ -279,6 +279,10 @@ async function paintWrap({ baseImage, imagePrompt, references = [], intensity = 
     + 'identical mascot. They are three sides of one vehicle, not three design options.'
     + coverage
     + "\n- The wrap must follow the body's curves and panel lines like real vinyl, not float as a flat overlay."
+    + '\n- The grille\'s mesh or slatted insert, and any badge set into it, are NOT wrapped — leave that '
+    + 'area in the vehicle\'s real finish exactly as photographed. A wrap cannot be applied to a '
+    + 'perforated, three-dimensional opening; every real installer cuts around it. Likewise leave '
+    + 'glass, wheels, tyres, chrome trim and door handles unwrapped.'
     + '\n- Every text string must be spelled exactly as given and be crisply legible. Text sits wholly '
     + 'within ONE flat field of colour, or carries a heavy contrasting keyline if it crosses a boundary.'
     + '\n- The business name is the largest element on the vehicle by a wide margin, and whatever the '
