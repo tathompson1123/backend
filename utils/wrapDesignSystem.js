@@ -489,11 +489,14 @@ every time. If an element cannot be given enough room in a given view to stay cr
 from that view rather than shrinking it in — say so plainly in that view's instruction ("front
 view carries no services list — not enough room to keep it legible at this scale").
 
-- SIDE: the most room of the three, and where the dense content actually belongs. The largest
-  statement of the business name with its trade descriptor, the mascot at panel height in the
-  rear third, the FULL services block (this is the one view that can actually hold it), the
-  phone or website at full weight, and the dominant field division sweeping the whole length.
-  The logo sits on the front door or on the nose of the field.
+- SIDE: the most room of the three, and where the dense content actually belongs — but split
+  differently depending on whether THIS direction carries a mascot (see TEXT BUDGET above). On
+  the direction WITH a mascot: name, trade descriptor and the mascot at panel height in the
+  rear third — no services block here, the mascot already claims that room. On the direction
+  WITHOUT one: the FULL services block belongs here instead (this is the one view that can
+  actually hold it), since nothing else on this view is competing with it for room. Both carry
+  the phone or website at full weight and the dominant field division sweeping the whole
+  length. The logo sits on the front door or on the nose of the field.
 - FRONT: the smallest, quietest view — do not crowd it. Hood and bumper wrapped in the field
   colours, the divider carried across the hood, a compact lockup of the name or monogram
   positioned clear of the grille opening — above it or to one side, never crossing into it —

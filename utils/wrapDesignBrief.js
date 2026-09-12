@@ -125,6 +125,21 @@ character, one without one.
   possible scale, IS the design — it spans the side. Any signature stays small or absent, and
   the field geometry supports the type rather than competing with it.
 
+TEXT BUDGET DIFFERS BETWEEN THE TWO DIRECTIONS, and this is not optional polish — it is the
+difference between legible and garbled at the resolution these renders actually have. A
+detailed mascot competes with adjacent text for the same limited pixel budget on its view;
+asking that same view to also hold a six-item services block is how a name comes back as
+recognisable letters and the services block next to it comes back as noise. So:
+- On character_led's side view, the mascot is the content. Name, trade descriptor and the
+  leading CTA only — no services block, no credential strip, no tagline crowding the panel the
+  mascot already occupies.
+- wordmark_led carries the services block and the credential strip instead, on whichever view
+  in its own plan has room for them (ordinarily the side, per the view plan below) — it has no
+  mascot competing for space, so it is the direction with room for that content, not merely
+  permission to include it.
+- Both directions still carry the phone/website CTA at full size on every view regardless —
+  this rule is only about the services list and credential strip, not the calls to action.
+
 === WRITING THE IMAGE PROMPTS ===
 
 The render is a THREE-VIEW LAYOUT SHEET: one image containing the vehicle's side profile, its
