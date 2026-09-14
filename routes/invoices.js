@@ -663,8 +663,20 @@ router.post('/:id/send-square', authenticateToken, async (req, res) => {
         });
       }
 
+      // autoApplyTaxes: false is load-bearing. Confirmed against a real order from this
+      // account: Square's own location-level tax rules were applying a SECOND tax on top
+      // of the "Sales Tax" line item pushed below — auto_applied: true showed up in the
+      // order's applied_taxes with nothing in this request asking for it. That's the
+      // account's Tax Rules feature (configured once in the Square Dashboard), which
+      // evaluates independently of anything this API call sends unless explicitly turned
+      // off. We already compute and bill the exact tax the customer was quoted as our own
+      // line item below; Square's rule-based tax stacking on top of that is what "tax is
+      // added twice" actually was.
       const { result: orderResult } = await client.ordersApi.createOrder({
-        order: { locationId: squareLocationId, customerId, lineItems },
+        order: {
+          locationId: squareLocationId, customerId, lineItems,
+          pricingOptions: { autoApplyTaxes: false },
+        },
         idempotencyKey: randomUUID(),
       });
       const orderId = orderResult.order.id;
