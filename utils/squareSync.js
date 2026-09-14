@@ -120,15 +120,27 @@ async function syncSquareInvoices(userId, accessToken, locationId, pool) {
       const dueDate = inv.paymentRequests?.[0]?.dueDate || null;
       const invoiceNumber = `SQ-${inv.invoiceNumber || inv.id}`;
       const paidAt = status === 'paid' ? inv.updatedAt : null;
+      // Conflict on square_invoice_id, NOT invoice_number: invoice_number here is the
+      // synthetic "SQ-xxxx" this function generates itself, so it can never match the
+      // real "INV-xxxx" number an invoice was created with locally (via send-square).
+      // Conflicting on invoice_number meant that match never fired, and every sync
+      // inserted a fresh duplicate row instead of updating the invoice that was already
+      // there — with no line items, and the tax-inclusive total mislabelled as subtotal
+      // with tax_rate/tax_amount left at 0. total_amount/amount_paid/amount_due DO get
+      // refreshed here, because Square is the live source of truth for what was actually
+      // charged and collected (an invoice can be edited directly in Square after being
+      // sent); subtotal/tax_rate/tax_amount are left alone on conflict, since our own
+      // breakdown at creation time is better than anything derivable from Square's
+      // aggregate invoice total alone.
       await pool.query(
         `INSERT INTO invoices (user_id, invoice_number, customer_name, customer_email,
            subtotal, total_amount, amount_paid, amount_due, status, issue_date, due_date,
            paid_at, payment_processor, notes, square_invoice_id, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, 'square', $12, $13, $14, NOW())
-         ON CONFLICT (invoice_number) DO UPDATE SET
-           status = EXCLUDED.status, amount_paid = EXCLUDED.amount_paid,
-           amount_due = EXCLUDED.amount_due, paid_at = EXCLUDED.paid_at,
-           square_invoice_id = EXCLUDED.square_invoice_id, updated_at = NOW()`,
+         ON CONFLICT (square_invoice_id) WHERE square_invoice_id IS NOT NULL DO UPDATE SET
+           status = EXCLUDED.status, total_amount = EXCLUDED.total_amount,
+           amount_paid = EXCLUDED.amount_paid, amount_due = EXCLUDED.amount_due,
+           paid_at = EXCLUDED.paid_at, updated_at = NOW()`,
         [userId, invoiceNumber, customerName, customerEmail,
          totalAmount, amountPaid, amountDue,
          status, inv.createdAt?.split('T')[0], dueDate,

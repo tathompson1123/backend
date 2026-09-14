@@ -308,6 +308,21 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS square_invoice_id VARCHAR(255)");
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_invoice_id VARCHAR(255)");
     await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paypal_invoice_id VARCHAR(255)");
+    // syncSquareInvoices used to conflict on invoice_number instead of square_invoice_id,
+    // which never matched the invoice a local send-square call had already created — every
+    // sync inserted a fresh duplicate row instead of updating it. This index is what makes
+    // the corrected ON CONFLICT (square_invoice_id) in squareSync.js actually work, and
+    // guards against the same bug recurring in a different shape later. Wrapped in its own
+    // try/catch: creating it fails outright if any pre-existing duplicate rows still share a
+    // square_invoice_id, and those are a one-time data cleanup, not something this startup
+    // migration should be blocked on or should attempt to resolve itself.
+    try {
+      await pool.query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS invoices_square_id_idx ON invoices (square_invoice_id) WHERE square_invoice_id IS NOT NULL"
+      );
+    } catch (e) {
+      console.warn('⚠️ Could not create invoices_square_id_idx (likely pre-existing duplicate square_invoice_id rows still need cleanup):', e.message);
+    }
     await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS clover_merchant_id TEXT");
     await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS clover_access_token TEXT");
     await pool.query("ALTER TABLE payment_connections ADD COLUMN IF NOT EXISTS square_token_expires_at TIMESTAMPTZ");
