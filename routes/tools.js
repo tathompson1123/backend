@@ -129,7 +129,7 @@ router.post(
         businessName, service, tagline, phone, website,
         primaryColor, accentColor,
         year, make, model, trim,
-        customerEmail, autoColors, designMode, designIntensity,
+        customerEmail, autoColors, designMode, designIntensity, wrapCoverage,
         services, badges, serviceArea, yearsInBusiness, socialHandle,
       } = req.body || {};
 
@@ -252,6 +252,9 @@ router.post(
       // Orthogonal to designMode: one is how far to depart, the other how loud to be.
       // 'bold' is the dense trade-truck treatment, 'simple' the restrained premium one.
       const intensity = designIntensity === 'simple' ? 'simple' : 'bold';
+      // Orthogonal to both: how MUCH of the vehicle is wrapped at all, as opposed to how
+      // busy the wrapped area is. Defaults to full so existing callers are unaffected.
+      const coverage = ['sides', 'sides_rear', 'spot'].includes(wrapCoverage) ? wrapCoverage : 'full';
 
       // 3. What the customer actually wants printed. This is the input that decides whether
       //    a wrap looks full or sparse: with no services and no badges the design has
@@ -277,6 +280,7 @@ router.post(
         vehicle,
         designMode: mode,
         designIntensity: intensity,
+        wrapCoverage: coverage,
         content: wrapContent,
       }, userId, references);
 
@@ -297,6 +301,7 @@ router.post(
             imagePrompt: variant.image_prompt,
             references,
             intensity,
+            coverage,
           });
           const uploaded = await uploadBuffer(painted, `${stamp}-${variant.id}`);
           variants.push({
@@ -364,6 +369,7 @@ router.post(
         ctaType: brief.cta_type,
         designMode: mode,
         designIntensity: intensity,
+        wrapCoverage: coverage,
         // Echoed back so the UI can show what was actually used after the caps were applied.
         wrapContent,
         sourcePhotoUrl,

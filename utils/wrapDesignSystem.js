@@ -277,9 +277,9 @@ const TRADE_WORLDS = {
     urgency: 'considered', designSensitivity: 'high',
   },
   auto_detailing: {
-    artifacts: 'water beading on a clear coat, reflection highlights, buffer swirl, microfibre',
+    artifacts: 'water beading on a clear coat, reflection highlights, buffer swirl, microfibre, a mirror-gloss single-colour panel standing in for the finish itself',
     outcome: 'a car that looks better than the day it was bought',
-    avoid: 'black-on-black, and chrome gradient lettering',
+    avoid: 'black-on-black, chrome gradient lettering, and a busy multi-colour palette — the finish itself is the flex, so the wrap should look as clean as the cars this business produces',
     services: 'ceramic coating, paint correction, interior detail, PPF, window tint',
     urgency: 'considered', designSensitivity: 'high',
   },
@@ -312,11 +312,25 @@ const TRADE_WORLDS = {
     urgency: 'considered', designSensitivity: 'low',
   },
   food_service: {
-    artifacts: 'the dishes themselves at full saturation, festival bunting, a chef figure, steam',
+    artifacts: 'the dishes themselves at full saturation, festival bunting, a chef figure, steam, the serving window or order counter as a framing device on the side that faces the line',
     outcome: 'the thing they are already hungry for, right now',
     avoid: 'a muted or sophisticated palette — this is the one trade where louder genuinely sells more',
     services: 'the actual menu items, named',
     urgency: 'emergency', designSensitivity: 'low',
+  },
+  financial_services: {
+    artifacts: 'a shield or seal, a rising line built from a bar chart, a vault door, a handshake mark, columns or an arch borrowed from bank architecture — kept abstract and geometric, never a literal coin or dollar sign',
+    outcome: 'their money handled by people they can actually trust',
+    avoid: 'a saturated colour and any mascot — this buyer is judging gravitas, not energy, and both undercut it. Also avoid green as a literal "it\'s about money" cliché unless it is already the brand\'s own colour',
+    services: 'the specific accounts, loans or services actually offered',
+    urgency: 'considered', designSensitivity: 'high',
+  },
+  school: {
+    artifacts: 'the school\'s own crest, seal or letter monogram, its existing mascot if it has one, laurels or shield devices, a ruled notebook-line motif used sparingly',
+    outcome: 'a vehicle that reads as unmistakably theirs and safe, not a company van in the pickup line',
+    avoid: 'inventing a new mascot or crest from scratch when the school already has one — use its real colours and real mascot rather than a generic K-12 clip-art look',
+    services: 'the specific program, activity or department the vehicle serves (athletics, transportation, district office, a specific campus)',
+    urgency: 'considered', designSensitivity: 'medium',
   },
   professional_services: {
     artifacts: 'a seal, a signature stroke, a document corner, a monogram',
@@ -532,6 +546,61 @@ share of the design; none is left plain white.
 
 One call to action per view, and it does not compete with a second.`;
 
+// ── Coverage overrides ───────────────────────────────────────────────────────
+//
+// Orthogonal to intensity: intensity is how busy the wrapped area is, coverage is which
+// panels are wrapped in the first place. Full coverage needs no override — the intensity
+// view plans above already assume every panel is wrapped. Partial coverage is expressed as
+// an OVERRIDE appended after those view plans, rather than a rewrite of them per intensity,
+// because the same partial-coverage rule ("front and rear stay bare") applies whether the
+// wrapped area itself is bold or simple.
+
+function coverageBlock(coverage) {
+  if (coverage === 'sides') {
+    return `\n\nCOVERAGE OVERRIDE — THIS IS A SIDES-ONLY PARTIAL WRAP, NOT A FULL WRAP.
+This overrides any view-plan guidance above that assumes every panel is wrapped.
+- Only the SIDE view carries the design: doors, the full side panel and the pillars between
+  the windows, edge to edge, exactly the way a real sides-only wrap job is cut.
+- The FRONT and REAR views are NOT wrapped. Write front_prompt and rear_prompt to say plainly
+  that the vehicle stays in its bare factory paint on those views — no colour fields, no
+  graphics, no text — exactly as it appears in the blank base sheet. Do not carry the wordmark,
+  services block, mascot or any device onto the front or rear.
+- design_spec still defines the one design used on the side view; it does not describe a
+  front or rear treatment because there isn't one.`;
+  }
+  if (coverage === 'sides_rear') {
+    return `\n\nCOVERAGE OVERRIDE — THIS IS A SIDES + REAR PARTIAL WRAP, NOT A FULL WRAP.
+This overrides any view-plan guidance above that assumes every panel is wrapped.
+- The SIDE view carries the design: doors, the full side panel and the pillars between the
+  windows, edge to edge, exactly the way a real partial wrap is cut.
+- The REAR view is fully wrapped too — this is the one place a stopped driver reads longest,
+  so it still carries the phone/website at full size and whatever device fits the space, per
+  the REAR guidance in the view plan above.
+- The FRONT view is NOT wrapped. Write front_prompt to say plainly that the vehicle stays in
+  its bare factory paint there — no colour fields, no graphics, no text — exactly as it
+  appears in the blank base sheet. Do not carry the wordmark, services block, mascot or any
+  device onto the front.`;
+  }
+  if (coverage === 'spot') {
+    return `\n\nCOVERAGE OVERRIDE — THIS IS SPOT GRAPHICS, A DECAL PACKAGE, NOT A WRAP.
+This overrides all view-plan, intensity, colour-strategy and signature guidance above — none
+of it applies to a decal job. Ignore mascots, field geometry, dividers and colour strategies
+entirely.
+- The ONLY graphics anywhere on the vehicle are the logo (if supplied) and the business
+  wordmark, applied at a moderate size on the front doors in the SIDE view — not edge to edge,
+  not spanning the panel, sized the way a real vinyl decal application is, with generous bare
+  paint visible around it. The phone number may appear small beneath it.
+- Nothing else is printed anywhere: no trade descriptor at scale, no tagline, no services
+  block, no credential strip, no mascot, no background scene.
+- The FRONT and REAR views are NOT wrapped. Write front_prompt and rear_prompt to say plainly
+  that the vehicle stays entirely in its bare factory paint on those views, exactly as it
+  appears in the blank base sheet.
+- design_spec should describe only the decal itself: its exact contents, colours and size —
+  not a field geometry or background, because there isn't one.`;
+  }
+  return '';
+}
+
 /** Nearest trade entry for a free-text trade string, or null. */
 function matchTrade(trade) {
   const text = String(trade || '').toLowerCase();
@@ -548,7 +617,9 @@ function matchTrade(trade) {
     pest_control: ['pest', 'exterminat', 'termite', 'rodent'],
     remodeling: ['remodel', 'renovat', 'construction', 'contractor', 'handyman', 'deck', 'fence', 'carpentry'],
     moving: ['moving', 'movers', 'hauling', 'junk removal', 'relocation'],
-    food_service: ['taco', 'food truck', 'catering', 'bbq', 'coffee', 'taqueria', 'restaurant'],
+    food_service: ['taco', 'food truck', 'street food', 'mobile kitchen', 'catering', 'bbq', 'coffee', 'taqueria', 'restaurant'],
+    financial_services: ['bank', 'credit union', 'financial', 'wealth', 'mortgage', 'lending'],
+    school: ['school', 'district', 'academy', 'elementary', 'middle school', 'high school', 'university', 'college'],
     professional_services: ['notary', 'account', 'bookkeep', 'legal', 'insurance', 'consult', 'real estate'],
   };
   for (const [key, needles] of Object.entries(aliases)) {
@@ -565,8 +636,10 @@ function matchTrade(trade) {
  * @param {string} trade free-text business name + service, for trade matching
  * @param {'bold'|'simple'} intensity which treatment
  * @param {object} content supplied wrap copy: services, badges, serviceArea, yearsInBusiness, socialHandle
+ * @param {'full'|'sides'|'sides_rear'|'spot'} coverage how much of the vehicle is wrapped —
+ *   orthogonal to intensity; 'full' (default) needs no override
  */
-function buildReferenceBlock(trade, intensity = 'bold', content = {}) {
+function buildReferenceBlock(trade, intensity = 'bold', content = {}, coverage = 'full') {
   const world = matchTrade(trade);
   const level = intensity === 'simple' ? 'simple' : 'bold';
   const bold = level === 'bold';
@@ -639,6 +712,7 @@ strongest references survives being read at 40mph.
 
 NEVER PRODUCE ANY OF THESE:
 ${antiDefaults.map(d => `- ${d}`).join('\n')}
+${coverageBlock(coverage)}
 `;
 }
 
@@ -653,4 +727,5 @@ module.exports = {
   TRADE_WORLDS,
   matchTrade,
   buildReferenceBlock,
+  coverageBlock,
 };

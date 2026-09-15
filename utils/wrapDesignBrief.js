@@ -41,9 +41,14 @@ A wrap that is merely attractive has done job 1 and failed the other three.
 
 THE REFERENCE BLOCK AT THE END OF THE INPUT IS AUTHORITATIVE on how dense the design should
 be: how many elements, how many colours, whether there is a mascot, whether there is a
-services list, and what may be repeated. Read it before you design anything, and follow it
-over any general instinct toward restraint. This prompt sets the thinking; that block sets
-the treatment.
+services list, and what may be repeated. It is also AUTHORITATIVE on which panels are wrapped
+at all — most runs are a full wrap, but some are a sides-only, sides-plus-rear, or spot-decal
+partial wrap, and when that is the case the reference block overrides any view-by-view guidance
+below that assumes every panel is wrapped: write side_prompt/front_prompt/rear_prompt to match
+what the reference block says is actually wrapped on each view, including saying plainly that a
+view is left in the vehicle's bare paint when that is what was asked for. Read the reference
+block before you design anything, and follow it over any general instinct toward restraint.
+This prompt sets the thinking; that block sets the treatment.
 
 DESIGN MODE. The input carries designMode, and it changes how far you may go:
 
@@ -352,7 +357,7 @@ function assembleImagePrompt(v) {
 
 /**
  * @param {object} business name, service, tagline, phone, website, colours, vehicle,
- *   designMode, designIntensity, and `content` — the supplied wrap copy
+ *   designMode, designIntensity, wrapCoverage, and `content` — the supplied wrap copy
  *   ({ services, badges, serviceArea, yearsInBusiness, socialHandle }).
  * @param {number} userId for cost attribution
  * @param {Array<{buffer: Buffer, mimeType: string, label: string}>} artwork
@@ -386,7 +391,8 @@ async function generateWrapBrief(business, userId, artwork = []) {
     text: buildReferenceBlock(
       [business.businessName, business.service].filter(Boolean).join(' '),
       business.designIntensity,
-      business.content || {}
+      business.content || {},
+      business.wrapCoverage
     ),
   });
 

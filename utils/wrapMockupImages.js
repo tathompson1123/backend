@@ -244,9 +244,12 @@ async function renderBaseVehicle({ year, make, model, trim }) {
  * @param {Buffer} baseImage the three-view sheet from renderBaseVehicle
  * @param {string} imagePrompt the assembled per-view instruction from the brief
  * @param {Array<{buffer: Buffer, mimeType: string, label: string}>} references customer artwork
- * @param {'bold'|'simple'} intensity which treatment — decides the coverage rule
+ * @param {'bold'|'simple'} intensity which treatment — decides how dense the wrapped area is
+ * @param {'full'|'sides'|'sides_rear'|'spot'} coverage how much of the vehicle is wrapped at all —
+ *   orthogonal to intensity: intensity is how busy the wrapped area is, coverage is which panels
+ *   are wrapped in the first place
  */
-async function paintWrap({ baseImage, imagePrompt, references = [], intensity = 'bold' }) {
+async function paintWrap({ baseImage, imagePrompt, references = [], intensity = 'bold', coverage: coveragePreset = 'full' }) {
   const parts = [];
   const refs = (references || []).filter(r => r?.buffer);
   const bold = intensity !== 'simple';
@@ -286,16 +289,52 @@ async function paintWrap({ baseImage, imagePrompt, references = [], intensity = 
       + '\n- Do not tile, collage or repeat the artwork across the vehicle.';
   }
 
-  // Coverage is the difference between a wrap and a decal job, and it is the one rule that
-  // genuinely differs by treatment: the dense look demands every panel, the restrained look
-  // earns its effect from empty base colour.
-  const coverage = bold
-    ? '\n- The wrap covers 100% of the painted bodywork on EVERY view, edge to edge: hood, roof, '
-      + 'doors, full side, rear, front and rear bumpers, mirror caps and the pillars between the '
-      + 'windows. No bare white body panel is visible anywhere unless white is a deliberate field '
-      + 'in the design. Graphics run across panel gaps and door seams uninterrupted, as real vinyl does.'
-    : '\n- Every view carries the base colour across the full body, including hood and bumpers. '
-      + 'Empty space is in the base colour, never in bare white paint.';
+  // Coverage is the difference between a wrap and a decal job. At FULL coverage it is also
+  // the one rule that genuinely differs by treatment: the dense look demands every panel, the
+  // restrained look earns its effect from empty base colour. Partial coverage overrides both —
+  // which panels are wrapped at all is a separate question from how busy the wrapped ones are.
+  const REAR_FULLY_WRAPPED = '\n- The rear is fully wrapped, edge to edge: both rear doors or the '
+    + 'tailgate/hatch, and the rear bumper. No bare white body panel visible there.';
+  const BARE_REAR = '\n- The rear — both rear doors or the tailgate/hatch, and the rear bumper — is '
+    + 'NOT wrapped. It stays in the vehicle\'s own bare factory paint, exactly as shown in the blank '
+    + 'base sheet: no colour fields, no graphics, no text.';
+  const BARE_FRONT = '\n- The front — hood, front bumper and mirror caps — is NOT wrapped. It stays '
+    + 'in the vehicle\'s own bare factory paint, exactly as shown in the blank base sheet: no colour '
+    + 'fields, no graphics, no text. The front view of the sheet shows the vehicle essentially '
+    + 'unwrapped.';
+
+  const coverageByPreset = {
+    full: bold
+      ? '\n- The wrap covers 100% of the painted bodywork on EVERY view, edge to edge: hood, roof, '
+        + 'doors, full side, rear, front and rear bumpers, mirror caps and the pillars between the '
+        + 'windows. No bare white body panel is visible anywhere unless white is a deliberate field '
+        + 'in the design. Graphics run across panel gaps and door seams uninterrupted, as real vinyl does.'
+      : '\n- Every view carries the base colour across the full body, including hood and bumpers. '
+        + 'Empty space is in the base colour, never in bare white paint.',
+
+    sides: '\n- This is a SIDES-ONLY partial wrap, not a full wrap. On the side view only: the wrap '
+      + 'covers the doors, the full side panel and the pillars between the windows, edge to edge, the '
+      + 'way a real sides-only wrap job is cut.'
+      + BARE_FRONT
+      + BARE_REAR
+      + '\n- The rear view of the sheet also shows the vehicle essentially unwrapped, in its bare paint.',
+
+    sides_rear: '\n- This is a SIDES + REAR partial wrap, not a full wrap. On the side view: the wrap '
+      + 'covers the doors, the full side panel and the pillars between the windows, edge to edge, the '
+      + 'way a real partial wrap is cut.'
+      + REAR_FULLY_WRAPPED
+      + BARE_FRONT,
+
+    spot: '\n- This is SPOT GRAPHICS — a decal package, not a wrap. The only graphics anywhere on the '
+      + 'vehicle are the logo and the business wordmark, applied at a moderate size on the front doors '
+      + 'in the side view — NOT edge to edge, NOT spanning the panel, sized the way a real vinyl decal '
+      + 'application is: generous bare paint visible all around it. Every other panel on every view — '
+      + 'hood, roof, rear, bumpers, mirror caps — stays in the vehicle\'s own bare factory paint exactly '
+      + 'as shown in the blank base sheet: no colour fields, no additional graphics, no text.'
+      + '\n- The front and rear views of the sheet show the vehicle essentially unwrapped, in its bare paint.',
+  };
+
+  const coverage = coverageByPreset[coveragePreset] || coverageByPreset.full;
 
   const instruction = imagePrompt + '\n\nMANDATORY CONSTRAINTS:'
     + '\n- Keep the THREE-VIEW LAYOUT exactly as in the attached sheet: the side profile across the '
