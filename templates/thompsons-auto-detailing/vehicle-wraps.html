@@ -3,23 +3,105 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vehicle Wraps | Thompson's Auto Detailing — Olympia, WA</title>
-  <meta name="description" content="Custom vehicle wraps in Olympia, WA. Full color-change wraps, partial and accent wraps, and custom graphics in gloss, matte, satin, chrome and color-shift finishes — fully reversible and paint-safe." />
+  <title>Vehicle Wraps Olympia WA | Commercial Fleet Wraps, Color Change &amp; Chrome Delete | Thompson's Auto Detailing</title>
+  <meta name="description" content="Commercial fleet wraps, personal color-change vinyl wraps, and chrome delete in Olympia, WA. Full, partial or decal fleet branding; 50+ real Cheetah Wrap colors in gloss, satin and matte. Free design mockup on request." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- SEO structured data — no street address included since none was supplied; add one before publish if you want the full LocalBusiness rich result. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "AutomotiveBusiness",
+    "name": "Thompson's Auto Detailing",
+    "telephone": "+1-360-463-1391",
+    "areaServed": { "@type": "City", "name": "Olympia, WA" },
+    "priceRange": "$$",
+    "makesOffer": [
+      {
+        "@type": "Offer",
+        "itemOffered": {
+          "@type": "Service",
+          "name": "Commercial Fleet Vehicle Wraps",
+          "description": "Full, partial (sides and rear) and decal-application fleet wraps for business vehicles.",
+          "areaServed": "Olympia, WA"
+        }
+      },
+      {
+        "@type": "Offer",
+        "itemOffered": {
+          "@type": "Service",
+          "name": "Personal Vehicle Color Change Wraps",
+          "description": "Full-color-change vinyl vehicle wraps in gloss, satin and matte finishes, plus accent wraps like carbon fiber hoods.",
+          "areaServed": "Olympia, WA"
+        }
+      },
+      {
+        "@type": "Offer",
+        "itemOffered": {
+          "@type": "Service",
+          "name": "Chrome Delete",
+          "description": "Precision-cut black vinyl chrome delete for window trim, grille surrounds and badges.",
+          "areaServed": "Olympia, WA"
+        }
+      }
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Do you install commercial fleet wraps near Olympia, WA?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes — we design and install commercial fleet wraps for businesses in and around Olympia, WA, from a single work truck to a full fleet. We can also handle partial wraps and decal-only branding if a full wrap isn't in the budget." }
+      },
+      {
+        "@type": "Question",
+        "name": "What's the difference between a full wrap, partial wrap, and decal application?",
+        "acceptedAnswer": { "@type": "Answer", "text": "A full wrap covers every exterior panel for maximum visibility. A partial wrap covers the sides and rear (the panels people actually see in traffic and parking lots) while the hood and roof stay factory. Decal application is cut vinyl graphics — your logo, name and number — applied directly, without covering the vehicle's painted panels. All three are real options depending on budget and how much coverage you want." }
+      },
+      {
+        "@type": "Question",
+        "name": "How much does a vehicle wrap cost?",
+        "acceptedAnswer": { "@type": "Answer", "text": "It depends on the vehicle size, the coverage (full, partial or decal), and the finish. We'll give you an exact quote once we know your vehicle and what you're picturing — request a free mockup and we'll follow up with pricing." }
+      },
+      {
+        "@type": "Question",
+        "name": "Will a wrap damage my vehicle's factory paint?",
+        "acceptedAnswer": { "@type": "Answer", "text": "No — a properly installed and removed wrap doesn't harm paint in good condition. It's designed to protect the paint underneath while it's on, and to come off clean." }
+      },
+      {
+        "@type": "Question",
+        "name": "Do you offer chrome delete near me?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes — we install precision-cut black chrome delete film over window trim, grille surrounds, mirror caps and badges, in gloss, satin or matte black." }
+      },
+      {
+        "@type": "Question",
+        "name": "What color options do I have for a personal wrap?",
+        "acceptedAnswer": { "@type": "Answer", "text": "We work with Cheetah Wrap's full color line — dozens of colors across gloss, satin and matte finishes, plus metallic and aluminum-finish options. You can browse and select the colors you're interested in right on this page." }
+      }
+    ]
+  }
+  </script>
+
   <style>
+    /* Light theme — backgrounds light, text dark, gold accents kept */
     :root {
-      /* Light theme — backgrounds light, text dark, gold accents kept */
-      --navy: #ffffff;            /* section backgrounds */
-      --navy-deep: #f6f3ec;       /* page / deepest panels */
-      --navy-soft: #ece4d6;       /* cards / soft panels / bar tracks */
-      --gold: #d4a544;            /* gold fills (buttons, bars, icons) */
-      --gold-bright: #f0c265;     /* hover / brightest gold */
-      --gold-deep: #8a6a23;       /* gold accent TEXT (readable on light) */
-      --off-white: #18283f;       /* primary text (deep navy) */
-      --ink: #14181f;             /* text on gold fills (near-black) */
+      --navy: #ffffff;
+      --navy-deep: #f6f3ec;
+      --navy-soft: #ece4d6;
+      --gold: #d4a544;
+      --gold-bright: #f0c265;
+      --gold-deep: #8a6a23;
+      --off-white: #18283f;
+      --ink: #14181f;
       --muted: rgba(24, 40, 63, 0.66);
+      --good: #2f7d45;
+      --bad: #9b111e;
       --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
       --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     }
@@ -39,177 +121,171 @@
     .btn-primary:hover { background: var(--gold-bright); transform: translateY(-3px); box-shadow: 0 16px 40px rgba(212, 165, 68, 0.4); }
     .btn-ghost { color: var(--off-white); border-color: rgba(24, 40, 63, 0.35); }
     .btn-ghost:hover { background: var(--off-white); color: var(--navy); border-color: var(--off-white); transform: translateY(-3px); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
 
     @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-    /* ---------- Hero (cinematic image) ---------- */
-    .phero { position: relative; min-height: 600px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 6rem 2rem; overflow: hidden; isolation: isolate; }
-    .phero-bg {
-      position: absolute; inset: -6%; z-index: -3;
-      background: url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=1920&q=85') center/cover no-repeat;
-      animation: kenBurns 26s ease-in-out infinite alternate; will-change: transform;
-    }
+    /* ---------- Hero ---------- */
+    .phero { position: relative; min-height: 520px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 6rem 2rem 4rem; overflow: hidden; isolation: isolate; }
+    .phero-bg { position: absolute; inset: -6%; z-index: -3; background: url('images/fleet-precision-tint.jpg') center 30%/cover no-repeat; animation: kenBurns 26s ease-in-out infinite alternate; will-change: transform; }
     @keyframes kenBurns { 0% { transform: scale(1) translate(0, 0); } 100% { transform: scale(1.14) translate(-1.5%, -2%); } }
-    .phero-overlay {
-      position: absolute; inset: 0; z-index: -2;
-      background:
-        radial-gradient(circle at 50% 28%, rgba(212, 165, 68, 0.18) 0%, transparent 55%),
-        linear-gradient(180deg, rgba(246, 243, 236, 0.86) 0%, rgba(246, 243, 236, 0.72) 42%, rgba(255, 255, 255, 0.95) 100%);
-    }
-    .phero-sweep { position: absolute; top: 0; bottom: 0; left: -30%; width: 22%; z-index: -1; background: linear-gradient(105deg, transparent, rgba(240, 194, 101, 0.18), transparent); transform: rotate(7deg); animation: pheroSweep 8s ease-in-out 1.6s infinite; }
-    @keyframes pheroSweep { 0% { left: -30%; } 55%, 100% { left: 130%; } }
-
-    .phero-inner { position: relative; z-index: 1; max-width: 920px; }
-    .page-eyebrow { display: inline-block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--gold-deep); font-weight: 600; margin-bottom: 1.75rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 0.3s forwards; }
+    .phero-overlay { position: absolute; inset: 0; z-index: -2; background: radial-gradient(circle at 50% 28%, rgba(212, 165, 68, 0.18) 0%, transparent 55%), linear-gradient(180deg, rgba(246, 243, 236, 0.88) 0%, rgba(246, 243, 236, 0.78) 42%, rgba(255, 255, 255, 0.96) 100%); }
+    .phero-inner { position: relative; z-index: 1; max-width: 940px; }
+    .page-eyebrow { display: inline-block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--gold-deep); font-weight: 600; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 0.3s forwards; }
     .page-eyebrow::before, .page-eyebrow::after { content: ''; display: inline-block; width: 30px; height: 1px; background: var(--gold); vertical-align: middle; margin: 0 0.85rem; }
-    .page-title { font-family: 'Playfair Display', serif; font-size: clamp(2.6rem, 6.5vw, 5rem); font-weight: 900; line-height: 1.04; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 1s var(--ease-out) 0.5s forwards; }
+    .page-title { font-family: 'Playfair Display', serif; font-size: clamp(2.4rem, 6vw, 4.4rem); font-weight: 900; line-height: 1.06; margin-bottom: 1.25rem; opacity: 0; animation: fadeUp 1s var(--ease-out) 0.5s forwards; }
     .page-title em { font-style: normal; background: linear-gradient(120deg, var(--gold) 0%, var(--gold-bright) 50%, var(--gold) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-    .page-lede { font-size: clamp(1.05rem, 1.5vw, 1.28rem); color: var(--off-white); max-width: 740px; margin: 0 auto 2.5rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 0.8s forwards; }
+    .page-lede { font-size: clamp(1.02rem, 1.4vw, 1.2rem); color: var(--off-white); max-width: 720px; margin: 0 auto 2rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 0.8s forwards; }
     .page-ctas { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; opacity: 0; animation: fadeUp 0.8s var(--ease-spring) 1.05s forwards; }
-    .hero-call { margin-top: 1.1rem; font-size: 0.98rem; color: var(--muted); opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.2s forwards; }
-    .hero-call a { color: var(--gold-deep); font-weight: 700; border-bottom: 1px solid rgba(212, 165, 68, 0.4); transition: color 0.3s; }
-    .hero-call a:hover { color: var(--gold-bright); }
-    .hero-trust { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 2.25rem; opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.3s forwards; }
-    .hero-chip { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase; font-weight: 600; color: var(--off-white); border: 1px solid rgba(212, 165, 68, 0.5); border-radius: 100px; padding: 0.5rem 1.1rem; background: rgba(255, 255, 255, 0.72); backdrop-filter: blur(6px); }
-    .hero-chip span { color: var(--gold-deep); }
+    .hero-call { margin-top: 1.1rem; font-size: 0.95rem; color: var(--muted); opacity: 0; animation: fadeUp 0.8s var(--ease-out) 1.2s forwards; }
+    .hero-call a { color: var(--gold-deep); font-weight: 700; border-bottom: 1px solid rgba(212, 165, 68, 0.4); }
 
     /* ---------- Reveal-on-scroll ---------- */
     .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.8s var(--ease-out), transform 0.8s var(--ease-out); }
     .reveal.in-view { opacity: 1; transform: translateY(0); }
     .reveal-stagger > * { opacity: 0; transform: translateY(30px); transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out); }
     .reveal-stagger.in-view > *:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0s; }
-    .reveal-stagger.in-view > *:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.1s; }
-    .reveal-stagger.in-view > *:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.2s; }
-    .reveal-stagger.in-view > *:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 0.3s; }
-    .reveal-stagger.in-view > *:nth-child(5) { opacity: 1; transform: translateY(0); transition-delay: 0.4s; }
-    .reveal-stagger.in-view > *:nth-child(6) { opacity: 1; transform: translateY(0); transition-delay: 0.5s; }
+    .reveal-stagger.in-view > *:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.08s; }
+    .reveal-stagger.in-view > *:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.16s; }
+    .reveal-stagger.in-view > *:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 0.24s; }
+    .reveal-stagger.in-view > *:nth-child(5) { opacity: 1; transform: translateY(0); transition-delay: 0.32s; }
+    .reveal-stagger.in-view > *:nth-child(6) { opacity: 1; transform: translateY(0); transition-delay: 0.4s; }
+    .reveal-stagger.in-view > *:nth-child(7) { opacity: 1; transform: translateY(0); transition-delay: 0.48s; }
 
-    /* ---------- Common section styles ---------- */
-    section { padding: 6rem 2rem; }
+    /* ---------- Common section ---------- */
+    section { padding: 5rem 2rem; }
     .container { max-width: 1280px; margin: 0 auto; }
     .section-eyebrow { display: block; font-size: 0.78rem; letter-spacing: 4px; text-transform: uppercase; color: var(--gold-deep); font-weight: 600; margin-bottom: 1rem; }
-    .section-title { font-family: 'Playfair Display', serif; font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; line-height: 1.15; margin-bottom: 1rem; }
-    .section-lede { color: var(--muted); max-width: 620px; font-size: 1.02rem; }
-    .section-head { text-align: center; margin: 0 auto 4rem; max-width: 720px; }
+    .section-title { font-family: 'Playfair Display', serif; font-size: clamp(1.9rem, 3.6vw, 2.8rem); font-weight: 700; line-height: 1.15; margin-bottom: 1rem; }
+    .section-lede { color: var(--muted); max-width: 640px; font-size: 1rem; }
+    .section-head { text-align: center; margin: 0 auto 3rem; max-width: 740px; }
     .section-head .section-lede { margin: 0 auto; }
 
-    /* ---------- "Why wrap" split (KEPT pattern) ---------- */
-    .what { background: var(--navy); }
-    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center; }
-    .split-image { position: relative; aspect-ratio: 4/5; border-radius: 4px; overflow: hidden; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4); }
-    .split-image img { width: 100%; height: 100%; object-fit: cover; }
-    .split-image::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 60%, rgba(7, 13, 31, 0.6) 100%); }
-    .split-content h2 { margin-bottom: 1.5rem; }
-    .split-content p { color: var(--muted); margin-bottom: 1rem; font-size: 1.05rem; }
-    .split-content ul { list-style: none; margin-top: 1.5rem; }
-    .split-content li { padding: 0.75rem 0 0.75rem 2rem; position: relative; color: var(--off-white); border-bottom: 1px solid rgba(212, 165, 68, 0.15); }
-    .split-content li::before { content: '✓'; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; background: var(--gold); color: var(--ink); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; }
+    /* ---------- Type selector ---------- */
+    .type-selector { background: var(--navy); }
+    .type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.75rem; }
+    .type-card { cursor: pointer; text-align: center; padding: 2.5rem 1.75rem; border: 2px solid rgba(212, 165, 68, 0.2); border-radius: 12px; background: var(--navy-deep); transition: transform 0.35s var(--ease-out), border-color 0.35s, box-shadow 0.35s; }
+    .type-card:hover { transform: translateY(-5px); border-color: var(--gold-deep); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.1); }
+    .type-card.active { border-color: var(--gold-deep); background: linear-gradient(180deg, var(--navy-soft), var(--navy-deep)); box-shadow: 0 20px 50px rgba(212, 165, 68, 0.22); transform: translateY(-5px); }
+    .type-icon { font-size: 2.4rem; margin-bottom: 1rem; }
+    .type-card h3 { font-family: 'Playfair Display', serif; font-size: 1.35rem; margin-bottom: 0.5rem; }
+    .type-card p { color: var(--muted); font-size: 0.92rem; }
+    .type-card .type-cta { display: inline-block; margin-top: 1.1rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold-deep); }
 
-    /* ---------- Finish & color gallery (NEW — wrap-specific) ---------- */
-    .finishes { background: linear-gradient(180deg, var(--navy-deep), var(--navy)); }
-    .finishes-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.75rem; }
-    .finish-card { border: 1px solid rgba(212, 165, 68, 0.22); border-radius: 8px; overflow: hidden; background: var(--navy); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12); transition: transform 0.4s var(--ease-out), border-color 0.4s, box-shadow 0.4s; }
-    .finish-card:hover { transform: translateY(-6px); border-color: var(--gold-deep); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.18); }
-    .finish-swatch { position: relative; height: 140px; overflow: hidden; isolation: isolate; }
-    .finish-swatch::after { content: ''; position: absolute; top: -60%; left: -40%; width: 45%; height: 220%; background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.35), transparent); transform: rotate(10deg); animation: finishSweep 6s ease-in-out infinite; }
-    @keyframes finishSweep { 0%, 100% { left: -45%; } 50% { left: 130%; } }
-    .finish-swatch.gloss { background: linear-gradient(135deg, #14213d 0%, #2c4a7c 45%, #14213d 100%); }
-    .finish-swatch.matte { background: linear-gradient(135deg, #3a3a3a 0%, #55524c 100%); }
-    .finish-swatch.satin { background: linear-gradient(135deg, #6b6f76 0%, #9aa0a8 55%, #6b6f76 100%); }
-    .finish-swatch.chrome { background: linear-gradient(135deg, #c9d3da 0%, #6f7a82 30%, #eef2f4 55%, #4a545c 80%, #d7dee2 100%); }
-    .finish-swatch.shift { background: linear-gradient(120deg, #7b2ff7 0%, #d4a544 35%, #2c9e6b 65%, #7b2ff7 100%); }
-    .finish-swatch.custom { background: linear-gradient(135deg, var(--navy-deep) 0%, var(--navy-deep) 49%, var(--gold) 50%, var(--gold-bright) 100%); }
-    .finish-body { padding: 1.5rem; }
-    .finish-body h3 { font-family: 'Playfair Display', serif; font-size: 1.3rem; margin-bottom: 0.4rem; }
-    .finish-body p { color: var(--muted); font-size: 0.92rem; }
+    /* ---------- Type panels ---------- */
+    .type-panel { display: none; }
+    .type-panel.active { display: block; }
+    .type-panel-header { background: var(--navy-deep); text-align: center; padding-bottom: 2rem; }
 
-    /* ---------- Comparison (KEPT pattern) ---------- */
-    .compare { background: linear-gradient(180deg, var(--navy), var(--navy-deep)); }
-    .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-    .compare-card { background: var(--navy-soft); border: 1px solid rgba(212, 165, 68, 0.18); padding: 2.5rem; border-radius: 4px; position: relative; transition: transform 0.5s var(--ease-out), border-color 0.5s, box-shadow 0.5s; }
-    .compare-card.featured { border-color: var(--gold-deep); box-shadow: 0 30px 80px rgba(212, 165, 68, 0.18); transform: translateY(-4px); }
-    .compare-card.featured::before { content: 'REVERSIBLE'; position: absolute; top: -12px; left: 2rem; background: var(--gold); color: var(--ink); padding: 0.4rem 0.85rem; font-size: 0.7rem; letter-spacing: 1.5px; font-weight: 700; }
-    .compare-card h3 { font-family: 'Playfair Display', serif; font-size: 1.6rem; margin-bottom: 0.4rem; }
-    .compare-card .compare-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
-    .compare-list { list-style: none; }
-    .compare-list li { padding: 0.85rem 0; border-bottom: 1px solid rgba(245, 243, 238, 0.08); display: flex; gap: 0.75rem; align-items: flex-start; color: var(--muted); }
-    .compare-list li::before { content: '–'; color: rgba(245, 243, 238, 0.4); flex-shrink: 0; }
-    .compare-card.featured .compare-list li::before { content: '✓'; color: var(--gold-deep); font-weight: 700; }
-    .compare-card.featured .compare-list li { color: var(--off-white); }
+    /* ---------- Benefit grid (used by all three panels) ---------- */
+    .benefit-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+    .benefit-grid.cols-2 { grid-template-columns: repeat(2, 1fr); max-width: 760px; margin: 0 auto; }
+    .benefit-card { text-align: center; padding: 2.2rem 1.4rem; border: 1px solid rgba(212, 165, 68, 0.2); border-radius: 10px; background: linear-gradient(180deg, var(--navy-soft), var(--navy-deep)); }
+    .benefit-icon { width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 1.1rem; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; color: var(--gold-deep); background: rgba(212, 165, 68, 0.12); border: 1px solid var(--gold); }
+    .benefit-card h4 { font-family: 'Playfair Display', serif; font-size: 1.12rem; margin-bottom: 0.4rem; }
+    .benefit-card p { color: var(--muted); font-size: 0.86rem; }
 
-    /* ---------- Assurance band (KEPT pattern) ---------- */
+    /* ---------- Option cards (coverage tiers) ---------- */
+    .option-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+    .option-grid.cols-2 { grid-template-columns: repeat(2, 1fr); max-width: 760px; margin: 0 auto; }
+    .option-card { background: var(--navy); border: 1px solid rgba(212, 165, 68, 0.18); border-radius: 8px; padding: 2rem 1.6rem; text-align: center; }
+    .option-card .tier { font-size: 0.76rem; letter-spacing: 2.5px; text-transform: uppercase; color: var(--gold-deep); font-weight: 700; margin-bottom: 0.6rem; }
+    .option-card p { color: var(--muted); font-size: 0.9rem; }
+
+    /* ---------- Photo gallery ---------- */
+    .gallery-note { text-align: center; font-size: 0.82rem; color: var(--muted); font-style: italic; max-width: 640px; margin: 0 auto 2rem; }
+    .gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+    .gallery-item { border-radius: 8px; overflow: hidden; border: 1px solid rgba(212, 165, 68, 0.2); box-shadow: 0 16px 34px rgba(0, 0, 0, 0.1); background: var(--navy); }
+    .gallery-item img { width: 100%; height: 230px; object-fit: cover; }
+    .gallery-caption { padding: 0.7rem 0.9rem; font-size: 0.78rem; color: var(--muted); text-align: center; }
+
+    /* ---------- Accent-wrap callout (carbon hood) ---------- */
+    .accent-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+    .accent-item { border-radius: 8px; overflow: hidden; border: 1px solid rgba(212, 165, 68, 0.2); box-shadow: 0 16px 34px rgba(0, 0, 0, 0.1); }
+    .accent-item img { width: 100%; height: 320px; object-fit: cover; }
+    .accent-caption { padding: 0.8rem 1rem; font-size: 0.82rem; color: var(--muted); text-align: center; background: var(--navy); }
+
+    /* ---------- Finish tabs + color swatches ---------- */
+    .finish-tabs { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; margin-bottom: 2rem; }
+    .finish-tab { padding: 0.65rem 1.5rem; border-radius: 100px; border: 1px solid rgba(212, 165, 68, 0.35); background: var(--navy); font-family: 'Inter', sans-serif; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.5px; cursor: pointer; color: var(--off-white); transition: background 0.25s, color 0.25s, border-color 0.25s; }
+    .finish-tab.active { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+    .swatch-family { display: none; }
+    .swatch-family.active { display: block; }
+    .swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.7rem; }
+    .swatch-chip { display: flex; align-items: center; gap: 0.65rem; padding: 0.6rem 0.75rem; border: 1px solid rgba(212, 165, 68, 0.22); border-radius: 8px; background: var(--navy); cursor: pointer; transition: border-color 0.2s, background 0.2s; text-align: left; width: 100%; font-family: 'Inter', sans-serif; }
+    .swatch-chip:hover { border-color: var(--gold-deep); }
+    .swatch-chip.selected { border-color: var(--gold-deep); background: rgba(212, 165, 68, 0.1); }
+    .sw-dot { width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(24, 40, 63, 0.2); flex-shrink: 0; }
+    .sw-name { font-size: 0.76rem; color: var(--off-white); line-height: 1.25; }
+    .swatch-chip.selected .sw-name { color: var(--gold-deep); font-weight: 700; }
+    .sw-check { margin-left: auto; opacity: 0; color: var(--gold-deep); font-size: 0.85rem; flex-shrink: 0; }
+    .swatch-chip.selected .sw-check { opacity: 1; }
+    .swatch-disclaimer { text-align: center; font-size: 0.78rem; color: var(--muted); font-style: italic; margin-top: 1.25rem; }
+    .selected-summary { text-align: center; font-size: 0.88rem; color: var(--gold-deep); font-weight: 600; margin-top: 1.5rem; min-height: 1.3em; }
+
+    /* ---------- Lead forms ---------- */
+    .lead-form-wrap { max-width: 680px; margin: 0 auto; }
+    .lead-form { background: var(--navy); border: 1px solid rgba(212, 165, 68, 0.22); border-radius: 12px; padding: 2.5rem; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+    .form-field { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.1rem; }
+    .form-field label { font-size: 0.74rem; font-weight: 700; color: var(--gold-deep); letter-spacing: 0.8px; text-transform: uppercase; }
+    .form-field input, .form-field select, .form-field textarea { padding: 0.8rem 1rem; border: 1px solid rgba(24, 40, 63, 0.2); border-radius: 6px; font-size: 0.95rem; font-family: 'Inter', sans-serif; background: var(--navy-deep); color: var(--off-white); }
+    .form-field textarea { resize: vertical; min-height: 80px; }
+    .form-field input:focus, .form-field select:focus, .form-field textarea:focus { outline: none; border-color: var(--gold-deep); }
+    .consent-row { display: flex; align-items: flex-start; gap: 0.7rem; margin: 0.5rem 0 1.5rem; }
+    .consent-row input[type="checkbox"] { margin-top: 3px; width: 19px; height: 19px; min-width: 19px; accent-color: var(--gold-deep); cursor: pointer; }
+    .consent-row label { font-size: 0.76rem; color: var(--muted); line-height: 1.45; }
+    .form-status { margin-top: 1.1rem; padding: 0.9rem 1.1rem; border-radius: 6px; font-size: 0.86rem; display: none; }
+    .form-status.show-success { display: block; background: rgba(47, 125, 69, 0.1); color: var(--good); border: 1px solid rgba(47, 125, 69, 0.3); }
+    .form-status.show-error { display: block; background: rgba(155, 17, 30, 0.08); color: var(--bad); border: 1px solid rgba(155, 17, 30, 0.25); }
+
+    /* ---------- Assurance band ---------- */
     .assure { background: var(--navy); }
     .assure-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
-    .assure-card { text-align: center; padding: 2.75rem 1.75rem; border: 1px solid rgba(212, 165, 68, 0.22); border-radius: 8px; background: linear-gradient(180deg, var(--navy-soft), var(--navy-deep)); position: relative; overflow: hidden; transition: transform 0.4s var(--ease-out), border-color 0.4s, box-shadow 0.4s; }
-    .assure-card:hover { transform: translateY(-6px); border-color: var(--gold-deep); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.4); }
-    .assure-card::after { content: ''; position: absolute; top: -60%; left: -40%; width: 50%; height: 220%; background: linear-gradient(105deg, transparent, rgba(240, 194, 101, 0.10), transparent); transform: rotate(8deg); transition: left 0.8s var(--ease-out); }
-    .assure-card:hover::after { left: 140%; }
-    .assure-icon { width: 78px; height: 78px; border-radius: 50%; margin: 0 auto 1.4rem; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--gold-deep); background: rgba(212, 165, 68, 0.12); border: 1px solid var(--gold); }
-    .assure-card .big { font-family: 'Playfair Display', serif; font-size: 2.4rem; color: var(--gold-deep); line-height: 1; margin-bottom: 0.3rem; }
-    .assure-card h3 { font-family: 'Playfair Display', serif; font-size: 1.45rem; margin-bottom: 0.5rem; }
-    .assure-card p { color: var(--muted); font-size: 0.97rem; }
+    .assure-card { text-align: center; padding: 2.6rem 1.6rem; border: 1px solid rgba(212, 165, 68, 0.22); border-radius: 8px; background: linear-gradient(180deg, var(--navy-soft), var(--navy-deep)); position: relative; overflow: hidden; }
+    .assure-icon { width: 74px; height: 74px; border-radius: 50%; margin: 0 auto 1.3rem; display: flex; align-items: center; justify-content: center; font-size: 1.9rem; color: var(--gold-deep); background: rgba(212, 165, 68, 0.12); border: 1px solid var(--gold); }
+    .assure-card .big { font-family: 'Playfair Display', serif; font-size: 2.2rem; color: var(--gold-deep); line-height: 1; margin-bottom: 0.3rem; }
+    .assure-card h3 { font-family: 'Playfair Display', serif; font-size: 1.35rem; margin-bottom: 0.5rem; }
+    .assure-card p { color: var(--muted); font-size: 0.94rem; }
 
-    /* ---------- Benefits strip (SCANNABLE) ---------- */
-    .bstrip-section { background: var(--navy-deep); }
-    .bstrip { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; max-width: 1000px; margin: 0 auto; }
-    .bchip { display: flex; align-items: center; gap: 0.85rem; background: var(--navy-soft); border: 1px solid rgba(212, 165, 68, 0.2); border-radius: 100px; padding: 0.85rem 1.5rem; transition: border-color 0.3s, transform 0.3s; }
-    .bchip:hover { border-color: var(--gold-deep); transform: translateY(-3px); }
-    .bchip .ic { width: 38px; height: 38px; border-radius: 50%; background: rgba(212, 165, 68, 0.12); border: 1px solid var(--gold); color: var(--gold-deep); display: flex; align-items: center; justify-content: center; font-size: 1.05rem; flex-shrink: 0; }
-    .bchip b { font-size: 0.95rem; color: var(--off-white); font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; }
-
-    /* ---------- Process (KEPT pattern) ---------- */
-    .process { background: var(--navy); position: relative; overflow: hidden; }
+    /* ---------- Process ---------- */
+    .process { background: var(--navy-deep); position: relative; overflow: hidden; }
     .process::before { content: ''; position: absolute; left: 50%; top: 8rem; bottom: 5rem; width: 1px; background: linear-gradient(180deg, transparent, var(--gold), transparent); transform: translateX(-50%); opacity: 0.4; }
-    .step-grid { display: flex; flex-direction: column; gap: 4rem; }
-    .step { display: grid; grid-template-columns: 1fr 60px 1fr; gap: 2rem; align-items: start; }
-    .step-num { width: 56px; height: 56px; border-radius: 50%; background: var(--gold); color: var(--ink); display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 700; box-shadow: 0 0 0 6px var(--navy), 0 0 0 7px rgba(212, 165, 68, 0.4); grid-column: 2; justify-self: center; align-self: start; margin-top: -0.9rem; }
+    .step-grid { display: flex; flex-direction: column; gap: 3.5rem; }
+    .step { display: grid; grid-template-columns: 1fr 56px 1fr; gap: 2rem; align-items: start; }
+    .step-num { width: 52px; height: 52px; border-radius: 50%; background: var(--gold); color: var(--ink); display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 1.3rem; font-weight: 700; box-shadow: 0 0 0 6px var(--navy-deep), 0 0 0 7px rgba(212, 165, 68, 0.4); grid-column: 2; justify-self: center; margin-top: -0.8rem; }
     .step:nth-child(odd) .step-content { grid-column: 1; text-align: right; }
     .step:nth-child(even) .step-content { grid-column: 3; }
-    .step-content h4 { font-family: 'Playfair Display', serif; font-size: 1.4rem; line-height: 1.2; margin-bottom: 0.5rem; color: var(--off-white); }
-    .step-content p { color: var(--muted); font-size: 0.97rem; }
+    .step-content h4 { font-family: 'Playfair Display', serif; font-size: 1.3rem; margin-bottom: 0.4rem; }
+    .step-content p { color: var(--muted); font-size: 0.93rem; }
 
-    /* ---------- Packages / coverage tiers (KEPT pattern) ---------- */
-    .pricing { background: var(--navy-deep); }
-    .price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
-    .price-card { background: var(--navy); border: 1px solid rgba(212, 165, 68, 0.18); padding: 2.5rem 2rem; border-radius: 4px; text-align: center; transition: transform 0.4s, border-color 0.4s, box-shadow 0.4s; }
-    .price-card:hover { transform: translateY(-6px); border-color: var(--gold-deep); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4); }
-    .price-card.featured { border-color: var(--gold-deep); box-shadow: 0 20px 50px rgba(212, 165, 68, 0.2); }
-    .price-card .tier { font-size: 0.78rem; letter-spacing: 3px; text-transform: uppercase; color: var(--gold-deep); margin-bottom: 1rem; }
-    .price-card .price-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
-    .price-list { list-style: none; text-align: left; margin-bottom: 2rem; }
-    .price-list li { padding: 0.6rem 0 0.6rem 1.75rem; position: relative; color: var(--muted); font-size: 0.92rem; border-bottom: 1px solid rgba(245, 243, 238, 0.06); }
-    .price-list li::before { content: '✓'; position: absolute; left: 0; color: var(--gold-deep); font-weight: 700; }
-
-    /* ---------- FAQ (KEPT pattern) ---------- */
+    /* ---------- FAQ ---------- */
     .faq { background: var(--navy); }
     .faq-list { max-width: 820px; margin: 0 auto; }
-    .faq-item { border-bottom: 1px solid rgba(212, 165, 68, 0.18); padding: 1.5rem 0; }
-    .faq-q { display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 1rem; font-family: 'Playfair Display', serif; font-size: 1.2rem; color: var(--off-white); }
-    .faq-toggle { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--gold); display: flex; align-items: center; justify-content: center; color: var(--gold-deep); transition: transform 0.4s var(--ease-out); }
+    .faq-item { border-bottom: 1px solid rgba(212, 165, 68, 0.18); padding: 1.4rem 0; }
+    .faq-q { display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 1rem; font-family: 'Playfair Display', serif; font-size: 1.12rem; color: var(--off-white); }
+    .faq-toggle { width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--gold); display: flex; align-items: center; justify-content: center; color: var(--gold-deep); transition: transform 0.4s var(--ease-out); }
     .faq-item[open] .faq-toggle { transform: rotate(45deg); background: var(--gold); color: var(--ink); }
-    .faq-a { color: var(--muted); padding-top: 1rem; font-size: 0.97rem; }
+    .faq-a { color: var(--muted); padding-top: 0.9rem; font-size: 0.94rem; }
     .faq-q::-webkit-details-marker { display: none; }
 
     /* ---------- CTA band ---------- */
-    .cta-band { background: linear-gradient(120deg, var(--navy) 0%, var(--navy-soft) 50%, var(--navy) 100%); text-align: center; padding: 6rem 2rem; position: relative; overflow: hidden; }
+    .cta-band { background: linear-gradient(120deg, var(--navy) 0%, var(--navy-soft) 50%, var(--navy) 100%); text-align: center; padding: 5rem 2rem; position: relative; overflow: hidden; }
     .cta-band::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(212, 165, 68, 0.18) 0%, transparent 60%); }
     .cta-band > * { position: relative; z-index: 1; }
-    .cta-band h2 { font-family: 'Playfair Display', serif; font-size: clamp(2rem, 4vw, 3rem); margin-bottom: 1rem; }
-    .cta-band p { color: var(--muted); margin-bottom: 2rem; font-size: 1.05rem; max-width: 620px; margin-left: auto; margin-right: auto; }
-    .cta-trust { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
-    .cta-trust span { font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase; color: var(--gold-deep); font-weight: 600; }
-    .cta-trust span + span::before { content: '·'; margin-right: 0.75rem; color: var(--muted); }
+    .cta-band h2 { font-family: 'Playfair Display', serif; font-size: clamp(1.8rem, 3.6vw, 2.6rem); margin-bottom: 1rem; }
+    .cta-band p { color: var(--muted); margin-bottom: 2rem; font-size: 1.02rem; max-width: 600px; margin-left: auto; margin-right: auto; }
 
     /* ---------- Responsive ---------- */
     @media (max-width: 900px) {
-      .split, .compare-grid, .assure-grid, .price-grid, .finishes-grid { grid-template-columns: 1fr; gap: 2rem; }
-      .step { grid-template-columns: 60px 1fr; gap: 1.25rem; }
+      .type-grid, .benefit-grid, .option-grid, .gallery-grid, .accent-grid, .assure-grid, .form-row { grid-template-columns: 1fr; gap: 1.25rem; }
+      .step { grid-template-columns: 52px 1fr; gap: 1.1rem; }
       .step-num { grid-column: 1; }
-      .step:nth-child(odd) .step-content,
-      .step:nth-child(even) .step-content { grid-column: 2; text-align: left; }
-      .process::before { left: 28px; transform: none; }
-      section { padding: 4.5rem 1.5rem; }
-      .phero { min-height: 460px; padding: 3.5rem 1.5rem 4rem; }
+      .step:nth-child(odd) .step-content, .step:nth-child(even) .step-content { grid-column: 2; text-align: left; }
+      .process::before { left: 26px; transform: none; }
+      section { padding: 3.5rem 1.25rem; }
+      .phero { min-height: 440px; padding: 3.25rem 1.25rem 3.5rem; }
+      .lead-form { padding: 1.75rem; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -223,137 +299,413 @@
   <header class="phero">
     <div class="phero-bg" aria-hidden="true"></div>
     <div class="phero-overlay" aria-hidden="true"></div>
-    <div class="phero-sweep" aria-hidden="true"></div>
-
     <div class="phero-inner">
-      <span class="page-eyebrow">Color change &amp; custom graphics</span>
-      <h1 class="page-title">Vehicle <em>Wraps</em></h1>
+      <span class="page-eyebrow">Fleet · Personal · Chrome Delete</span>
+      <h1 class="page-title">Vehicle Wraps in <em>Olympia, WA</em></h1>
       <p class="page-lede">
-        A totally new look, without touching a drop of paint. Full color-change wraps, partial and accent wraps, and custom graphics — in gloss, matte, satin, chrome or color-shift — installed clean and fully reversible.
+        Commercial fleet wraps, full color-change vinyl wraps, and chrome delete — precision-installed and fully reversible. Tell us what you're picturing below and we'll show you exactly what's possible, starting with a free design mockup.
       </p>
       <div class="page-ctas">
-        <a href="sms:+13604631391?&body=I%27m%20interested%20in%20getting%20a%20vehicle%20wrap%20for%20my%20car" target="_top" class="btn btn-primary">Get a Quote</a>
+        <a href="#wrap-type-selector" class="btn btn-primary">See Wrap Options ↓</a>
       </div>
-      <p class="hero-call">Or call <a href="tel:+13604631391" target="_top">(360)&nbsp;463-1391</a></p>
-      <div class="hero-trust">
-        <span class="hero-chip"><span>🎨</span> Any Color, Any Finish</span>
-        <span class="hero-chip"><span>↺</span> 100% Reversible</span>
-        <span class="hero-chip"><span>🛡</span> Protects Factory Paint</span>
-      </div>
+      <p class="hero-call">Or call/text <a href="tel:+13604631391" target="_top">(360)&nbsp;463-1391</a></p>
     </div>
   </header>
 
-  <!-- Why wrap -->
-  <section class="what">
-    <div class="container">
-      <div class="split">
-        <div class="split-image reveal">
-          <img src="https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=900&q=85" alt="Vehicle finished with a color-change wrap" />
-        </div>
-        <div class="split-content reveal">
-          <span class="section-eyebrow">Why wrap</span>
-          <h2 class="section-title">A new look today. Your factory paint underneath, untouched.</h2>
-          <p>A wrap is precision-cut vinyl applied over your factory paint — not a repaint. That means no sanding, no chemical prep, no permanent change, and a finish that comes off clean whenever you're ready for something new or ready to sell.</p>
-          <p>It's also protection: the vinyl becomes a sacrificial layer between your paint and the road, catching the light chips and scuffs that would otherwise hit the paint itself.</p>
-          <ul>
-            <li>Any color, any finish — gloss, matte, satin, chrome or color-shift</li>
-            <li>Fully reversible — your original paint is preserved underneath</li>
-            <li>Shields factory paint from minor chips, scuffs and UV fade</li>
-            <li>Custom graphics, liveries and logos are all doable, not just color</li>
-            <li>Installed in days, not the weeks a full repaint takes</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Finish & color gallery -->
-  <section class="finishes">
+  <!-- Type selector -->
+  <section class="type-selector" id="wrap-type-selector">
     <div class="container">
       <div class="section-head reveal">
-        <span class="section-eyebrow">Pick your look</span>
-        <h2 class="section-title">Every finish, one material.</h2>
-        <p class="section-lede">The same precision-cut vinyl comes in dozens of colors across five finish families. We'll help you land on the one that fits the vehicle.</p>
+        <span class="section-eyebrow">Start here</span>
+        <h2 class="section-title">What type of wrap are you looking for?</h2>
+        <p class="section-lede">Pick one below — we'll show you the benefits, the options, and real examples for that exact type.</p>
       </div>
-      <div class="finishes-grid reveal-stagger">
-        <div class="finish-card">
-          <div class="finish-swatch gloss"></div>
-          <div class="finish-body"><h3>Gloss</h3><p>Deep, mirror-like shine — reads just like a fresh factory paint job, in any color.</p></div>
+      <div class="type-grid reveal-stagger">
+        <div class="type-card" data-type="fleet">
+          <div class="type-icon">🚚</div>
+          <h3>Commercial Fleet Wrap</h3>
+          <p>Turn every truck and van into a moving billboard for your business.</p>
+          <span class="type-cta">View fleet options →</span>
         </div>
-        <div class="finish-card">
-          <div class="finish-swatch matte"></div>
-          <div class="finish-body"><h3>Matte</h3><p>Flat, non-reflective, and unmistakably custom. The most requested finish on the market right now.</p></div>
+        <div class="type-card" data-type="personal">
+          <div class="type-icon">🎨</div>
+          <h3>Personal Vinyl Wrap</h3>
+          <p>A full color change or accent wrap for your own vehicle — any color, any finish.</p>
+          <span class="type-cta">View colors →</span>
         </div>
-        <div class="finish-card">
-          <div class="finish-swatch satin"></div>
-          <div class="finish-body"><h3>Satin</h3><p>A soft, low-sheen middle ground between gloss and matte — subtle, not flashy.</p></div>
-        </div>
-        <div class="finish-card">
-          <div class="finish-swatch chrome"></div>
-          <div class="finish-body"><h3>Chrome / Metallic</h3><p>Mirror-bright and unmistakable. The finish that stops people in a parking lot.</p></div>
-        </div>
-        <div class="finish-card">
-          <div class="finish-swatch shift"></div>
-          <div class="finish-body"><h3>Color-Shift</h3><p>Shifts hue as the light and angle change — a different color from every side.</p></div>
-        </div>
-        <div class="finish-card">
-          <div class="finish-swatch custom"></div>
-          <div class="finish-body"><h3>Custom Design</h3><p>Your own graphics, logo or livery — from a single accent panel to a full design.</p></div>
+        <div class="type-card" data-type="chrome">
+          <div class="type-icon">🖤</div>
+          <h3>Chrome Delete</h3>
+          <p>Blackout your chrome trim for a cleaner, more modern look.</p>
+          <span class="type-cta">View chrome delete →</span>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Wrap vs. paint -->
-  <section class="compare" id="compare">
-    <div class="container">
-      <div class="section-head reveal">
-        <span class="section-eyebrow">Wrap vs. repaint</span>
-        <h2 class="section-title">Why most people wrap instead of repainting.</h2>
-        <p class="section-lede">A repaint is permanent and it's the only way to fix paint that's already damaged. For everything else — a new look, added protection, or getting ready to sell — a wrap wins on cost, time and reversibility.</p>
-      </div>
-
-      <div class="compare-grid reveal-stagger">
-        <div class="compare-card">
-          <h3>Repaint</h3>
-          <p class="compare-sub">Permanent, and the right call for damaged paint.</p>
-          <ul class="compare-list">
-            <li>Sanding and chemical prep down to bare metal</li>
-            <li>Typically weeks in the shop, not days</li>
-            <li>Permanent — can't be undone if you change your mind</li>
-            <li>No protective layer over the new paint</li>
-            <li>Higher cost for full-vehicle color changes</li>
-          </ul>
-        </div>
-
-        <div class="compare-card featured">
-          <h3>Vehicle Wrap</h3>
-          <p class="compare-sub">A new look with your factory paint kept safe underneath.</p>
-          <ul class="compare-list">
-            <li>No sanding, no chemical prep, paint untouched</li>
-            <li>Most vehicles done in a few days</li>
-            <li>Fully reversible — remove it anytime, paint intact</li>
-            <li>Vinyl itself shields paint from minor chips and UV</li>
-            <li>Lower cost, especially for a full color change</li>
-          </ul>
+  <!-- FLEET PANEL -->
+  <div class="type-panel" data-panel="fleet" id="panel-fleet">
+    <section class="type-panel-header">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Commercial fleet wraps</span>
+          <h2 class="section-title">Fleet wraps that get your business seen all over Olympia.</h2>
+          <p class="section-lede">A wrapped fleet is advertising that works every mile it drives — parked, at a job site, or stuck in traffic. Here's why businesses wrap their vehicles, and the three ways to do it.</p>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Our promise -->
+    <section>
+      <div class="container">
+        <div class="benefit-grid">
+          <div class="benefit-card">
+            <div class="benefit-icon">📣</div>
+            <h4>A Moving Billboard</h4>
+            <p>A wrapped fleet vehicle gets seen by thousands of people a day — advertising that works while you drive to the job, not just when you're running an ad.</p>
+          </div>
+          <div class="benefit-card">
+            <div class="benefit-icon">🎯</div>
+            <h4>One Consistent Look</h4>
+            <p>Every truck and van matches — same colors, same logo placement, same message, across your whole fleet.</p>
+          </div>
+          <div class="benefit-card">
+            <div class="benefit-icon">💼</div>
+            <h4>Advertising, Not Just Paint</h4>
+            <p>Vehicle wraps are commonly treated as a deductible business expense — check with your accountant, but it's marketing spend, not a paint job.</p>
+          </div>
+          <div class="benefit-card">
+            <div class="benefit-icon">🛡</div>
+            <h4>Protects Resale Value</h4>
+            <p>The wrap shields the factory paint underneath, so when a vehicle rotates out of the fleet, it's in better shape than it would be bare.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section style="background:var(--navy-deep);">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Coverage options</span>
+          <h2 class="section-title">Full wrap, partial wrap, or decal application.</h2>
+        </div>
+        <div class="option-grid">
+          <div class="option-card">
+            <div class="tier">Full Vehicle Wrap</div>
+            <p>Every panel wrapped — the whole vehicle becomes the ad. Maximum visibility, maximum impact.</p>
+          </div>
+          <div class="option-card">
+            <div class="tier">Partial Wrap (Sides + Rear)</div>
+            <p>Sides and rear wrapped, hood and roof left factory — most of the visual impact at a lower cost per vehicle.</p>
+          </div>
+          <div class="option-card">
+            <div class="tier">Decal Application</div>
+            <p>Your logo, name and number cut and applied directly — the most affordable way to get your whole fleet branded and matching.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">See the range</span>
+          <h2 class="section-title">Fleet wrap design examples.</h2>
+        </div>
+        <p class="gallery-note">Concept designs across different trades, to show the range of what's possible — not all installed jobs. We'll design something original for your brand.</p>
+        <div class="gallery-grid">
+          <div class="gallery-item">
+            <img src="images/fleet-evergreen-edge.jpg" alt="Fleet wrap concept for a lawn care truck, green grass pattern with bold lettering" loading="lazy" width="1200" height="1490" />
+            <p class="gallery-caption">Lawn care truck</p>
+          </div>
+          <div class="gallery-item">
+            <img src="images/fleet-aquablast.jpg" alt="Fleet wrap concept for a pressure washing van, blue and lime wave design" loading="lazy" width="1200" height="1490" />
+            <p class="gallery-caption">Pressure washing van</p>
+          </div>
+          <div class="gallery-item">
+            <img src="images/fleet-paws-motion.jpg" alt="Fleet wrap concept for a mobile pet grooming van, pink and teal with dog mascot" loading="lazy" width="1200" height="1490" />
+            <p class="gallery-caption">Mobile pet grooming van</p>
+          </div>
+          <div class="gallery-item">
+            <img src="images/fleet-precision-tint.jpg" alt="Fleet wrap concept for a window tint and paint protection film van, black and yellow diagonal split" loading="lazy" width="1200" height="1490" />
+            <p class="gallery-caption">Tint &amp; PPF van</p>
+          </div>
+          <div class="gallery-item">
+            <img src="images/fleet-sunburst-solar.jpg" alt="Fleet wrap concept for a solar installation van, orange and black with sun mascot" loading="lazy" width="928" height="1152" />
+            <p class="gallery-caption">Solar installation van</p>
+          </div>
+          <div class="gallery-item">
+            <img src="images/fleet-radiant-flame.jpg" alt="Fleet wrap concept for an HVAC truck, red and blue with flame mascot" loading="lazy" width="928" height="1152" />
+            <p class="gallery-caption">HVAC truck</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section style="background:var(--navy-deep);">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Get started</span>
+          <h2 class="section-title">Get a free mockup of your fleet wrap.</h2>
+          <p class="section-lede">Tell us about your business and we'll put together a free design mockup of what your fleet wrap could look like — no obligation.</p>
+        </div>
+        <div class="lead-form-wrap">
+          <form class="lead-form" id="fleetForm">
+            <div class="form-row">
+              <div class="form-field">
+                <label for="fleetName">Full Name</label>
+                <input type="text" id="fleetName" name="fleetName" required autocomplete="name" />
+              </div>
+              <div class="form-field">
+                <label for="fleetPhone">Phone</label>
+                <input type="tel" id="fleetPhone" name="fleetPhone" required autocomplete="tel" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-field">
+                <label for="fleetEmail">Email</label>
+                <input type="email" id="fleetEmail" name="fleetEmail" required autocomplete="email" />
+              </div>
+              <div class="form-field">
+                <label for="fleetBusiness">Business Name</label>
+                <input type="text" id="fleetBusiness" name="fleetBusiness" required autocomplete="organization" />
+              </div>
+            </div>
+            <div class="form-field">
+              <label for="fleetWrapType">Ideal Wrap Type</label>
+              <select id="fleetWrapType" name="fleetWrapType" required>
+                <option value="" disabled selected>Choose one</option>
+                <option value="Full Vehicle Wrap">Full Vehicle Wrap</option>
+                <option value="Partial Wrap (Sides + Rear)">Partial Wrap (Sides + Rear)</option>
+                <option value="Decal Application">Decal Application</option>
+                <option value="Not sure yet">Not sure yet</option>
+              </select>
+            </div>
+            <div class="consent-row">
+              <input type="checkbox" id="fleetConsent" name="fleetConsent" required />
+              <label for="fleetConsent">I consent to receive text messages from Thompson's Auto Detailing about my inquiry. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</label>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Get My Free Mockup</button>
+            <div class="form-status" id="fleetFormStatus"></div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- PERSONAL PANEL -->
+  <div class="type-panel" data-panel="personal" id="panel-personal">
+    <section class="type-panel-header">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Personal vehicle wraps</span>
+          <h2 class="section-title">A new look, without touching a drop of paint.</h2>
+          <p class="section-lede">A wrap is precision-cut vinyl applied over your factory paint — reversible, protective, and available in dozens of real colors and finishes.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="benefit-grid">
+          <div class="benefit-card">
+            <div class="benefit-icon">🎨</div>
+            <h4>Any Color, Any Finish</h4>
+            <p>Gloss, satin, matte, metallic and aluminum finishes — dozens of real colors to choose from.</p>
+          </div>
+          <div class="benefit-card">
+            <div class="benefit-icon">↺</div>
+            <h4>Fully Reversible</h4>
+            <p>Your original paint is preserved underneath — come off clean whenever you're ready for something new.</p>
+          </div>
+          <div class="benefit-card">
+            <div class="benefit-icon">🛡</div>
+            <h4>Protects Factory Paint</h4>
+            <p>The vinyl becomes a sacrificial layer, catching light chips, scuffs and UV fade before they hit your paint.</p>
+          </div>
+          <div class="benefit-card">
+            <div class="benefit-icon">⏱</div>
+            <h4>Faster &amp; Cheaper Than Paint</h4>
+            <p>Days, not weeks — and no sanding or chemical prep down to bare metal.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section style="background:var(--navy-deep);">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Not just full color change</span>
+          <h2 class="section-title">Accent wraps like carbon fiber hoods.</h2>
+          <p class="section-lede">A full color change isn't the only option — a single-panel accent wrap is a lower-cost way to make a real statement.</p>
+        </div>
+        <div class="accent-grid">
+          <div class="accent-item">
+            <img src="images/personal-carbon-wrx.jpg" alt="Subaru WRX STI with a carbon fiber vinyl hood wrap" loading="lazy" width="1200" height="1490" />
+            <p class="accent-caption">Carbon fiber hood wrap — Subaru WRX STI</p>
+          </div>
+          <div class="accent-item">
+            <img src="images/personal-carbon-q50.jpg" alt="Infiniti Q50 with a carbon fiber vinyl hood wrap" loading="lazy" width="1200" height="1490" />
+            <p class="accent-caption">Carbon fiber hood wrap — Infiniti Q50</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Pick your color</span>
+          <h2 class="section-title">Real Cheetah Wrap colors, by finish.</h2>
+          <p class="section-lede">Browse gloss, satin and matte, and select any colors you're interested in — we'll bring the swatch deck so you can see and feel the real thing.</p>
+        </div>
+
+        <div class="finish-tabs" role="tablist">
+          <button type="button" class="finish-tab active" data-finish="gloss">Gloss (28)</button>
+          <button type="button" class="finish-tab" data-finish="satin">Satin (14)</button>
+          <button type="button" class="finish-tab" data-finish="matte">Matte (8)</button>
+        </div>
+
+        <div class="swatch-family active" data-finish-family="gloss">
+          <div class="swatch-grid" id="glossSwatches"></div>
+        </div>
+        <div class="swatch-family" data-finish-family="satin">
+          <div class="swatch-grid" id="satinSwatches"></div>
+        </div>
+        <div class="swatch-family" data-finish-family="matte">
+          <div class="swatch-grid" id="matteSwatches"></div>
+        </div>
+
+        <p class="swatch-disclaimer">Swatches are an approximate on-screen preview — colors vary by monitor. We'll bring the real Cheetah Wrap swatch deck to your consultation.</p>
+        <p class="selected-summary" id="selectedSummary"></p>
+      </div>
+    </section>
+
+    <section style="background:var(--navy-deep);">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Get started</span>
+          <h2 class="section-title">Tell us what you're picturing.</h2>
+          <p class="section-lede">Send us your vehicle and what you want done — including any colors you selected above — and we'll follow up with next steps.</p>
+        </div>
+        <div class="lead-form-wrap">
+          <form class="lead-form" id="personalForm">
+            <div class="form-row">
+              <div class="form-field">
+                <label for="personalName">Full Name</label>
+                <input type="text" id="personalName" name="personalName" required autocomplete="name" />
+              </div>
+              <div class="form-field">
+                <label for="personalPhone">Phone</label>
+                <input type="tel" id="personalPhone" name="personalPhone" required autocomplete="tel" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-field">
+                <label for="personalEmail">Email</label>
+                <input type="email" id="personalEmail" name="personalEmail" required autocomplete="email" />
+              </div>
+              <div class="form-field">
+                <label for="personalVehicle">Vehicle (Year / Make / Model)</label>
+                <input type="text" id="personalVehicle" name="personalVehicle" placeholder="e.g. 2021 Ford F-150" required />
+              </div>
+            </div>
+            <div class="form-field">
+              <label for="personalWanting">What are you wanting to get done?</label>
+              <textarea id="personalWanting" name="personalWanting" placeholder="Full color change, an accent wrap, chrome delete along with it, etc."></textarea>
+            </div>
+            <div class="consent-row">
+              <input type="checkbox" id="personalConsent" name="personalConsent" required />
+              <label for="personalConsent">I consent to receive text messages from Thompson's Auto Detailing about my inquiry. Message &amp; data rates may apply. Message frequency may vary. Reply STOP to unsubscribe.</label>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Send My Request</button>
+            <div class="form-status" id="personalFormStatus"></div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- CHROME DELETE PANEL -->
+  <div class="type-panel" data-panel="chrome" id="panel-chrome">
+    <section class="type-panel-header">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Chrome delete</span>
+          <h2 class="section-title">Blackout your chrome for a cleaner, modern look.</h2>
+          <p class="section-lede">Precision-cut black vinyl film applied directly over your factory chrome trim — no removal, no permanent change.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="benefit-grid cols-2">
+          <div class="benefit-card">
+            <div class="benefit-icon">🖤</div>
+            <h4>Modern, Blacked-Out Look</h4>
+            <p>Chrome delete is one of the most popular styling upgrades available — a cleaner, more aggressive look on almost any vehicle.</p>
+          </div>
+          <div class="benefit-card">
+            <div class="benefit-icon">✨</div>
+            <h4>Covers Pitted or Hazy Chrome</h4>
+            <p>Faded, pitted or cloudy factory chrome gets covered clean, without the cost of replacing trim.</p>
+          </div>
+          <div class="benefit-card">
+            <div class="benefit-icon">↺</div>
+            <h4>Fully Reversible</h4>
+            <p>Comes off clean whenever you want the chrome back — nothing permanent.</p>
+          </div>
+          <div class="benefit-card">
+            <div class="benefit-icon">💰</div>
+            <h4>Affordable vs. Trim Replacement</h4>
+            <p>A fraction of the cost of sourcing and replacing OEM trim pieces.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section style="background:var(--navy-deep);">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Options</span>
+          <h2 class="section-title">Full package or targeted trim.</h2>
+          <p class="section-lede">We install precision-cut chrome delete film — including Cheetah Wrap's CheetahPCC line — in gloss, satin or matte black.</p>
+        </div>
+        <div class="option-grid cols-2">
+          <div class="option-card">
+            <div class="tier">Full Chrome Delete</div>
+            <p>Every piece of exterior chrome — window trim, grille surround, door handles, mirror caps and badges.</p>
+          </div>
+          <div class="option-card">
+            <div class="tier">Partial / Targeted</div>
+            <p>Just the window trim, just the grille, or whichever pieces you want blacked out — priced per section.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container" style="text-align:center;">
+        <h2 class="section-title" style="margin-bottom:1.25rem;">Ready to blackout your trim?</h2>
+        <p class="section-lede" style="margin:0 auto 2rem;">Text us your vehicle and which pieces you're thinking about — we'll get you a quote.</p>
+        <a href="sms:+13604631391?&body=I%27m%20interested%20in%20chrome%20delete%20for%20my%20vehicle" target="_top" class="btn btn-primary">Ask About Chrome Delete</a>
+      </div>
+    </section>
+  </div>
+
+  <!-- Our promise (shared across all three) -->
   <section class="assure">
     <div class="container">
       <div class="section-head reveal">
         <span class="section-eyebrow">Our promise</span>
-        <h2 class="section-title">Clean install, no surprises.</h2>
+        <h2 class="section-title">Clean install, no surprises — whichever wrap you choose.</h2>
       </div>
       <div class="assure-grid reveal-stagger">
         <div class="assure-card">
           <div class="assure-icon">↺</div>
           <div class="big">100%</div>
           <h3>Reversible</h3>
-          <p>Every wrap is designed to come off clean, whenever you're ready — your factory paint is exactly as it was underneath.</p>
+          <p>Every wrap is designed to come off clean — your factory paint is exactly as it was underneath.</p>
         </div>
         <div class="assure-card">
           <div class="assure-icon">🛡</div>
@@ -371,53 +723,33 @@
     </div>
   </section>
 
-  <!-- Benefits strip -->
-  <section class="bstrip-section">
-    <div class="container">
-      <div class="section-head reveal">
-        <span class="section-eyebrow">At a glance</span>
-        <h2 class="section-title">Everything a wrap should do.</h2>
-      </div>
-      <div class="bstrip reveal-stagger">
-        <div class="bchip"><span class="ic">🎨</span><b>Any color or finish</b></div>
-        <div class="bchip"><span class="ic">↺</span><b>Fully reversible</b></div>
-        <div class="bchip"><span class="ic">🛡</span><b>Shields factory paint</b></div>
-        <div class="bchip"><span class="ic">✂️</span><b>Precision panel-cut</b></div>
-        <div class="bchip"><span class="ic">⏱</span><b>Days, not weeks</b></div>
-        <div class="bchip"><span class="ic">🚚</span><b>Full or partial coverage</b></div>
-      </div>
-    </div>
-  </section>
-
   <!-- Process -->
   <section class="process">
     <div class="container">
       <div class="section-head reveal">
         <span class="section-eyebrow">Our process</span>
-        <h2 class="section-title">How we wrap your vehicle.</h2>
-        <p class="section-lede">From first call to finished panel, every step is built around a clean, bubble-free install.</p>
+        <h2 class="section-title">How we wrap your vehicle — fleet or personal.</h2>
       </div>
-
       <div class="step-grid reveal-stagger">
         <div class="step">
           <div class="step-num">1</div>
           <div class="step-content">
             <h4>Consult &amp; design</h4>
-            <p>We talk through color, finish and coverage — full color change, a partial wrap, or custom graphics — and settle on the plan before anything is cut.</p>
+            <p>We talk through coverage, color and finish — and for fleet wraps, put together a free mockup before anything is cut.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">2</div>
           <div class="step-content">
             <h4>Wash &amp; decontaminate</h4>
-            <p>Every panel is deep-cleaned and decontaminated so the vinyl bonds flawlessly — no dust, wax or debris trapped underneath.</p>
+            <p>Every panel is deep-cleaned so the vinyl bonds flawlessly — no dust, wax or debris trapped underneath.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">3</div>
           <div class="step-content">
             <h4>Precision cut &amp; apply</h4>
-            <p>Vinyl is cut and applied panel by panel, heat-formed around every curve and edge for a factory-tight fit — no visible seams.</p>
+            <p>Vinyl is cut and applied panel by panel, heat-formed around every curve for a factory-tight fit.</p>
           </div>
         </div>
         <div class="step">
@@ -431,59 +763,6 @@
     </div>
   </section>
 
-  <!-- Packages / coverage -->
-  <section class="pricing">
-    <div class="container">
-      <div class="section-head reveal">
-        <span class="section-eyebrow">Coverage &amp; packages</span>
-        <h2 class="section-title">Full wrap, partial wrap, or spot graphics.</h2>
-        <p class="section-lede">Pick how much of the vehicle gets wrapped. Get an exact quote in under 24 hours.</p>
-      </div>
-
-      <div class="price-grid reveal-stagger">
-        <div class="price-card">
-          <div class="tier">Spot Graphics</div>
-          <p class="price-desc">Logo or accent graphics on specific panels</p>
-          <ul class="price-list">
-            <li>One or two panels — hood, roof or doors</li>
-            <li>Logo, lettering or an accent design</li>
-            <li>Lowest-cost way to make a statement</li>
-            <li>Same precision-cut install</li>
-          </ul>
-          <a href="sms:+13604631391?&body=I%27m%20interested%20in%20getting%20a%20vehicle%20wrap%20for%20my%20car" target="_top" class="btn btn-ghost" style="width: 100%; justify-content: center;">Quote me</a>
-        </div>
-
-        <div class="price-card featured">
-          <div class="tier">Full Color Change ★</div>
-          <p class="price-desc">The whole vehicle, one new color and finish</p>
-          <ul class="price-list">
-            <li>Every exterior panel wrapped</li>
-            <li>Any color, any finish — gloss to color-shift</li>
-            <li>Shields factory paint underneath</li>
-            <li>Fully reversible whenever you're ready</li>
-          </ul>
-          <a href="sms:+13604631391?&body=I%27m%20interested%20in%20getting%20a%20vehicle%20wrap%20for%20my%20car" target="_top" class="btn btn-primary" style="width: 100%; justify-content: center;">Get my quote</a>
-        </div>
-
-        <div class="price-card">
-          <div class="tier">Full Wrap + Custom Graphics</div>
-          <p class="price-desc">Full color change plus a one-of-a-kind design</p>
-          <ul class="price-list">
-            <li>Everything in Full Color Change</li>
-            <li>Custom-designed graphics or livery</li>
-            <li>Ideal for fleet, business or show vehicles</li>
-            <li>Design work included in your quote</li>
-          </ul>
-          <a href="sms:+13604631391?&body=I%27m%20interested%20in%20getting%20a%20vehicle%20wrap%20for%20my%20car" target="_top" class="btn btn-ghost" style="width: 100%; justify-content: center;">Quote me</a>
-        </div>
-      </div>
-
-      <p style="text-align: center; color: var(--muted); margin-top: 2rem; font-size: 0.85rem;">
-        <em>Final quote depends on your vehicle's size, chosen finish, and coverage.</em>
-      </p>
-    </div>
-  </section>
-
   <!-- FAQ -->
   <section class="faq">
     <div class="container">
@@ -491,31 +770,30 @@
         <span class="section-eyebrow">Common questions</span>
         <h2 class="section-title">What buyers ask us.</h2>
       </div>
-
       <div class="faq-list reveal">
         <details class="faq-item">
-          <summary class="faq-q">Will a wrap damage my factory paint?<span class="faq-toggle">+</span></summary>
-          <p class="faq-a">No — installed and removed correctly, a wrap doesn't harm paint in good condition. It's designed to come off clean, leaving the paint underneath exactly as it was. If your paint is already damaged or has been repainted with lower-quality paint, we'll check it first and let you know what to expect.</p>
+          <summary class="faq-q">Do you install commercial fleet wraps near Olympia, WA?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Yes — we design and install commercial fleet wraps for businesses in and around Olympia, WA, from a single work truck to a full fleet. We can also handle partial wraps and decal-only branding if a full wrap isn't in the budget.</p>
         </details>
         <details class="faq-item">
-          <summary class="faq-q">How long does a wrap last?<span class="faq-toggle">+</span></summary>
-          <p class="faq-a">Most quality vinyl wraps hold up well for several years with normal care, depending on the finish, your climate, and how the vehicle is parked and washed. We'll go over care and expected lifespan for the specific vinyl you choose.</p>
+          <summary class="faq-q">What's the difference between a full wrap, partial wrap, and decal application?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">A full wrap covers every exterior panel for maximum visibility. A partial wrap covers the sides and rear — the panels people actually see in traffic and parking lots — while the hood and roof stay factory. Decal application is cut vinyl graphics (your logo, name and number) applied directly, without covering the painted panels. All three are real options depending on budget and coverage.</p>
         </details>
         <details class="faq-item">
-          <summary class="faq-q">Can I wash and drive it normally?<span class="faq-toggle">+</span></summary>
-          <p class="faq-a">Yes. Hand washing or a touchless car wash is best — avoid brush-style automatic washes and pressure washing directly at panel edges. Otherwise it drives, parks and washes like normal paint.</p>
+          <summary class="faq-q">How much does a vehicle wrap cost?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">It depends on the vehicle size, the coverage (full, partial or decal), and the finish. We'll give you an exact quote once we know your vehicle and what you're picturing — request a free mockup above and we'll follow up with pricing.</p>
         </details>
         <details class="faq-item">
-          <summary class="faq-q">Can you match any color, or a specific design?<span class="faq-toggle">+</span></summary>
-          <p class="faq-a">Yes — vinyl comes in an enormous range of factory colors and finishes, and we can also work from a reference color or design you bring us. For custom graphics or a full livery, we'll design it with you before anything is cut.</p>
+          <summary class="faq-q">Will a wrap damage my vehicle's factory paint?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">No — a properly installed and removed wrap doesn't harm paint in good condition. It's designed to protect the paint underneath while it's on, and to come off clean.</p>
         </details>
         <details class="faq-item">
-          <summary class="faq-q">How long does the install take?<span class="faq-toggle">+</span></summary>
-          <p class="faq-a">A full color change typically takes a few days; spot graphics or a partial wrap can often be done same day. We'll give you an exact timeline once we know your vehicle and the scope.</p>
+          <summary class="faq-q">Do you offer chrome delete near me?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">Yes — we install precision-cut black chrome delete film over window trim, grille surrounds, mirror caps and badges, in gloss, satin or matte black.</p>
         </details>
         <details class="faq-item">
-          <summary class="faq-q">Can I remove it myself before selling the car?<span class="faq-toggle">+</span></summary>
-          <p class="faq-a">We recommend having it removed professionally so nothing is left behind and the paint underneath is checked and protected during removal — but yes, that's exactly the point of a wrap: it comes off, and your original paint is what's underneath.</p>
+          <summary class="faq-q">What color options do I have for a personal wrap?<span class="faq-toggle">+</span></summary>
+          <p class="faq-a">We work with Cheetah Wrap's full color line — dozens of colors across gloss, satin and matte finishes, plus metallic and aluminum-finish options. You can browse and select the colors you're interested in right on this page.</p>
         </details>
       </div>
     </div>
@@ -523,30 +801,196 @@
 
   <!-- CTA band -->
   <section class="cta-band reveal">
-    <h2>Turn heads. Protect your paint.</h2>
-    <p>Tell us your vehicle, the color or finish you're picturing, and how much of it you want wrapped — we'll get you an exact quote in under 24 hours.</p>
-    <a href="sms:+13604631391?&body=I%27m%20interested%20in%20getting%20a%20vehicle%20wrap%20for%20my%20car" target="_top" class="btn btn-primary">Get my quote →</a>
-    <div class="cta-trust">
-      <span>Any Color or Finish</span>
-      <span>100% Reversible</span>
-      <span>Full or Partial Coverage</span>
-    </div>
+    <h2>Fleet, personal, or chrome delete — let's talk.</h2>
+    <p>Pick a wrap type above and send us your details, or just call or text us directly.</p>
+    <a href="tel:+13604631391" target="_top" class="btn btn-primary">Call (360) 463-1391</a>
   </section>
 
   <script>
-    // Reveal-on-scroll
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          e.target.classList.add('in-view');
-          io.unobserve(e.target);
-        }
+    // ---------- Reveal-on-scroll ----------
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); }
       });
     }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
-    document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => io.observe(el));
+    document.querySelectorAll('.reveal, .reveal-stagger').forEach(function (el) { io.observe(el); });
 
-    // Auto-resize: report full page height to the host (e.g. Wix Velo) so the
-    // embed can grow to fit the content instead of scrolling inside a fixed box.
+    // ---------- Type selector ----------
+    var typeCards = document.querySelectorAll('.type-card');
+    var typePanels = document.querySelectorAll('.type-panel');
+    typeCards.forEach(function (card) {
+      card.addEventListener('click', function () {
+        var type = card.getAttribute('data-type');
+        typeCards.forEach(function (c) { c.classList.toggle('active', c === card); });
+        typePanels.forEach(function (p) {
+          p.classList.toggle('active', p.getAttribute('data-panel') === type);
+        });
+        var panel = document.getElementById('panel-' + type);
+        if (panel) { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      });
+    });
+
+    // ---------- Real Cheetah Wrap color catalog (cheetahwrap.com, Sept 2026) ----------
+    // Hex values are an approximation for the on-screen swatch, not an official spec —
+    // see the disclaimer under the swatch grid.
+    var COLORS = {
+      gloss: [
+        ['Cresting Silver Metallic', '#C7CBCE'], ['Wild Ride Red Metallic', '#B01E2E'],
+        ['Midnight Metallic', '#1B1F2A'], ['Sea Wave Metallic', '#1E6E8C'],
+        ['Pearl Lavender', '#C9B8DE'], ['Lava Orange Metallic', '#D14A16'],
+        ['Perfect Peach', '#F3B58C'], ['Grass Green', '#4CA83D'],
+        ['Passion Purple', '#7A2AA0'], ['Bright Yellow', '#F5D800'],
+        ['Orange', '#F26A21'], ['Bubblegum Pink', '#F177B0'],
+        ['Carmine Red', '#9B111E'], ['Light Gray', '#B8BCC0'],
+        ['Military Green', '#4B5320'], ['Light Blue', '#7EC8E3'],
+        ['Black Rose', '#3B0A1A'], ['White', '#FFFFFF'],
+        ['Black Metallic', '#17181A'], ['Black', '#0B0B0C'],
+        ['Charcoal Metallic', '#3A3B3C'], ['Sandstorm', '#C2A66B'],
+        ['Pearl White', '#F4F3EE'], ['Berry Blue', '#2748A0'],
+        ['Nardo Gray', '#6E7072'], ['Khaki Green', '#7C7A4E'],
+        ['Desert Tan', '#C8AD7F'], ['British Racing Green Metallic', '#04422C']
+      ],
+      satin: [
+        ['Stormy Gray', '#6D7278'], ['Black', '#101112'],
+        ['Charcoal Metallic', '#3E3F40'], ['Pearl White', '#EFEEE9'],
+        ['Blue Aluminum', '#3E6FA6'], ['Passion Purple Aluminum', '#5B3E86'],
+        ['Gray Aluminum', '#8A8D90'], ['White', '#F2F2EF'],
+        ['Nardo Gray', '#6C6E70'], ['Berry Blue Aluminum', '#33538C'],
+        ['Black Rose Aluminum', '#4A2430'], ['Yellow Gold Aluminum', '#C8A233'],
+        ['Cheetah Green Metallic', '#2F7D45'], ['Pine Green Metallic', '#1F4D34']
+      ],
+      matte: [
+        ['Military Green', '#4B5320'], ['Carmine Red', '#8C1A26'],
+        ['Charcoal Metallic', '#37393A'], ['Black', '#131313'],
+        ['Nardo Gray', '#6B6D6F'], ['Khaki Green', '#756F45'],
+        ['Desert Tan', '#BFA678'], ['Sandstorm', '#B99E63']
+      ]
+    };
+
+    var selectedColors = [];
+
+    function renderSwatches(finish, containerId) {
+      var container = document.getElementById(containerId);
+      COLORS[finish].forEach(function (pair) {
+        var name = pair[0], hex = pair[1];
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'swatch-chip';
+        chip.setAttribute('data-color', finish.charAt(0).toUpperCase() + finish.slice(1) + ' ' + name);
+        chip.innerHTML = '<span class="sw-dot" style="background:' + hex + '"></span><span class="sw-name">' + name + '</span><span class="sw-check">✓</span>';
+        chip.addEventListener('click', function () {
+          var full = chip.getAttribute('data-color');
+          var idx = selectedColors.indexOf(full);
+          if (idx === -1) { selectedColors.push(full); chip.classList.add('selected'); }
+          else { selectedColors.splice(idx, 1); chip.classList.remove('selected'); }
+          updateSelectedSummary();
+        });
+        container.appendChild(chip);
+      });
+    }
+    renderSwatches('gloss', 'glossSwatches');
+    renderSwatches('satin', 'satinSwatches');
+    renderSwatches('matte', 'matteSwatches');
+
+    function updateSelectedSummary() {
+      var el = document.getElementById('selectedSummary');
+      if (!el) return;
+      if (selectedColors.length === 0) { el.textContent = ''; }
+      else if (selectedColors.length <= 3) { el.textContent = 'Selected: ' + selectedColors.join(', '); }
+      else { el.textContent = selectedColors.length + ' colors selected'; }
+    }
+
+    // ---------- Finish tabs ----------
+    var finishTabs = document.querySelectorAll('.finish-tab');
+    var swatchFamilies = document.querySelectorAll('.swatch-family');
+    finishTabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var finish = tab.getAttribute('data-finish');
+        finishTabs.forEach(function (t) { t.classList.toggle('active', t === tab); });
+        swatchFamilies.forEach(function (f) {
+          f.classList.toggle('active', f.getAttribute('data-finish-family') === finish);
+        });
+      });
+    });
+
+    // ---------- Lead form submission ----------
+    var API_BASE = 'https://backend-production-ab50.up.railway.app';
+    var LEAD_USER_ID = '3';
+
+    function submitLead(payload, statusEl, submitBtn, form) {
+      submitBtn.disabled = true;
+      var originalText = submitBtn.textContent;
+      submitBtn.textContent = 'Sending…';
+      statusEl.className = 'form-status';
+      statusEl.textContent = '';
+
+      fetch(API_BASE + '/api/leads/public/' + LEAD_USER_ID, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, body: d }; }); })
+        .then(function (res) {
+          if (res.ok) {
+            statusEl.className = 'form-status show-success';
+            statusEl.textContent = "Thanks — we've got your request and will be in touch shortly.";
+            form.reset();
+            selectedColors.length = 0;
+            document.querySelectorAll('.swatch-chip.selected').forEach(function (c) { c.classList.remove('selected'); });
+            updateSelectedSummary();
+          } else {
+            statusEl.className = 'form-status show-error';
+            statusEl.textContent = res.body && res.body.error ? res.body.error : 'Something went wrong — please call or text us instead.';
+          }
+        })
+        .catch(function () {
+          statusEl.className = 'form-status show-error';
+          statusEl.textContent = 'Something went wrong — please call or text us instead.';
+        })
+        .finally(function () {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        });
+    }
+
+    var fleetForm = document.getElementById('fleetForm');
+    fleetForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var statusEl = document.getElementById('fleetFormStatus');
+      var businessName = document.getElementById('fleetBusiness').value.trim();
+      var wrapType = document.getElementById('fleetWrapType').value;
+      submitLead({
+        name: document.getElementById('fleetName').value.trim(),
+        email: document.getElementById('fleetEmail').value.trim(),
+        phone: document.getElementById('fleetPhone').value.trim(),
+        service: 'Fleet wrap inquiry — ' + wrapType,
+        message: 'Business: ' + businessName,
+        sms_consent: document.getElementById('fleetConsent').checked,
+        source_url: window.location.href
+      }, statusEl, fleetForm.querySelector('button[type="submit"]'), fleetForm);
+    });
+
+    var personalForm = document.getElementById('personalForm');
+    personalForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var statusEl = document.getElementById('personalFormStatus');
+      var vehicle = document.getElementById('personalVehicle').value.trim();
+      var wanting = document.getElementById('personalWanting').value.trim();
+      var messageParts = ['Vehicle: ' + vehicle];
+      if (wanting) messageParts.push('Wanting: ' + wanting);
+      if (selectedColors.length) messageParts.push('Colors of interest: ' + selectedColors.join(', '));
+      submitLead({
+        name: document.getElementById('personalName').value.trim(),
+        email: document.getElementById('personalEmail').value.trim(),
+        phone: document.getElementById('personalPhone').value.trim(),
+        service: 'Personal wrap inquiry',
+        message: messageParts.join('. '),
+        sms_consent: document.getElementById('personalConsent').checked,
+        source_url: window.location.href
+      }, statusEl, personalForm.querySelector('button[type="submit"]'), personalForm);
+    });
+
+    // ---------- Auto-resize for a Wix/Velo embed ----------
     function sorcePostHeight() {
       var h = document.documentElement.scrollHeight;
       if (window.parent) window.parent.postMessage({ sorceHeight: h }, '*');
