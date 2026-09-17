@@ -95,13 +95,21 @@ function suggestedDelayMs(body) {
 const MAX_ATTEMPTS = 3;
 const MAX_WAIT_PER_ATTEMPT_MS = 20000;
 
+// 429 (rate limited) and 500/503 (Google's own infra overloaded or restarting) are all
+// transient — the same request routed a few seconds later routinely succeeds. Anything else
+// (400, 403, 404...) is a request Google has actually looked at and rejected, and retrying
+// it wastes the attempt budget on a result that cannot change.
+const RETRYABLE_STATUSES = [429, 500, 503];
+
 /**
- * One Gemini image generation, with retries on transient rate limits.
+ * One Gemini image generation, with retries on transient rate limits and server errors.
  * `parts` is the content array: text plus any inline images.
  * Returns the first image the model produced, as a Buffer.
  */
 async function generateImage(parts) {
   let waitedMs = 0;
+  let lastStatus = null;
+  let lastDetail = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const res = await fetch(`${GEMINI_ENDPOINT}/${IMAGE_MODEL}:generateContent?key=${apiKey()}`, {
@@ -153,63 +161,119 @@ async function generateImage(parts) {
 
     const detail = body?.error?.message || text.slice(0, 300);
 
-    if (res.status !== 429) {
+    if (!RETRYABLE_STATUSES.includes(res.status)) {
       throw new WrapImageError(`Gemini image request failed (${res.status}) on ${IMAGE_MODEL}: ${detail}`);
     }
+    lastStatus = res.status;
+    lastDetail = detail;
 
-    // "limit: 0" means the model has no allowance on this billing tier at all. Google
-    // still attaches a retry delay, which can never help — don't burn attempts on it.
-    if (/limit:\s*0\b/.test(detail)) {
-      throw new WrapImageError(
-        `${IMAGE_MODEL} has no quota on this Google AI billing tier, so every request is refused ` +
-        `(the "retry in Ns" in Google's message is misleading — the limit is 0, not exhausted). ` +
-        `Either enable billing on the Google AI project, or set GEMINI_IMAGE_MODEL to a model your tier allows.`,
-        'QUOTA_UNAVAILABLE'
-      );
-    }
+    // The quota messages below are specific to 429 responses — a 500/503 body doesn't carry
+    // this shape, so these checks only ever fire on the status they're written for.
+    if (res.status === 429) {
+      // "limit: 0" means the model has no allowance on this billing tier at all. Google
+      // still attaches a retry delay, which can never help — don't burn attempts on it.
+      if (/limit:\s*0\b/.test(detail)) {
+        throw new WrapImageError(
+          `${IMAGE_MODEL} has no quota on this Google AI billing tier, so every request is refused ` +
+          `(the "retry in Ns" in Google's message is misleading — the limit is 0, not exhausted). ` +
+          `Either enable billing on the Google AI project, or set GEMINI_IMAGE_MODEL to a model your tier allows.`,
+          'QUOTA_UNAVAILABLE'
+        );
+      }
 
-    // A daily cap won't clear within a request either.
-    if (/per\s*_?day/i.test(detail)) {
-      throw new WrapImageError(
-        `Daily Gemini image quota is used up on ${IMAGE_MODEL}. It resets on Google's schedule — ` +
-        `enable billing on the Google AI project to lift it.`,
-        'QUOTA_DAILY'
-      );
+      // A daily cap won't clear within a request either.
+      if (/per\s*_?day/i.test(detail)) {
+        throw new WrapImageError(
+          `Daily Gemini image quota is used up on ${IMAGE_MODEL}. It resets on Google's schedule — ` +
+          `enable billing on the Google AI project to lift it.`,
+          'QUOTA_DAILY'
+        );
+      }
     }
 
     if (attempt === MAX_ATTEMPTS) {
-      throw new WrapImageError(
-        `Gemini rate limit on ${IMAGE_MODEL} did not clear after ${attempt} attempts ` +
-        `(waited ${Math.round(waitedMs / 1000)}s). The free tier allows very few image requests per minute; ` +
-        `enabling billing on the Google AI project is the durable fix.`,
-        'RATE_LIMITED'
-      );
+      const cause = res.status === 429
+        ? `Gemini rate limit on ${IMAGE_MODEL} did not clear after ${attempt} attempts ` +
+          `(waited ${Math.round(waitedMs / 1000)}s). The free tier allows very few image requests per minute; ` +
+          `enabling billing on the Google AI project is the durable fix.`
+        : `Gemini's own infrastructure (${res.status}) did not recover after ${attempt} attempts ` +
+          `(waited ${Math.round(waitedMs / 1000)}s): ${detail}. This is an outage on Google's side, not ` +
+          `a quota or request problem — retrying again in a minute usually clears it.`;
+      throw new WrapImageError(cause, res.status === 429 ? 'RATE_LIMITED' : 'UPSTREAM_UNAVAILABLE');
     }
 
     // Google's own delay when offered, otherwise exponential backoff.
     const wait = Math.min(suggestedDelayMs(body) || (2000 * Math.pow(2, attempt - 1)), MAX_WAIT_PER_ATTEMPT_MS);
     waitedMs += wait;
-    console.log(`[wrap-mockup] rate limited on ${IMAGE_MODEL}, waiting ${Math.round(wait / 1000)}s (attempt ${attempt}/${MAX_ATTEMPTS})`);
+    const reason = res.status === 429 ? 'rate limited' : `got a ${res.status} from Gemini`;
+    console.log(`[wrap-mockup] ${reason} on ${IMAGE_MODEL}, waiting ${Math.round(wait / 1000)}s (attempt ${attempt}/${MAX_ATTEMPTS})`);
     await sleep(wait);
   }
 
   // Unreachable — the loop either returns or throws.
-  throw new WrapImageError('Gemini image generation failed');
+  throw new WrapImageError(
+    lastStatus ? `Gemini image generation failed (${lastStatus}): ${lastDetail}` : 'Gemini image generation failed'
+  );
 }
+
+// Shared across every layout below — the bodywork is always blank and always shot flat, only
+// the view count and arrangement change.
+const BLANK_BODYWORK = 'The bodywork is completely blank: pure white paint, no text, no '
+  + 'graphics, no logos, no livery, no pinstripes, no badges anywhere on any view. Ready to be '
+  + 'wrapped.\n\nNo people, no other vehicles, no watermark, no caption text, no labels, no '
+  + 'dimension lines, no title on the sheet.';
+const FLAT_LIGHTING = 'LIGHTING AND FINISH: flat, even, neutral studio lighting across every '
+  + 'panel, as on a wrap shop\'s design proof. No dramatic rim lighting, no cast shadows, no '
+  + 'glossy floor reflections, no background gradient, no depth-of-field blur. Every panel is '
+  + 'evenly lit and in sharp focus edge to edge. Clean, crisp, technical.';
 
 /**
  * The blank vehicle sheet the wrap gets painted onto.
  *
- * Three orthographic-style views of ONE vehicle on a single sheet: side profile across the
- * top, front and rear beneath it. Flat, even, shadowless lighting on a plain light
- * background, because the artwork is the deliverable and staging that competes with it is
- * staging that hides it.
+ * The view count matches what the coverage actually needs to show, not a fixed three-view
+ * sheet: a sides-only or spot-graphics job has nothing to say about the front or rear, so
+ * rendering (and later preserving) blank panels for them is wasted resolution budget on the
+ * one thing that IS the deliverable — the side. Full coverage keeps the original three-view
+ * layout sheet; sides+rear drops to two views; sides-only and spot drop to one.
+ *
+ * Flat, even, shadowless lighting on a plain light background either way, because the
+ * artwork is the deliverable and staging that competes with it is staging that hides it.
  *
  * Generated once per run and reused for both variants — a fresh vehicle per variant
  * would give two different vans, which defeats comparing designs side by side.
+ *
+ * @param {'full'|'sides'|'sides_rear'|'spot'} coverage which views to render
  */
-async function renderBaseVehicle({ year, make, model, trim }) {
+async function renderBaseVehicle({ year, make, model, trim, coverage = 'full' }) {
   const vehicle = [year, make, model, trim].filter(Boolean).join(' ');
+
+  if (coverage === 'sides' || coverage === 'spot') {
+    const prompt = 'A professional vehicle-wrap design mockup template — a single SIDE PROFILE '
+      + 'view of a plain white ' + vehicle + ', shot square-on at 90 degrees against a plain very '
+      + 'light grey studio background. The entire vehicle in frame from front bumper to rear '
+      + 'bumper, wheels straight, no perspective distortion, filling most of the frame. No other '
+      + 'view of the vehicle anywhere in the image — this is a single shot, not a sheet.\n\n'
+      + FLAT_LIGHTING + '\n\n' + BLANK_BODYWORK;
+    return generateImage([{ text: prompt }]);
+  }
+
+  if (coverage === 'sides_rear') {
+    const prompt = 'A professional vehicle-wrap design mockup template sheet for a plain white '
+      + vehicle + ', laid out as a print-ready presentation sheet.\n\n'
+      + 'LAYOUT — TWO views of the SAME vehicle on one sheet, against a plain very light grey '
+      + 'studio background:\n'
+      + '- Across the top: the full SIDE PROFILE, shot square-on at 90 degrees, the entire '
+      + 'vehicle in frame from front bumper to rear bumper, wheels straight, no perspective '
+      + 'distortion. This is the largest view.\n'
+      + '- Below it: the REAR view, square-on, showing the full rear doors or tailgate and rear '
+      + 'bumper.\n'
+      + '- Clear even spacing between the two views. Each view complete and uncropped. NO FRONT '
+      + 'VIEW anywhere on this sheet.\n\n'
+      + FLAT_LIGHTING + '\n\n' + BLANK_BODYWORK;
+    return generateImage([{ text: prompt }]);
+  }
+
+  // full — the original three-view layout sheet.
   const prompt = 'A professional vehicle-wrap design mockup template sheet for a plain white '
     + vehicle + ', laid out as a print-ready presentation sheet.\n\n'
     + 'LAYOUT — three views of the SAME vehicle on one sheet, against a plain very light grey '
@@ -222,14 +286,7 @@ async function renderBaseVehicle({ year, make, model, trim }) {
     + '- Bottom right: the REAR view, square-on, showing the full rear doors or tailgate and '
     + 'rear bumper.\n'
     + '- Clear even spacing between the views. Each view complete and uncropped.\n\n'
-    + 'LIGHTING AND FINISH: flat, even, neutral studio lighting across every panel, as on a '
-    + 'wrap shop\'s design proof. No dramatic rim lighting, no cast shadows, no glossy floor '
-    + 'reflections, no background gradient, no depth-of-field blur. Every panel is evenly lit '
-    + 'and in sharp focus edge to edge. Clean, crisp, technical.\n\n'
-    + 'The bodywork is completely blank: pure white paint, no text, no graphics, no logos, no '
-    + 'livery, no pinstripes, no badges anywhere on any view. Ready to be wrapped.\n\n'
-    + 'No people, no other vehicles, no watermark, no caption text, no labels, no dimension '
-    + 'lines, no title on the sheet.';
+    + FLAT_LIGHTING + '\n\n' + BLANK_BODYWORK;
 
   return generateImage([{ text: prompt }]);
 }
@@ -292,16 +349,10 @@ async function paintWrap({ baseImage, imagePrompt, references = [], intensity = 
   // Coverage is the difference between a wrap and a decal job. At FULL coverage it is also
   // the one rule that genuinely differs by treatment: the dense look demands every panel, the
   // restrained look earns its effect from empty base colour. Partial coverage overrides both —
-  // which panels are wrapped at all is a separate question from how busy the wrapped ones are.
+  // and the base sheet itself only contains the views that coverage actually needs (see
+  // renderBaseVehicle), so a partial job has no front/rear panel to describe as bare at all.
   const REAR_FULLY_WRAPPED = '\n- The rear is fully wrapped, edge to edge: both rear doors or the '
     + 'tailgate/hatch, and the rear bumper. No bare white body panel visible there.';
-  const BARE_REAR = '\n- The rear — both rear doors or the tailgate/hatch, and the rear bumper — is '
-    + 'NOT wrapped. It stays in the vehicle\'s own bare factory paint, exactly as shown in the blank '
-    + 'base sheet: no colour fields, no graphics, no text.';
-  const BARE_FRONT = '\n- The front — hood, front bumper and mirror caps — is NOT wrapped. It stays '
-    + 'in the vehicle\'s own bare factory paint, exactly as shown in the blank base sheet: no colour '
-    + 'fields, no graphics, no text. The front view of the sheet shows the vehicle essentially '
-    + 'unwrapped.';
 
   const coverageByPreset = {
     full: bold
@@ -312,45 +363,66 @@ async function paintWrap({ baseImage, imagePrompt, references = [], intensity = 
       : '\n- Every view carries the base colour across the full body, including hood and bumpers. '
         + 'Empty space is in the base colour, never in bare white paint.',
 
-    sides: '\n- This is a SIDES-ONLY partial wrap, not a full wrap. On the side view only: the wrap '
-      + 'covers the doors, the full side panel and the pillars between the windows, edge to edge, the '
-      + 'way a real sides-only wrap job is cut.'
-      + BARE_FRONT
-      + BARE_REAR
-      + '\n- The rear view of the sheet also shows the vehicle essentially unwrapped, in its bare paint.',
+    sides: '\n- This is a SIDES-ONLY partial wrap, not a full wrap. The wrap covers the doors, the '
+      + 'full side panel and the pillars between the windows, edge to edge, the way a real '
+      + 'sides-only wrap job is cut. This image shows only that one side view — there is no front '
+      + 'or rear panel to consider.',
 
     sides_rear: '\n- This is a SIDES + REAR partial wrap, not a full wrap. On the side view: the wrap '
       + 'covers the doors, the full side panel and the pillars between the windows, edge to edge, the '
       + 'way a real partial wrap is cut.'
       + REAR_FULLY_WRAPPED
-      + BARE_FRONT,
+      + ' There is no front view on this sheet at all.',
 
     spot: '\n- This is SPOT GRAPHICS — a decal package, not a wrap. The only graphics anywhere on the '
       + 'vehicle are the logo and the business wordmark, applied at a moderate size on the front doors '
-      + 'in the side view — NOT edge to edge, NOT spanning the panel, sized the way a real vinyl decal '
-      + 'application is: generous bare paint visible all around it. Every other panel on every view — '
-      + 'hood, roof, rear, bumpers, mirror caps — stays in the vehicle\'s own bare factory paint exactly '
-      + 'as shown in the blank base sheet: no colour fields, no additional graphics, no text.'
-      + '\n- The front and rear views of the sheet show the vehicle essentially unwrapped, in its bare paint.',
+      + 'in this side view — NOT edge to edge, NOT spanning the panel, sized the way a real vinyl decal '
+      + 'application is: generous bare paint visible all around it. Every other part of this one panel — '
+      + 'the rest of the doors, the rear quarter, the roofline — stays in the vehicle\'s own bare factory '
+      + 'paint exactly as shown in the blank base image: no colour fields, no additional graphics, no '
+      + 'text. This image shows only this one side view — there is no front or rear panel.',
   };
 
   const coverage = coverageByPreset[coveragePreset] || coverageByPreset.full;
 
+  // The layout-preservation clause has to match what renderBaseVehicle actually produced for
+  // this coverage — a single side shot, a two-view sheet, or the original three-view sheet.
+  const viewCount = coveragePreset === 'full' ? 3 : (coveragePreset === 'sides_rear' ? 2 : 1);
+  const layoutClause = viewCount === 3
+    ? '\n- Keep the THREE-VIEW LAYOUT exactly as in the attached sheet: the side profile across the '
+      + 'top, the front at bottom left, the rear at bottom right, each in the same position, at the '
+      + 'same size and at the same angle. Do not merge them, do not re-stage the vehicle at a new '
+      + 'angle, do not drop a view, do not add a view.'
+    : viewCount === 2
+    ? '\n- Keep the TWO-VIEW LAYOUT exactly as in the attached sheet: the side profile view and the '
+      + 'rear view, each in the same position, at the same size and at the same angle. Do not merge '
+      + 'them, do not re-stage the vehicle at a new angle, do not add a front view, do not drop '
+      + 'either view.'
+    : '\n- This is a SINGLE SIDE-PROFILE IMAGE. Keep the vehicle\'s position, angle and framing '
+      + 'exactly as shown. Do not add a front or rear view and do not create a multi-panel layout.';
+
+  const consistencyClause = viewCount > 1
+    ? `\n- All ${viewCount === 3 ? 'three' : 'two'} views show the SAME design: identical colours, `
+      + 'identical wordmark treatment, identical mascot. They are '
+      + `${viewCount === 3 ? 'three sides' : 'two sides'} of one vehicle, not design options.`
+    : '';
+
+  // The grille carve-out only matters when a front view actually exists to carve it out of.
+  const grilleClause = viewCount === 3
+    ? '\n- The grille\'s mesh or slatted insert, and any badge set into it, are NOT wrapped — leave that '
+      + 'area in the vehicle\'s real finish exactly as photographed. A wrap cannot be applied to a '
+      + 'perforated, three-dimensional opening; every real installer cuts around it. Likewise leave '
+      + 'glass, wheels, tyres, chrome trim and door handles unwrapped.'
+    : '\n- Leave glass, wheels, tyres, chrome trim and door handles unwrapped.';
+
   const instruction = imagePrompt + '\n\nMANDATORY CONSTRAINTS:'
-    + '\n- Keep the THREE-VIEW LAYOUT exactly as in the attached sheet: the side profile across the '
-    + 'top, the front at bottom left, the rear at bottom right, each in the same position, at the '
-    + 'same size and at the same angle. Do not merge them, do not re-stage the vehicle at a new '
-    + 'angle, do not drop a view, do not add a view.'
+    + layoutClause
     + '\n- Preserve the vehicle exactly as shown: same model, shape, proportions, wheels, windows, '
     + 'background and flat even lighting. Change only the graphics applied to the bodywork.'
-    + '\n- All three views show the SAME design: identical colours, identical wordmark treatment, '
-    + 'identical mascot. They are three sides of one vehicle, not three design options.'
+    + consistencyClause
     + coverage
     + "\n- The wrap must follow the body's curves and panel lines like real vinyl, not float as a flat overlay."
-    + '\n- The grille\'s mesh or slatted insert, and any badge set into it, are NOT wrapped — leave that '
-    + 'area in the vehicle\'s real finish exactly as photographed. A wrap cannot be applied to a '
-    + 'perforated, three-dimensional opening; every real installer cuts around it. Likewise leave '
-    + 'glass, wheels, tyres, chrome trim and door handles unwrapped.'
+    + grilleClause
     + '\n- Every text string must be spelled exactly as given and be crisply legible. Text sits wholly '
     + 'within ONE flat field of colour, or carries a heavy contrasting keyline if it crosses a boundary.'
     + '\n- The business name is the largest element on the vehicle by a wide margin, and whatever the '

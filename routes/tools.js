@@ -11,7 +11,7 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
-const { generateWrapBrief } = require('../utils/wrapDesignBrief');
+const { generateWrapBrief, refineWrapVariant } = require('../utils/wrapDesignBrief');
 const { renderBaseVehicle, paintWrap, WrapImageError } = require('../utils/wrapMockupImages');
 const { extractBrandColors } = require('../utils/brandColors');
 const { scrapeSite, fetchImage, ScrapeError } = require('../utils/siteScrape');
@@ -39,6 +39,11 @@ const RUNS_PER_DAY = 200;
 // it is also the one endpoint here that fetches a URL the caller supplies, so it gets a
 // tighter cap of its own rather than sharing the mockup budget.
 const SCANS_PER_DAY = 40;
+
+// A refinement is one Claude call plus one Gemini call — cheaper than a full run (which is
+// one Claude call plus three Gemini calls), so it gets its own, more generous budget rather
+// than sharing RUNS_PER_DAY.
+const REFINEMENTS_PER_DAY = 150;
 
 // Wrap copy that the customer supplies. Capped because these are printed on a vehicle:
 // past seven services the block stops being readable at 40mph, and the wrap is worse for
@@ -75,6 +80,26 @@ function configureCloudinary() {
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
+
+/**
+ * A Cloudinary upload closure scoped to one user's folder — shared by the generate and
+ * refine endpoints rather than redefined in each. Returns the whole Cloudinary result,
+ * because a caller sometimes needs `colors` off it as well as the URL.
+ */
+function makeUploader(userId) {
+  return (buffer, publicId, opts = {}) => new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: `sorce/wrap-mockups/${userId}`,
+        public_id: publicId,
+        resource_type: 'image',
+        ...opts,
+      },
+      (err, result) => (err ? reject(err) : resolve(result))
+    );
+    stream.end(buffer);
   });
 }
 
@@ -173,20 +198,7 @@ router.post(
       const createdAt = reservation.rows[0].created_at;
 
       configureCloudinary();
-      // Returns the whole Cloudinary result, because the artwork uploads need `colors`
-      // off it as well as the URL.
-      const uploadBuffer = (buffer, publicId, opts = {}) => new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: `sorce/wrap-mockups/${userId}`,
-            public_id: publicId,
-            resource_type: 'image',
-            ...opts,
-          },
-          (err, result) => (err ? reject(err) : resolve(result))
-        );
-        stream.end(buffer);
-      });
+      const uploadBuffer = makeUploader(userId);
 
       const stamp = Date.now();
 
@@ -268,6 +280,27 @@ router.post(
         socialHandle: socialHandle?.trim() || undefined,
       };
 
+      // The original request, not just its creative output — needed later to reload this run
+      // into the form, and to reconstruct the `business` object a refine call re-briefs from.
+      // Artwork files themselves aren't included: they're never persisted as re-uploadable
+      // files, only as the Cloudinary URLs already captured in artwork_urls below.
+      const requestContext = {
+        businessName: businessName.trim(),
+        service: service?.trim() || '',
+        tagline: tagline?.trim() || '',
+        phone: phone || '', website: website || '',
+        primaryColor: resolvedColors.primary, accentColor: resolvedColors.accent,
+        autoColors: useDetected,
+        year, make: make.trim(), model: model.trim(), trim: trim || '',
+        customerEmail: customerEmail?.trim() || '',
+        serviceArea: wrapContent.serviceArea || '',
+        yearsInBusiness: wrapContent.yearsInBusiness || '',
+        socialHandle: wrapContent.socialHandle || '',
+        services: wrapContent.services,
+        badges: wrapContent.badges,
+        designMode: mode, designIntensity: intensity, wrapCoverage: coverage,
+      };
+
       // 4. The creative decisions. Claude is shown the artwork itself, so it reads the
       //    trade, the palette and the brand's character rather than being told them.
       const brief = await generateWrapBrief({
@@ -284,10 +317,11 @@ router.post(
         content: wrapContent,
       }, userId, references);
 
-      // 5. One base sheet — side, front and rear of the same blank vehicle — reused for all
-      //    two variants. Generating a fresh vehicle per variant would give two different
-      //    vans, which defeats comparing designs.
-      const baseImage = await renderBaseVehicle({ year, make, model, trim });
+      // 5. One base image — reused for both variants so a fresh vehicle per variant doesn't
+      //    give two different vans, which would defeat comparing designs. Its view count
+      //    matches coverage: three views for a full wrap, fewer for a partial one — see
+      //    renderBaseVehicle.
+      const baseImage = await renderBaseVehicle({ year, make, model, trim, coverage });
       const sourcePhotoUrl = (await uploadBuffer(baseImage, `${stamp}-base`)).secure_url;
 
       // 6. Paint each variant. Sequential on purpose — the image model is the slow,
@@ -324,6 +358,14 @@ router.post(
             websiteDisplay: variant.website_display || undefined,
             mascot: variant.mascot || undefined,
             imageUrl: uploaded.secure_url,
+            // Kept (not just the assembled image_prompt) so a later refine call can show
+            // Claude exactly what it wrote last time and change only what's asked — these
+            // never reached the UI or the old stored shape, only image_prompt did.
+            designSpec: variant.design_spec,
+            sidePrompt: variant.side_prompt,
+            frontPrompt: variant.front_prompt || undefined,
+            rearPrompt: variant.rear_prompt || undefined,
+            imagePrompt: variant.image_prompt,
           });
         } catch (err) {
           console.error(`[wrap-mockup] variant ${variant.id} failed: ${err.message}`);
@@ -349,12 +391,13 @@ router.post(
       await pool.query(
         `UPDATE wrap_mockups
             SET source_photo_url = $2, variants = $3, creative_summary = $4,
-                dominant_message = $5, artwork_urls = $6, brand_colors = $7, status = 'done'
+                dominant_message = $5, artwork_urls = $6, brand_colors = $7,
+                request_context = $8, status = 'done'
           WHERE id = $1`,
         [mockupId, sourcePhotoUrl, JSON.stringify(variants),
          brief.creative_summary || null,
          [brief.inferred_trade, brief.dominant_message].filter(Boolean).join(' — ') || null,
-         JSON.stringify(artworkUploads), JSON.stringify(resolvedColors)]
+         JSON.stringify(artworkUploads), JSON.stringify(resolvedColors), JSON.stringify(requestContext)]
       );
 
       res.json({
@@ -400,7 +443,7 @@ router.get('/wrap-mockups', authenticateToken, requireToolsAccess, async (req, r
     const result = await pool.query(
       `SELECT id, business_name, vehicle, source_photo_url, variants,
               creative_summary, dominant_message, customer_email, created_at,
-              artwork_urls, brand_colors, status
+              artwork_urls, brand_colors, status, request_context
          FROM wrap_mockups WHERE user_id = $1
         ORDER BY created_at DESC LIMIT 40`,
       [req.user.userId]
@@ -409,6 +452,165 @@ router.get('/wrap-mockups', authenticateToken, requireToolsAccess, async (req, r
   } catch (error) {
     console.error('Failed to list wrap mockups:', error.message);
     res.status(500).json({ error: 'Failed to load mockups' });
+  }
+});
+
+// POST /api/tools/wrap-mockup/:id/refine - Tweak one already-rendered variant instead of
+// re-rolling the whole run. Re-briefs through Claude first (so the printed-copy fields —
+// services, phone, palette swatches — stay in sync with whatever changed), then repaints via
+// Gemini from the SAME base image and reference artwork the original run used. The revised
+// result is appended to that variant's revision history rather than replacing it outright, so
+// a tweak that makes things worse can be stepped back from.
+router.post('/wrap-mockup/:id/refine', authenticateToken, requireToolsAccess, async (req, res) => {
+  const userId = req.user.userId;
+  const mockupId = Number(req.params.id);
+  const { variantId, instruction } = req.body || {};
+
+  if (!Number.isInteger(mockupId)) return res.status(400).json({ error: 'Invalid mockup id' });
+  if (!variantId?.trim()) return res.status(400).json({ error: 'variantId is required' });
+  if (!instruction?.trim()) return res.status(400).json({ error: 'A revision instruction is required' });
+
+  try {
+    const row = await pool.query(
+      `SELECT id, variants, source_photo_url, artwork_urls, request_context, status
+         FROM wrap_mockups WHERE id = $1 AND user_id = $2`,
+      [mockupId, userId]
+    );
+    if (row.rows.length === 0) return res.status(404).json({ error: 'Mockup not found' });
+    const mockup = row.rows[0];
+    if (mockup.status !== 'done') {
+      return res.status(409).json({ error: `This mockup is ${mockup.status}, not ready to refine` });
+    }
+    if (!mockup.request_context || !mockup.source_photo_url) {
+      // Rows created before request_context existed have nothing to refine from.
+      return res.status(409).json({ error: 'This mockup predates the refine feature and cannot be refined — generate a new one.' });
+    }
+
+    const variants = Array.isArray(mockup.variants) ? mockup.variants : [];
+    const variantIndex = variants.findIndex(v => v.id === variantId);
+    if (variantIndex === -1) return res.status(404).json({ error: 'Variant not found on this mockup' });
+    const variant = variants[variantIndex];
+
+    // Recorded before the paid work starts, same reasoning as wrap_brand_scans: a failed
+    // refine still burned a Claude call and a Gemini call, so it still counts.
+    const rate = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM wrap_mockup_refinements
+        WHERE user_id = $1 AND created_at > NOW() - INTERVAL '24 hours'`,
+      [userId]
+    );
+    if (rate.rows[0].n >= REFINEMENTS_PER_DAY) {
+      return res.status(429).json({
+        error: `Daily limit of ${REFINEMENTS_PER_DAY} refinements reached. Try again tomorrow.`,
+        code: 'RATE_LIMITED',
+      });
+    }
+    await pool.query(
+      'INSERT INTO wrap_mockup_refinements (user_id, mockup_id) VALUES ($1, $2)',
+      [userId, mockupId]
+    );
+
+    // Re-fetch the bytes this request doesn't have in memory — the original request did,
+    // but that request is long finished. Same fetch-and-buffer fetchImage already uses for
+    // brand-scan's logo/photo candidates.
+    const { buffer: baseImage } = await fetchImage(mockup.source_photo_url, 10 * 1024 * 1024);
+    const artworkUrls = Array.isArray(mockup.artwork_urls) ? mockup.artwork_urls : [];
+    const references = [];
+    for (const art of artworkUrls) {
+      try {
+        const { buffer, contentType } = await fetchImage(art.url, 5 * 1024 * 1024);
+        references.push({ buffer, mimeType: sniffImageType(buffer) || contentType, label: art.name || 'artwork' });
+      } catch (err) {
+        console.warn(`[wrap-mockup-refine] artwork re-fetch failed: ${err.message}`);
+      }
+    }
+
+    const ctx = mockup.request_context;
+    const business = {
+      businessName: ctx.businessName,
+      service: ctx.service || undefined,
+      tagline: ctx.tagline || undefined,
+      phone: ctx.phone, website: ctx.website,
+      primaryColor: ctx.primaryColor, accentColor: ctx.accentColor,
+      vehicle: [ctx.year, ctx.make, ctx.model, ctx.trim].filter(Boolean).join(' '),
+      designMode: ctx.designMode, designIntensity: ctx.designIntensity, wrapCoverage: ctx.wrapCoverage,
+      content: {
+        services: ctx.services || [], badges: ctx.badges || [],
+        serviceArea: ctx.serviceArea || undefined,
+        yearsInBusiness: ctx.yearsInBusiness || undefined,
+        socialHandle: ctx.socialHandle || undefined,
+      },
+    };
+
+    const revised = await refineWrapVariant(business, {
+      id: variant.id, label: variant.label, color_strategy: variant.color_strategy,
+      signature: variant.signature, rationale: variant.rationale, palette: variant.palette,
+      wordmark: variant.wordmark, trade_descriptor: variant.tradeDescriptor,
+      tagline: variant.tagline || '', services_shown: variant.servicesShown || [],
+      credentials_shown: variant.credentialsShown || [],
+      phone_display: variant.phoneDisplay || '', website_display: variant.websiteDisplay || '',
+      mascot: variant.mascot || '', design_spec: variant.designSpec,
+      side_prompt: variant.sidePrompt, front_prompt: variant.frontPrompt || '',
+      rear_prompt: variant.rearPrompt || '',
+    }, instruction.trim(), userId, references);
+
+    configureCloudinary();
+    const uploadBuffer = makeUploader(userId);
+    const painted = await paintWrap({
+      baseImage,
+      imagePrompt: revised.image_prompt,
+      references,
+      intensity: ctx.designIntensity,
+      coverage: ctx.wrapCoverage,
+    });
+    const revisionNumber = (variant.revisions?.length || 1);
+    const uploaded = await uploadBuffer(painted, `${Date.now()}-${variant.id}-refine-${revisionNumber}`);
+
+    const newState = {
+      id: variant.id,
+      label: revised.label,
+      rationale: revised.rationale,
+      signature: revised.signature,
+      color_strategy: revised.color_strategy,
+      palette: revised.palette,
+      wordmark: revised.wordmark,
+      tradeDescriptor: revised.trade_descriptor,
+      tagline: revised.tagline || undefined,
+      servicesShown: revised.services_shown,
+      credentialsShown: revised.credentials_shown,
+      phoneDisplay: revised.phone_display || undefined,
+      websiteDisplay: revised.website_display || undefined,
+      mascot: revised.mascot || undefined,
+      imageUrl: uploaded.secure_url,
+      designSpec: revised.design_spec,
+      sidePrompt: revised.side_prompt,
+      frontPrompt: revised.front_prompt || undefined,
+      rearPrompt: revised.rear_prompt || undefined,
+      imagePrompt: revised.image_prompt,
+      instruction: instruction.trim(),
+      changeSummary: revised.change_summary || undefined,
+      createdAt: new Date().toISOString(),
+    };
+
+    // First refinement on this variant seeds revision 0 with the pre-refine state (labelled
+    // "Original") so stepping back has somewhere to go; every later refine just appends.
+    const revisions = Array.isArray(variant.revisions) && variant.revisions.length > 0
+      ? variant.revisions
+      : [{ ...variant, instruction: null, changeSummary: undefined, createdAt: variant.createdAt || null }];
+    revisions.push(newState);
+
+    // The variant's top-level fields mirror the LATEST revision, so every other read path
+    // (GET /wrap-mockups, the main generate response shape) keeps working unchanged.
+    variants[variantIndex] = { ...newState, revisions };
+
+    await pool.query('UPDATE wrap_mockups SET variants = $2 WHERE id = $1', [mockupId, JSON.stringify(variants)]);
+
+    res.json({ mockupId, variant: variants[variantIndex] });
+  } catch (error) {
+    if (error instanceof WrapImageError) {
+      return res.status(400).json({ error: error.message, code: error.code });
+    }
+    console.error('[wrap-mockup-refine] failed:', error.message);
+    res.status(500).json({ error: 'Failed to refine mockup', detail: error.message });
   }
 });
 

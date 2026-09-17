@@ -147,15 +147,22 @@ recognisable letters and the services block next to it comes back as noise. So:
 
 === WRITING THE IMAGE PROMPTS ===
 
-The render is a THREE-VIEW LAYOUT SHEET: one image containing the vehicle's side profile, its
-front, and its rear, all of the same vehicle wrapped in the same design. You write four
-pieces, and they are assembled into the instruction the image model paints from:
+The render is normally a THREE-VIEW LAYOUT SHEET: one image containing the vehicle's side
+profile, its front, and its rear, all of the same vehicle wrapped in the same design. THE
+REFERENCE BLOCK MAY OVERRIDE THIS for a partial wrap or spot-graphics job — a sides-only or
+spot job renders as a single side-profile image, and sides+rear as a two-view sheet with no
+front view at all. When the reference block's coverage override applies, follow it: write
+only the fields it says matter, and leave the others as a short placeholder — they will not
+reach the image model. You still write four pieces, and they are assembled into the
+instruction the image model paints from:
 
-- design_spec: the design that is common to all three views. Exact hex values with the role
-  each one plays, the field geometry and the divider device, the type treatment, the mascot
-  (if any) described precisely enough to be drawn the same way three times, and the
-  background scene or texture. This is what keeps the three views recognisably one design.
-- side_prompt, front_prompt, rear_prompt: what goes where on each view.
+- design_spec: the design that is common to every view actually being rendered. Exact hex
+  values with the role each one plays, the field geometry and the divider device, the type
+  treatment, the mascot (if any) described precisely enough to be drawn the same way on every
+  view, and the background scene or texture. This is what keeps every view recognisably one
+  design.
+- side_prompt, front_prompt, rear_prompt: what goes where on each view that is actually
+  rendered, per the coverage override.
 
 In all four: give EXACT hex colours, give the exact text strings verbatim in quotes, and say
 which flat colour field each text element sits on. Always require the vehicle's shape, angle,
@@ -192,13 +199,96 @@ primaryColor and accentColor may have been sampled from the artwork rather than 
 treat them as the brand's real colours. If the sampled primary is a mid-tone, darken or
 saturate it rather than using it flat — a mid-chroma body is the worst outcome available.`;
 
+// Shared between BRIEF_TOOL (two fresh variants) and REFINE_TOOL (one revised variant) — the
+// per-variant shape is identical either way, only how many of them and what surrounds them
+// differs. Kept in one place so the two tools can't silently drift apart on a field.
+//
+// The content manifest (wordmark, services_shown, credentials_shown, phone/website display
+// strings) exists because prose prompts silently drop content. Making Claude commit to each
+// string as its own field means the assembled image prompt provably contains them, and means
+// the salesperson can see exactly what will be printed before spending a render.
+const VARIANT_SCHEMA = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', enum: ['character_led', 'wordmark_led'] },
+    label: { type: 'string', description: 'A short name for this direction the salesperson can say out loud.' },
+    color_strategy: {
+      type: 'string',
+      enum: ['saturated_field', 'complementary_split', 'dark_anchor', 'committed_two_tone', 'material_field', 'heritage_field'],
+      description: 'Which named colour strategy this direction uses. Use a different one per direction where the brand allows.',
+    },
+    signature: {
+      type: 'string',
+      description: 'The ONE thing this vehicle will be remembered by, and which source it came from (name wordplay, local identity, trade artifact, character, badge). Specific, not a category.',
+    },
+    rationale: { type: 'string', description: 'One sentence on what this direction is betting on.' },
+
+    palette: {
+      type: 'array',
+      minItems: 2,
+      description: 'Every colour in this design, with the job it does. Roles: field_primary, field_secondary, type, keyline, accent.',
+      items: {
+        type: 'object',
+        properties: {
+          role: { type: 'string' },
+          hex: { type: 'string', description: 'Six-digit hex, with the leading #.' },
+        },
+        required: ['role', 'hex'],
+      },
+    },
+    wordmark: {
+      type: 'string',
+      description: 'The business name exactly as it will be set on the vehicle, including capitalisation and any line break shown as " / ".',
+    },
+    trade_descriptor: {
+      type: 'string',
+      description: 'The words that tell a stranger what this business does, exactly as they will appear.',
+    },
+    tagline: {
+      type: 'string',
+      description: 'The tagline as it will appear, or an empty string if this direction uses none. Creative, never a factual claim.',
+    },
+    services_shown: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'The services printed on this design, verbatim from the supplied content inventory. Empty array if none were supplied or the treatment excludes them. Never invent one.',
+    },
+    credentials_shown: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'The credential badges printed on this design, verbatim from the supplied content inventory. Empty array if none were supplied. Never invent one.',
+    },
+    phone_display: {
+      type: 'string',
+      description: 'The phone number formatted exactly as it will be printed, or an empty string if this design carries none.',
+    },
+    website_display: {
+      type: 'string',
+      description: 'The website exactly as it will be printed, or an empty string if this design carries none.',
+    },
+    mascot: {
+      type: 'string',
+      description: 'The mascot described precisely enough to be drawn identically on every view: what it is, its pose, what it holds, its colours, its drawing style. Empty string if this direction has none.',
+    },
+
+    design_spec: {
+      type: 'string',
+      description: 'The design common to every view actually rendered (see the reference block\'s coverage override): exact hexes and their roles, field geometry and divider device, type treatment, mascot, background scene. This is what keeps those views one design.',
+    },
+    side_prompt: { type: 'string', description: 'What goes where on the side profile view. Always used.' },
+    front_prompt: { type: 'string', description: 'What goes where on the front view, including hood, bumper and mirror caps. Not used when the coverage override has no front view (sides-only, sides+rear, or spot graphics) — write a short placeholder in that case.' },
+    rear_prompt: { type: 'string', description: 'What goes where on the rear view — usually the densest panel. Not used when the coverage override has no rear view (sides-only or spot graphics) — write a short placeholder in that case.' },
+  },
+  required: [
+    'id', 'label', 'color_strategy', 'signature', 'rationale',
+    'palette', 'wordmark', 'trade_descriptor', 'services_shown', 'credentials_shown',
+    'phone_display', 'website_display',
+    'design_spec', 'side_prompt', 'front_prompt', 'rear_prompt',
+  ],
+};
+
 // The tool is the output contract. Claude is forced to call it, so the response is a
 // validated object rather than text that has to be parsed.
-//
-// The per-variant content manifest (wordmark, services_shown, credentials_shown, phone/website
-// display strings) exists because prose prompts silently drop content. Making Claude commit to
-// each string as its own field means the assembled image prompt provably contains them, and
-// means the salesperson can see exactly what will be printed before spending a render.
 const BRIEF_TOOL = {
   name: 'submit_wrap_brief',
   description: 'Return the two wrap design directions.',
@@ -238,88 +328,28 @@ const BRIEF_TOOL = {
         type: 'array',
         minItems: 2,
         maxItems: 2,
-        items: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', enum: ['character_led', 'wordmark_led'] },
-            label: { type: 'string', description: 'A short name for this direction the salesperson can say out loud.' },
-            color_strategy: {
-              type: 'string',
-              enum: ['saturated_field', 'complementary_split', 'dark_anchor', 'committed_two_tone', 'material_field', 'heritage_field'],
-              description: 'Which named colour strategy this direction uses. Use a different one per direction where the brand allows.',
-            },
-            signature: {
-              type: 'string',
-              description: 'The ONE thing this vehicle will be remembered by, and which source it came from (name wordplay, local identity, trade artifact, character, badge). Specific, not a category.',
-            },
-            rationale: { type: 'string', description: 'One sentence on what this direction is betting on.' },
-
-            palette: {
-              type: 'array',
-              minItems: 2,
-              description: 'Every colour in this design, with the job it does. Roles: field_primary, field_secondary, type, keyline, accent.',
-              items: {
-                type: 'object',
-                properties: {
-                  role: { type: 'string' },
-                  hex: { type: 'string', description: 'Six-digit hex, with the leading #.' },
-                },
-                required: ['role', 'hex'],
-              },
-            },
-            wordmark: {
-              type: 'string',
-              description: 'The business name exactly as it will be set on the vehicle, including capitalisation and any line break shown as " / ".',
-            },
-            trade_descriptor: {
-              type: 'string',
-              description: 'The words that tell a stranger what this business does, exactly as they will appear.',
-            },
-            tagline: {
-              type: 'string',
-              description: 'The tagline as it will appear, or an empty string if this direction uses none. Creative, never a factual claim.',
-            },
-            services_shown: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'The services printed on this design, verbatim from the supplied content inventory. Empty array if none were supplied or the treatment excludes them. Never invent one.',
-            },
-            credentials_shown: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'The credential badges printed on this design, verbatim from the supplied content inventory. Empty array if none were supplied. Never invent one.',
-            },
-            phone_display: {
-              type: 'string',
-              description: 'The phone number formatted exactly as it will be printed, or an empty string if this design carries none.',
-            },
-            website_display: {
-              type: 'string',
-              description: 'The website exactly as it will be printed, or an empty string if this design carries none.',
-            },
-            mascot: {
-              type: 'string',
-              description: 'The mascot described precisely enough to be drawn identically three times: what it is, its pose, what it holds, its colours, its drawing style. Empty string if this direction has none.',
-            },
-
-            design_spec: {
-              type: 'string',
-              description: 'The design common to all three views: exact hexes and their roles, field geometry and divider device, type treatment, mascot, background scene. This is what keeps the three views one design.',
-            },
-            side_prompt: { type: 'string', description: 'What goes where on the side profile view.' },
-            front_prompt: { type: 'string', description: 'What goes where on the front view, including hood, bumper and mirror caps.' },
-            rear_prompt: { type: 'string', description: 'What goes where on the rear view — usually the densest panel.' },
-          },
-          required: [
-            'id', 'label', 'color_strategy', 'signature', 'rationale',
-            'palette', 'wordmark', 'trade_descriptor', 'services_shown', 'credentials_shown',
-            'phone_display', 'website_display',
-            'design_spec', 'side_prompt', 'front_prompt', 'rear_prompt',
-          ],
-        },
+        items: VARIANT_SCHEMA,
       },
     },
     required: ['creative_summary', 'inferred_trade', 'brand_read', 'cta_type', 'dominant_message', 'self_critique', 'variants'],
+  },
+};
+
+// Same per-variant shape as BRIEF_TOOL, but returning exactly ONE revised variant rather than
+// two fresh directions — see refineWrapVariant below.
+const REFINE_TOOL = {
+  name: 'submit_wrap_revision',
+  description: 'Return the revised wrap variant.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      change_summary: {
+        type: 'string',
+        description: 'One sentence on what actually changed and which fields it touched, for the salesperson to confirm before spending a render.',
+      },
+      variant: VARIANT_SCHEMA,
+    },
+    required: ['change_summary', 'variant'],
   },
 };
 
@@ -339,20 +369,55 @@ function decodeEntities(value) {
 }
 
 /**
- * Fold the shared spec and the three view prompts into the single instruction paintWrap
+ * Fold the shared spec and the relevant view prompts into the single instruction paintWrap
  * paints from. Assembled here rather than asked for as one field because a model writing
  * one long prose prompt reliably shortchanges the rear view — separate required fields
  * make skipping it impossible.
+ *
+ * Which views are included depends on coverage: front_prompt/rear_prompt exist on every
+ * variant regardless (the schema requires them), but a sides-only or spot job never rendered
+ * a front or rear panel to paint, so including those sections here would hand the image model
+ * instructions for a view it was never shown — dropped rather than assembled.
+ *
+ * @param {object} v the variant, with design_spec/side_prompt/front_prompt/rear_prompt
+ * @param {'full'|'sides'|'sides_rear'|'spot'} coverage which views were actually rendered
  */
-function assembleImagePrompt(v) {
+function assembleImagePrompt(v, coverage = 'full') {
   const section = (title, body) => (body ? `\n\n${title}\n${body}` : '');
+  const hasFront = coverage === 'full';
+  const hasRear = coverage === 'full' || coverage === 'sides_rear';
+  const viewCount = hasFront && hasRear ? 'three views of the vehicle in the layout sheet'
+    : hasRear ? 'two views of the vehicle in the layout sheet'
+    : 'the vehicle in this image';
+
   return [
-    'Apply this wrap design to all three views of the vehicle in the layout sheet.',
-    section('THE DESIGN (identical across all three views):', v.design_spec),
-    section('SIDE PROFILE VIEW — the large view:', v.side_prompt),
-    section('FRONT VIEW:', v.front_prompt),
-    section('REAR VIEW:', v.rear_prompt),
+    `Apply this wrap design to ${viewCount}.`,
+    section(`THE DESIGN (identical across ${hasFront || hasRear ? 'every view' : 'the vehicle'}):`, v.design_spec),
+    section('SIDE PROFILE VIEW:', v.side_prompt),
+    hasFront ? section('FRONT VIEW:', v.front_prompt) : '',
+    hasRear ? section('REAR VIEW:', v.rear_prompt) : '',
   ].join('');
+}
+
+// Show Claude the actual logo/artwork rather than describing it in words — the trade, the
+// brand's character and which colours are really the brand's are all things only visible by
+// looking. Shared between generateWrapBrief and refineWrapVariant so both see artwork the
+// same way.
+function buildArtworkContent(artwork = []) {
+  const content = [];
+  for (const item of artwork) {
+    if (!item?.buffer) continue;
+    // The real type, not the declared one — the API rejects a mismatch, and an upload's
+    // Content-Type comes from its file extension.
+    const mediaType = sniffImageType(item.buffer);
+    if (!mediaType || !VISION_TYPES.includes(mediaType)) continue;
+    content.push({
+      type: 'image',
+      source: { type: 'base64', media_type: mediaType, data: item.buffer.toString('base64') },
+    });
+    content.push({ type: 'text', text: `(above: ${item.label || 'artwork'})` });
+  }
+  return content;
 }
 
 /**
@@ -369,22 +434,7 @@ async function generateWrapBrief(business, userId, artwork = []) {
   }
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  // Show Claude the actual logo. Describing it in words was the weak link: the trade,
-  // the brand's character and which colours are really the brand's are all things you
-  // can only judge by looking.
-  const messageContent = [];
-  for (const item of artwork) {
-    if (!item?.buffer) continue;
-    // The real type, not the declared one — the API rejects a mismatch, and an upload's
-    // Content-Type comes from its file extension.
-    const mediaType = sniffImageType(item.buffer);
-    if (!mediaType || !VISION_TYPES.includes(mediaType)) continue;
-    messageContent.push({
-      type: 'image',
-      source: { type: 'base64', media_type: mediaType, data: item.buffer.toString('base64') },
-    });
-    messageContent.push({ type: 'text', text: `(above: ${item.label || 'artwork'})` });
-  }
+  const messageContent = buildArtworkContent(artwork);
   messageContent.push({ type: 'text', text: JSON.stringify(business, null, 1) });
   messageContent.push({
     type: 'text',
@@ -435,7 +485,7 @@ async function generateWrapBrief(business, userId, artwork = []) {
     .map(v => {
       const clean = { ...v };
       for (const key of PRINTED) clean[key] = decodeEntities(clean[key]);
-      return { ...clean, image_prompt: assembleImagePrompt(clean) };
+      return { ...clean, image_prompt: assembleImagePrompt(clean, business.wrapCoverage) };
     })
     .filter(v => v.design_spec || v.side_prompt);
 
@@ -448,4 +498,122 @@ async function generateWrapBrief(business, userId, artwork = []) {
   return brief;
 }
 
-module.exports = { generateWrapBrief, assembleImagePrompt, MODEL };
+// This prompt holds only the rules a REVISION needs, not the full design-from-scratch
+// judgment SYSTEM_PROMPT carries — a refine call is shown one existing, already-good variant
+// and a specific complaint, not a blank page.
+const REFINE_SYSTEM_PROMPT = `You are revising ONE existing vehicle wrap design based on
+specific feedback from the salesperson or customer who has already seen the render. You are
+not designing from scratch — you are shown the exact current variant, field by field, and a
+description of what should change about it.
+
+CHANGE ONLY WHAT THE REQUESTED REVISION REQUIRES. Every field in the current variant that the
+revision doesn't touch is copied through unchanged — same hex values, same wordmark treatment,
+same mascot, same text, character for character. A revision that rewrites fields nobody asked
+to change produces a different design, not a refined one, and the whole point of this step is
+that the salesperson already liked most of what they have.
+
+THE REVISION INSTRUCTION IS DIRECT HUMAN SIGN-OFF, not a general design brief. If it asks for
+specific text that wasn't in the original design ("add 'Est. 2010'", "change the phone number
+to..."), that is authorized — a person looked at the render and asked for it on purpose. This
+is different from generating a NEW design, where inventing unsupplied claims is forbidden.
+Still never invent something the instruction and the current variant didn't between them
+already establish — if the instruction says "make it pop more" with no specifics, use your
+judgment on the EXISTING palette and signature rather than introducing a new claim or a new
+element that wasn't asked for.
+
+IF THE CHANGE AFFECTS WHAT'S PAINTED (colour, sizing, layout, mascot, added or changed text),
+update design_spec and every view prompt it appears in so the instruction the image model
+receives fully reflects the change — never leave a view prompt with stale wording that
+contradicts what design_spec now says. If the change is about something already described
+precisely enough (e.g. "make the mascot bigger"), update the sizing language in the relevant
+view prompt(s) directly.
+
+THE REFERENCE BLOCK AT THE END OF THE INPUT still applies: it says which views exist for this
+coverage (a partial or spot-graphics job may only have a side view — never add a front or rear
+treatment that will never be rendered), and it still carries the anti-defaults and mascot
+rules that governed the original design. A revision does not get to reintroduce something the
+treatment forbids.
+
+WRITING THE VIEW PROMPTS follows the same rules as the original design: exact hex colours,
+exact text strings in quotes, say which flat colour field each text element sits on, and size
+by containment ("fills its own colour field edge to edge") rather than by percentage.
+
+Return the COMPLETE variant with every field present — this is not a diff, it is the full
+variant paintWrap will paint from next.`;
+
+/**
+ * Revise ONE existing variant based on specific feedback, rather than generating fresh
+ * directions. The caller (routes/tools.js's POST /wrap-mockup/:id/refine) re-paints from the
+ * SAME base image and references the original run used — this function only produces the
+ * updated creative fields and the image_prompt to paint them from.
+ *
+ * @param {object} business the same shape generateWrapBrief takes, reconstructed from the
+ *   original request's stored request_context
+ * @param {object} currentVariant the variant as it stands now (including design_spec/
+ *   side_prompt/front_prompt/rear_prompt from the last render or refinement)
+ * @param {string} instruction free-text description of the requested change
+ * @param {number} userId for cost attribution
+ * @param {Array<{buffer: Buffer, mimeType: string, label: string}>} artwork the original
+ *   reference artwork, re-fetched by the route from where it was originally uploaded
+ * @returns {Promise<object>} the revised variant, carrying a freshly assembled image_prompt
+ *   and a change_summary
+ */
+async function refineWrapVariant(business, currentVariant, instruction, userId, artwork = []) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY is not configured on the server');
+  }
+  if (!instruction?.trim()) {
+    throw new Error('A revision instruction is required');
+  }
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const messageContent = buildArtworkContent(artwork);
+  messageContent.push({
+    type: 'text',
+    text: JSON.stringify({ business, current_variant: currentVariant, requested_change: instruction }, null, 1),
+  });
+  messageContent.push({
+    type: 'text',
+    text: buildReferenceBlock(
+      [business.businessName, business.service].filter(Boolean).join(' '),
+      business.designIntensity,
+      business.content || {},
+      business.wrapCoverage
+    ),
+  });
+
+  const response = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 24000,
+    system: REFINE_SYSTEM_PROMPT,
+    tools: [REFINE_TOOL],
+    tool_choice: { type: 'tool', name: 'submit_wrap_revision' },
+    messages: [{ role: 'user', content: messageContent }],
+  });
+
+  logClaudeUsage(userId, MODEL, response.usage, 'wrap_mockup_refine');
+
+  const toolUse = response.content.find(block => block.type === 'tool_use');
+  if (!toolUse?.input?.variant) {
+    throw new Error(`Claude did not return a wrap revision (stop_reason: ${response.stop_reason})`);
+  }
+
+  const revised = toolUse.input.variant;
+  const PRINTED = [
+    'wordmark', 'trade_descriptor', 'tagline', 'services_shown', 'credentials_shown',
+    'phone_display', 'website_display', 'mascot',
+    'design_spec', 'side_prompt', 'front_prompt', 'rear_prompt',
+  ];
+  for (const key of PRINTED) revised[key] = decodeEntities(revised[key]);
+
+  if (!revised.design_spec && !revised.side_prompt) {
+    throw new Error('Wrap revision came back with no usable design');
+  }
+
+  revised.image_prompt = assembleImagePrompt(revised, business.wrapCoverage);
+  revised.change_summary = decodeEntities(toolUse.input.change_summary);
+  Object.defineProperty(revised, 'usage', { value: response.usage, enumerable: false });
+  return revised;
+}
+
+module.exports = { generateWrapBrief, refineWrapVariant, assembleImagePrompt, MODEL };

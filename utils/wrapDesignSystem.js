@@ -552,51 +552,55 @@ One call to action per view, and it does not compete with a second.`;
 // panels are wrapped in the first place. Full coverage needs no override — the intensity
 // view plans above already assume every panel is wrapped. Partial coverage is expressed as
 // an OVERRIDE appended after those view plans, rather than a rewrite of them per intensity,
-// because the same partial-coverage rule ("front and rear stay bare") applies whether the
-// wrapped area itself is bold or simple.
+// because the same partial-coverage rule applies whether the wrapped area itself is bold or
+// simple.
+//
+// The render itself has fewer views for partial coverage — a sides-only or spot job renders
+// as a single side-profile image, sides+rear as a two-view sheet — so there is no front or
+// rear PANEL to describe as bare at all; front_prompt/rear_prompt simply aren't used for
+// those views and are told to stay short rather than invent guidance for a view that will
+// never be rendered.
 
 function coverageBlock(coverage) {
   if (coverage === 'sides') {
     return `\n\nCOVERAGE OVERRIDE — THIS IS A SIDES-ONLY PARTIAL WRAP, NOT A FULL WRAP.
-This overrides any view-plan guidance above that assumes every panel is wrapped.
-- Only the SIDE view carries the design: doors, the full side panel and the pillars between
+This overrides all view-plan guidance above, including the assumption of a three-view sheet.
+- The render is a SINGLE SIDE-PROFILE IMAGE. There is no front view and no rear view at all —
+  do not write instructions assuming either exists.
+- On that one side: the wrap covers the doors, the full side panel and the pillars between
   the windows, edge to edge, exactly the way a real sides-only wrap job is cut.
-- The FRONT and REAR views are NOT wrapped. Write front_prompt and rear_prompt to say plainly
-  that the vehicle stays in its bare factory paint on those views — no colour fields, no
-  graphics, no text — exactly as it appears in the blank base sheet. Do not carry the wordmark,
-  services block, mascot or any device onto the front or rear.
-- design_spec still defines the one design used on the side view; it does not describe a
-  front or rear treatment because there isn't one.`;
+- design_spec and side_prompt are the only fields that matter here. front_prompt and
+  rear_prompt are not used for this coverage — leave them as a short placeholder.`;
   }
   if (coverage === 'sides_rear') {
     return `\n\nCOVERAGE OVERRIDE — THIS IS A SIDES + REAR PARTIAL WRAP, NOT A FULL WRAP.
-This overrides any view-plan guidance above that assumes every panel is wrapped.
-- The SIDE view carries the design: doors, the full side panel and the pillars between the
-  windows, edge to edge, exactly the way a real partial wrap is cut.
+This overrides all view-plan guidance above, including the assumption of a three-view sheet.
+- The render is a TWO-VIEW SHEET: the side profile and the rear. There is NO front view at
+  all — do not write instructions assuming one exists.
+- On the side view: the wrap covers the doors, the full side panel and the pillars between
+  the windows, edge to edge, exactly the way a real partial wrap is cut.
 - The REAR view is fully wrapped too — this is the one place a stopped driver reads longest,
   so it still carries the phone/website at full size and whatever device fits the space, per
   the REAR guidance in the view plan above.
-- The FRONT view is NOT wrapped. Write front_prompt to say plainly that the vehicle stays in
-  its bare factory paint there — no colour fields, no graphics, no text — exactly as it
-  appears in the blank base sheet. Do not carry the wordmark, services block, mascot or any
-  device onto the front.`;
+- front_prompt is not used for this coverage — leave it as a short placeholder.`;
   }
   if (coverage === 'spot') {
     return `\n\nCOVERAGE OVERRIDE — THIS IS SPOT GRAPHICS, A DECAL PACKAGE, NOT A WRAP.
 This overrides all view-plan, intensity, colour-strategy and signature guidance above — none
 of it applies to a decal job. Ignore mascots, field geometry, dividers and colour strategies
 entirely.
+- The render is a SINGLE SIDE-PROFILE IMAGE. There is no front view and no rear view at all —
+  do not write instructions assuming either exists.
 - The ONLY graphics anywhere on the vehicle are the logo (if supplied) and the business
-  wordmark, applied at a moderate size on the front doors in the SIDE view — not edge to edge,
-  not spanning the panel, sized the way a real vinyl decal application is, with generous bare
-  paint visible around it. The phone number may appear small beneath it.
-- Nothing else is printed anywhere: no trade descriptor at scale, no tagline, no services
-  block, no credential strip, no mascot, no background scene.
-- The FRONT and REAR views are NOT wrapped. Write front_prompt and rear_prompt to say plainly
-  that the vehicle stays entirely in its bare factory paint on those views, exactly as it
-  appears in the blank base sheet.
-- design_spec should describe only the decal itself: its exact contents, colours and size —
-  not a field geometry or background, because there isn't one.`;
+  wordmark, applied at a moderate size on the front doors in that one side view — not edge to
+  edge, not spanning the panel, sized the way a real vinyl decal application is, with generous
+  bare paint visible around it. The phone number may appear small beneath it.
+- Nothing else is printed: no trade descriptor at scale, no tagline, no services block, no
+  credential strip, no mascot, no background scene.
+- design_spec and side_prompt are the only fields that matter here — design_spec should
+  describe only the decal itself: its exact contents, colours and size, not a field geometry
+  or background. front_prompt and rear_prompt are not used for this coverage — leave them as
+  a short placeholder.`;
   }
   return '';
 }
