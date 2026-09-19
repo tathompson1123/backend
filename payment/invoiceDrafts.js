@@ -237,7 +237,12 @@ async function createSquareDraft({ userId, invoice, items }) {
 
   // Discounts go in the order's `discounts` array, NOT as a negative line item —
   // Square rejects a negative base_price_money with INVALID_VALUE.
-  const order = { locationId, customerId, lineItems };
+  //
+  // pricingOptions.autoApplyTaxes: false is load-bearing (see routes/invoices.js
+  // send-square for how this was confirmed against a real order): the account's
+  // Square Dashboard Tax Rules auto-apply a second tax on top of the "Sales Tax"
+  // line item we push below unless this request explicitly opts out.
+  const order = { locationId, customerId, lineItems, pricingOptions: { autoApplyTaxes: false } };
   if (tax.applies) {
     order.taxes = [{
       uid: SALES_TAX_UID,
