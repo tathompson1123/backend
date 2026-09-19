@@ -1047,33 +1047,20 @@ router.get('/services', async (req, res) => {
   try {
     const { employeeId, userId } = req.employee;
 
-    // Check if employee has specific service assignments
-    const assignedServices = await pool.query(
-      'SELECT service_id FROM service_employees WHERE employee_id = $1',
-      [employeeId]
+    // service_employees is always the explicit source of truth — employees are seeded with
+    // every active service when created (see routes/employees.js) or when this route backfills
+    // a legacy employee. There is intentionally no "zero rows = sees everything" fallback here:
+    // that implicit behavior used to mean a single service assignment (e.g. checking one employee
+    // for a newly added service) would silently flip them from "sees everything" to "sees only
+    // that one service" the moment they got their first row.
+    const result = await pool.query(
+      `SELECT s.id, s.name, s.description, s.duration_hours, s.price
+       FROM services s
+       JOIN service_employees se ON se.service_id = s.id
+       WHERE s.user_id = $1 AND se.employee_id = $2 AND s.active = true
+       ORDER BY s.name`,
+      [userId, employeeId]
     );
-
-    let result;
-    if (assignedServices.rows.length > 0) {
-      // Return only assigned services
-      const serviceIds = assignedServices.rows.map(r => r.service_id);
-      result = await pool.query(
-        `SELECT id, name, description, duration_hours, price
-         FROM services
-         WHERE user_id = $1 AND id = ANY($2) AND active = true
-         ORDER BY name`,
-        [userId, serviceIds]
-      );
-    } else {
-      // No specific assignments = can do all services
-      result = await pool.query(
-        `SELECT id, name, description, duration_hours, price
-         FROM services
-         WHERE user_id = $1 AND active = true
-         ORDER BY name`,
-        [userId]
-      );
-    }
 
     res.json({ services: result.rows });
   } catch (error) {
