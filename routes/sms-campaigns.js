@@ -127,6 +127,14 @@ async function backfillCampaignReplyEmails() {
     for (const camp of campaigns.rows) {
       // Inbound replies for this user, after the campaign went out, from a number that's
       // on their customer list (the blast audience), not yet emailed.
+      //
+      // Must also be genuinely UNTAGGED — no lead_id/booking_id/review_request_id/
+      // campaign_id of its own. Anything already tagged was already classified (and
+      // already notified) by the live webhook when it arrived: a review reply, an
+      // ongoing lead conversation, a booking message. Without this, every boot re-swept
+      // ANY reply from a customer who'd received a campaign in the last 14 days — so
+      // review replies and lead replies were being emailed to the owner mislabeled as
+      // "SMS campaign reply", in a batch, every time the server restarted.
       const replies = await pool.query(
         `SELECT m.id, m.from_number, m.message, m.lead_id, c.name AS customer_name
          FROM sms_messages m
@@ -138,6 +146,10 @@ async function backfillCampaignReplyEmails() {
            AND m.direction = 'incoming'
            AND m.created_at >= $2
            AND (m.campaign_reply_emailed IS NULL OR m.campaign_reply_emailed = FALSE)
+           AND m.lead_id IS NULL
+           AND m.booking_id IS NULL
+           AND m.review_request_id IS NULL
+           AND m.campaign_id IS NULL
            -- Never email the owner about an opt-out command (STOP/CANCEL/etc.) — those
            -- unsubscribe the contact, they aren't a reply worth a notification.
            AND upper(regexp_replace(m.message, '[^A-Za-z]', '', 'g'))
