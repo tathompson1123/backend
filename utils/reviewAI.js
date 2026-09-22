@@ -169,12 +169,18 @@ async function classifyReplySentiment(text, userId, history = []) {
 // "Lukewarm" covers neutral verdicts and the mild-positive replies people actually
 // send ("it went ok", "fine thanks") — gushing at those reads as canned, because it
 // plainly isn't a response to what they said.
-function fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink, lukewarm }) {
+function raffleAskLine(raffleEnabled, raffleReward) {
+  return raffleEnabled && raffleReward
+    ? ` Once you've posted it, text us a screenshot and you'll be entered to win ${raffleReward}!`
+    : '';
+}
+
+function fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink, lukewarm, raffleEnabled, raffleReward }) {
   const inc = incentiveEnabled && incentive
     ? `Leave us a quick Google review and ${incentive}. `
     : `If you have a sec, we'd love a quick Google review. `;
   const opener = lukewarm ? `Thanks for letting us know, ${fn}!` : `So glad to hear it, ${fn}!`;
-  return `${opener} ${inc}${reviewLink || ''}`.trim();
+  return `${opener} ${inc}${reviewLink || ''}${raffleAskLine(raffleEnabled, raffleReward)}`.trim();
 }
 
 // customerReply/history are what make this a reply rather than a form letter. Without
@@ -183,7 +189,7 @@ function fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink, lukewar
 // mood and ignoring the one specific thing they'd actually chosen to mention.
 async function composePositiveReply(
   { firstName, businessName, incentive, incentiveEnabled, reviewLink,
-    customerReply, sentiment, history },
+    customerReply, sentiment, history, raffleEnabled, raffleReward },
   userId
 ) {
   const fn = (firstName && String(firstName).trim()) || 'there';
@@ -193,6 +199,9 @@ async function composePositiveReply(
     const incLine = incentiveEnabled && incentive
       ? `Offer this incentive, but ONLY as a reward conditional on leaving the review: "${incentive}". Phrase it like "if you leave us a Google review, <incentive>".`
       : 'Do not offer any incentive; just warmly ask for the review.';
+    const raffleLine = raffleEnabled && raffleReward
+      ? ` After the link, add one short extra sentence: once they've posted the review, ask them to text back a screenshot of it as proof, to be entered to win ${raffleReward}.`
+      : '';
 
     const thread = (history || [])
       .slice(-6)
@@ -203,10 +212,10 @@ async function composePositiveReply(
       ? `You write a single short SMS from ${businessName || 'the business'} replying to a customer who has just answered "how did the service go?".\n\n` +
         'Do two things, in this order:\n' +
         '1. Respond to what they ACTUALLY said. Pick up the specific thing they mentioned and answer it like a person would. If they thanked you for something, acknowledge that thing.\n' +
-        `2. Then ask them to leave a Google review. ${incLine}\n\n` +
+        `2. Then ask them to leave a Google review. ${incLine}${raffleLine}\n\n` +
         'Match their energy, never inflate it. If they said it went "ok" or "fine", do NOT tell them they are thrilled or delighted or that you are so glad they loved it — something like "glad we could get you in quickly" is the right register. Save real enthusiasm for customers who were actually enthusiastic.\n\n' +
-        'Do not quote their words back at them verbatim, and do not invent details they did not mention. Keep it to about 2 sentences before the link, at most one emoji. End with the review link exactly as given. Reply with ONLY the message text.'
-      : `You write a single short, friendly SMS (max ~2 sentences, at most one emoji) from ${businessName || 'the business'} thanking a happy customer and asking them to leave a Google review. ${incLine} End with the review link exactly as given, on the same line is fine. Do not invent facts. Reply with ONLY the message text.`;
+        'Do not quote their words back at them verbatim, and do not invent details they did not mention. Keep it to about 2-3 sentences total, at most one emoji. Put the review link on its own, exactly as given. Reply with ONLY the message text.'
+      : `You write a single short, friendly SMS from ${businessName || 'the business'} thanking a happy customer and asking them to leave a Google review. ${incLine}${raffleLine} Keep it to about 2-3 sentences total, at most one emoji. Put the review link on its own, exactly as given. Do not invent facts. Reply with ONLY the message text.`;
 
     const user = [
       `Customer first name: ${fn}`,
@@ -216,12 +225,12 @@ async function composePositiveReply(
       `Review link: ${reviewLink || ''}`,
     ].filter(Boolean).join('\n');
 
-    const out = await ask(userId, 'review_positive', system, user, 200);
+    const out = await ask(userId, 'review_positive', system, user, 220);
     let msg = out.replace(/^["']|["']$/g, '').trim();
     if (reviewLink && !msg.includes(reviewLink)) msg = `${msg} ${reviewLink}`.trim();
-    return msg || fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink, lukewarm });
+    return msg || fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink, lukewarm, raffleEnabled, raffleReward });
   } catch {
-    return fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink, lukewarm });
+    return fallbackPositive({ fn, incentive, incentiveEnabled, reviewLink, lukewarm, raffleEnabled, raffleReward });
   }
 }
 
@@ -229,16 +238,16 @@ async function composePositiveReply(
 // attempt 1 = a day after the ask, attempt 2 = a week after. Kept deliberately
 // short and low-pressure: this person already said they were happy, so the job is
 // to make it easy, not to sell. Never implies they promised anything.
-function fallbackFollowUp({ fn, businessName, incentive, incentiveEnabled, reviewLink, attempt }) {
+function fallbackFollowUp({ fn, businessName, incentive, incentiveEnabled, reviewLink, attempt, raffleEnabled, raffleReward }) {
   const inc = incentiveEnabled && incentive ? ` and ${incentive}` : '';
   const body = attempt === 1
     ? `Hi ${fn}, just floating this back up — if you have a minute for a quick Google review${inc}, here's the link:`
     : `Hi ${fn}, last nudge from ${businessName || 'us'} on this one — a quick Google review${inc} would really help us out:`;
-  return `${body} ${reviewLink || ''}`.trim();
+  return `${body} ${reviewLink || ''}${raffleAskLine(raffleEnabled, raffleReward)}`.trim();
 }
 
 async function composeReviewFollowUp(
-  { firstName, businessName, incentive, incentiveEnabled, reviewLink, attempt = 1, history },
+  { firstName, businessName, incentive, incentiveEnabled, reviewLink, attempt = 1, history, raffleEnabled, raffleReward },
   userId
 ) {
   const fn = (firstName && String(firstName).trim()) || 'there';
@@ -246,6 +255,9 @@ async function composeReviewFollowUp(
     const incLine = incentiveEnabled && incentive
       ? `You may mention the incentive, but ONLY as conditional on leaving the review: "${incentive}".`
       : 'Do not offer any incentive.';
+    const raffleLine = raffleEnabled && raffleReward
+      ? ` After the link, add one short extra sentence: once they've posted the review, ask them to text back a screenshot of it as proof, to be entered to win ${raffleReward}.`
+      : '';
 
     const thread = (history || [])
       .slice(-6)
@@ -258,20 +270,20 @@ async function composeReviewFollowUp(
       `${attempt === 1
         ? 'This is a gentle first reminder, about a day after the ask.'
         : 'This is the SECOND and final text reminder, about a week after the ask. Make it clear this is the last time you will bring it up, warmly and without guilt-tripping.'}\n\n` +
-      `${incLine}\n\n` +
-      'Rules: assume they are busy, not avoiding you — never imply they promised or forgot, never guilt them, never repeat a previous follow-up almost word for word. One short sentence plus the link, no more. At most one emoji. End with the review link exactly as given. Reply with ONLY the message text.',
+      `${incLine}${raffleLine}\n\n` +
+      'Rules: assume they are busy, not avoiding you — never imply they promised or forgot, never guilt them, never repeat a previous follow-up almost word for word. One to two short sentences plus the link, no more. At most one emoji. Put the review link exactly as given. Reply with ONLY the message text.',
       [
         `Customer first name: ${fn}`,
         thread ? `Conversation so far:\n${thread}` : null,
         `Review link: ${reviewLink || ''}`,
       ].filter(Boolean).join('\n'),
-      160
+      180
     );
     let msg = out.replace(/^["']|["']$/g, '').trim();
     if (reviewLink && !msg.includes(reviewLink)) msg = `${msg} ${reviewLink}`.trim();
-    return msg || fallbackFollowUp({ fn, businessName, incentive, incentiveEnabled, reviewLink, attempt });
+    return msg || fallbackFollowUp({ fn, businessName, incentive, incentiveEnabled, reviewLink, attempt, raffleEnabled, raffleReward });
   } catch {
-    return fallbackFollowUp({ fn, businessName, incentive, incentiveEnabled, reviewLink, attempt });
+    return fallbackFollowUp({ fn, businessName, incentive, incentiveEnabled, reviewLink, attempt, raffleEnabled, raffleReward });
   }
 }
 

@@ -277,7 +277,8 @@ router.post('/review-requests/:id/send-ask', authenticateToken, async (req, res)
     const rr = (await pool.query(
       `SELECT rr.id, rr.user_id, c.name AS customer_name, c.phone,
               u.business_name, u.google_review_link,
-              rc.incentive, rc.incentive_enabled, rc.review_link_base
+              rc.incentive, rc.incentive_enabled, rc.review_link_base,
+              rc.raffle_enabled, rc.raffle_reward
        FROM review_requests rr
        JOIN customers c ON c.id = rr.customer_id
        JOIN users u ON u.id = rr.user_id
@@ -290,16 +291,12 @@ router.post('/review-requests/:id/send-ask', authenticateToken, async (req, res)
     if (!rr.phone) return res.status(400).json({ error: 'That customer has no phone number' });
     if (!rr.google_review_link) return res.status(400).json({ error: 'Set your Google review link first' });
 
-    const { buildReviewLink } = require('../utils/reviewLink');
     const { composePositiveReply } = require('../utils/reviewAI');
     const { sendSMS } = require('../utils/twilio');
 
-    const link = await buildReviewLink(pool, {
-      reviewRequestId: rr.id,
-      userId: rr.user_id,
-      customBase: rr.review_link_base,
-      hasGoogleLink: true,
-    });
+    // Send the raw Google review link directly — no tracking redirect — so it
+    // reads as trustworthy rather than a backend link.
+    const link = rr.google_review_link;
 
     const message = await composePositiveReply({
       firstName: String(rr.customer_name || 'there').split(/\s+/)[0],
@@ -307,6 +304,8 @@ router.post('/review-requests/:id/send-ask', authenticateToken, async (req, res)
       incentive: rr.incentive,
       incentiveEnabled: rr.incentive_enabled,
       reviewLink: link,
+      raffleEnabled: rr.raffle_enabled,
+      raffleReward: rr.raffle_reward,
     }, userId);
 
     await sendSMS(rr.phone, message, userId);

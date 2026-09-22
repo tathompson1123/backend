@@ -65,14 +65,14 @@ router.post('/status', express.urlencoded({ extended: false }), async (req, res)
 // so a slow Claude call or a pg hiccup can never cause a connection-failure (error 11200)
 // that loses the inbound message.
 router.post('/webhook', express.urlencoded({ extended: false }), (req, res) => {
-  const { From, To, Body, MessageSid } = req.body;
+  const { From, To, Body, MessageSid, NumMedia, MediaUrl0 } = req.body;
 
-  console.log(`📨 SMS: ${From} → ${To}: "${Body}"`);
+  console.log(`📨 SMS: ${From} → ${To}: "${Body}"${NumMedia > 0 ? ` (+${NumMedia} media)` : ''}`);
 
   res.status(200).type('text/xml').send('<Response></Response>');
 
   setImmediate(() => {
-    processInboundSms({ From, To, Body, MessageSid }).catch(err =>
+    processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUrl0 }).catch(err =>
       console.error('SMS webhook async error:', err.message)
     );
   });
@@ -131,7 +131,8 @@ function optKeyword(body) {
   return null;
 }
 
-async function processInboundSms({ From, To, Body, MessageSid }) {
+async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUrl0 }) {
+  const hasMedia = parseInt(NumMedia, 10) > 0 && !!MediaUrl0;
   if (MessageSid) {
     const dupCheck = await pool.query(
       'SELECT id FROM sms_messages WHERE twilio_message_sid = $1 LIMIT 1',
@@ -273,7 +274,8 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
       const revRes = await pool.query(
         `SELECT rr.id, rr.customer_name, c.name AS c_name,
                 u.email AS owner_email, u.business_name, u.google_review_link,
-                rc.incentive, rc.incentive_enabled, rc.review_link_base
+                rc.incentive, rc.incentive_enabled, rc.review_link_base,
+                rc.raffle_enabled, rc.raffle_reward
          FROM review_requests rr
          JOIN users u ON u.id = rr.user_id
          LEFT JOIN customers c ON c.id = rr.customer_id
@@ -380,23 +382,17 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
           console.log(`🟠 Review reply NEGATIVE from ${From} (request ${rr.id}) — owner notified`);
         } else {
           // positive or neutral → send the review ask with the incentive woven in.
-          // Clean, branded short link (redirects through the site → tracker → Google) so the
-          // text doesn't show the raw backend/api URL.
-          // sorceintegrations.com/r/<business-slug>/<token> — carries the business's own
-          // name so the customer recognises it, and needs nothing set up on their domain.
-          const { buildReviewLink } = require('../utils/reviewLink');
-          const trackedUrl = (await buildReviewLink(pool, {
-            reviewRequestId: rr.id,
-            userId: user.id,
-            customBase: rr.review_link_base,
-            hasGoogleLink: !!rr.google_review_link,
-          })) || '';
+          // The raw Google review link, straight through — no tracking redirect —
+          // so it reads as trustworthy rather than a backend/api URL.
+          const reviewUrl = rr.google_review_link || '';
           const reply = await composePositiveReply({
             firstName,
             businessName: rr.business_name,
             incentive: rr.incentive,
             incentiveEnabled: rr.incentive_enabled,
-            reviewLink: trackedUrl,
+            reviewLink: reviewUrl,
+            raffleEnabled: rr.raffle_enabled,
+            raffleReward: rr.raffle_reward,
             // Give it what they actually said, plus the thread, so the ask lands as a
             // reply to them rather than a form letter that ignores their message.
             customerReply: Body,
@@ -423,6 +419,71 @@ async function processInboundSms({ From, To, Body, MessageSid }) {
     }
   } catch (e) {
     console.error('Review reply handling error:', e.message);
+  }
+
+  // ── Review screenshot proof (raffle entry) ────────────────────────────────
+  // The review link isn't tracked, so once the ask has gone out we have no way to
+  // know who actually left a review. If the raffle is on, the ask asks them to text
+  // back a screenshot as proof — this is where that screenshot gets matched to the
+  // request and counted. Only fires on an MMS to a request we've already asked
+  // (replied_positive/neutral) that hasn't already sent proof.
+  if (hasMedia) {
+    try {
+      const last10shot = (From || '').replace(/\D/g, '').slice(-10);
+      if (last10shot) {
+        const shotRes = await pool.query(
+          `SELECT rr.id, rr.customer_name, c.name AS c_name,
+                  rc.raffle_enabled, rc.raffle_reward
+           FROM review_requests rr
+           JOIN users u ON u.id = rr.user_id
+           LEFT JOIN customers c ON c.id = rr.customer_id
+           LEFT JOIN review_configs rc ON rc.user_id = rr.user_id
+           WHERE rr.user_id = $1
+             AND rr.status IN ('replied_positive', 'replied_neutral')
+             AND COALESCE(rr.review_completed, false) = false
+             AND right(regexp_replace(COALESCE(c.phone, rr.customer_phone, ''), '\\D', '', 'g'), 10) = $2
+           ORDER BY rr.created_at DESC
+           LIMIT 1`,
+          [user.id, last10shot]
+        );
+
+        if (shotRes.rows.length > 0) {
+          const rr = shotRes.rows[0];
+          const firstName = ((rr.customer_name || rr.c_name || '').split(' ')[0]) || 'there';
+          const shotLeadId = await findLeadIdByPhone(pool, user.id, From);
+
+          await pool.query(
+            `UPDATE review_requests
+                SET review_completed = true, review_completed_at = NOW(), screenshot_url = $2
+              WHERE id = $1`,
+            [rr.id, MediaUrl0]
+          );
+          await pool.query(
+            `INSERT INTO sms_messages
+             (user_id, lead_id, direction, from_number, to_number, message, twilio_message_sid, review_request_id, created_at)
+             VALUES ($1, $2, 'incoming', $3, $4, $5, $6, $7, NOW())`,
+            [user.id, shotLeadId, From, To, Body || '[screenshot]', MessageSid, rr.id]
+          ).catch(() => {});
+
+          const thanks = rr.raffle_enabled && rr.raffle_reward
+            ? `Thank you, ${firstName}! You're entered to win ${rr.raffle_reward} — winners are drawn on the 1st.`
+            : `Thank you, ${firstName}! We really appreciate it.`;
+          try {
+            await sendSMS(From, thanks, user.id);
+            await pool.query(
+              `INSERT INTO sms_messages (user_id, lead_id, direction, to_number, message, review_request_id, created_at)
+               VALUES ($1, $2, 'outgoing', $3, $4, $5, NOW())`,
+              [user.id, shotLeadId, From, thanks, rr.id]
+            ).catch(() => {});
+          } catch (e) { console.log(`Screenshot thank-you SMS not sent to ${From}: ${e.message}`); }
+
+          console.log(`📸 Review screenshot received from ${From} (request ${rr.id})`);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Review screenshot handling error:', e.message);
+    }
   }
 
   // ── Thread attribution ────────────────────────────────────────────────────

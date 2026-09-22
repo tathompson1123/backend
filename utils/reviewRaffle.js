@@ -1,18 +1,19 @@
 // ============================================
 // MONTHLY GOOGLE REVIEW RAFFLE
 // ============================================
-// Each month, customers who clicked their review link (our concrete
-// "engaged with leaving a review" signal) are entered into a raffle.
-// One winner is drawn at random and texted the reward configured in the
-// GBP incentive field; everyone else gets a consolation offer text.
+// Each month, customers who texted back a screenshot proving they left a
+// review (our concrete "engaged with leaving a review" signal, since the
+// review link itself isn't tracked) are entered into a raffle. One winner is
+// drawn at random and texted the configured raffle reward; everyone else
+// gets a consolation offer text.
 //
 // "Verification" note: Google's Places API only exposes ~5 of a business's
 // reviews and gives us no reviewer→phone mapping, so we cannot reliably
-// confirm every entrant actually posted a review. We best-effort match
-// entrant names against the reviews Google does return and flag matches as
-// `review_verified`. If a business turns on `raffle_require_verified`, the
-// draw is restricted to those verified entrants; otherwise all clickers are
-// eligible.
+// confirm every entrant actually posted a review even with a screenshot in
+// hand. We best-effort match entrant names against the reviews Google does
+// return and flag matches as `review_verified`. If a business turns on
+// `raffle_require_verified`, the draw is restricted to those verified
+// entrants; otherwise everyone who sent proof is eligible.
 
 const { pool } = require('../config/database');
 const { sendSMS } = require('./twilio');
@@ -101,9 +102,9 @@ function firstName(name) {
 }
 
 // ─── Pool selection ─────────────────────────────────────────
-// One entry per customer (earliest click that month), with a phone,
-// who clicked the review link during `period`, has not already won a prior
-// raffle, and has not already been processed into a raffle.
+// One entry per customer (earliest proof that month), with a phone, who sent
+// screenshot proof of their review during `period`, has not already won a
+// prior raffle, and has not already been processed into a raffle.
 async function selectPoolRows(userId, period) {
   const result = await pool.query(
     `SELECT DISTINCT ON (rr.customer_id)
@@ -112,19 +113,19 @@ async function selectPoolRows(userId, period) {
      FROM review_requests rr
      JOIN customers c ON c.id = rr.customer_id
      WHERE rr.user_id = $1
-       AND rr.link_clicked = true
+       AND rr.review_completed = true
        AND c.phone IS NOT NULL
        AND (c.sms_unsubscribed IS NULL OR c.sms_unsubscribed = FALSE)
        AND rr.raffle_period IS NULL
-       AND COALESCE(rr.link_clicked_at, rr.actual_send_time, rr.created_at) >= to_date($2, 'YYYY-MM')
-       AND COALESCE(rr.link_clicked_at, rr.actual_send_time, rr.created_at) <  (to_date($2, 'YYYY-MM') + INTERVAL '1 month')
+       AND COALESCE(rr.review_completed_at, rr.actual_send_time, rr.created_at) >= to_date($2, 'YYYY-MM')
+       AND COALESCE(rr.review_completed_at, rr.actual_send_time, rr.created_at) <  (to_date($2, 'YYYY-MM') + INTERVAL '1 month')
        AND NOT EXISTS (
          SELECT 1 FROM review_requests w
          WHERE w.user_id = rr.user_id
            AND w.customer_id = rr.customer_id
            AND w.raffle_status = 'won'
        )
-     ORDER BY rr.customer_id, COALESCE(rr.link_clicked_at, rr.actual_send_time, rr.created_at) ASC`,
+     ORDER BY rr.customer_id, COALESCE(rr.review_completed_at, rr.actual_send_time, rr.created_at) ASC`,
     [userId, period]
   );
 

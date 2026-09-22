@@ -1313,4 +1313,34 @@ router.post('/discovery/book', async (req, res) => {
   }
 });
 
+// POST /api/public/discovery/lead — a prospect self-submits from the marketing
+// site's qualifying quiz (/learnmore). No call time is picked here — this just
+// lands the qualified prospect in SORCE's own sales pipeline (sorce_leads) so
+// the team can follow up and get one booked.
+router.post('/discovery/lead', async (req, res) => {
+  try {
+    const { name, email, phone, businessType, struggle, revenue } = req.body;
+    if (!name?.trim())  return res.status(400).json({ error: 'Please enter your name' });
+    if (!email?.trim()) return res.status(400).json({ error: 'Please enter your email' });
+    if (!phone?.trim()) return res.status(400).json({ error: 'Please enter your phone number' });
+
+    const notes = [
+      businessType ? `Business type: ${businessType}` : null,
+      struggle ? `Struggling with: ${struggle}` : null,
+      revenue ? `Monthly revenue: ${revenue}` : null,
+    ].filter(Boolean).join('\n') || null;
+
+    await pool.query(
+      `INSERT INTO sorce_leads (name, email, phone, company, industry, source, status, notes)
+       VALUES ($1, $2, $3, NULL, $4, 'learnmore_quiz', 'new', $5)`,
+      [name.trim(), email.trim().toLowerCase(), phone.trim(), businessType || null, notes]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Learn-more quiz lead error:', err.message);
+    res.status(500).json({ error: 'Could not submit — please try again.' });
+  }
+});
+
 module.exports = router;

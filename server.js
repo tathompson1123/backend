@@ -74,7 +74,6 @@ app.get('/api/health', (req, res) => {
 const authRoutes = require('./routes/auth');
 const analyticsRoutes = require('./routes/analytics');
 const { router: discoveryRoutes } = require('./routes/discovery');
-const { buildReviewLink } = require('./utils/reviewLink');
 const internalBillingRoutes = require('./routes/internal-billing');
 const bookingRoutes = require('./routes/bookings');
 const customerRoutes = require('./routes/customers');
@@ -953,6 +952,10 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     `);
     // Monthly review raffle tracking on each request
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS link_clicked_at TIMESTAMP`);
+    // Proof of a posted review: since the review link isn't tracked, the ask ends
+    // with "text us a screenshot to be entered" — the media URL lands here and
+    // review_completed/review_completed_at (above) get set when it arrives.
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS screenshot_url TEXT`);
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS review_verified BOOLEAN DEFAULT false`);
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS review_verified_at TIMESTAMP`);
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS raffle_status VARCHAR(20)`); // 'won' | 'lost' | null
@@ -2295,6 +2298,7 @@ cron.schedule('*/10 * * * *', async () => {
                 u.business_name, u.email AS owner_email, u.google_review_link,
                 u.twilio_phone_number, u.plan,
                 rc.incentive, rc.incentive_enabled, rc.review_link_base, rc.rep_name,
+                rc.raffle_enabled, rc.raffle_reward,
                 COALESCE(
                   (SELECT bi.service_name FROM booking_items bi
                     WHERE bi.booking_id = rr.booking_id AND bi.is_addon = false
@@ -2309,7 +2313,6 @@ cron.schedule('*/10 * * * *', async () => {
           WHERE rr.followup_seq_started_at IS NOT NULL
             AND rr.${step.col} IS NULL
             AND rr.status = ANY($1)
-            AND COALESCE(rr.link_clicked, false)    = false
             AND COALESCE(rr.review_completed, false) = false
             AND COALESCE(rr.review_verified, false)  = false
             AND rr.followup_seq_started_at + ($2::int * INTERVAL '1 day') <= NOW()
@@ -2335,13 +2338,10 @@ cron.schedule('*/10 * * * *', async () => {
           const firstName = String(req.customer_name || 'there').split(' ')[0];
           // A re-ask carries no link — it re-opens "how did it go?" and nothing more —
           // so only the review chase needs one, and only it should abort without one.
+          // The link sent is the business's raw Google review link — no tracking
+          // redirect — so it reads as trustworthy in the text.
           const isReAsk = REVIEW_REASK_STATUSES.includes(req.status);
-          const reviewLink = isReAsk ? null : await buildReviewLink(pool, {
-            reviewRequestId: req.id,
-            userId: req.user_id,
-            customBase: req.review_link_base,
-            hasGoogleLink: !!req.google_review_link,
-          });
+          const reviewLink = isReAsk ? null : (req.google_review_link || null);
           if (!isReAsk && !reviewLink) { await markDone(); continue; }
 
           if (step.channel === 'sms') {
@@ -2392,6 +2392,8 @@ cron.schedule('*/10 * * * *', async () => {
                   reviewLink,
                   attempt: step.attempt,
                   history: priorTurns,
+                  raffleEnabled: req.raffle_enabled,
+                  raffleReward: req.raffle_reward,
                 }, req.user_id);
 
             const toPhone = req.customer_phone.startsWith('+')
@@ -2852,8 +2854,8 @@ const { runChatLearningAgent } = require('./utils/chatLearningAgent');
 cron.schedule('0 */4 * * *', () => runChatLearningAgent());
 
 // ── Monthly Google review raffle — runs at 9am on the 1st of each month ───────
-// Draws one winner from the prior month's review-link clickers and texts the
-// whole pool (winner gets the GBP incentive reward; everyone else a consolation).
+// Draws one winner from the prior month's screenshot-proof submitters and texts
+// the whole pool (winner gets the raffle reward; everyone else a consolation).
 const { runMonthlyRaffles } = require('./utils/reviewRaffle');
 cron.schedule('0 9 1 * *', () => runMonthlyRaffles(), { timezone: 'America/New_York' });
 
