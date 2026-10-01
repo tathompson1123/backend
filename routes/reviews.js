@@ -298,6 +298,16 @@ router.post('/review-requests/:id/send-ask', authenticateToken, async (req, res)
     // reads as trustworthy rather than a backend link.
     const link = rr.google_review_link;
 
+    // This fires from the CRM for a "needs attention" thread the owner decided was
+    // worth asking anyway — give it the actual conversation so the ask reads as a
+    // reply to what the customer said, not a form letter that ignores it.
+    const priorTurns = (await pool.query(
+      `SELECT direction, message FROM sms_messages
+       WHERE review_request_id = $1 ORDER BY created_at ASC LIMIT 8`,
+      [rr.id]
+    ).catch(() => ({ rows: [] }))).rows;
+    const lastInbound = [...priorTurns].reverse().find(m => m.direction === 'incoming');
+
     const message = await composePositiveReply({
       firstName: String(rr.customer_name || 'there').split(/\s+/)[0],
       businessName: rr.business_name,
@@ -306,6 +316,9 @@ router.post('/review-requests/:id/send-ask', authenticateToken, async (req, res)
       reviewLink: link,
       raffleEnabled: rr.raffle_enabled,
       raffleReward: rr.raffle_reward,
+      customerReply: lastInbound ? lastInbound.message : '',
+      sentiment: 'neutral',
+      history: priorTurns,
     }, userId);
 
     await sendSMS(rr.phone, message, userId);
@@ -622,7 +635,7 @@ router.get('/review-sms-conversation/:id', authenticateToken, async (req, res) =
     const own = await pool.query('SELECT id FROM review_requests WHERE id = $1 AND user_id = $2', [req.params.id, req.user.userId]);
     if (own.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
     const messages = await pool.query(
-      `SELECT direction, to_number, from_number, message, created_at
+      `SELECT direction, to_number, from_number, message, media_url, created_at
        FROM sms_messages
        WHERE review_request_id = $1 AND user_id = $2
        ORDER BY created_at ASC`,

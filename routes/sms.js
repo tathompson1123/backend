@@ -11,6 +11,7 @@ const {
   last10, phoneVariants, findLeadIdByPhone, resolveThread,
 } = require('../utils/smsThread');
 const twilio = require('twilio');
+const { authenticateToken } = require('../config/middleware');
 const { TRANSACTIONAL_EMAIL, ownerAlertReplyTo } = require('../utils/emailFrom');
 // Customer SMS text and model output both land inside owner alert HTML.
 const { escapeHtml: esc } = require('../utils/escapeHtml');
@@ -266,7 +267,9 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
 
   // ── Google Review SMS reply handling ──────────────────────────────────────
   // If we're awaiting this customer's reply to a review opener, classify it and branch:
-  // positive/neutral → thank + incentive + review link; negative → escalate to the owner.
+  // positive → thank + incentive + review link; negative → escalate to the owner;
+  // neutral → acknowledge only, flag "needs attention" so the owner reads it and
+  // decides from the CRM whether to send the review ask by hand.
   // Checked before the campaign/lead paths so a review reply isn't mistaken for a new lead.
   try {
     const last10rev = (From || '').replace(/\D/g, '').slice(-10);
@@ -298,9 +301,9 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
         const revLeadId = await findLeadIdByPhone(pool, user.id, From);
         await pool.query(
           `INSERT INTO sms_messages
-           (user_id, lead_id, direction, from_number, to_number, message, twilio_message_sid, status, review_request_id, created_at)
-           VALUES ($1, $2, 'incoming', $3, $4, $5, $6, 'received', $7, NOW())`,
-          [user.id, revLeadId, From, To, Body, MessageSid, rr.id]
+           (user_id, lead_id, direction, from_number, to_number, message, media_url, twilio_message_sid, status, review_request_id, created_at)
+           VALUES ($1, $2, 'incoming', $3, $4, $5, $6, $7, 'received', $8, NOW())`,
+          [user.id, revLeadId, From, To, Body, hasMedia ? MediaUrl0 : null, MessageSid, rr.id]
         ).catch(() => {});
 
         // Give it the thread, so "yeah still not fixed" is read against what was
@@ -380,8 +383,40 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
             } catch (e) { console.log(`Owner escalation email failed: ${e.message}`); }
           }
           console.log(`🟠 Review reply NEGATIVE from ${From} (request ${rr.id}) — owner notified`);
+        } else if (sentiment === 'neutral') {
+          // Ambiguous — not a clear thumbs-up, but not a complaint either. Don't put
+          // words in their mouth by asking for a review automatically; acknowledge
+          // them and let the owner read the actual reply and decide from the CRM.
+          const ack = `Thanks for letting us know, ${firstName}!`;
+          try {
+            await sendSMS(From, ack, user.id);
+            await pool.query(
+              `INSERT INTO sms_messages (user_id, lead_id, direction, to_number, message, review_request_id, created_at)
+               VALUES ($1, $2, 'outgoing', $3, $4, $5, NOW())`,
+              [user.id, revLeadId, From, ack, rr.id]
+            ).catch(() => {});
+          } catch (e) { console.log(`Needs-attention ack SMS not sent to ${From}: ${e.message}`); }
+
+          await pool.query(`UPDATE review_requests SET status = 'needs_attention' WHERE id = $1`, [rr.id]);
+
+          if (rr.owner_email) {
+            try {
+              const sgMail = require('@sendgrid/mail');
+              sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+              await sgMail.send({
+                to: rr.owner_email,
+                from: { name: `${rr.business_name || 'SORCE'} via SORCE`, email: TRANSACTIONAL_EMAIL },
+                replyTo: ownerAlertReplyTo(),
+                subject: `SORCE: reply needs your attention — ${firstName}`,
+                text: `${rr.customer_name || rr.c_name || 'A customer'} replied to your review request, but it wasn't clearly positive.\n\n`
+                  + `Their message:\n"${Body}"\n\n`
+                  + `We thanked them but held off on asking for a review. Open SORCE to read the full reply and send the review request yourself if it's worth it.`,
+              });
+            } catch (e) { console.log(`Needs-attention owner email failed: ${e.message}`); }
+          }
+          console.log(`🟡 Review reply NEEDS ATTENTION from ${From} (request ${rr.id}) — owner notified, no auto review ask`);
         } else {
-          // positive or neutral → send the review ask with the incentive woven in.
+          // positive → send the review ask with the incentive woven in.
           // The raw Google review link, straight through — no tracking redirect —
           // so it reads as trustworthy rather than a backend/api URL.
           const reviewUrl = rr.google_review_link || '';
@@ -408,11 +443,8 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
             ).catch(() => {});
           } catch (e) { console.log(`Review positive SMS not sent to ${From}: ${e.message}`); }
 
-          await pool.query(
-            `UPDATE review_requests SET status = $2 WHERE id = $1`,
-            [rr.id, sentiment === 'neutral' ? 'replied_neutral' : 'replied_positive']
-          );
-          console.log(`🟢 Review reply ${sentiment.toUpperCase()} from ${From} (request ${rr.id}) — review ask sent`);
+          await pool.query(`UPDATE review_requests SET status = 'replied_positive' WHERE id = $1`, [rr.id]);
+          console.log(`🟢 Review reply POSITIVE from ${From} (request ${rr.id}) — review ask sent`);
         }
         return;
       }
@@ -460,9 +492,9 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
           );
           await pool.query(
             `INSERT INTO sms_messages
-             (user_id, lead_id, direction, from_number, to_number, message, twilio_message_sid, review_request_id, created_at)
-             VALUES ($1, $2, 'incoming', $3, $4, $5, $6, $7, NOW())`,
-            [user.id, shotLeadId, From, To, Body || '[screenshot]', MessageSid, rr.id]
+             (user_id, lead_id, direction, from_number, to_number, message, media_url, twilio_message_sid, review_request_id, created_at)
+             VALUES ($1, $2, 'incoming', $3, $4, $5, $6, $7, $8, NOW())`,
+            [user.id, shotLeadId, From, To, Body || '[screenshot]', MediaUrl0, MessageSid, rr.id]
           ).catch(() => {});
 
           const thanks = rr.raffle_enabled && rr.raffle_reward
@@ -551,9 +583,9 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
     // in this conversation can't tell it was ever a campaign at all.
     await pool.query(
       `INSERT INTO sms_messages
-       (lead_id, user_id, campaign_id, direction, from_number, to_number, message, twilio_message_sid, status, campaign_reply_emailed, created_at)
-       VALUES ($1, $2, $3, 'incoming', $4, $5, $6, $7, 'received', TRUE, CURRENT_TIMESTAMP)`,
-      [crLeadId, user.id, thread.campaign_id, From, To, Body, MessageSid]
+       (lead_id, user_id, campaign_id, direction, from_number, to_number, message, media_url, twilio_message_sid, status, campaign_reply_emailed, created_at)
+       VALUES ($1, $2, $3, 'incoming', $4, $5, $6, $7, $8, 'received', TRUE, CURRENT_TIMESTAMP)`,
+      [crLeadId, user.id, thread.campaign_id, From, To, Body, hasMedia ? MediaUrl0 : null, MessageSid]
     );
     await pool.query(
       `UPDATE leads SET status = 'replied', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
@@ -624,9 +656,9 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
     const bookingLeadId = await findLeadIdByPhone(pool, user.id, From);
     await pool.query(
       `INSERT INTO sms_messages
-       (user_id, booking_id, lead_id, direction, from_number, to_number, message, twilio_message_sid, status, created_at)
-       VALUES ($1, $2, $3, 'incoming', $4, $5, $6, $7, 'received', NOW())`,
-      [user.id, bookingId, bookingLeadId, From, To, Body, MessageSid]
+       (user_id, booking_id, lead_id, direction, from_number, to_number, message, media_url, twilio_message_sid, status, created_at)
+       VALUES ($1, $2, $3, 'incoming', $4, $5, $6, $7, $8, 'received', NOW())`,
+      [user.id, bookingId, bookingLeadId, From, To, Body, hasMedia ? MediaUrl0 : null, MessageSid]
     );
     // Push the business owner
     sendPushToOwner(
@@ -682,9 +714,9 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
 
   await pool.query(
     `INSERT INTO sms_messages
-     (lead_id, user_id, direction, from_number, to_number, message, twilio_message_sid, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
-    [leadId, user.id, 'incoming', From, To, Body, MessageSid]
+     (lead_id, user_id, direction, from_number, to_number, message, media_url, twilio_message_sid, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+    [leadId, user.id, 'incoming', From, To, Body, hasMedia ? MediaUrl0 : null, MessageSid]
   );
 
   await pool.query(
@@ -922,6 +954,34 @@ Lead: ${lead.name || 'Customer'} | ${lead.email || 'No email'}`;
     return null;
   }
 }
+
+// GET /api/sms/media-proxy?url=<twilio media url> — Twilio's MMS media URLs require
+// account auth to fetch, so a bare <img src> in the CRM 401s. This fetches it with
+// our Twilio credentials and streams it back. Locked to api.twilio.com so it can't
+// be used as an open proxy for arbitrary URLs.
+router.get('/media-proxy', authenticateToken, async (req, res) => {
+  try {
+    const mediaUrl = req.query.url;
+    if (!mediaUrl) return res.status(400).json({ error: 'Missing url' });
+    let parsed;
+    try { parsed = new URL(mediaUrl); } catch { return res.status(400).json({ error: 'Invalid url' }); }
+    if (parsed.hostname !== 'api.twilio.com' || !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+      return res.status(400).json({ error: 'Invalid media url' });
+    }
+
+    const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+    const twilioRes = await fetch(mediaUrl, { headers: { Authorization: `Basic ${auth}` } });
+    if (!twilioRes.ok) return res.status(twilioRes.status).json({ error: 'Could not fetch media' });
+
+    res.set('Content-Type', twilioRes.headers.get('content-type') || 'application/octet-stream');
+    res.set('Cache-Control', 'private, max-age=86400');
+    const buf = Buffer.from(await twilioRes.arrayBuffer());
+    res.send(buf);
+  } catch (error) {
+    console.error('Media proxy error:', error.message);
+    res.status(500).json({ error: 'Could not fetch media' });
+  }
+});
 
 // GET /api/sms/webhook-status — check Twilio webhook config for the authenticated user's number
 router.get('/webhook-status', async (req, res) => {

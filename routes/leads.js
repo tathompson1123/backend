@@ -197,6 +197,26 @@ router.post('/public/:userId', async (req, res) => {
         .catch(err => console.error('Error sending lead notification email:', err.message));
     }
 
+    // Confirmation email to the lead themselves, so they know the submission went
+    // through and what happens next. PLACEHOLDER COPY — swap in the real wording
+    // once it's provided; this applies to every public lead form site-wide, not
+    // just the vehicle-wraps questionnaire.
+    if (process.env.SENDGRID_API_KEY && email) {
+      sgMail.send({
+        to: email,
+        from: { name: "Thompson's Auto Detailing", email: TRANSACTIONAL_EMAIL },
+        subject: "We've got your request — Thompson's Auto Detailing",
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
+            <div style="padding:2rem;border:1px solid #e5e7eb;border-radius:8px;">
+              <h1 style="margin:0 0 1rem;font-size:1.25rem;">Thanks, ${name}!</h1>
+              <p style="margin:0 0 1rem;">We received your request${service ? ` for <strong>${service}</strong>` : ''} and will be in touch shortly with next steps.</p>
+              <p style="color:#6b7280;font-size:0.85rem;margin:0;">— Thompson's Auto Detailing</p>
+            </div>
+          </div>`,
+      }).catch(err => console.error('Error sending lead confirmation email:', err.message));
+    }
+
     res.json({
       success: true,
       message: 'Thank you! We\'ll be in touch soon.'
@@ -933,7 +953,7 @@ router.get('/:leadId/sms-conversation', authenticateToken, async (req, res) => {
     // came from — a campaign blast, a booking exchange, a review ask or the agent —
     // so a thread that pulls together several sources doesn't read as one voice.
     const messagesResult = await pool.query(
-      `SELECT id, direction, to_number, from_number, message, created_at, status,
+      `SELECT id, direction, to_number, from_number, message, media_url, created_at, status,
               lead_id, booking_id, campaign_id, review_request_id, sent_by_employee_id,
               ${THREAD_SOURCE_SQL} AS thread_source
        FROM sms_messages
