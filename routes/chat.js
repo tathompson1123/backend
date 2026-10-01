@@ -132,7 +132,8 @@ async function getAvailableSlotsForDate(userId, serviceId, bookingDate, duration
     const [h, m] = slot.split(':').map(Number);
     const startMinAbs = h * 60 + m;
     const endMin = startMinAbs + durationMinutes;
-    const endTime = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+    // A TIME column can't hold an hour past 23 — see routes/bookings.js.
+    const endTime = `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
 
     const emp = await pool.query(
       `SELECT e.id, e.work_hours, e.work_days FROM employees e
@@ -303,7 +304,8 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
     const [startHour, startMin] = startTime.split(':').map(Number);
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = startMinutes + (totalDurationHours * 60);
-    const endHour = Math.floor(endMinutes / 60);
+    // A TIME column can't hold an hour past 23 — see routes/bookings.js.
+    const endHour = Math.floor(endMinutes / 60) % 24;
     const endMin = endMinutes % 60;
     const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
 

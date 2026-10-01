@@ -1917,7 +1917,8 @@ router.put('/my-bookings/:id', requirePermission('manage_bookings'), async (req,
       const [startHour, startMin] = startTime.split(':').map(Number);
       const startMinutes = startHour * 60 + startMin;
       const endMinutes = startMinutes + Math.round(totalDurationHours * 60);
-      const eh = Math.floor(endMinutes / 60);
+      // A TIME column can't hold an hour past 23 — see routes/bookings.js.
+      const eh = Math.floor(endMinutes / 60) % 24;
       const em = endMinutes % 60;
       computedEndTime = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
     }

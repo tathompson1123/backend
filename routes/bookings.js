@@ -207,7 +207,9 @@ router.post('/create', authenticateToken, async (req, res) => {
     const [startHour, startMin] = startTime.split(':').map(Number);
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = startMinutes + Math.round(totalDurationHours * 60);
-    const endHour = Math.floor(endMinutes / 60);
+    // A TIME column can't hold an hour past 23 — a late start plus a long combined
+    // duration (e.g. 10pm + 4 hours) produced "26:00" and crashed the insert outright.
+    const endHour = Math.floor(endMinutes / 60) % 24;
     const endMin = endMinutes % 60;
     const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
 
@@ -443,7 +445,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const [startHour, startMin] = startTime.split(':').map(Number);
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = startMinutes + Math.round(totalDurationHours * 60);
-    const endHour = Math.floor(endMinutes / 60);
+    // See POST /create — a TIME column can't hold an hour past 23.
+    const endHour = Math.floor(endMinutes / 60) % 24;
     const endMin = endMinutes % 60;
     const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
 

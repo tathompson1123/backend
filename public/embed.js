@@ -1432,6 +1432,28 @@
     return false;
   }
 
+  // URL/title/heading matching above is a best-effort guess at a checkout flow, and it
+  // only covers the page the step started on — a multi-step purchase (pick an amount ->
+  // enter card info) can land on a URL, title and headings that say nothing about gift
+  // cards or checkout by the time the actual payment step renders. Detecting the payment
+  // fields themselves doesn't depend on wording at all, so it catches that step on any
+  // platform: a real purchase form always has a card number/CVV input or a Stripe/Square
+  // embed, and a lead-gen contact form never does.
+  function hasPaymentFields(el) {
+    if (el.querySelector(
+      'iframe[name*="privateStripeFrame"], iframe[src*="js.stripe.com"], .StripeElement, [data-stripe], ' +
+      'iframe[src*="squareup.com"], iframe[src*="square.site"], [data-square], #sq-card-number, .sq-card-wrapper, ' +
+      'iframe[src*="paypal.com"], [data-paypal-button]'
+    )) return true;
+    var ccInputs = el.querySelectorAll(
+      'input[autocomplete^="cc-"], ' +
+      'input[name*="card" i][name*="num" i], input[id*="card" i][id*="num" i], ' +
+      'input[name*="cvv" i], input[name*="cvc" i], input[id*="cvv" i], input[id*="cvc" i], ' +
+      'input[name*="expir" i], input[id*="expir" i]'
+    );
+    return ccInputs.length > 0;
+  }
+
   var INPUT_SELECTOR = [
     // Standard HTML inputs
     'input[type="text"]', 'input[type="email"]', 'input[type="tel"]',
@@ -1453,6 +1475,7 @@
 
   function isContactForm(form) {
     if (isGiftCardContext(form)) return false;
+    if (hasPaymentFields(form)) return false;
     // Skip forms inside nav, header (search bars, login forms)
     var ancestor = form;
     while (ancestor) {
@@ -1471,6 +1494,7 @@
   function isFormLikeContainer(el) {
     if (el.tagName === 'FORM') return false; // already handled
     if (isGiftCardContext(el)) return false;
+    if (hasPaymentFields(el)) return false;
     var inputs = el.querySelectorAll(INPUT_SELECTOR);
     if (inputs.length < 2) return false;
     var submitBtn = el.querySelector('button[type="submit"], input[type="submit"], button');
