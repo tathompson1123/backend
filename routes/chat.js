@@ -110,6 +110,25 @@ async function getAvailableSlotsForDate(userId, serviceId, bookingDate, duration
     return (h * 60 + m + durationMinutes) <= closeMinutes;
   });
 
+  // Drop slots that have already passed when the requested date is today in the
+  // business's own timezone — otherwise a slot like "10am" still got offered to a
+  // customer chatting in at 3pm, since nothing here compared against the clock.
+  // Mirrors the same fix already in GET /api/public/availability.
+  const bizLocResult = await pool.query('SELECT state, zip_code FROM business_information WHERE user_id = $1', [userId]);
+  const { state, zip_code } = bizLocResult.rows[0] || {};
+  const tz = getTimezoneForBusiness(state, zip_code);
+  const now = new Date();
+  const todayIso = now.toLocaleDateString('en-CA', { timeZone: tz });
+  if (bookingDate === todayIso) {
+    const nowHHMM = now.toLocaleTimeString('en-US', { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' });
+    const [nowH, nowM] = nowHHMM.split(':').map(Number);
+    const cutoff = nowH * 60 + nowM + 30; // 30-min booking lead time, matching the widget's own filter
+    candidateSlots = candidateSlots.filter(t => {
+      const [h, m] = t.split(':').map(Number);
+      return (h * 60 + m) >= cutoff;
+    });
+  }
+
   // If no employees configured, all candidate slots are available
   const empCount = parseInt(
     (await pool.query('SELECT COUNT(*) AS count FROM employees WHERE user_id = $1 AND active = true', [userId])).rows[0].count
@@ -218,7 +237,7 @@ async function sendAttentionEmail({ userId, customerName, customerPhone, convers
     console.error('📧 Attention email error:', err.message);
   }
 }
-const { getBusinessDateTime } = require('../utils/zipToTimezone');
+const { getBusinessDateTime, getTimezoneForBusiness } = require('../utils/zipToTimezone');
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
