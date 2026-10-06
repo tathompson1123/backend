@@ -267,6 +267,44 @@ router.get('/stats', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /api/google-business/review-requests/:id/stop
+// Manual "stop texts": nothing more review-related goes to this customer — no queued
+// opener, no "how did it go?", no follow-up texts/emails — and their replies are no
+// longer run through the review reply handler.
+router.post('/review-requests/:id/stop', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const rr = (await pool.query(
+      `SELECT id, customer_id FROM review_requests WHERE id = $1 AND user_id = $2`,
+      [req.params.id, userId]
+    )).rows[0];
+    if (!rr) return res.status(404).json({ error: 'Review request not found' });
+
+    if (rr.customer_id) {
+      await pool.query(
+        `UPDATE customers SET review_requests_stopped = TRUE WHERE id = $1 AND user_id = $2`,
+        [rr.customer_id, userId]
+      );
+      // Any other open request for the same customer, so the status matches the flag.
+      await pool.query(
+        `UPDATE review_requests SET status = 'stopped'
+          WHERE user_id = $1 AND customer_id = $2
+            AND status IN ('pending','awaiting_reply','replied_positive','replied_neutral','needs_attention','sent')`,
+        [userId, rr.customer_id]
+      );
+    }
+    await pool.query(
+      `UPDATE review_requests SET status = 'stopped'
+        WHERE id = $1 AND status IN ('pending','awaiting_reply','replied_positive','replied_neutral','needs_attention','sent')`,
+      [rr.id]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error stopping review texts:', error.message);
+    res.status(500).json({ error: 'Failed to stop review texts' });
+  }
+});
+
 // GET - Review requests history
 // POST /api/google-business/review-requests/:id/send-ask
 // Send the positive-path review ask to someone the sentiment call got wrong, or who

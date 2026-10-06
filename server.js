@@ -985,6 +985,9 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS followup_email_2_at TIMESTAMP`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_review_requests_followup
       ON review_requests(followup_seq_started_at) WHERE followup_seq_started_at IS NOT NULL`);
+    // Manual "stop texts" switch (per customer): blocks the opener, the follow-up
+    // texts/emails and the reply handling, without touching campaign opt-outs.
+    await pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS review_requests_stopped BOOLEAN DEFAULT FALSE`);
     console.log('✅ Review requests table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify review_requests table:', e.message);
@@ -2173,6 +2176,7 @@ cron.schedule('*/60 * * * * *', async () => {
          AND rr.sms_sent = false
          AND c.phone IS NOT NULL
          AND (c.sms_unsubscribed IS NULL OR c.sms_unsubscribed = FALSE)
+         AND COALESCE(c.review_requests_stopped, FALSE) = FALSE
          AND rr.scheduled_send_time <= NOW()
          AND u.twilio_phone_number IS NOT NULL`
     );
@@ -2315,6 +2319,7 @@ cron.schedule('*/10 * * * *', async () => {
             AND rr.status = ANY($1)
             AND COALESCE(rr.review_completed, false) = false
             AND COALESCE(rr.review_verified, false)  = false
+            AND COALESCE(c.review_requests_stopped, FALSE) = FALSE
             AND rr.followup_seq_started_at + ($2::int * INTERVAL '1 day') <= NOW()
           LIMIT 200`,
         [step.statuses, step.afterDays]
