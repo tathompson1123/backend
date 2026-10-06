@@ -5,6 +5,7 @@ const { authenticateToken } = require('../config/middleware');
 const { pool } = require('../config/database');
 const { isUnlimitedAccount } = require('../utils/unlimitedAccounts');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { SMS_CAMPAIGN_RATE_CENTS } = require('../utils/smsCampaignBilling');
 
 // Plan hierarchy for upgrade/downgrade detection. Basic is no longer sold but is
 // still recognised so any legacy account on it can still be moved up.
@@ -19,7 +20,7 @@ const PLAN_ORDER = { basic: 1, pro: 2, scale: 3 };
 // The amount below is only a fallback for a Scale sub created without a quote, and
 // nothing self-serve charges it — see SELF_SERVE_PLANS.
 const PLAN_AMOUNTS = {
-  pro:   parseInt(process.env.PLAN_AMOUNT_PRO   || '19500', 10),
+  pro:   parseInt(process.env.PLAN_AMOUNT_PRO   || '25000', 10),
   scale: parseInt(process.env.PLAN_AMOUNT_SCALE || '17595', 10),
 };
 
@@ -38,7 +39,8 @@ function planFromAmount(amount) {
     [PLAN_AMOUNTS.pro]: 'pro',
     [PLAN_AMOUNTS.scale]: 'scale',
     9900: 'pro', 9995: 'pro',   // legacy Pro pricing, before $195
-    19500: 'pro',
+    19500: 'pro',   // Pro before the $250 move — still resolves until migrated
+    25000: 'pro',
     17500: 'scale', 17595: 'scale',
     2995: 'basic',  // legacy only — no longer sold
   };
@@ -609,9 +611,9 @@ router.get('/usage', authenticateToken, async (req, res) => {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
 
-    const [smsRow, chatRow, userRow, claudeRow] = await Promise.all([
+    const [smsRow, chatRow, userRow, claudeRow, campaignRow] = await Promise.all([
       pool.query(
-        `SELECT COUNT(*) FROM sms_messages WHERE user_id = $1 AND direction = 'outgoing' AND created_at >= $2`,
+        `SELECT COUNT(*) FROM sms_messages WHERE user_id = $1 AND direction = 'outgoing' AND campaign_id IS NULL AND created_at >= $2`,
         [userId, monthStart]
       ),
       pool.query(
@@ -628,6 +630,14 @@ router.get('/usage', authenticateToken, async (req, res) => {
         `SELECT COALESCE(SUM(cost_usd), 0) AS total FROM claude_usage WHERE user_id = $1 AND created_at >= $2`,
         [userId, monthStart]
       ),
+      // Campaign (blast) texts are billed per text on top of the plan, not counted
+      // against the plan's SMS allowance.
+      pool.query(
+        `SELECT COALESCE(SUM(billed_texts), 0) AS texts, COALESCE(SUM(charge_cents), 0) AS cents
+           FROM sms_campaigns
+          WHERE user_id = $1 AND created_at >= $2 AND billing_status IN ('billed', 'pending', 'failed', 'unbilled')`,
+        [userId, monthStart]
+      ),
     ]);
 
     const plan = userRow.rows[0]?.plan;
@@ -637,9 +647,9 @@ router.get('/usage', authenticateToken, async (req, res) => {
     // (mirrors the enforcement in routes/chat.js so the dashboard matches reality).
     const chatUnlimited = unlimited || userRow.rows[0]?.ai_chat_unlimited === true;
     const SMS_LIMITS = { free: 0, basic: 100, pro: 100, scale: 500, expert: 200 };
-    const CHAT_LIMITS = { free: 0, basic: 200, pro: 500, scale: 99999, expert: 500 };
+    const CHAT_LIMITS = { free: 0, basic: 200, pro: 99999, scale: 99999, expert: 500 };
     // Monthly AI chat API cost limits by plan (in USD)
-    const CHAT_COST_LIMITS = { free: 0, basic: 0, pro: 6.00, scale: null, expert: 6.00 };
+    const CHAT_COST_LIMITS = { free: 0, basic: 0, pro: null, scale: null, expert: 6.00 };
 
     res.json({
       plan,
@@ -650,12 +660,33 @@ router.get('/usage', authenticateToken, async (req, res) => {
       chatUsed: parseInt(chatRow.rows[0].count, 10),
       chatLimit: chatUnlimited ? null : (CHAT_LIMITS[plan] || 0),
       claudeCostMonth: parseFloat(claudeRow.rows[0].total) || 0,
+      campaignTextsMonth: parseInt(campaignRow.rows[0].texts, 10) || 0,
+      campaignChargeCentsMonth: parseInt(campaignRow.rows[0].cents, 10) || 0,
+      campaignRateCents: unlimited ? 0 : SMS_CAMPAIGN_RATE_CENTS,
       chatCostLimit: chatUnlimited ? null : (CHAT_COST_LIMITS[plan] ?? null),
       monthStart: monthStart.toISOString(),
     });
   } catch (error) {
     console.error('Usage fetch error:', error.message);
     res.status(500).json({ error: 'Failed to fetch usage' });
+  }
+});
+
+// GET - SMS campaign charges (what blasts have cost this customer, and whether each
+// one has reached their Stripe bill)
+router.get('/sms-charges', authenticateToken, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, message, recipient_count, billed_texts, charge_cents, billing_status, billed_at, created_at
+         FROM sms_campaigns
+        WHERE user_id = $1 AND billing_status IS NOT NULL
+        ORDER BY created_at DESC LIMIT 50`,
+      [req.user.userId]
+    );
+    res.json({ rateCents: SMS_CAMPAIGN_RATE_CENTS, campaigns: r.rows });
+  } catch (error) {
+    console.error('SMS charges fetch error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch SMS charges' });
   }
 });
 

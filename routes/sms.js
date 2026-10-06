@@ -467,7 +467,8 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
       const last10shot = (From || '').replace(/\D/g, '').slice(-10);
       if (last10shot) {
         const shotRes = await pool.query(
-          `SELECT rr.id, rr.customer_name, c.name AS c_name,
+          `SELECT rr.id, rr.customer_name, c.name AS c_name, u.business_name,
+                  COALESCE(rr.screenshot_attempts, 0) AS screenshot_attempts,
                   rc.raffle_enabled, rc.raffle_reward
            FROM review_requests rr
            JOIN users u ON u.id = rr.user_id
@@ -487,11 +488,30 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
           const firstName = ((rr.customer_name || rr.c_name || '').split(' ')[0]) || 'there';
           const shotLeadId = await findLeadIdByPhone(pool, user.id, From);
 
+          // Only a screenshot that really shows a posted Google review counts. Anything
+          // else — a car photo, an unsubmitted star form, another business — is not an
+          // entry, and the customer is told what we need instead.
+          const MAX_SCREENSHOT_ATTEMPTS = 5;
+          const { verifyReviewScreenshot } = require('../utils/reviewAI');
+          const check = await verifyReviewScreenshot(
+            MediaUrl0,
+            { businessName: rr.business_name, customerName: rr.customer_name || rr.c_name },
+            user.id
+          );
+          const valid = check.verdict === 'valid';
+
           await pool.query(
-            `UPDATE review_requests
-                SET review_completed = true, review_completed_at = NOW(), screenshot_url = $2
-              WHERE id = $1`,
-            [rr.id, MediaUrl0]
+            valid
+              ? `UPDATE review_requests
+                    SET review_completed = true, review_completed_at = NOW(), screenshot_url = $2,
+                        screenshot_verdict = 'valid', screenshot_reason = $3,
+                        screenshot_attempts = COALESCE(screenshot_attempts, 0) + 1
+                  WHERE id = $1`
+              : `UPDATE review_requests
+                    SET screenshot_url = $2, screenshot_verdict = $4, screenshot_reason = $3,
+                        screenshot_attempts = COALESCE(screenshot_attempts, 0) + 1
+                  WHERE id = $1`,
+            valid ? [rr.id, MediaUrl0, check.reason] : [rr.id, MediaUrl0, check.reason, check.verdict]
           );
           await pool.query(
             `INSERT INTO sms_messages
@@ -499,6 +519,28 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
              VALUES ($1, $2, 'incoming', $3, $4, $5, $6, $7, $8, NOW())`,
             [user.id, shotLeadId, From, To, Body || '[screenshot]', MediaUrl0, MessageSid, rr.id]
           ).catch(() => {});
+
+          if (!valid) {
+            // Past the retry cap we go quiet rather than keep spending a vision call per
+            // image, but the photo is still logged on the thread for the owner to see.
+            if (rr.screenshot_attempts < MAX_SCREENSHOT_ATTEMPTS) {
+              const retry = check.verdict === 'error'
+                ? `Thanks, ${firstName}! We got your photo and will take a look.`
+                : check.verdict === 'unclear'
+                  ? `Thanks ${firstName}! We couldn't quite make that out. Can you send a clear screenshot showing your posted Google review? Then you'll be entered.`
+                  : `Thanks ${firstName}! That doesn't look like a screenshot of your Google review. Send a screenshot showing your posted review and you'll be entered.`;
+              try {
+                await sendSMS(From, retry, user.id);
+                await pool.query(
+                  `INSERT INTO sms_messages (user_id, lead_id, direction, to_number, message, review_request_id, created_at)
+                   VALUES ($1, $2, 'outgoing', $3, $4, $5, NOW())`,
+                  [user.id, shotLeadId, From, retry, rr.id]
+                ).catch(() => {});
+              } catch (e) { console.log(`Screenshot retry SMS not sent to ${From}: ${e.message}`); }
+            }
+            console.log(`📸 Review screenshot NOT accepted from ${From} (request ${rr.id}): ${check.verdict} — ${check.reason}`);
+            return;
+          }
 
           const thanks = rr.raffle_enabled && rr.raffle_reward
             ? `Thank you, ${firstName}! You're entered to win ${rr.raffle_reward} — winners are drawn on the 1st.`

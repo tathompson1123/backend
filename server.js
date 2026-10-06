@@ -985,6 +985,10 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS followup_email_2_at TIMESTAMP`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_review_requests_followup
       ON review_requests(followup_seq_started_at) WHERE followup_seq_started_at IS NOT NULL`);
+    // AI check of raffle screenshots — only a verified posted Google review enters the raffle.
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS screenshot_verdict TEXT`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS screenshot_reason TEXT`);
+    await pool.query(`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS screenshot_attempts INTEGER DEFAULT 0`);
     // Manual "stop texts" switch (per customer): blocks the opener, the follow-up
     // texts/emails and the reply handling, without touching campaign opt-outs.
     await pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS review_requests_stopped BOOLEAN DEFAULT FALSE`);
@@ -2046,7 +2050,7 @@ cron.schedule('*/30 * * * * *', async () => {
           }
           const usageRow = await pool.query(
             `SELECT COUNT(*) FROM sms_messages
-             WHERE user_id = $1 AND direction = 'outgoing'
+             WHERE user_id = $1 AND direction = 'outgoing' AND campaign_id IS NULL
              AND created_at >= date_trunc('month', NOW())`,
             [lead.user_id]
           );
@@ -2196,7 +2200,7 @@ cron.schedule('*/60 * * * * *', async () => {
           }
           const usageRow = await pool.query(
             `SELECT COUNT(*) FROM sms_messages
-             WHERE user_id = $1 AND direction = 'outgoing'
+             WHERE user_id = $1 AND direction = 'outgoing' AND campaign_id IS NULL
              AND created_at >= date_trunc('month', NOW())`,
             [req.user_id]
           );
@@ -2290,6 +2294,15 @@ const REVIEW_FOLLOWUP_STEPS = [
 // nudges at people whose job was weeks ago.
 const FOLLOWUP_MAX_LATE_DAYS = 3;
 
+// SMS campaign billing retry — hourly, picks up any blast whose Stripe charge didn't
+// land first time (see utils/smsCampaignBilling.js).
+cron.schedule('17 * * * *', async () => {
+  try {
+    const { retryUnbilledCampaigns } = require('./utils/smsCampaignBilling');
+    await retryUnbilledCampaigns();
+  } catch (e) { console.error('SMS campaign billing retry error:', e.message); }
+});
+
 cron.schedule('*/10 * * * *', async () => {
   for (const step of REVIEW_FOLLOWUP_STEPS) {
     try {
@@ -2362,7 +2375,7 @@ cron.schedule('*/10 * * * *', async () => {
               const smsLimit = SMS_LIMITS[req.plan] || 0;
               const used = parseInt((await pool.query(
                 `SELECT COUNT(*) FROM sms_messages
-                  WHERE user_id = $1 AND direction = 'outgoing'
+                  WHERE user_id = $1 AND direction = 'outgoing' AND campaign_id IS NULL
                     AND created_at >= date_trunc('month', NOW())`,
                 [req.user_id]
               )).rows[0].count, 10);

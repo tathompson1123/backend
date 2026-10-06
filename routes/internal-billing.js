@@ -27,7 +27,7 @@ const SITE_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 // its monthly amount comes from whoever closed the call, and the fixed amount here
 // is only the fallback if they didn't name one.
 const PLAN_PRICES = {
-  pro:   { env: 'STRIPE_PRICE_PRO',   amount: parseInt(process.env.PLAN_AMOUNT_PRO   || '19500', 10), label: 'SORCE Pro' },
+  pro:   { env: 'STRIPE_PRICE_PRO',   amount: parseInt(process.env.PLAN_AMOUNT_PRO   || '25000', 10), label: 'SORCE Pro' },
   scale: { env: 'STRIPE_PRICE_SCALE', amount: parseInt(process.env.PLAN_AMOUNT_SCALE || '17595', 10), label: 'SORCE Scale', custom: true },
 };
 

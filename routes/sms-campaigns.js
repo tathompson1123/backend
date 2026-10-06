@@ -7,6 +7,7 @@ const { sendSmsCampaignReplyNotification } = require('../utils/bookingEmail');
 const { findLeadIdByPhone } = require('../utils/smsThread');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logClaudeUsage } = require('../utils/claudeUsage');
+const { SMS_CAMPAIGN_RATE_CENTS, chargeCampaign } = require('../utils/smsCampaignBilling');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -29,7 +30,7 @@ const isUnlimitedSms = isUnlimitedAccount;
 async function getMonthlySmsUsage(userId) {
   const r = await pool.query(
     `SELECT COUNT(*) FROM sms_messages
-     WHERE user_id = $1 AND direction = 'outgoing'
+     WHERE user_id = $1 AND direction = 'outgoing' AND campaign_id IS NULL
        AND created_at >= date_trunc('month', NOW())`,
     [userId]
   );
@@ -291,6 +292,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
       monthlyLimit,
       monthlyUsed,
       monthlyRemaining,
+      ratePerTextCents: unlimited ? 0 : SMS_CAMPAIGN_RATE_CENTS,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -399,30 +401,26 @@ router.post('/send-now', authenticateToken, async (req, res) => {
     // Enforce the plan's monthly SMS allowance (shared pool with the lead agent). Trim the
     // blast to what's left rather than hard-failing, and report how many were skipped.
     // Exempt accounts (UNLIMITED_SMS_EMAILS) bypass both the monthly and per-blast caps.
+    // Campaign texts are billed to the customer per text (see utils/smsCampaignBilling)
+    // instead of drawing down a plan allowance, so the only gates are having a paid
+    // plan and the per-blast cap. Exempt accounts skip the per-blast cap too.
     let monthlyLimit = null, monthlyRemaining = null, sendCap;
     if (unlimited) {
       sendCap = 1000000;
     } else {
-      monthlyLimit = SMS_PLAN_LIMITS[plan] || 0;
-      if (monthlyLimit === 0) {
+      if (!SMS_PLAN_LIMITS[plan]) {
         return res.status(403).json({ error: 'Your plan does not include SMS. Upgrade to send text campaigns.' });
       }
-      const monthlyUsed = await getMonthlySmsUsage(userId);
-      monthlyRemaining = Math.max(0, monthlyLimit - monthlyUsed);
-      if (monthlyRemaining === 0) {
-        return res.status(403).json({
-          error: `You've used all ${monthlyLimit} texts in your ${plan} plan this month. Upgrade or wait until next month.`,
-          monthlyLimit, monthlyUsed,
-        });
-      }
-      sendCap = Math.min(SMS_SEND_LIMIT, monthlyRemaining);
+      sendCap = SMS_SEND_LIMIT;
     }
 
     // Record the campaign up front so a mid-send crash still leaves a trail.
     // consent_certified captures the owner's opt-in attestation for this blast.
+    // billing_status 'pending' enrols it for billing once the send finishes (and for
+    // the hourly retry if that step is ever missed).
     const campaignRow = await pool.query(
-      `INSERT INTO sms_campaigns (user_id, message, status, consent_certified, created_at)
-       VALUES ($1, $2, 'pending', TRUE, NOW()) RETURNING id`,
+      `INSERT INTO sms_campaigns (user_id, message, status, consent_certified, billing_status, created_at)
+       VALUES ($1, $2, 'pending', TRUE, 'pending', NOW()) RETURNING id`,
       [userId, message.trim()]
     );
     const campaignId = campaignRow.rows[0].id;
@@ -466,9 +464,9 @@ router.post('/send-now', authenticateToken, async (req, res) => {
       skipped,
       reachableTotal,
       unlimited,
-      monthlyLimit,
-      monthlyRemaining: unlimited ? null : Math.max(0, monthlyRemaining - queued),
       limitReached: skipped > 0,
+      ratePerTextCents: unlimited ? 0 : SMS_CAMPAIGN_RATE_CENTS,
+      estimatedChargeCents: unlimited ? 0 : queued * SMS_CAMPAIGN_RATE_CENTS,
     });
 
     // ── Background send (not awaited) ──────────────────────────
@@ -506,6 +504,9 @@ router.post('/send-now', authenticateToken, async (req, res) => {
         `UPDATE sms_campaigns SET status = $1, recipient_count = $2, sent_at = NOW() WHERE id = $3`,
         [sent > 0 ? 'sent' : 'failed', sent, campaignId]
       ).catch(err => console.error('Campaign finalize update failed:', err.message));
+
+      // Bill the customer for the texts that actually went out.
+      await chargeCampaign(campaignId).catch(err => console.error('Campaign billing error:', err.message));
 
       console.log(`📱 SMS campaign ${campaignId}: ${sent}/${queued} texts sent for user ${userId}${skipped ? ` (${skipped} skipped — monthly limit ${monthlyLimit})` : ''}`);
     })().catch(e => console.error('Background SMS campaign send error:', e.message));

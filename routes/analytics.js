@@ -12,7 +12,7 @@ const DASHBOARD_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com
 // Per-plan monthly revenue. basic/expert are legacy and priced at what they were
 // sold for. Scale is quoted per customer now, so its figure is an estimate only —
 // real Scale MRR is whatever their subscription actually says in Stripe.
-const PLAN_REVENUE  = { basic: 29.95, pro: 195, expert: 99.95, scale: 175.95 };
+const PLAN_REVENUE  = { basic: 29.95, pro: 250, expert: 99.95, scale: 175.95 };
 const SMS_COST      = 0.0075;  // per outbound SMS (Twilio)
 const CHAT_COST     = 0.04;   // per chat conversation (Claude Sonnet 4 estimate)
 const AI_SMS_COST   = 0.003;  // per AI-generated SMS response

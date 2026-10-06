@@ -355,7 +355,62 @@ async function rateIncentive(incentiveText, userId) {
   return { score: null, tip: '' };
 }
 
+// ── Verify a raffle-entry screenshot actually shows a posted Google review ───
+// Fetches the MMS image from Twilio and asks Claude (vision) whether it is real
+// proof, not just any photo. Returns { verdict, reason } where verdict is:
+//   'valid'   — clearly a posted Google review for this business → enter them
+//   'invalid' — something else (random photo, other platform, unsubmitted form…)
+//   'unclear' — too cropped/blurry to tell → ask for a clearer one
+//   'error'   — couldn't fetch/analyze it (never enters; caller decides what to say)
+const SCREENSHOT_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
+
+async function verifyReviewScreenshot(mediaUrl, { businessName, customerName } = {}, userId) {
+  try {
+    if (!mediaUrl || !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+      return { verdict: 'error', reason: 'media or Twilio credentials unavailable' };
+    }
+    const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+    const imgRes = await fetch(mediaUrl, { headers: { Authorization: `Basic ${auth}` } });
+    if (!imgRes.ok) return { verdict: 'error', reason: `media fetch ${imgRes.status}` };
+    const mediaType = (imgRes.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (!SCREENSHOT_TYPES.has(mediaType)) return { verdict: 'error', reason: `unsupported image type ${mediaType}` };
+    const buf = Buffer.from(await imgRes.arrayBuffer());
+    if (buf.length > SCREENSHOT_MAX_BYTES) return { verdict: 'error', reason: 'image too large' };
+
+    const resp = await client().messages.create({
+      model: MODEL,
+      max_tokens: 200,
+      system:
+        'You verify proof that a customer posted a Google review for a specific business. ' +
+        'Reply with ONLY minified JSON: {"verdict":"valid"|"invalid"|"unclear","reason":"<one short sentence>"}.\n' +
+        'valid = the image clearly shows a Google review that has actually been posted (Google Maps / Google Business ' +
+        'review screen: reviewer name, star rating, and the review text or "Posted" confirmation) for the named business. ' +
+        'Allow small spelling or abbreviation differences in the business name.\n' +
+        'invalid = anything else: a random photo, a car or job photo, a meme, a screenshot of text messages, the review ' +
+        'link page or an empty/unsubmitted star form, a review of a DIFFERENT business, or another platform (Yelp, Facebook, etc.).\n' +
+        'unclear = it may be a Google review but it is too cropped, blurry or small to confirm.',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: buf.toString('base64') } },
+          { type: 'text', text: `Business that should have been reviewed: "${businessName || 'unknown'}". Customer: "${customerName || 'unknown'}". Does this image show them having posted a Google review for that business?` },
+        ],
+      }],
+    });
+    try { logClaudeUsage(userId, MODEL, resp.usage, 'review_screenshot_verify'); } catch {}
+    const m = (resp.content?.[0]?.text || '').match(/\{[\s\S]*\}/);
+    if (!m) return { verdict: 'error', reason: 'unparseable model output' };
+    const parsed = JSON.parse(m[0]);
+    const verdict = ['valid', 'invalid', 'unclear'].includes(parsed.verdict) ? parsed.verdict : 'error';
+    return { verdict, reason: String(parsed.reason || '').slice(0, 300) };
+  } catch (e) {
+    return { verdict: 'error', reason: e.message };
+  }
+}
+
 module.exports = {
+  verifyReviewScreenshot,
   shortenServiceName,
   classifyReplySentiment,
   composePositiveReply,

@@ -305,6 +305,33 @@ router.post('/review-requests/:id/stop', authenticateToken, async (req, res) => 
   }
 });
 
+// POST /api/google-business/review-requests/:id/approve-screenshot
+// Owner override for a screenshot the AI didn't accept: they've looked at the photo
+// themselves and it's real, so count it as a raffle entry.
+router.post('/review-requests/:id/approve-screenshot', authenticateToken, async (req, res) => {
+  try {
+    const rr = (await pool.query(
+      `SELECT id, screenshot_url, COALESCE(review_completed, false) AS review_completed
+         FROM review_requests WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.user.userId]
+    )).rows[0];
+    if (!rr) return res.status(404).json({ error: 'Review request not found' });
+    if (!rr.screenshot_url) return res.status(400).json({ error: 'No screenshot to approve' });
+    if (rr.review_completed) return res.status(400).json({ error: 'Already entered' });
+
+    await pool.query(
+      `UPDATE review_requests
+          SET review_completed = true, review_completed_at = NOW(), screenshot_verdict = 'approved_manual'
+        WHERE id = $1`,
+      [rr.id]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error approving screenshot:', error.message);
+    res.status(500).json({ error: 'Failed to approve screenshot' });
+  }
+});
+
 // GET - Review requests history
 // POST /api/google-business/review-requests/:id/send-ask
 // Send the positive-path review ask to someone the sentiment call got wrong, or who
@@ -648,6 +675,8 @@ router.get('/review-sms-conversations', authenticateToken, async (req, res) => {
               COALESCE(NULLIF(rr.customer_name, ''), c.name) AS customer_name,
               COALESCE(NULLIF(rr.customer_phone, ''), c.phone) AS customer_phone,
               rr.status,
+              rr.screenshot_verdict, rr.screenshot_url,
+              COALESCE(rr.review_completed, false) AS review_completed,
               COUNT(s.id)::int AS message_count,
               MAX(s.created_at) AS last_message_at,
               (SELECT s2.message FROM sms_messages s2 WHERE s2.review_request_id = rr.id ORDER BY s2.created_at DESC LIMIT 1) AS last_message,
@@ -656,7 +685,8 @@ router.get('/review-sms-conversations', authenticateToken, async (req, res) => {
        JOIN sms_messages s ON s.review_request_id = rr.id
        LEFT JOIN customers c ON c.id = rr.customer_id
        WHERE rr.user_id = $1
-       GROUP BY rr.id, rr.customer_name, c.name, rr.customer_phone, c.phone, rr.status
+       GROUP BY rr.id, rr.customer_name, c.name, rr.customer_phone, c.phone, rr.status,
+                rr.screenshot_verdict, rr.screenshot_url, rr.review_completed
        ORDER BY MAX(s.created_at) DESC`,
       [req.user.userId]
     );

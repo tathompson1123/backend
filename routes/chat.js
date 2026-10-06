@@ -557,7 +557,8 @@ router.post('/message', async (req, res) => {
     const userInfo = userInfoResult.rows[0] || {};
 
     // Check monthly AI chat cost limit by plan
-    const CHAT_COST_LIMITS = { pro: 6.00, expert: 6.00 };
+    // Pro and Scale have unlimited AI; only the legacy Expert plan is still capped.
+    const CHAT_COST_LIMITS = { expert: 6.00 };
     const planRow = await pool.query(
       'SELECT plan, ai_chat_unlimited, email, business_name, chat_limit_notified_at FROM users WHERE id = $1',
       [userId]
