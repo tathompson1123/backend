@@ -95,7 +95,7 @@ async function purchasePhoneNumber({ zipCode, areaCode, userId }) {
 // than buying another. Orphans happen — a failed signup can leave a number attached
 // to nobody while still billing monthly — so this recovers them automatically.
 //
-// The shared trial number and our own SORCE sender are excluded by name; they're
+// The shared trial number, the demo number and our own SORCE sender are excluded by name; they're
 // deliberately unassigned and must never be handed to a customer.
 async function claimSpareNumber(userId) {
   const twilioClient = getClient();
@@ -111,7 +111,7 @@ async function claimSpareNumber(userId) {
   );
 
   const reserved = new Set(
-    [process.env.TWILIO_SHARED_TRIAL_NUMBER, process.env.SORCE_SMS_FROM]
+    [process.env.TWILIO_SHARED_TRIAL_NUMBER, process.env.SORCE_SMS_FROM, process.env.DEMO_SMS_NUMBER]
       .filter(Boolean)
       .map(n => String(n).replace(/\D/g, '').slice(-10))
   );

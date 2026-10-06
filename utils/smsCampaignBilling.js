@@ -41,7 +41,7 @@ pool.query(`ALTER TABLE sms_campaigns ADD COLUMN IF NOT EXISTS billed_texts INTE
 async function chargeCampaign(campaignId) {
   const row = (await pool.query(
     `SELECT sc.id, sc.user_id, sc.recipient_count, sc.billing_status,
-            u.email, u.stripe_customer_id
+            u.email, u.stripe_customer_id, u.is_demo
        FROM sms_campaigns sc JOIN users u ON u.id = sc.user_id
       WHERE sc.id = $1`,
     [campaignId]
@@ -59,7 +59,7 @@ async function chargeCampaign(campaignId) {
   );
 
   if (texts === 0) { await save('none'); return 'none'; }
-  if (isUnlimitedAccount(row.email)) { await save('exempt'); return 'exempt'; }
+  if (isUnlimitedAccount(row.email) || row.is_demo) { await save('exempt'); return 'exempt'; }
 
   const cents = texts * SMS_CAMPAIGN_RATE_CENTS;
   if (!row.stripe_customer_id) {

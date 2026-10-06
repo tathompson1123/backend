@@ -14,6 +14,7 @@ const {
   sendDiscoverySMS, sendConfirmationEmail, confirmationSMS, formatWhen,
   checkDiscoverySmsSetup,
 } = require('../utils/discoveryNotify');
+const { EFFECTIVE_JWT_SECRET } = require('../config/middleware');
 const { isZoomConfigured, createMeeting, updateMeeting, deleteMeeting, checkZoomSetup } = require('../utils/zoom');
 
 const SITE_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
@@ -710,6 +711,112 @@ router.post('/calls', requireAnalytics, async (req, res) => {
   } catch (err) {
     console.error('Create discovery call error:', err.message);
     res.status(500).json({ error: 'Failed to create discovery call' });
+  }
+});
+
+/* ─────────────────────────── DEMO ACCOUNTS ─────────────────────────── */
+// A rep can open a working account for the prospect mid-call, built from the details
+// they gave on the booking form, and screenshare it — including sending a real SMS
+// or email campaign — before any sale. It's created on demand (not at booking) so a
+// no-show or a spam booking never leaves a stray account squatting on their email.
+//
+// Phone number: every demo account uses one dedicated SORCE demo number
+// (DEMO_SMS_NUMBER — bought once, in the Messaging Service, webhook pointed at
+// /api/sms/webhook). It falls back to the shared trial number if unset. Replies are
+// traced to the demo account that most recently texted that person (see the shared-
+// number branch in routes/sms.js), so back-to-back calls on the same number each get
+// their own replies. On first payment the account is switched off demo mode and gets
+// its own number (see the invoice.payment_succeeded handler in routes/billing.js).
+//
+// Cost guard: demo sends are capped (10 recipients per blast) and never billed to the
+// prospect — the point is the demo, and we shouldn't invoice someone who hasn't
+// bought. The cap stops a demo list becoming a free blast channel.
+pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_demo BOOLEAN DEFAULT FALSE`)
+  .catch(e => console.error('users is_demo migration error:', e.message));
+pool.query(`ALTER TABLE discovery_calls ADD COLUMN IF NOT EXISTS demo_user_id INTEGER`)
+  .catch(e => console.error('discovery_calls demo_user_id migration error:', e.message));
+
+async function ensureProspectAccount(call) {
+  if (!call.email) {
+    const err = new Error('This call has no email, so there is nothing to create the account from');
+    err.status = 400; throw err;
+  }
+  const email = call.email.trim().toLowerCase();
+  const existing = await pool.query(
+    `SELECT id, email, business_name, plan, is_demo FROM users WHERE LOWER(email) = $1`, [email]
+  );
+  if (existing.rows[0]) return { user: existing.rows[0], created: false };
+
+  // Nobody knows this password; access is through the staff "open account" token, and
+  // the prospect claims the account later with a normal password reset.
+  const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 12);
+  const business = (call.company || call.name || 'My Business').trim();
+  const created = await pool.query(
+    `INSERT INTO users
+       (email, password_hash, name, business_name, phone, plan, base_plan, trial_ends_at,
+        onboarding_completed, onboarding_current_step, onboarding_steps_completed,
+        has_seen_welcome, email_verified, questionnaire_completed, is_demo, created_at)
+     VALUES ($1,$2,$3,$4,$5,'pro','pro', NOW() + INTERVAL '14 days',
+             true, 6, $6, true, true, true, true, CURRENT_TIMESTAMP)
+     RETURNING id, email, business_name, plan, is_demo`,
+    [email, passwordHash, call.name || business, business, call.phone || null,
+     JSON.stringify({ step1: true, step2: true, step3: true, step4: true, step5: true, step6: true })]
+  );
+  const user = created.rows[0];
+
+  const shared = process.env.DEMO_SMS_NUMBER || process.env.TWILIO_SHARED_TRIAL_NUMBER;
+  if (!process.env.DEMO_SMS_NUMBER) {
+    console.warn('⚠️ DEMO_SMS_NUMBER not set — demo account is using the shared trial number instead');
+  }
+  if (shared) {
+    await pool.query(
+      'UPDATE users SET twilio_phone_number = $1, twilio_phone_sid = NULL WHERE id = $2', [shared, user.id]
+    );
+  } else {
+    console.warn(`⚠️ Neither DEMO_SMS_NUMBER nor TWILIO_SHARED_TRIAL_NUMBER is set — demo account ${user.id} has no SMS number`);
+  }
+  console.log(`🧪 Demo account ${user.id} created for ${email} from discovery call ${call.id}`);
+  return { user, created: true };
+}
+
+// POST /api/discovery/calls/:id/open-account
+// Creates the prospect's account if needed and returns a short-lived login for it, so
+// the rep can screenshare the real dashboard. The token is stamped with who opened it.
+router.post('/calls/:id/open-account', requireAnalytics, async (req, res) => {
+  try {
+    const call = (await pool.query('SELECT * FROM discovery_calls WHERE id = $1', [req.params.id])).rows[0];
+    if (!call) return res.status(404).json({ error: 'Call not found' });
+
+    const { user, created } = await ensureProspectAccount(call);
+    await pool.query('UPDATE discovery_calls SET demo_user_id = $1 WHERE id = $2', [user.id, call.id]);
+
+    const full = (await pool.query(
+      `SELECT id, email, business_name, plan, trial_ends_at, onboarding_completed,
+              onboarding_current_step, onboarding_steps_completed, has_seen_welcome,
+              questionnaire_completed, email_verified
+         FROM users WHERE id = $1`, [user.id]
+    )).rows[0];
+
+    const token = jwt.sign(
+      { userId: full.id, email: full.email, impersonatedBy: req.analytics?.name || 'SORCE team' },
+      EFFECTIVE_JWT_SECRET,
+      { expiresIn: '4h' }
+    );
+    console.log(`🔑 ${req.analytics?.name || 'SORCE team'} opened account ${full.id} (${full.email}) from call ${call.id}${created ? ' [just created]' : ''}`);
+
+    res.json({
+      success: true, created, isDemo: !!user.is_demo, token,
+      user: {
+        id: full.id, email: full.email, businessName: full.business_name, plan: full.plan,
+        trial_ends_at: full.trial_ends_at, onboarding_completed: full.onboarding_completed,
+        onboarding_current_step: full.onboarding_current_step,
+        onboarding_steps_completed: full.onboarding_steps_completed,
+        hasSeenWelcome: full.has_seen_welcome, questionnaire_completed: true, email_verified: true,
+      },
+    });
+  } catch (err) {
+    console.error('Open account error:', err.message);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Could not open that account' });
   }
 });
 

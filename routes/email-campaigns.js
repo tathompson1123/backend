@@ -376,8 +376,11 @@ async function sendCampaign(userId, config, campaignId) {
   const ownerReplyEmail = config.from_email;
 
   // Comped accounts have no per-campaign recipient cap; everyone else is capped at 2000.
-  const ownerRow = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
-  const sendLimit = isUnlimitedAccount(ownerRow.rows[0]?.email) ? null : EMAIL_SEND_LIMIT;
+  const ownerRow = await pool.query('SELECT email, is_demo FROM users WHERE id = $1', [userId]);
+  // Demo accounts (opened on a sales call) can only email a handful of people.
+  const sendLimit = ownerRow.rows[0]?.is_demo
+    ? 10
+    : isUnlimitedAccount(ownerRow.rows[0]?.email) ? null : EMAIL_SEND_LIMIT;
 
   // ── Email send (deduplicated by email; capped unless the account is comped) ────────────
   const emailCustomers = await pool.query(

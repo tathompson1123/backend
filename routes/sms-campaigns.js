@@ -8,6 +8,7 @@ const { findLeadIdByPhone } = require('../utils/smsThread');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logClaudeUsage } = require('../utils/claudeUsage');
 const { SMS_CAMPAIGN_RATE_CENTS, chargeCampaign } = require('../utils/smsCampaignBilling');
+const DEMO_SEND_CAP = 10;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -390,7 +391,7 @@ router.post('/send-now', authenticateToken, async (req, res) => {
       });
     }
 
-    const userRow = await pool.query('SELECT twilio_phone_number, plan, email FROM users WHERE id = $1', [userId]);
+    const userRow = await pool.query('SELECT twilio_phone_number, plan, email, is_demo FROM users WHERE id = $1', [userId]);
     if (!userRow.rows[0]?.twilio_phone_number) {
       return res.status(400).json({ error: 'No SMS number is provisioned for your account yet' });
     }
@@ -413,6 +414,8 @@ router.post('/send-now', authenticateToken, async (req, res) => {
       }
       sendCap = SMS_SEND_LIMIT;
     }
+    // Demo accounts (opened on a sales call) can only text a handful of people.
+    if (userRow.rows[0]?.is_demo === true) sendCap = Math.min(sendCap, DEMO_SEND_CAP);
 
     // Record the campaign up front so a mid-send crash still leaves a trail.
     // consent_certified captures the owner's opt-in attestation for this blast.
