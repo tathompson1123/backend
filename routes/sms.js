@@ -320,7 +320,9 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
         // A happy customer will still tell you the pressure washer was broken. That
         // shouldn't cost them the review ask, but the owner does need to hear it —
         // so it goes out as its own note rather than riding on the sentiment call.
-        if (sentiment !== 'negative' && verdict.issue && rr.owner_email && process.env.SENDGRID_API_KEY) {
+        // Positive only: negative and needs-attention replies already email the owner
+        // below, so sending this too would put two emails in the inbox for one reply.
+        if (sentiment === 'positive' && verdict.issue && rr.owner_email && process.env.SENDGRID_API_KEY) {
           try {
             const sgMail = require('@sendgrid/mail');
             sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -410,6 +412,7 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
                 subject: `SORCE: reply needs your attention — ${firstName}`,
                 text: `${rr.customer_name || rr.c_name || 'A customer'} replied to your review request, but it wasn't clearly positive.\n\n`
                   + `Their message:\n"${Body}"\n\n`
+                  + (verdict.issue ? `Issue they raised: ${verdict.issue}\n\n` : '')
                   + `We thanked them but held off on asking for a review. Open SORCE to read the full reply and send the review request yourself if it's worth it.`,
               });
             } catch (e) { console.log(`Needs-attention owner email failed: ${e.message}`); }
