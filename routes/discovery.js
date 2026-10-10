@@ -15,6 +15,7 @@ const {
   checkDiscoverySmsSetup,
 } = require('../utils/discoveryNotify');
 const { EFFECTIVE_JWT_SECRET } = require('../config/middleware');
+const { seedDemoAccount, convertDemoAccount } = require('../utils/demoAccount');
 const { isZoomConfigured, createMeeting, updateMeeting, deleteMeeting, checkZoomSetup } = require('../utils/zoom');
 
 const SITE_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
@@ -644,6 +645,7 @@ router.get('/calls', requireAnalytics, async (req, res) => {
     const result = await pool.query(
       `SELECT dc.*,
               tm.name AS rep_name, tm.title AS rep_title, tm.photo_url AS rep_photo,
+              du.is_demo                 AS demo_is_demo,
               u.id                       AS customer_user_id,
               u.plan                     AS customer_plan,
               u.subscription_status      AS customer_status,
@@ -653,6 +655,7 @@ router.get('/calls', requireAnalytics, async (req, res) => {
        FROM discovery_calls dc
        LEFT JOIN sorce_team_members tm ON tm.id = dc.assigned_to
        LEFT JOIN users u ON dc.email IS NOT NULL AND LOWER(u.email) = LOWER(dc.email)
+       LEFT JOIN users du ON du.id = dc.demo_user_id
        ${where}
        ORDER BY dc.scheduled_at DESC
        LIMIT 500`,
@@ -745,7 +748,18 @@ async function ensureProspectAccount(call) {
   const existing = await pool.query(
     `SELECT id, email, business_name, plan, is_demo FROM users WHERE LOWER(email) = $1`, [email]
   );
-  if (existing.rows[0]) return { user: existing.rows[0], created: false };
+  if (existing.rows[0]) {
+    // Only ever open a demo account. A real account with this email (a customer, or our
+    // own dev account) must never be what a prospect is shown on screenshare.
+    if (!existing.rows[0].is_demo) {
+      const err = new Error(
+        `${email} already belongs to a real SORCE account, so a demo can't be built on it. ` +
+        `Use a different email for this call (a +alias like name+demo@gmail.com works).`
+      );
+      err.status = 409; throw err;
+    }
+    return { user: existing.rows[0], created: false };
+  }
 
   // Nobody knows this password; access is through the staff "open account" token, and
   // the prospect claims the account later with a normal password reset.
@@ -775,6 +789,9 @@ async function ensureProspectAccount(call) {
   } else {
     console.warn(`⚠️ Neither DEMO_SMS_NUMBER nor TWILIO_SHARED_TRIAL_NUMBER is set — demo account ${user.id} has no SMS number`);
   }
+  // Example service (guessed from the form), example location, and the prospect as the
+  // one real contact. Failing to seed must not stop the demo opening.
+  await seedDemoAccount(user.id, call).catch(e => console.error(`⚠️ Demo seed failed for user ${user.id}:`, e.message));
   console.log(`🧪 Demo account ${user.id} created for ${email} from discovery call ${call.id}`);
   return { user, created: true };
 }
@@ -817,6 +834,29 @@ router.post('/calls/:id/open-account', requireAnalytics, async (req, res) => {
   } catch (err) {
     console.error('Open account error:', err.message);
     res.status(err.status || 500).json({ error: err.status ? err.message : 'Could not open that account' });
+  }
+});
+
+// POST /api/discovery/calls/:id/convert-demo
+// Payment collected → make the demo a real account: demo limits lifted, example data
+// removed. (A Stripe payment does the same thing automatically; this is for payment taken
+// any other way.)
+router.post('/calls/:id/convert-demo', requireAnalytics, async (req, res) => {
+  try {
+    const call = (await pool.query('SELECT demo_user_id FROM discovery_calls WHERE id = $1', [req.params.id])).rows[0];
+    if (!call) return res.status(404).json({ error: 'Call not found' });
+    if (!call.demo_user_id) return res.status(400).json({ error: 'No demo account has been opened for this call' });
+
+    const result = await convertDemoAccount(call.demo_user_id);
+    if (!result.converted && result.reason === 'already_real') {
+      return res.status(400).json({ error: 'That account is already a real account' });
+    }
+    if (!result.converted) return res.status(404).json({ error: 'Demo account not found' });
+    console.log(`✅ ${req.analytics?.name || 'SORCE team'} converted demo account ${call.demo_user_id} to real`);
+    res.json({ success: true, needsDedicatedNumber: result.needsDedicatedNumber });
+  } catch (err) {
+    console.error('Convert demo error:', err.message);
+    res.status(500).json({ error: 'Could not convert that account' });
   }
 });
 
@@ -926,8 +966,12 @@ router.post('/calls/:id/resend', requireAnalytics, async (req, res) => {
 
 /* ─────────────────────────── AVAILABILITY (public booking) ─────────────────────────── */
 
-// Weekday windows the public page offers. Falls back to Mon–Fri 9–5 when nothing is set.
-const DEFAULT_WINDOWS = [1, 2, 3, 4, 5].map(day => ({ day_of_week: day, start_time: '09:00', end_time: '17:00' }));
+// Windows the public page offers, in BUSINESS_TZ: Monday–Saturday, 9:30am–5:00pm Pacific
+// (the last 30-minute call starts at 4:30). Falls back to this when nothing is stored.
+// Pacific is a real zone, so this is PST in winter and PDT in summer — 9:30 on the
+// clock in Washington either way. Each visitor sees these converted to their own zone.
+const BUSINESS_TZ = 'America/Los_Angeles';
+const DEFAULT_WINDOWS = [1, 2, 3, 4, 5, 6].map(day => ({ day_of_week: day, start_time: '09:30', end_time: '17:00' }));
 
 async function loadWindows() {
   try {
@@ -1041,38 +1085,84 @@ async function dispatchConfirmations(call, { force = false, channel = 'both' } =
   return result;
 }
 
-// Free 30-minute slots on a given date, in the windows above, minus anything booked.
-async function slotsForDate(dateStr) {
-  const windows = await loadWindows();
-  const day = new Date(`${dateStr}T12:00:00Z`).getUTCDay();
-  const todays = windows.filter(w => Number(w.day_of_week) === day);
-  if (todays.length === 0) return [];
+// ── Time zone helpers (no library: Intl is enough for fixed-offset math) ──────────
+// Offset of `tz` from UTC at instant `ts`, in ms (e.g. -8h for Pacific in winter).
+function tzOffsetMs(ts, tz) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(ts)).reduce((o, p) => (p.type !== 'literal' && (o[p.type] = Number(p.value)), o), {});
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return asUtc - Math.floor(ts / 1000) * 1000;
+}
 
+// The UTC instant at which wall-clock y-m-d hh:mm happens in `tz`. Re-checks the offset
+// once so a time that straddles a daylight-saving change still lands correctly.
+function zonedTimeToUtc(y, mo, d, hh, mm, tz) {
+  const guess = Date.UTC(y, mo - 1, d, hh, mm);
+  let utc = guess - tzOffsetMs(guess, tz);
+  utc = guess - tzOffsetMs(utc, tz);
+  return utc;
+}
+
+// YYYY-MM-DD for instant `ts` as seen on the wall clock in `tz`.
+function localDateStr(ts, tz) {
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts));
+  return p; // en-CA formats as YYYY-MM-DD
+}
+
+function validZone(tz) {
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; }
+}
+
+// Free 30-minute slots on `dateStr` AS THE VISITOR SEES IT (viewerTz), minus anything
+// booked. The windows are Pacific, so a visitor's calendar day can pull slots from the
+// neighbouring Pacific days — e.g. for someone in Sydney, "Tuesday" is Monday afternoon
+// in Washington — so we generate Pacific slots for dateStr±1 and keep those that land
+// on the visitor's date. Each slot's `iso` is the absolute instant; the page renders it
+// in the visitor's own zone.
+async function slotsForDate(dateStr, viewerTz) {
+  const viewer = viewerTz && validZone(viewerTz) ? viewerTz : BUSINESS_TZ;
+  const windows = await loadWindows();
+
+  const [Y, M, D] = dateStr.split('-').map(Number);
+  const rangeStart = zonedTimeToUtc(Y, M, D - 1, 0, 0, BUSINESS_TZ);
+  const rangeEnd = zonedTimeToUtc(Y, M, D + 2, 0, 0, BUSINESS_TZ);
   const booked = (await pool.query(
     `SELECT scheduled_at, duration_minutes FROM discovery_calls
-     WHERE status != 'cancelled' AND scheduled_at::date = $1::date`,
-    [dateStr]
+     WHERE status != 'cancelled' AND scheduled_at >= $1 AND scheduled_at < $2`,
+    [new Date(rangeStart), new Date(rangeEnd)]
   )).rows;
 
   const slots = [];
-  for (const w of todays) {
-    const [sh, sm] = String(w.start_time).split(':').map(Number);
-    const [eh, em] = String(w.end_time).split(':').map(Number);
-    for (let m = sh * 60 + sm; m + DEFAULT_SLOT_MINUTES <= eh * 60 + em; m += DEFAULT_SLOT_MINUTES) {
-      const hh = String(Math.floor(m / 60)).padStart(2, '0');
-      const mm = String(m % 60).padStart(2, '0');
-      const start = new Date(`${dateStr}T${hh}:${mm}:00`);
-      if (start.getTime() < Date.now() + 60 * 60 * 1000) continue; // need an hour's notice
-      const overlaps = booked.some(b => {
-        const bStart = new Date(b.scheduled_at).getTime();
-        const bEnd = bStart + (b.duration_minutes || DEFAULT_SLOT_MINUTES) * 60000;
-        const sStart = start.getTime();
-        return sStart < bEnd && sStart + DEFAULT_SLOT_MINUTES * 60000 > bStart;
-      });
-      if (!overlaps) slots.push({ time: `${hh}:${mm}`, iso: start.toISOString() });
+  for (const offset of [-1, 0, 1]) {
+    const pt = new Date(Date.UTC(Y, M - 1, D + offset, 12)); // noon UTC, safe for date math
+    const [py, pm, pd] = [pt.getUTCFullYear(), pt.getUTCMonth() + 1, pt.getUTCDate()];
+    const dow = pt.getUTCDay();
+    for (const w of windows.filter(w => Number(w.day_of_week) === dow)) {
+      const [sh, sm] = String(w.start_time).split(':').map(Number);
+      const [eh, em] = String(w.end_time).split(':').map(Number);
+      for (let m = sh * 60 + sm; m + DEFAULT_SLOT_MINUTES <= eh * 60 + em; m += DEFAULT_SLOT_MINUTES) {
+        const hh = Math.floor(m / 60), mm = m % 60;
+        const startMs = zonedTimeToUtc(py, pm, pd, hh, mm, BUSINESS_TZ);
+        if (localDateStr(startMs, viewer) !== dateStr) continue;
+        if (startMs < Date.now() + 60 * 60 * 1000) continue; // need an hour's notice
+        const overlaps = booked.some(b => {
+          const bStart = new Date(b.scheduled_at).getTime();
+          const bEnd = bStart + (b.duration_minutes || DEFAULT_SLOT_MINUTES) * 60000;
+          return startMs < bEnd && startMs + DEFAULT_SLOT_MINUTES * 60000 > bStart;
+        });
+        if (!overlaps) {
+          slots.push({
+            time: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`,
+            iso: new Date(startMs).toISOString(),
+          });
+        }
+      }
     }
   }
-  return slots;
+  return slots.sort((a, b) => a.iso.localeCompare(b.iso));
 }
 
 module.exports = {
@@ -1080,6 +1170,7 @@ module.exports = {
   requireAnalytics,
   loadWindows,
   slotsForDate,
+  localDateStr,
   dispatchConfirmations,
   syncLeadForCall,
   DEFAULT_SLOT_MINUTES,

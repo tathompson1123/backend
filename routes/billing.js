@@ -340,7 +340,11 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         // Money has cleared, so a demo account is now a real customer: lift the demo
         // send caps and let campaign billing apply. The dedicated number is bought below
         // (a demo account has no twilio_phone_sid), replacing the shared demo number.
-        await pool.query(`UPDATE users SET is_demo = FALSE WHERE stripe_customer_id = $1 AND is_demo = TRUE`, [invoice.customer]);
+        const demoRow = await pool.query(`SELECT id FROM users WHERE stripe_customer_id = $1 AND is_demo = TRUE`, [invoice.customer]);
+        if (demoRow.rows[0]) {
+          await require('../utils/demoAccount').convertDemoAccount(demoRow.rows[0].id)
+            .catch(e => console.error('Demo conversion on payment failed:', e.message));
+        }
         const converted = await pool.query(
           `SELECT u.id, u.plan, u.subscription_status, u.twilio_phone_sid, bi.zip_code
            FROM users u

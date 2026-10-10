@@ -1256,10 +1256,10 @@ router.get('/cc/:linkToken/:recipientToken', async (req, res) => {
 // GET /api/public/discovery/slots?date=YYYY-MM-DD
 router.get('/discovery/slots', async (req, res) => {
   try {
-    const { date } = req.query;
+    const { date, tz } = req.query;
     if (!date) return res.status(400).json({ error: 'A date is required' });
     const { slotsForDate } = require('./discovery');
-    res.json({ success: true, date, slots: await slotsForDate(date) });
+    res.json({ success: true, date, slots: await slotsForDate(date, tz) });
   } catch (err) {
     console.error('Discovery slots error:', err.message);
     res.status(500).json({ error: 'Failed to load available times' });
@@ -1275,11 +1275,14 @@ router.post('/discovery/book', async (req, res) => {
     if (!phone?.trim()) return res.status(400).json({ error: 'Please enter your phone number' });
     if (!scheduledAt)   return res.status(400).json({ error: 'Please pick a time' });
 
-    const { slotsForDate, dispatchConfirmations, syncLeadForCall, DEFAULT_SLOT_MINUTES } = require('./discovery');
+    const { slotsForDate, localDateStr, dispatchConfirmations, syncLeadForCall, DEFAULT_SLOT_MINUTES } = require('./discovery');
 
-    // Re-check the slot server-side so two prospects can't grab the same time.
-    const dateStr = new Date(scheduledAt).toISOString().slice(0, 10);
-    const open = await slotsForDate(dateStr);
+    // Re-check the slot server-side so two prospects can't grab the same time. The date
+    // is the one the visitor picked, i.e. their own calendar day, so check it in their zone.
+    let viewerTz = timezone || 'America/Los_Angeles';
+    try { new Intl.DateTimeFormat('en-US', { timeZone: viewerTz }); } catch { viewerTz = 'America/Los_Angeles'; }
+    const dateStr = localDateStr(new Date(scheduledAt).getTime(), viewerTz);
+    const open = await slotsForDate(dateStr, viewerTz);
     const wanted = new Date(scheduledAt).getTime();
     if (!open.some(s => new Date(s.iso).getTime() === wanted)) {
       return res.status(409).json({ error: 'Sorry, that time was just taken. Please pick another.' });
