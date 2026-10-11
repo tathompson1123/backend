@@ -1275,7 +1275,7 @@ router.post('/discovery/book', async (req, res) => {
     if (!phone?.trim()) return res.status(400).json({ error: 'Please enter your phone number' });
     if (!scheduledAt)   return res.status(400).json({ error: 'Please pick a time' });
 
-    const { slotsForDate, localDateStr, dispatchConfirmations, syncLeadForCall, DEFAULT_SLOT_MINUTES } = require('./discovery');
+    const { slotsForDate, localDateStr, dispatchConfirmations, notifyRepOfBooking, syncLeadForCall, DEFAULT_SLOT_MINUTES } = require('./discovery');
 
     // Re-check the slot server-side so two prospects can't grab the same time. The date
     // is the one the visitor picked, i.e. their own calendar day, so check it in their zone.
@@ -1309,6 +1309,7 @@ router.post('/discovery/book', async (req, res) => {
     const call = created.rows[0];
     await syncLeadForCall(call);
     const delivery = await dispatchConfirmations(call);
+    await notifyRepOfBooking(call, delivery.zoomJoinUrl);
     res.json({ success: true, call: { id: call.id, scheduled_at: call.scheduled_at }, delivery });
   } catch (err) {
     console.error('Discovery booking error:', err.message);

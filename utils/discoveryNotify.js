@@ -289,7 +289,63 @@ async function sendConfirmationEmail(call, rep) {
   });
 }
 
+// Tell the assigned rep a prospect just booked themselves onto their calendar. The
+// confirmations above only go to the prospect, so without this the rep finds out by
+// opening /analytics. Owner-style alert: plain layout, reply goes to the prospect.
+async function sendRepBookingEmail(call, rep) {
+  if (!process.env.SENDGRID_API_KEY) throw new Error('SENDGRID_API_KEY not configured');
+  if (!rep?.email) throw new Error('No rep email to notify');
+  const { escapeHtml: esc } = require('./escapeHtml');
+  const { plainEmail } = require('./emailLayout');
+  const { ownerAlertReplyTo } = require('./emailFrom');
+
+  // The rep reads this in their own zone, which is the business zone; the prospect's
+  // own zone goes alongside so nobody has to do the math when confirming by phone.
+  const repWhen = formatWhen(call.scheduled_at, 'America/Los_Angeles');
+  const prospectZone = call.timezone && call.timezone !== 'America/Los_Angeles';
+  const prospectWhen = prospectZone ? formatWhen(call.scheduled_at, call.timezone) : null;
+
+  const details = [
+    { label: 'Name', value: esc(call.name) },
+    { label: 'Phone', value: esc(call.phone) },
+    { label: 'Email', value: esc(call.email) },
+    call.company ? { label: 'Company', value: esc(call.company) } : null,
+    { label: 'When', value: esc(repWhen) },
+    prospectWhen ? { label: 'Their time', value: esc(prospectWhen) } : null,
+    call.zoom_join_url ? { label: 'Zoom', value: esc(call.zoom_join_url) } : null,
+    call.notes ? { label: 'Notes', value: `<span style="white-space:pre-wrap;">${esc(call.notes)}</span>` } : null,
+  ].filter(Boolean);
+
+  const text = [
+    `New discovery call booked: ${call.name}`,
+    `Phone: ${call.phone}`,
+    `Email: ${call.email}`,
+    call.company ? `Company: ${call.company}` : null,
+    `When: ${repWhen}`,
+    prospectWhen ? `Their time: ${prospectWhen}` : null,
+    call.zoom_join_url ? `Zoom: ${call.zoom_join_url}` : null,
+    call.notes ? `Notes: ${call.notes}` : null,
+  ].filter(Boolean).join('\n');
+
+  await sgMail.send({
+    to: rep.email,
+    from: { name: 'SORCE Bookings', email: FROM_EMAIL },
+    replyTo: ownerAlertReplyTo(call.email, call.name),
+    trackingSettings: { clickTracking: { enable: false, enableText: false }, openTracking: { enable: false } },
+    subject: `New discovery call: ${call.name} — ${repWhen}`,
+    text,
+    html: plainEmail({
+      greeting: rep.name ? `Hi ${esc(rep.name.split(' ')[0])},` : undefined,
+      paragraphs: ['A prospect just booked a discovery call with you.'],
+      details,
+      action: { label: 'Open your dashboard', url: `${SITE_URL}/analytics` },
+      signature: 'SORCE Integrations',
+    }),
+  });
+}
+
 module.exports = {
+  sendRepBookingEmail,
   toE164,
   formatWhen,
   sendDiscoverySMS,

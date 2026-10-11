@@ -11,7 +11,7 @@ const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const {
-  sendDiscoverySMS, sendConfirmationEmail, confirmationSMS, formatWhen,
+  sendDiscoverySMS, sendConfirmationEmail, sendRepBookingEmail, confirmationSMS, formatWhen,
   checkDiscoverySmsSetup,
 } = require('../utils/discoveryNotify');
 const { EFFECTIVE_JWT_SECRET } = require('../config/middleware');
@@ -1165,12 +1165,29 @@ async function slotsForDate(dateStr, viewerTz) {
   return slots.sort((a, b) => a.iso.localeCompare(b.iso));
 }
 
+// Email the assigned rep about a self-booked call. Never throws: a failed alert must not
+// fail the prospect's booking, which has already been saved by the time this runs.
+async function notifyRepOfBooking(call, zoomJoinUrl) {
+  try {
+    if (!call.assigned_to) return;
+    const rep = (await pool.query(
+      'SELECT name, email FROM sorce_team_members WHERE id = $1',
+      [call.assigned_to]
+    )).rows[0];
+    if (!rep?.email) return;
+    await sendRepBookingEmail({ ...call, zoom_join_url: zoomJoinUrl || call.zoom_join_url }, rep);
+  } catch (err) {
+    console.error(`⚠️ Rep booking email failed (call ${call.id}):`, err.message);
+  }
+}
+
 module.exports = {
   router,
   requireAnalytics,
   loadWindows,
   slotsForDate,
   localDateStr,
+  notifyRepOfBooking,
   dispatchConfirmations,
   syncLeadForCall,
   DEFAULT_SLOT_MINUTES,
