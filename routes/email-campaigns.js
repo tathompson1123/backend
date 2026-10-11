@@ -131,8 +131,42 @@ function emailBlocksToHtml(blocks) {
       }
       case 'offer_box':
         return `  <div style="margin:0 28px 24px;background:${c.bgColor||'#f0fdf4'};border-left:4px solid ${c.borderColor||'#22c55e'};padding:16px 20px;border-radius:8px"><p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#111827">${esc(c.title||'Exclusive Offer')}</p><p style="margin:0;font-size:14px;color:#374151;line-height:1.55">${esc(c.description||'')}</p></div>`;
-      case 'offer_headline':
-        return `  <div style="padding:36px 28px 8px;text-align:center"><h2 style="margin:0 0 10px;font-size:30px;font-weight:800;color:#111827;line-height:1.2">${esc(c.title||'')}</h2>${c.subtitle ? `<p style="margin:0;font-size:16px;font-weight:600;color:#b45309;line-height:1.4">${esc(c.subtitle)}</p>` : ''}</div>`;
+      case 'offer_headline': {
+        // Dark, poster-style headline when theme is 'dark'; the earlier light version otherwise.
+        const dark = c.theme === 'dark';
+        const accent = c.accent || '#f97316';
+        return dark
+          ? `  <div style="background:#2b2b2b;padding:40px 30px 10px;text-align:left"><h2 style="margin:0 0 12px;font-size:36px;font-weight:800;color:#ffffff;line-height:1.1;text-transform:uppercase;letter-spacing:-0.5px">${esc(c.title||'')}</h2>${c.subtitle ? `<p style="margin:0;font-size:16px;font-weight:700;color:${esc(accent)};line-height:1.4">${esc(c.subtitle)}</p>` : ''}</div>`
+          : `  <div style="padding:36px 28px 8px;text-align:center"><h2 style="margin:0 0 10px;font-size:30px;font-weight:800;color:#111827;line-height:1.2">${esc(c.title||'')}</h2>${c.subtitle ? `<p style="margin:0;font-size:16px;font-weight:600;color:#b45309;line-height:1.4">${esc(c.subtitle)}</p>` : ''}</div>`;
+      }
+      case 'intro_text':
+        return `  <div style="background:#2b2b2b;padding:14px 30px 26px"><p style="margin:0;font-size:16px;color:#e5e5e5;line-height:1.6">${esc(c.text||'')}</p></div>`;
+      case 'offer_cards': {
+        const cardsHtml = (c.cards||[]).map(card => `
+    <div style="padding:6px 0 26px;text-align:center">
+      ${card.image ? `<img src="${esc(normalizeHeroImageUrl(card.image))}" alt="${esc(card.title||c.alt||'')}" width="600" height="400" border="0" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;vertical-align:middle" />` : ''}
+      <h3 style="margin:18px 20px 6px;font-size:24px;font-weight:800;color:#f5f5f5;text-transform:uppercase;letter-spacing:0.5px;line-height:1.2">${esc(card.title||'')}</h3>
+      <p style="margin:0 24px;font-size:15px;color:#d4d4d4;line-height:1.5">${esc(card.line||'')}</p>
+    </div>`).join('');
+        return `  <div style="background:#2b2b2b;padding:6px 0 0">${cardsHtml}\n  </div>`;
+      }
+      case 'cta_buttons': {
+        const accent = c.accent || '#f97316';
+        const primary = `<a href="${esc(c.link||'#')}" style="display:inline-block;background:${esc(accent)};color:#ffffff;padding:15px 30px;margin:6px;border:2px solid ${esc(accent)};text-decoration:none;font-weight:800;font-size:14px;letter-spacing:0.5px;text-transform:uppercase">${esc(c.text||'Book Now')}</a>`;
+        const secondary = c.secondaryText && c.secondaryLink
+          ? `<a href="${esc(c.secondaryLink)}" style="display:inline-block;background:transparent;color:#f5f5f5;padding:15px 30px;margin:6px;border:2px solid ${esc(accent)};text-decoration:none;font-weight:800;font-size:14px;letter-spacing:0.5px;text-transform:uppercase">${esc(c.secondaryText)}</a>`
+          : '';
+        return `  <div style="background:#2b2b2b;padding:8px 24px 26px;text-align:center">${primary}${secondary}</div>`;
+      }
+      case 'fine_print':
+        return `  <div style="background:#2b2b2b;padding:0 30px 28px"><p style="margin:0;font-size:11px;color:#a3a3a3;line-height:1.5">${esc(c.text||'')}</p></div>`;
+      case 'brand_footer': {
+        const links = [
+          c.contactEmail ? `<a href="mailto:${esc(c.contactEmail)}" style="color:#f5f5f5;text-decoration:none;font-weight:700">Contact Us</a>` : '',
+          `<a href="#unsubscribe" style="color:#f5f5f5;text-decoration:underline;font-weight:700">${esc(c.unsubscribeText||'Unsubscribe')}</a>`,
+        ].filter(Boolean).join('<span style="color:#6b7280">&nbsp;&nbsp;|&nbsp;&nbsp;</span>');
+        return `  <div style="background:#1f1f1f;border-top:1px solid #3a3a3a;padding:28px 24px;text-align:center"><p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#e5e5e5;letter-spacing:0.08em;text-transform:uppercase">${esc(c.name||'')}</p>${c.address ? `<p style="margin:0 0 14px;font-size:13px;color:#a3a3a3;line-height:1.5">${esc(c.address)}</p>` : ''}<p style="margin:0;font-size:12px">${links}</p></div>`;
+      }
       case 'offer_list': {
         const rows = (c.items||[]).map(i => `<div style="padding:7px 0;font-size:16px;color:#1f2937;line-height:1.5"><span style="color:#16a34a;font-weight:700;margin-right:10px">&#10003;</span>${esc(i)}</div>`).join('');
         return `  <div style="padding:20px 36px 8px"><p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280">${esc(c.heading||'What you get')}</p>${rows}</div>`;
@@ -176,12 +210,26 @@ async function getBusinessContext(userId) {
   );
   const services = servicesRow.rows.map(r => r.name);
 
+  // Address and phone feed the email footer and the "Call" button.
+  let address = '', phone = '';
+  try {
+    const bi = (await pool.query(
+      'SELECT address, city, state, zip_code, phone FROM business_information WHERE user_id = $1 LIMIT 1', [userId]
+    )).rows[0];
+    if (bi) {
+      address = [bi.address, bi.city, [bi.state, bi.zip_code].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+      phone = (bi.phone || '').trim();
+    }
+  } catch (e) { /* optional */ }
+
   return {
     businessName: user.business_name || 'Our Business',
     industry: user.business_type || industryFallback || 'service business',
     city: '',
     state: '',
     services,
+    address,
+    phone,
   };
 }
 
@@ -217,7 +265,7 @@ async function getNextFocus(userId, currentFocus) {
 }
 
 async function generateCampaign(userId, config, offerDetails, autoRotate = false) {
-  const { businessName, industry, city, services } = await getBusinessContext(userId);
+  const { businessName, industry, city, services, address, phone } = await getBusinessContext(userId);
   const recentSubjects = await getRecentSubjects(userId);
   const month = new Date().toLocaleString('default', { month: 'long' });
   const tone = config?.tone || 'friendly';
@@ -262,26 +310,31 @@ Offer ends: ${expiryStr}
 ${offerInstruction}
 ${recentSubjects.length ? `Recent subjects (do not repeat): ${recentSubjects.join(' | ')}` : ''}
 
-The email has exactly three parts, in this order, and nothing else:
-1. THE OFFER, stated plainly at the very top.
-2. EXACTLY WHAT THEY GET: a short list of concrete things included.
-3. ONE CALL TO ACTION.
+The email has exactly these parts, in this order, and nothing else:
+1. THE OFFER as a bold headline at the very top.
+2. A very short intro (one or two sentences).
+3. EXACTLY WHAT THEY GET: three cards, each a name plus one short line.
+4. ONE CALL TO ACTION.
 
-Write it brief and straight to the point. No story, no problem/solution setup, no filler, no "we hope this finds you well".
+Brief and straight to the point. No story, no problem/solution setup, no filler, no "we hope this finds you well".
 
 Return ONLY valid JSON (no markdown, no code fences):
 {
   "subject": "under 50 characters, states the offer itself",
   "previewText": "under 90 characters, adds the deadline or the key detail",
-  "headline": "the offer in 8 words or fewer, e.g. '20% Off Any Full Detail'",
+  "headline": "the offer in 8 words or fewer, e.g. 'Big Shine. Small Price.' or '20% Off Any Full Detail'",
   "subheadline": "one short line with the deadline, 12 words or fewer, e.g. 'This week only — ends ${expiryStr}'",
-  "getHeading": "2-4 words introducing the list, e.g. 'What you get'",
-  "items": ["3 or 4 concrete items, each 10 words or fewer — what's included, the saving, any bonus"],
+  "intro": "one or two plain sentences, 30 words or fewer in total, saying what the offer is and who it's for",
+  "cards": [
+    { "title": "2-4 word name of one thing they get", "line": "one short line, 10 words or fewer" },
+    { "title": "...", "line": "..." },
+    { "title": "...", "line": "..." }
+  ],
   "ctaText": "2-4 words, starts with a verb, e.g. 'Book Your Spot'",
   "annotations": [
     { "blockType": "offer_headline", "label": "2-4 words", "note": "One plain sentence on why leading with the offer works" },
-    { "blockType": "offer_list", "label": "2-4 words", "note": "One plain sentence on why spelling out what they get works" },
-    { "blockType": "cta_button", "label": "2-4 words", "note": "One plain sentence on why a single clear action works" }
+    { "blockType": "offer_cards", "label": "2-4 words", "note": "One plain sentence on why spelling out what they get works" },
+    { "blockType": "cta_buttons", "label": "2-4 words", "note": "One plain sentence on why a clear next step works" }
   ]
 }`;
 
@@ -300,31 +353,57 @@ Return ONLY valid JSON (no markdown, no code fences):
   const clip = (v, n) => String(v || '').trim().slice(0, n);
   const subject = clip(parsed.subject, 80);
   const headline = clip(parsed.headline, 90);
-  const items = (Array.isArray(parsed.items) ? parsed.items : []).map(i => clip(i, 120)).filter(Boolean).slice(0, 4);
-  if (!subject || !headline || items.length === 0) throw new Error('AI response was missing the offer or what they get');
+  const rawCards = (Array.isArray(parsed.cards) ? parsed.cards : [])
+    .map(c => ({ title: clip(c?.title, 50), line: clip(c?.line, 120) }))
+    .filter(c => c.title)
+    .slice(0, 3);
+  if (!subject || !headline || rawCards.length === 0) throw new Error('AI response was missing the offer or what they get');
 
-  // The layout is built here, not by the model: the structure is fixed (offer, what you
-  // get, one button) so it can't drift into the long, confusing emails this replaces.
+  // One photo per card, from the business's own industry. No photo is fine: the card just
+  // renders without one.
+  let photos = [];
+  try {
+    const pexelsQuery = (industry && industry !== 'service business') ? industry : businessName;
+    const { hero } = await fetchPexelsImages(pexelsQuery, null);
+    photos = hero || [];
+  } catch (e) { photos = []; }
+  const cards = rawCards.map((c, i) => ({ ...c, image: photos[i] || '' }));
+
+  const accent = '#f97316';
+  const cardsPlain = cards.map(c => `- ${c.title}: ${c.line}`);
+
+  // The layout is built here, not by the model: the structure is fixed (offer, intro, what
+  // you get, one action) so it can't drift into the long, confusing emails this replaces.
   const { randomUUID } = require('crypto');
   const blocks = [
-    { type: 'header', content: { title: businessName, bgColor: '#111827', textColor: '#ffffff' } },
-    { type: 'offer_headline', content: { title: headline, subtitle: clip(parsed.subheadline, 120) } },
-    { type: 'offer_list', content: { heading: clip(parsed.getHeading, 40) || 'What you get', items } },
-    { type: 'cta_button', content: { text: clip(parsed.ctaText, 40) || 'Book Now', link: ctaLink, bgColor: '#111827', textColor: '#ffffff', borderRadius: '8px' } },
-    { type: 'footer', content: { text: `You're receiving this because you've used ${businessName} before.`, unsubscribeText: 'Unsubscribe' } },
-  ].map(b => ({ ...b, id: randomUUID().slice(0, 8) }));
+    { type: 'header', content: { title: businessName, bgColor: '#1f1f1f', textColor: '#ffffff' } },
+    { type: 'offer_headline', content: { title: headline, subtitle: clip(parsed.subheadline, 120), theme: 'dark', accent } },
+    clip(parsed.intro, 260) ? { type: 'intro_text', content: { text: clip(parsed.intro, 260) } } : null,
+    { type: 'offer_cards', content: { cards, alt: businessName } },
+    { type: 'cta_buttons', content: {
+      text: clip(parsed.ctaText, 40) || 'Book Now', link: ctaLink, accent,
+      secondaryText: phone ? `Call ${phone}` : '', secondaryLink: phone ? `tel:${String(phone).replace(/[^\d+]/g, '')}` : '',
+    } },
+    { type: 'fine_print', content: { text: `Offer ends ${expiryStr}.` } },
+    { type: 'brand_footer', content: {
+      name: businessName, address, contactEmail: config?.from_email || '', unsubscribeText: 'Unsubscribe',
+    } },
+  ].filter(Boolean).map(b => ({ ...b, id: randomUUID().slice(0, 8) }));
 
   const bodyText = [
     headline,
     clip(parsed.subheadline, 120),
     '',
-    `${clip(parsed.getHeading, 40) || 'What you get'}:`,
-    ...items.map(i => `- ${i}`),
+    clip(parsed.intro, 260),
+    '',
+    ...cardsPlain,
     '',
     `${clip(parsed.ctaText, 40) || 'Book Now'}: ${ctaLink}`,
-  ].filter((l, i, a) => l !== undefined && !(l === '' && a[i - 1] === '')).join('\n');
+    phone ? `Or call ${phone}` : '',
+    `Offer ends ${expiryStr}.`,
+  ].filter((l, i, a) => !(l === '' && (i === 0 || a[i - 1] === ''))).join('\n');
 
-  const allowedAnnotations = new Set(['offer_headline', 'offer_list', 'cta_button']);
+  const allowedAnnotations = new Set(['offer_headline', 'offer_cards', 'cta_buttons']);
   const annotations = (Array.isArray(parsed.annotations) ? parsed.annotations : [])
     .filter(a => a && allowedAnnotations.has(a.blockType))
     .map(a => ({ blockType: a.blockType, label: clip(a.label, 40), note: clip(a.note, 200) }));
