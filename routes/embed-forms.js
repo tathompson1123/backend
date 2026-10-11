@@ -97,6 +97,7 @@ async function scheduleLeadSms(userId, lead) {
     }
     const smsTemplate = agentConfig.rows[0].sms_template;
     if (cfg.smsEnabled && lead.phone && lead.sms_consent && smsTemplate) {
+      if (await require('./leads').recentlyAutoTexted(userId, lead.phone, lead.id)) return;
       const delaySeconds = 45 + Math.floor(Math.random() * 30);
       await pool.query(
         `UPDATE leads SET status = 'sms_pending', sms_scheduled_at = NOW() + ($1 * INTERVAL '1 second') WHERE id = $2`,
@@ -282,13 +283,28 @@ router.post('/public/:publicId/submit', async (req, res) => {
       if (!ok) return res.status(400).json({ error: `${f.label} is required` });
     }
 
-    const val = (k) => (body[k] != null ? String(body[k]).trim() : '');
+    const val = (k) => (body[k] != null ? String(body[k]).trim().slice(0, k === 'message' ? 2000 : 200) : '');
     const name = val('name') || val('email') || val('phone') || 'Website Lead';
     const email = val('email') || null;
     const phone = val('phone') || null;
     const service = val('service') || null;
     let message = val('message') || null;
-    const smsConsent = body.sms_consent === true || body.sms_consent === 'true' || body.sms_consent === 'on';
+    let smsConsent = body.sms_consent === true || body.sms_consent === 'true' || body.sms_consent === 'on';
+
+    // Anonymous submissions end in a text and in the owner's inbox: sanity-check the phone,
+    // and cap how fast any one form can be fed.
+    if (phone) {
+      try { require('../utils/smsGuard').assertDestinationAllowed(phone); }
+      catch { return res.status(400).json({ error: 'Please enter a valid US phone number' }); }
+    }
+    if (email && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+    const flood = await pool.query(
+      "SELECT COUNT(*)::int AS n FROM leads WHERE user_id = $1 AND source = $2 AND created_at > NOW() - INTERVAL '1 hour'",
+      [form.user_id, form.source]
+    );
+    if (flood.rows[0].n >= 60) return res.status(429).json({ error: 'Too many submissions. Please try again later.' });
 
     // Compile non-standard answers (custom text, selects, checkboxes) into notes for the owner.
     const extraLines = [];
@@ -320,30 +336,32 @@ router.post('/public/:publicId/submit', async (req, res) => {
       scheduleLeadSms(form.user_id, lead).catch(e => console.error('scheduleLeadSms error:', e.message));
     }
 
-    // Owner notification (non-blocking)
+    // Owner notification (non-blocking). Everything below came from an anonymous visitor.
+    const { escapeHtml: esc } = require('../utils/escapeHtml');
+    const textSafe = require('../utils/textSafe');
     if (process.env.SENDGRID_API_KEY) {
       pool.query('SELECT email, business_name FROM users WHERE id = $1', [form.user_id])
         .then(o => {
           const owner = o.rows[0];
           if (!owner?.email) return;
-          const rows = [`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;width:120px;">Name</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${name}</td></tr>`];
-          if (phone) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Phone</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${phone}</td></tr>`);
-          if (email) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Email</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${email}</td></tr>`);
-          if (service) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${service}</td></tr>`);
-          if (message) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;vertical-align:top;">Message</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${message}</td></tr>`);
+          const rows = [`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;width:120px;">Name</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(name)}</td></tr>`];
+          if (phone) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Phone</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(phone)}</td></tr>`);
+          if (email) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Email</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(email)}</td></tr>`);
+          if (service) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(service)}</td></tr>`);
+          if (message) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;vertical-align:top;">Message</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(message)}</td></tr>`);
           for (const line of extraLines) {
             const [lbl, ...rest] = line.split(':');
-            rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">${lbl}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${rest.join(':').trim()}</td></tr>`);
+            rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">${esc(lbl)}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(rest.join(':').trim())}</td></tr>`);
           }
           return sgMail.send({
             to: owner.email,
             from: { name: 'SORCE', email: TRANSACTIONAL_EMAIL },
-            subject: `New lead: ${name} (${form.name})`,
+            subject: `New lead: ${textSafe.singleLine(name)} (${textSafe.singleLine(form.name)})`,
             html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
-              <div style="background:#1d4ed8;padding:1.5rem 2rem;border-radius:8px 8px 0 0;"><h1 style="color:#fff;margin:0;font-size:1.25rem;">New Lead — ${form.name}</h1></div>
+              <div style="background:#1d4ed8;padding:1.5rem 2rem;border-radius:8px 8px 0 0;"><h1 style="color:#fff;margin:0;font-size:1.25rem;">New Lead — ${esc(form.name)}</h1></div>
               <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
                 <table style="width:100%;border-collapse:collapse;margin:0 0 1rem;">${rows.join('')}</table>
-                <p style="color:#6b7280;font-size:0.85rem;margin:0;">Source: <strong>${form.source}</strong></p>
+                <p style="color:#6b7280;font-size:0.85rem;margin:0;">Source: <strong>${esc(form.source)}</strong></p>
               </div></div>`,
           });
         })

@@ -311,8 +311,8 @@ router.get('/availability', async (req, res) => {
         let variantDurationMinutes = null;
         if (variantId) {
           const vResult = await pool.query(
-            'SELECT duration_hours, service_id FROM service_variants WHERE id = $1',
-            [Number(variantId)]
+            'SELECT sv.duration_hours, sv.service_id FROM service_variants sv JOIN services s ON s.id = sv.service_id WHERE sv.id = $1 AND s.user_id = $2',
+            [Number(variantId), businessId]
           );
           if (vResult.rows.length > 0 && vResult.rows[0].duration_hours) {
             variantDurationMinutes = Math.round(parseFloat(vResult.rows[0].duration_hours) * 60);
@@ -529,7 +529,13 @@ router.post('/bookings/create', async (req, res) => {
     // Resolve variant price/duration for the main service
     let variantRow = null;
     if (variantId) {
-      const vRes = await pool.query('SELECT * FROM service_variants WHERE id = $1', [Number(variantId)]);
+      // The variant must belong to the service being booked, at this business — otherwise a
+      // caller could borrow a cheaper variant from anywhere in the system.
+      const vRes = await pool.query(
+        'SELECT sv.* FROM service_variants sv JOIN services s ON s.id = sv.service_id WHERE sv.id = $1 AND sv.service_id = $2 AND s.user_id = $3',
+        [Number(variantId), Number(serviceId), businessId]
+      );
+      if (vRes.rows.length === 0) return res.status(400).json({ error: 'Invalid service option' });
       if (vRes.rows.length > 0) variantRow = vRes.rows[0];
     }
 
@@ -608,7 +614,10 @@ router.post('/bookings/create', async (req, res) => {
     if (existingCustomer.rows.length > 0) {
       customerId = existingCustomer.rows[0].id;
       await pool.query(
-        `UPDATE customers SET name = $1, phone = COALESCE(NULLIF($2, ''), phone),
+        // Name and phone are only filled in when missing. Anyone can type someone else's email
+        // into this form, and it must not be able to repoint that customer's phone number
+        // (which later receives their texts) at a number of the caller's choosing.
+        `UPDATE customers SET name = COALESCE(NULLIF(name, ''), $1), phone = COALESCE(NULLIF(phone, ''), NULLIF($2, '')),
          last_service = $3, last_service_date = $4 WHERE id = $5`,
         [customerInfo.name, customerInfo.phone || '', serviceName, bookingDate, customerId]
       );
@@ -989,8 +998,14 @@ router.post('/bookings/create', async (req, res) => {
 // POST /api/public/bookings/payment-setup
 router.post('/bookings/payment-setup', async (req, res) => {
   try {
-    const { businessId, amount, customerEmail } = req.body;
-    if (!businessId) return res.status(400).json({ error: 'businessId required' });
+    const { businessId, customerEmail } = req.body;
+    if (!businessId || !/^\d{1,10}$/.test(String(businessId))) return res.status(400).json({ error: 'businessId required' });
+    // Client-chosen amount on a merchant's own Stripe account: bound it. (This endpoint is
+    // also a card-testing target, hence the tight rate limit in config/middleware.)
+    const amount = req.body.amount == null ? 0 : Number(req.body.amount);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 5000) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
 
     // Check if business has Stripe connected
     const connResult = await pool.query(
@@ -1275,6 +1290,36 @@ router.post('/discovery/book', async (req, res) => {
     if (!phone?.trim()) return res.status(400).json({ error: 'Please enter your phone number' });
     if (!scheduledAt)   return res.status(400).json({ error: 'Please pick a time' });
 
+    // This form is public and its output is a text AND an email to whatever was typed, so
+    // the inputs are validated before anything is stored or sent.
+    const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+    const cleanName = str(name, 80), cleanEmail = str(email, 254).toLowerCase(), cleanPhone = str(phone, 30);
+    if (cleanName.length < 2 || !/^[\p{L}][\p{L}\s'’.-]*$/u.test(cleanName)) {
+      return res.status(400).json({ error: 'Please enter your name' });
+    }
+    if (!/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(cleanEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+    try { require('../utils/smsGuard').assertDestinationAllowed(cleanPhone); }
+    catch { return res.status(400).json({ error: 'Please enter a valid US phone number' }); }
+    if (Number.isNaN(new Date(scheduledAt).getTime()) || new Date(scheduledAt) < new Date()) {
+      return res.status(400).json({ error: 'Please pick a time in the future' });
+    }
+
+    // One live booking per person. Stops a stranger's email or number being used to stack
+    // up confirmations and reminders, and stops one visitor hoarding the calendar.
+    const already = await pool.query(
+      `SELECT 1 FROM discovery_calls
+        WHERE status = 'scheduled' AND scheduled_at > NOW()
+          AND (LOWER(email) = $1
+               OR right(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = right(regexp_replace($2, '\\D', '', 'g'), 10))
+        LIMIT 1`,
+      [cleanEmail, cleanPhone]
+    );
+    if (already.rows.length) {
+      return res.status(409).json({ error: 'You already have a call booked. Reply to your confirmation to change it.' });
+    }
+
     const { slotsForDate, localDateStr, dispatchConfirmations, notifyRepOfBooking, syncLeadForCall, DEFAULT_SLOT_MINUTES } = require('./discovery');
 
     // Re-check the slot server-side so two prospects can't grab the same time. The date
@@ -1301,9 +1346,9 @@ router.post('/discovery/book', async (req, res) => {
       `INSERT INTO discovery_calls
          (name, email, phone, company, scheduled_at, duration_minutes, timezone, assigned_to, notes, source)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'public') RETURNING *`,
-      [name.trim(), email.trim().toLowerCase(), phone.trim(), company?.trim() || null,
-       scheduledAt, DEFAULT_SLOT_MINUTES, timezone || 'America/New_York',
-       rep.rows[0]?.id || null, notes?.trim() || null]
+      [cleanName, cleanEmail, cleanPhone, str(company, 120) || null,
+       scheduledAt, DEFAULT_SLOT_MINUTES, str(timezone, 60) || 'America/New_York',
+       rep.rows[0]?.id || null, str(notes, 1000) || null]
     );
 
     const call = created.rows[0];

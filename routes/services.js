@@ -274,6 +274,8 @@ async function scrapeWithPuppeteer(url) {
 
   try {
     const page = await browser.newPage();
+    // Every request this page makes (including redirects) must resolve to a public address.
+    await require('../utils/urlGuard').guardPuppeteerPage(page);
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
@@ -357,13 +359,12 @@ async function scrapeWithPuppeteer(url) {
 
 // Helper: Scrape page with axios (fallback when Puppeteer/Chromium unavailable)
 async function scrapeWithAxios(url) {
-  const axios = require('axios');
-  const response = await axios.get(url, {
-    timeout: 15000,
+  const { guardedFetch } = require('../utils/urlGuard');
+  const response = await guardedFetch(url, {
+    signal: AbortSignal.timeout(15000),
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-    maxRedirects: 5
   });
-  const html = response.data;
+  const html = response.text;
 
   // Find service-related links + nav links in the HTML
   const baseUrl = new URL(url);
@@ -409,8 +410,8 @@ async function scrapeWithAxios(url) {
   for (const link of extraLinks) {
     try {
       console.log('  → Also fetching linked page:', link);
-      const extraRes = await axios.get(link, { timeout: 10000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SORCEBot/1.0)' } });
-      const extraText = extraRes.data
+      const extraRes = await guardedFetch(link, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SORCEBot/1.0)' } });
+      const extraText = extraRes.text
         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
         .replace(/<[^>]+>/g, ' ')
@@ -434,20 +435,25 @@ router.post('/scrape', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Website URL is required' });
     }
 
-    console.log('🌐 Scraping services from:', url);
+    // Validate before anything touches the network (also normalises a bare domain).
+    let target;
+    try { target = (await require('../utils/urlGuard').safeUrl(url)).href; }
+    catch (e) { return res.status(400).json({ error: e.message || 'That address cannot be fetched.' }); }
+
+    console.log('🌐 Scraping services from:', target);
 
     // Try Puppeteer first (renders JS), fall back to axios if chromium unavailable
     let mainText;
     try {
-      mainText = await scrapeWithPuppeteer(url);
+      mainText = await scrapeWithPuppeteer(target);
       console.log('📄 Used Puppeteer (JS-rendered) scrape');
     } catch (puppeteerErr) {
       console.warn('⚠️ Puppeteer unavailable, falling back to axios:', puppeteerErr.message);
       try {
-        mainText = await scrapeWithAxios(url);
+        mainText = await scrapeWithAxios(target);
         console.log('📄 Used axios (static HTML) scrape');
       } catch (axiosErr) {
-        return res.status(400).json({ error: `Could not fetch website: ${axiosErr.message}` });
+        return res.status(400).json({ error: 'Could not fetch that website.' });
       }
     }
 

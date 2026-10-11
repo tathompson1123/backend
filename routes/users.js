@@ -32,6 +32,6 @@ router.post('/provision-phone', authenticateToken, async (req, res) => {
     res.json({ phoneNumber, phoneSid });
   } catch (error) {
     console.error('Error provisioning phone:', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to provision a phone number' });
   }
 });

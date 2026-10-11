@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validateTwilio } = require('../utils/twilioWebhook');
 const { pool } = require('../config/database');
 const { sendSMS } = require('../utils/twilio');
 const { classifyReplySentiment, composePositiveReply } = require('../utils/reviewAI');
@@ -39,7 +40,7 @@ function selfHealWebhook(phoneSid, phoneNumber) {
 }
 
 // Twilio delivery status callback — logs failures and updates the sms_messages row
-router.post('/status', express.urlencoded({ extended: false }), async (req, res) => {
+router.post('/status', express.urlencoded({ extended: false }), validateTwilio, async (req, res) => {
   res.status(200).send('OK');
   const { MessageSid, MessageStatus, ErrorCode, ErrorMessage } = req.body || {};
   if (!MessageSid) return;
@@ -65,7 +66,7 @@ router.post('/status', express.urlencoded({ extended: false }), async (req, res)
 // Reply to Twilio immediately (its retry budget is ~15s) and do all DB + AI work async,
 // so a slow Claude call or a pg hiccup can never cause a connection-failure (error 11200)
 // that loses the inbound message.
-router.post('/webhook', express.urlencoded({ extended: false }), (req, res) => {
+router.post('/webhook', express.urlencoded({ extended: false }), validateTwilio, (req, res) => {
   const { From, To, Body, MessageSid, NumMedia, MediaUrl0 } = req.body;
 
   console.log(`📨 SMS: ${From} → ${To}: "${Body}"${NumMedia > 0 ? ` (+${NumMedia} media)` : ''}`);
@@ -1010,7 +1011,7 @@ router.get('/media-proxy', authenticateToken, async (req, res) => {
     if (!mediaUrl) return res.status(400).json({ error: 'Missing url' });
     let parsed;
     try { parsed = new URL(mediaUrl); } catch { return res.status(400).json({ error: 'Invalid url' }); }
-    if (parsed.hostname !== 'api.twilio.com' || !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'api.twilio.com' || !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
       return res.status(400).json({ error: 'Invalid media url' });
     }
 
@@ -1111,12 +1112,12 @@ router.post('/fix-webhook', async (req, res) => {
 // find no owner and drop the message. Point the number here instead: the reply gets
 // forwarded on with enough context to act on, and is written to the call's notes so
 // it shows up in the CRM rather than only on somebody's phone.
-router.post('/sorce-inbound', express.urlencoded({ extended: false }), async (req, res) => {
+router.post('/sorce-inbound', express.urlencoded({ extended: false }), validateTwilio, async (req, res) => {
   // Answer Twilio immediately; nothing below should hold up the webhook.
   res.type('text/xml').send('<Response></Response>');
 
   const from = req.body.From;
-  const body = (req.body.Body || '').trim();
+  const body = (req.body.Body || '').trim().slice(0, 500);
   if (!from) return;
 
   try {

@@ -370,6 +370,10 @@ async function verifyReviewScreenshot(mediaUrl, { businessName, customerName } =
     if (!mediaUrl || !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
       return { verdict: 'error', reason: 'media or Twilio credentials unavailable' };
     }
+    // Credentials are attached below, so the URL must be Twilio's own API host.
+    if (!require('./twilioWebhook').isTwilioApiUrl(mediaUrl)) {
+      return { verdict: 'error', reason: 'media url is not a Twilio url' };
+    }
     const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
     const imgRes = await fetch(mediaUrl, { headers: { Authorization: `Basic ${auth}` } });
     if (!imgRes.ok) return { verdict: 'error', reason: `media fetch ${imgRes.status}` };

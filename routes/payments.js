@@ -89,10 +89,18 @@ router.post('/:id/refund', authenticateToken, async (req, res) => {
     const processor = await getProcessorForUser(userId, pool, payment.processor);
     if (!processor) return res.status(400).json({ error: 'Payment processor not connected' });
 
-    const refundResult = await processor.refundPayment(payment.processor_payment_id, amount);
+    // `amount` arrives as JSON from the client: make it a number, and never refund more than
+    // is left. (A string used to be concatenated onto the running total.)
+    const alreadyRefunded = parseFloat(payment.refund_amount || 0);
+    const remaining = Math.round((parseFloat(payment.amount) - alreadyRefunded) * 100) / 100;
+    const requested = amount == null ? remaining : Math.round(Number(amount) * 100) / 100;
+    if (!Number.isFinite(requested) || requested <= 0 || requested > remaining) {
+      return res.status(400).json({ error: `Refund amount must be between 0.01 and ${remaining.toFixed(2)}` });
+    }
+    const refundResult = await processor.refundPayment(payment.processor_payment_id, requested);
 
-    const refundAmount = amount || payment.amount;
-    const newRefundTotal = parseFloat(payment.refund_amount || 0) + refundAmount;
+    const refundAmount = requested;
+    const newRefundTotal = alreadyRefunded + refundAmount;
     const newStatus = newRefundTotal >= parseFloat(payment.amount) ? 'refunded' : 'partially_refunded';
 
     await pool.query(

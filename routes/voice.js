@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validateTwilio, isTwilioApiUrl } = require('../utils/twilioWebhook');
 const Anthropic = require('@anthropic-ai/sdk');
 const { pool } = require('../config/database');
 const { authenticateToken, requirePlan } = require('../config/middleware');
@@ -14,7 +15,7 @@ const BACKEND_URL = process.env.BACKEND_URL
 // ============================================
 // POST /webhook — Twilio voice webhook (public, returns TwiML)
 // ============================================
-router.post('/webhook', express.urlencoded({ extended: false }), async (req, res) => {
+router.post('/webhook', express.urlencoded({ extended: false }), validateTwilio, async (req, res) => {
   const hangupXml = '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>';
   try {
     const { From, To, CallSid } = req.body;
@@ -109,7 +110,7 @@ ${announcement}  <Dial action="${statusUrl}" timeout="${ringTimeout}" answerOnBr
 // ============================================
 // POST /status — Twilio dial action callback (public, returns TwiML)
 // ============================================
-router.post('/status', express.urlencoded({ extended: false }), async (req, res) => {
+router.post('/status', express.urlencoded({ extended: false }), validateTwilio, async (req, res) => {
   try {
     const { CallSid, From, To, DialCallStatus, DialCallDuration } = req.body;
     console.log(`📞 Call status: ${From} → ${To} | DialCallStatus: ${DialCallStatus}`);
@@ -234,7 +235,7 @@ router.post('/status', express.urlencoded({ extended: false }), async (req, res)
 // POST /recording — Twilio recording-ready callback (public)
 // Stores the recording on the lead and kicks off transcription.
 // ============================================
-router.post('/recording', express.urlencoded({ extended: false }), async (req, res) => {
+router.post('/recording', express.urlencoded({ extended: false }), validateTwilio, async (req, res) => {
   // Respond immediately; do the work async (Twilio doesn't need a body here).
   res.sendStatus(204);
   try {
@@ -255,7 +256,7 @@ router.post('/recording', express.urlencoded({ extended: false }), async (req, r
 
     await pool.query(
       `UPDATE leads SET call_recording_url = $1, call_duration = $2 WHERE id = $3`,
-      [RecordingUrl ? `${RecordingUrl}.mp3` : null, parseInt(RecordingDuration) || 0, leadId]
+      [RecordingUrl && isTwilioApiUrl(RecordingUrl) ? `${RecordingUrl}.mp3` : null, parseInt(RecordingDuration) || 0, leadId]
     );
     console.log(`🎙️ Recording stored on lead ${leadId} (${RecordingDuration}s)`);
 
@@ -282,7 +283,7 @@ router.post('/recording', express.urlencoded({ extended: false }), async (req, r
 // Fires when a transcript completes. Summarizes the call via Claude
 // and writes the summary to the lead.
 // ============================================
-router.post('/transcript', express.urlencoded({ extended: false }), async (req, res) => {
+router.post('/transcript', express.urlencoded({ extended: false }), validateTwilio, async (req, res) => {
   res.sendStatus(204);
   try {
     const transcriptSid = req.body.transcript_sid || req.body.TranscriptSid;
@@ -634,7 +635,7 @@ router.post('/fix-webhook', authenticateToken, async (req, res) => {
 // ============================================
 router.post('/sync-webhooks', express.json(), async (req, res) => {
   const expectedSecret = process.env.ADMIN_SECRET;
-  if (!expectedSecret || req.body?.adminSecret !== expectedSecret) {
+  if (!expectedSecret || !require('../config/analyticsAuth').safeEqual(req.body?.adminSecret, expectedSecret)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {

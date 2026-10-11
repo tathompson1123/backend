@@ -1777,7 +1777,7 @@ Price: $${parseFloat(s.price).toFixed(2)}${s.duration_hours ? ` (${s.duration_ho
 
   } catch (error) {
     console.error('❌ Error generating website:', error.message);
-    res.status(500).json({ error: 'Server error', message: error.message });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 // POST - Search for available domains

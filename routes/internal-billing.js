@@ -31,25 +31,8 @@ const PLAN_PRICES = {
   scale: { env: 'STRIPE_PRICE_SCALE', amount: parseInt(process.env.PLAN_AMOUNT_SCALE || '17595', 10), label: 'SORCE Scale', custom: true },
 };
 
-const requireAnalytics = (req, res, next) => {
-  const token = (req.headers.authorization || '').replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded.analytics) return res.status(403).json({ error: 'Forbidden' });
-    req.analytics = decoded;
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-};
+const { requireAnalytics, requireAdmin, safeEqual } = require('../config/analyticsAuth');
 
-// Taking money is admin-only. Invited members get the discovery calendar and
-// nothing else; a master-password session has no `tm` and counts as admin.
-const requireAdmin = (req, res, next) => {
-  if (!req.analytics?.tm || req.analytics.role === 'admin') return next();
-  return res.status(403).json({ error: 'Admin access required' });
-};
 
 // `monthlyAmount` is in dollars and only honoured for a custom-priced plan — it's the
 // number agreed on the call. A configured Stripe Price id is skipped when a quote is

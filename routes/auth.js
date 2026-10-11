@@ -4,6 +4,9 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
 const { EFFECTIVE_JWT_SECRET, authenticateToken } = require('../config/middleware');
+const { safeEqual } = require('../config/analyticsAuth');
+const { escapeHtml: escTeam } = require('../utils/escapeHtml');
+const { singleLine } = require('../utils/textSafe');
 const sgMail = require('@sendgrid/mail');
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -19,10 +22,19 @@ const FROM_EMAIL = { name: 'SORCE', email: TRANSACTIONAL_EMAIL };
 // POST - Signup
 router.post('/signup', async (req, res) => {
   try {
-    const { email, password, businessName, fullName } = req.body;
+    const { email, password } = req.body;
+    // Free text that later lands in an email to the sales team: bounded here, escaped there.
+    const businessName = typeof req.body.businessName === 'string' ? req.body.businessName.trim().slice(0, 120) : '';
+    const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim().slice(0, 120) : '';
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+    if (typeof email !== 'string' || typeof password !== 'string' || email.length > 254 || !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+    if (password.length < 8 || password.length > 200) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
     const existing = await pool.query(
@@ -52,10 +64,10 @@ const result = await pool.query(
 );
 
     const user = result.rows[0];
-    const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ typ: 'user', userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '30d' });
 
     // Generate and store email verification code
-    const verificationCode = String(Math.floor(100000 + Math.random() * 900000));
+    const verificationCode = String(require('crypto').randomInt(100000, 1000000));
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 15 minutes
     await pool.query(
       `UPDATE users SET email_verification_code = $1, email_verification_expires_at = $2 WHERE id = $3`,
@@ -139,7 +151,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ typ: 'user', userId: user.id, email: user.email }, EFFECTIVE_JWT_SECRET, { expiresIn: '30d' });
 
     console.log('✅ User logged in:', email);
 
@@ -163,7 +175,7 @@ router.post('/login', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Login error:', error.message);
-    res.status(500).json({ error: 'Login failed', message: error.message });
+    res.status(500).json({ error: 'Login failed' });
   }
 });
 
@@ -332,6 +344,9 @@ router.get('/onboarding/status', authenticateToken, async (req, res) => {
   }
 });
 
+// Wrong-code counter, cleared whenever a new code is issued or the email is verified.
+const verifyAttempts = new Map();
+
 // POST - Verify email with code
 router.post('/verify-email', authenticateToken, async (req, res) => {
   try {
@@ -350,7 +365,15 @@ router.post('/verify-email', authenticateToken, async (req, res) => {
     const user = result.rows[0];
     if (user.email_verified) return res.json({ success: true, already_verified: true });
 
-    if (!user.email_verification_code || user.email_verification_code !== code.trim()) {
+    // A 6-digit code is only safe if guesses are limited: 5 wrong tries, then a fresh code is needed.
+    const tries = verifyAttempts.get(userId) || 0;
+    if (tries >= 5) {
+      return res.status(429).json({ error: 'Too many incorrect codes. Please request a new one.' });
+    }
+    const given = Buffer.from(String(code).trim());
+    const want = Buffer.from(String(user.email_verification_code || ''));
+    if (!want.length || given.length !== want.length || !require('crypto').timingSafeEqual(given, want)) {
+      verifyAttempts.set(userId, tries + 1);
       return res.status(400).json({ error: 'Invalid verification code' });
     }
 
@@ -362,6 +385,7 @@ router.post('/verify-email', authenticateToken, async (req, res) => {
       `UPDATE users SET email_verified = true, email_verification_code = NULL, email_verification_expires_at = NULL WHERE id = $1`,
       [userId]
     );
+    verifyAttempts.delete(userId);
 
     res.json({ success: true });
   } catch (error) {
@@ -385,7 +409,8 @@ router.post('/resend-verification', authenticateToken, async (req, res) => {
 
 
     const email = result.rows[0].email;
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    verifyAttempts.delete(userId);
+    const code = String(require('crypto').randomInt(100000, 1000000));
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
     await pool.query(
@@ -445,7 +470,7 @@ router.post('/admin/force-verify', async (req, res) => {
   try {
     const { adminSecret, email } = req.body;
     const expectedSecret = process.env.ADMIN_SECRET;
-    if (!expectedSecret || adminSecret !== expectedSecret) {
+    if (!expectedSecret || !safeEqual(adminSecret, expectedSecret)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     if (!email) return res.status(400).json({ error: 'email required' });
@@ -480,10 +505,15 @@ router.post('/admin/force-verify', async (req, res) => {
 router.post('/admin/test-email', async (req, res) => {
   const { adminSecret, email, from, fromName } = req.body;
   const expectedSecret = process.env.ADMIN_SECRET;
-  if (!expectedSecret || adminSecret !== expectedSecret) {
+  if (!expectedSecret || !safeEqual(adminSecret, expectedSecret)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   if (!email) return res.status(400).json({ error: 'email required' });
+  // Test mail may only claim to come from our own domain; this route must not become a way
+  // to send mail as somebody else.
+  if (from && !/@([a-z0-9-]+\.)*sorceintegrations\.com$/i.test(String(from).trim())) {
+    return res.status(400).json({ error: 'from must be an address on sorceintegrations.com' });
+  }
   if (!process.env.SENDGRID_API_KEY) {
     return res.json({ success: false, error: 'SENDGRID_API_KEY not set', from: null });
   }
@@ -587,11 +617,11 @@ async function notifyTeamOfSignup({ email, businessName, fullName, userId }) {
   await sgMail.sendMultiple({
     to: recipients,
     from: FROM_EMAIL,
-    subject: `New SORCE signup: ${businessName || email}`,
+    subject: `New SORCE signup: ${singleLine(businessName || email)}`,
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;padding:28px 24px;">
         <p style="margin:0 0 4px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;">New signup</p>
-        <h1 style="margin:0 0 20px;font-size:22px;color:#111827;">${businessName || 'A new business'}</h1>
+        <h1 style="margin:0 0 20px;font-size:22px;color:#111827;">${escTeam(businessName || 'A new business')}</h1>
         <table style="width:100%;border-collapse:collapse;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;">
           ${[
             ['Business', businessName || '—'],
@@ -601,7 +631,7 @@ async function notifyTeamOfSignup({ email, businessName, fullName, userId }) {
           ].map(([label, value]) => `
           <tr>
             <td style="padding:10px 16px;font-size:13px;color:#6b7280;width:110px;">${label}</td>
-            <td style="padding:10px 16px;font-size:14px;color:#111827;font-weight:600;">${value}</td>
+            <td style="padding:10px 16px;font-size:14px;color:#111827;font-weight:600;">${escTeam(value)}</td>
           </tr>`).join('')}
         </table>
         <div style="margin:24px 0;">

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { authenticateToken } = require('../config/middleware');
+const { authenticateToken, blockImpersonation } = require('../config/middleware');
 const { pool } = require('../config/database');
 const { isUnlimitedAccount } = require('../utils/unlimitedAccounts');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
@@ -578,7 +578,7 @@ router.get('/subscription', authenticateToken, async (req, res) => {
 });
 
 // Cancel subscription
-router.post('/cancel-subscription', authenticateToken, async (req, res) => {
+router.post('/cancel-subscription', authenticateToken, blockImpersonation, async (req, res) => {
   try {
     const userId = req.user.userId;
     const result = await pool.query(

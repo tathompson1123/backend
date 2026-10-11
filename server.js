@@ -44,7 +44,10 @@ app.use(cors({
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  // Auth is a bearer token in a header, never a cookie, so credentialed CORS buys nothing —
+  // and combined with the wildcard *.vercel.app origin it let any Vercel-hosted page make
+  // credentialed calls to this API.
+  credentials: false
 }));
 
 // IMPORTANT: Webhooks MUST use raw body for signature verification, so they come BEFORE express.json()
@@ -58,6 +61,9 @@ app.post('/api/webhooks/paypal', express.raw({ type: 'application/json' }), paym
 // Regular JSON parsing for all other routes
 app.use(express.json({ limit: '10mb' }));
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+// Never let database/network error text leave the server in a 5xx body
+app.use(require('./config/errorSanitizer').errorSanitizer);
 
 // Apply rate limiting
 setupMiddleware(app);

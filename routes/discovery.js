@@ -25,24 +25,8 @@ const DEFAULT_SLOT_MINUTES = 30;
 
 // Same guard the analytics dashboard uses. Tokens minted for an individual team
 // member also carry tm (id) so we can attribute bookings and notes.
-const requireAnalytics = (req, res, next) => {
-  const token = (req.headers.authorization || '').replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded.analytics) return res.status(403).json({ error: 'Forbidden' });
-    req.analytics = decoded;
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-};
+const { requireAnalytics, requireAdmin, safeEqual } = require('../config/analyticsAuth');
 
-const requireAdmin = (req, res, next) => {
-  // Legacy shared-password sessions have no tm and are treated as admin.
-  if (!req.analytics?.tm || req.analytics.role === 'admin') return next();
-  return res.status(403).json({ error: 'Admin access required' });
-};
 
 /* ─────────────────────────── TEAM MEMBERS ─────────────────────────── */
 
@@ -495,6 +479,10 @@ router.patch('/leads/:id', requireAnalytics, async (req, res) => {
     // Consent is stamped server-side with who recorded it, so the timestamp can't be
     // backdated from the client — the whole point of the record is that it's evidence.
     if (req.body?.recordSmsConsent === true) {
+      // Consent is evidence: it must say how and when it was given, not just be ticked.
+      if (typeof req.body.sms_consent_note !== 'string' || req.body.sms_consent_note.trim().length < 10) {
+        return res.status(400).json({ error: 'Describe how and when they gave consent (at least a sentence).' });
+      }
       params.push(req.analytics?.tm || null);
       sets.push(`sms_consent_at = NOW()`, `sms_consent_method = 'verbal'`,
                 `sms_consent_by = $${params.length}`);
@@ -526,7 +514,7 @@ router.patch('/leads/:id', requireAnalytics, async (req, res) => {
 });
 
 // DELETE /api/discovery/leads/:id
-router.delete('/leads/:id', requireAnalytics, async (req, res) => {
+router.delete('/leads/:id', requireAnalytics, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query('DELETE FROM sorce_leads WHERE id = $1 RETURNING id', [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Lead not found' });
@@ -815,7 +803,7 @@ router.post('/calls/:id/open-account', requireAnalytics, async (req, res) => {
     )).rows[0];
 
     const token = jwt.sign(
-      { userId: full.id, email: full.email, impersonatedBy: req.analytics?.name || 'SORCE team' },
+      { typ: 'user', userId: full.id, email: full.email, impersonatedBy: req.analytics?.name || 'SORCE team' },
       EFFECTIVE_JWT_SECRET,
       { expiresIn: '4h' }
     );
@@ -841,7 +829,7 @@ router.post('/calls/:id/open-account', requireAnalytics, async (req, res) => {
 // Payment collected → make the demo a real account: demo limits lifted, example data
 // removed. (A Stripe payment does the same thing automatically; this is for payment taken
 // any other way.)
-router.post('/calls/:id/convert-demo', requireAnalytics, async (req, res) => {
+router.post('/calls/:id/convert-demo', requireAnalytics, requireAdmin, async (req, res) => {
   try {
     const call = (await pool.query('SELECT demo_user_id FROM discovery_calls WHERE id = $1', [req.params.id])).rows[0];
     if (!call) return res.status(404).json({ error: 'Call not found' });

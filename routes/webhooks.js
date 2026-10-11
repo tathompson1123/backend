@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { validateTwilio, isTwilioApiUrl } = require('../utils/twilioWebhook');
 const { pool } = require('../config/database');
 const { triggerLeadFormAgent } = require('./leads');
 
@@ -19,7 +20,7 @@ async function getUserBySiteKey(siteKey) {
 router.post('/form/:siteKey', async (req, res) => {
   try {
     const { siteKey } = req.params;
-    const { name, email, phone, service, message, platform, page_url } = req.body;
+    let { name, email, phone, service, message, platform, page_url } = req.body;
 
     // Resolve userId from siteKey
     const user = await getUserBySiteKey(siteKey);
@@ -32,6 +33,24 @@ router.post('/form/:siteKey', async (req, res) => {
     if (!name && !email && !phone) {
       return res.status(400).json({ error: 'At least one of name, email, or phone is required' });
     }
+
+    // The site key is embedded in public pages, so this endpoint is effectively anonymous:
+    // bound what it accepts and how fast, because each lead can trigger a text.
+    const cap = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : (v == null ? v : String(v).slice(0, n)));
+    name = cap(name, 100);
+    email = cap(email, 254);
+    phone = cap(phone, 30);
+    service = cap(service, 200);
+    message = cap(message, 2000);
+    if (phone) {
+      try { require('../utils/smsGuard').assertDestinationAllowed(phone); }
+      catch { return res.status(400).json({ error: 'Invalid phone number' }); }
+    }
+    const flood = await pool.query(
+      "SELECT COUNT(*)::int AS n FROM leads WHERE user_id = $1 AND source = 'lead_form' AND created_at > NOW() - INTERVAL '1 hour'",
+      [userId]
+    );
+    if (flood.rows[0].n >= 60) return res.status(429).json({ error: 'Too many submissions' });
 
     // Duplicate check: same email+phone submitted within 5 minutes
     if (email || phone) {
@@ -89,9 +108,17 @@ router.post('/google-lsa/:userId', async (req, res) => {
     const { userId } = req.params;
     const body = req.body;
 
-    // Verify user exists
-    const userRes = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
-    if (!userRes.rows[0]) return res.status(404).json({ error: 'User not found' });
+    // The user id in this URL is a small sequential number, so on its own it authenticates
+    // nobody — anyone could file leads (and trigger texts) against any business. The call
+    // must also present that business's site key, as ?key=<site key> on the webhook URL
+    // configured in Google, or in an X-Webhook-Key header.
+    const supplied = String(req.query.key || req.headers['x-webhook-key'] || '');
+    const userRes = await pool.query('SELECT id, site_key FROM users WHERE id = $1', [userId]);
+    const expected = userRes.rows[0]?.site_key ? String(userRes.rows[0].site_key) : '';
+    const a = Buffer.from(supplied), b = Buffer.from(expected);
+    if (!expected || a.length !== b.length || !require('crypto').timingSafeEqual(a, b)) {
+      return res.status(403).json({ error: 'Invalid webhook key' });
+    }
 
     // Google LSA lead payload varies — normalise common fields
     const customerName = body.customer_name || body.advertiser_name
@@ -145,7 +172,7 @@ router.post('/google-lsa/:userId', async (req, res) => {
  *
  * Flow: download recording → transcribe via OpenAI Whisper → Claude extracts lead info → save lead
  */
-router.post('/call-recording/:userId', async (req, res) => {
+router.post('/call-recording/:userId', express.urlencoded({ extended: false }), validateTwilio, async (req, res) => {
   try {
     const { userId } = req.params;
     const body = req.body;
@@ -154,7 +181,9 @@ router.post('/call-recording/:userId', async (req, res) => {
     if (!userRes.rows[0]) return res.status(404).json({ error: 'User not found' });
 
     // Twilio recording payload
-    const recordingUrl = body.RecordingUrl ? `${body.RecordingUrl}.mp3` : null;
+    // Only ever fetch from Twilio's own API host: the download below attaches our Twilio
+    // credentials, so a caller-chosen URL would hand them the account.
+    const recordingUrl = body.RecordingUrl && isTwilioApiUrl(body.RecordingUrl) ? `${body.RecordingUrl}.mp3` : null;
     const callerPhone = body.From;
     const callSid = body.CallSid;
     const durationSecs = parseInt(body.RecordingDuration) || 0;

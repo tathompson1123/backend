@@ -36,6 +36,23 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// True if another lead with the same phone (last 10 digits) has been through the SMS agent
+// for this business in the last 24 hours.
+async function recentlyAutoTexted(userId, phone, leadId) {
+  const digits = String(phone || '').replace(/\D/g, '').slice(-10);
+  if (digits.length < 10) return false;
+  const r = await pool.query(
+    `SELECT 1 FROM leads
+      WHERE user_id = $1 AND id <> $2
+        AND right(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $3
+        AND status IN ('sms_pending', 'sms_sending', 'contacted_sms')
+        AND created_at > NOW() - INTERVAL '24 hours'
+      LIMIT 1`,
+    [userId, leadId || 0, digits]
+  );
+  return r.rows.length > 0;
+}
+
 async function triggerLeadFormAgent(userId, lead) {
   try {
     // ONLY trigger for leads from website contact forms
@@ -65,6 +82,12 @@ async function triggerLeadFormAgent(userId, lead) {
 
     // Schedule SMS in DB — picked up by cron job every 30s
     if (config.smsEnabled && lead.phone && lead.sms_consent && smsTemplate) {
+      // Forms are anonymous, so the phone number is whatever a stranger typed. One automatic
+      // text per number per business per day, however many times it is submitted.
+      if (await recentlyAutoTexted(userId, lead.phone, lead.id)) {
+        console.log(`⏭️ Lead ${lead.id}: ${'number'} was already auto-texted in the last 24h — skipping SMS`);
+        return;
+      }
       const delaySeconds = 45 + Math.floor(Math.random() * 30); // 45-75 seconds
 
       await pool.query(
@@ -124,29 +147,49 @@ router.post('/public/:userId', async (req, res) => {
     const { userId } = req.params;
     const { name, email, phone, service, message, sms_consent, source, fbc, fbp, source_url } = req.body;
 
-    console.log('📝 Public lead submission:', { userId, name, email, phone, sms_consent, source });
-
     // CRITICAL: SMS consent MUST be true
     if (sms_consent !== true) {
-      console.error('❌ SMS consent not provided');
       return res.status(400).json({ error: 'SMS consent is required' });
     }
 
     // Validate required fields
     if (!name || !email || !phone) {
-      console.error('❌ Missing required fields');
       return res.status(400).json({ error: 'Name, email, and phone are required' });
     }
+
+    // This endpoint is anonymous and ends in a text and an email to whatever was typed, so
+    // the inputs are checked like the untrusted data they are.
+    if (!/^\d{1,10}$/.test(String(userId))) return res.status(404).json({ error: 'Not found' });
+    const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+    const cName = clean(name, 100), cEmail = clean(email, 254).toLowerCase();
+    const cService = clean(service, 200), cMessage = clean(message, 2000);
+    if (!cName || !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(cEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid name and email' });
+    }
+    try {
+      require('../utils/smsGuard').assertDestinationAllowed(phone);
+    } catch {
+      return res.status(400).json({ error: 'Please enter a valid US phone number' });
+    }
+    const cPhone = clean(String(phone), 30);
+
+    // One business, one flood: no more than 30 public submissions an hour, however many
+    // addresses they come from.
+    const recent = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM leads
+        WHERE user_id = $1 AND source = 'lead_form' AND created_at > NOW() - INTERVAL '1 hour'`, [userId]
+    );
+    if (recent.rows[0].n >= 30) return res.status(429).json({ error: 'Too many submissions. Please try again later.' });
 
     const result = await pool.query(
       `INSERT INTO leads (user_id, name, email, phone, status, source, service, message, sms_consent, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
        RETURNING *`,
-      [userId, name, email, phone, 'new', 'lead_form', service, message, true]
+      [userId, cName, cEmail, cPhone, 'new', 'lead_form', cService, cMessage, true]
     );
 
     const newLead = result.rows[0];
-    console.log(`✅ Public lead created: ${name} for user ${userId} (SMS consent: true)`);
+    console.log(`✅ Public lead ${newLead.id} created for user ${userId}`);
 
     // Fire Meta Conversions API Lead event (no-op if user hasn't configured a pixel).
     fireLeadEvent(userId, newLead, {
@@ -161,33 +204,37 @@ router.post('/public/:userId', async (req, res) => {
       console.error('Error triggering lead form agent:', err.message)
     );
 
-    // Notify business owner (non-blocking)
+    // Notify business owner (non-blocking). Every visitor-supplied value is escaped: this
+    // is an anonymous form, and the same text lands in the owner's inbox as HTML.
+    const { escapeHtml: esc } = require('../utils/escapeHtml');
+    const textSafe = require('../utils/textSafe');
     if (process.env.SENDGRID_API_KEY) {
       pool.query('SELECT email, business_name FROM users WHERE id = $1', [userId])
-        .then(ownerRes => {
+        .then(async ownerRes => {
           const owner = ownerRes.rows[0];
           if (!owner?.email) return;
-          return sgMail.send({
+          const row = (label, value, extra = '') =>
+            `<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;width:120px;${extra}">${label}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${value}</td></tr>`;
+          await sgMail.send({
             to: owner.email,
             from: { name: 'SORCE', email: TRANSACTIONAL_EMAIL },
-            // Reply goes to the lead, which is what hitting reply on "you have a
-            // new lead" is meant to do. Without it, the owner replies to our own
-            // inbox and the lead never hears from them.
-            ...(email ? { replyTo: { name: name || '', email } } : {}),
-            subject: `New lead: ${name}`,
+            // Reply goes to the lead, which is what hitting reply on "you have a new lead"
+            // is meant to do.
+            replyTo: { name: cName, email: cEmail },
+            subject: `New lead: ${textSafe.singleLine(cName)}`,
             html: `
               <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
                 <div style="background:#1d4ed8;padding:1.5rem 2rem;border-radius:8px 8px 0 0;">
                   <h1 style="color:#fff;margin:0;font-size:1.25rem;">New Lead Submitted</h1>
                 </div>
                 <div style="padding:2rem;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
-                  <p style="margin-top:0;">A new lead just came in from your website${owner.business_name ? ` for <strong>${owner.business_name}</strong>` : ''}.</p>
+                  <p style="margin-top:0;">A new lead just came in from your website${owner.business_name ? ` for <strong>${esc(owner.business_name)}</strong>` : ''}.</p>
                   <table style="width:100%;border-collapse:collapse;margin:1rem 0;">
-                    <tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;width:120px;border-radius:4px 0 0 0;">Name</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${name}</td></tr>
-                    <tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Phone</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${phone}</td></tr>
-                    <tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Email</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${email || '—'}</td></tr>
-                    ${service ? `<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${service}</td></tr>` : ''}
-                    ${message ? `<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;vertical-align:top;">Message</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${message}</td></tr>` : ''}
+                    ${row('Name', esc(cName))}
+                    ${row('Phone', esc(cPhone))}
+                    ${row('Email', esc(cEmail))}
+                    ${cService ? row('Service', esc(cService)) : ''}
+                    ${cMessage ? row('Message', esc(cMessage), 'vertical-align:top;') : ''}
                   </table>
                   <p style="color:#6b7280;font-size:0.85rem;margin:0;">Submitted via lead form on your website.</p>
                 </div>
@@ -197,24 +244,34 @@ router.post('/public/:userId', async (req, res) => {
         .catch(err => console.error('Error sending lead notification email:', err.message));
     }
 
-    // Confirmation email to the lead themselves, so they know the submission went
-    // through and what happens next. PLACEHOLDER COPY — swap in the real wording
-    // once it's provided; this applies to every public lead form site-wide, not
-    // just the vehicle-wraps questionnaire.
-    if (process.env.SENDGRID_API_KEY && email) {
-      sgMail.send({
-        to: email,
-        from: { name: "Thompson's Auto Detailing", email: TRANSACTIONAL_EMAIL },
-        subject: "We've got your request — Thompson's Auto Detailing",
-        html: `
+    // Confirmation email to the lead. Sent from the business's own name (it used to be
+    // hardcoded to one customer's brand for everybody), carries none of the visitor's free
+    // text, and goes to any one address at most once a day — an anonymous form that mails
+    // whatever address it's given is otherwise a way to spam a stranger from our domain.
+    if (process.env.SENDGRID_API_KEY) {
+      (async () => {
+        const dup = await pool.query(
+          `SELECT COUNT(*)::int AS n FROM leads
+            WHERE user_id = $1 AND LOWER(email) = $2 AND created_at > NOW() - INTERVAL '24 hours' AND id <> $3`,
+          [userId, cEmail, newLead.id]
+        );
+        if (dup.rows[0].n > 0) return;
+        const biz = (await pool.query('SELECT business_name FROM users WHERE id = $1', [userId])).rows[0]?.business_name || 'Our team';
+        const first = esc(textSafe.firstWord(cName));
+        await sgMail.send({
+          to: cEmail,
+          from: { name: `${textSafe.displayName(biz)} via SORCE`, email: TRANSACTIONAL_EMAIL },
+          subject: `We've got your request — ${textSafe.singleLine(biz)}`,
+          html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
             <div style="padding:2rem;border:1px solid #e5e7eb;border-radius:8px;">
-              <h1 style="margin:0 0 1rem;font-size:1.25rem;">Thanks, ${name}!</h1>
-              <p style="margin:0 0 1rem;">We received your request${service ? ` for <strong>${service}</strong>` : ''} and will be in touch shortly with next steps.</p>
-              <p style="color:#6b7280;font-size:0.85rem;margin:0;">— Thompson's Auto Detailing</p>
+              <h1 style="margin:0 0 1rem;font-size:1.25rem;">Thanks, ${first}!</h1>
+              <p style="margin:0 0 1rem;">We received your request and will be in touch shortly with next steps.</p>
+              <p style="color:#6b7280;font-size:0.85rem;margin:0;">— ${esc(biz)}</p>
             </div>
           </div>`,
-      }).catch(err => console.error('Error sending lead confirmation email:', err.message));
+        });
+      })().catch(err => console.error('Error sending lead confirmation email:', err.message));
     }
 
     res.json({
@@ -1181,3 +1238,4 @@ router.post('/:id/convert', authenticateToken, async (req, res) => {
 
 module.exports = router;
 module.exports.triggerLeadFormAgent = triggerLeadFormAgent;
+module.exports.recentlyAutoTexted = recentlyAutoTexted;

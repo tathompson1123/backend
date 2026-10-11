@@ -10,7 +10,21 @@ const sgMail = require('@sendgrid/mail');
 const jwt = require('jsonwebtoken');
 const { BULK_EMAIL } = require('../utils/emailFrom');
 
-const UNSUB_SECRET = process.env.JWT_SECRET || process.env.UNSUB_SECRET || 'sorce-unsubscribe-secret';
+// Unsubscribe links go to every recipient of every campaign, so the token in them must never
+// be usable for anything but unsubscribing. It used to be signed with JWT_SECRET and carry
+// the owner's userId — which made it a valid dashboard login for that owner, for a year.
+// Signing now uses a secret derived from JWT_SECRET (different key, same deployment config),
+// and authenticateToken additionally rejects any token with a 'type' claim.
+const crypto = require('crypto');
+const _baseSecret = process.env.UNSUB_SECRET || process.env.JWT_SECRET;
+if (!_baseSecret && (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT)) {
+  console.error('❌ FATAL: UNSUB_SECRET or JWT_SECRET must be set');
+  process.exit(1);
+}
+const UNSUB_SECRET = crypto.createHmac('sha256', _baseSecret || 'dev-only-unsub').update('sorce-unsubscribe-v2').digest('hex');
+// Links already in people's inboxes were signed with the old secret; keep honouring them
+// for unsubscribing only (they no longer work as logins).
+const LEGACY_UNSUB_SECRETS = [process.env.JWT_SECRET, process.env.UNSUB_SECRET, 'sorce-unsubscribe-secret'].filter(Boolean);
 const { ensureLinkTokens, ensureRecipientToken, rewriteHtml } = require('../utils/campaignLinks');
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.VITE_APP_URL || 'https://sorceintegrations.com';
 
@@ -1376,7 +1390,10 @@ async function applyUnsubscribeToken(token) {
   try {
     payload = jwt.verify(token, UNSUB_SECRET);
   } catch {
-    return { status: 400, body: { error: 'Invalid or expired unsubscribe link' } };
+    for (const legacy of LEGACY_UNSUB_SECRETS) {
+      try { payload = jwt.verify(token, legacy); break; } catch { /* try next */ }
+    }
+    if (!payload) return { status: 400, body: { error: 'Invalid or expired unsubscribe link' } };
   }
 
   if (payload.type !== 'unsubscribe' || !payload.email || !payload.userId) {

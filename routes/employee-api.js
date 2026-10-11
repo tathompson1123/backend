@@ -113,6 +113,27 @@ function isValidId(id) { return Number.isInteger(Number(id)) && Number(id) > 0; 
 // All routes require employee authentication
 router.use(authenticateEmployee);
 
+// An employee reaches a booking only if it is assigned to them, unless they hold
+// view_all_bookings or are an admin. Most handlers below filter on the business (user_id)
+// alone, which let any employee read a customer's thread, invoice or payment details for
+// any job in the company just by changing the id in the URL.
+router.use('/my-bookings/:id', async (req, res, next) => {
+  try {
+    const { employeeId, userId, isAdmin, permissions } = req.employee;
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid booking ID' });
+    if (isAdmin || permissions?.view_all_bookings) return next();
+    const r = await pool.query('SELECT employee_id FROM bookings WHERE id = $1 AND user_id = $2', [req.params.id, userId]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Booking not found' });
+    if (Number(r.rows[0].employee_id) !== Number(employeeId)) {
+      return res.status(403).json({ error: 'This booking is assigned to someone else' });
+    }
+    next();
+  } catch (err) {
+    console.error('Booking access check failed:', err.message);
+    res.status(500).json({ error: 'Failed to verify booking access' });
+  }
+});
+
 // GET /api/employee/my-bookings - Bookings assigned to this employee
 router.get('/my-bookings', requirePermission('view_bookings'), async (req, res) => {
   try {
@@ -1244,13 +1265,19 @@ router.get('/profile', async (req, res) => {
 router.put('/profile', async (req, res) => {
   try {
     const { employeeId } = req.employee;
-    const { phone, email } = req.body;
+    const { phone } = req.body;
+    let { email } = req.body;
 
+    // Email is the employee's login AND — when it matches the owner's — what makes them an
+    // admin, so it can't be self-service: anyone could take the owner's address and become
+    // admin. Re-sending the unchanged address (the app does) is ignored; a different one is
+    // refused. The owner changes it from the dashboard.
     if (email !== undefined) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
-        return res.status(400).json({ error: 'Invalid email format' });
+      const cur = await pool.query('SELECT email FROM employee_credentials WHERE employee_id = $1', [employeeId]);
+      if (String(email).trim().toLowerCase() !== String(cur.rows[0]?.email || '').toLowerCase()) {
+        return res.status(403).json({ error: 'Ask your manager to change your login email.' });
       }
+      email = undefined;
     }
 
     if (phone !== undefined && phone && phone.length > 20) {

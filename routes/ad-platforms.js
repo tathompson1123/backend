@@ -642,7 +642,7 @@ router.get('/google-lsa/diagnose', authenticateToken, async (req, res) => {
       managerIds,
       results,
     });
-  } catch (e) { res.status(500).json({ error: e.message, stack: e.stack }); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ══════════════════════════════════════════════════════════════════

@@ -162,6 +162,8 @@ function normalizeSmsText(text) {
 
 async function sendSMS(to, message, userId, mediaUrl) {
   message = normalizeSmsText(message);
+  // Destination, rate and opt-out checks live in one place so no caller can skip them.
+  await require('./smsGuard').assertSendAllowed({ to, userId });
   try {
     const twilioClient = getClient();
 

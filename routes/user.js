@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
-const { authenticateToken } = require('../config/middleware');
+const { authenticateToken, blockImpersonation } = require('../config/middleware');
 
 // GET - Get user profile
 router.get('/profile', authenticateToken, async (req, res) => {
@@ -52,12 +52,17 @@ router.post('/google-review-link', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Review link is required' });
     }
 
-    // Validate URL format
-    const link = reviewLink.toLowerCase();
-    if (!link.includes('g.page') && !link.includes('google.com')) {
+    // This link is texted to customers and used as a redirect target from our own domain,
+    // so it has to really be a Google link — a substring check let
+    // "https://evil.example/?google.com" through.
+    let parsedLink;
+    try { parsedLink = new URL(reviewLink.trim()); } catch { parsedLink = null; }
+    const host = parsedLink ? parsedLink.hostname.toLowerCase() : '';
+    const googleHost = /(^|\.)(google\.com|g\.page|g\.co|goo\.gl|maps\.app\.goo\.gl)$/.test(host);
+    if (!parsedLink || parsedLink.protocol !== 'https:' || !googleHost || reviewLink.length > 500) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid Google review link. Must contain g.page or google.com'
+        error: 'Invalid Google review link. It must be an https link on google.com, g.page or goo.gl'
       });
     }
 
@@ -75,7 +80,7 @@ router.post('/google-review-link', authenticateToken, async (req, res) => {
 });
 
 // PUT - Update user profile
-router.put('/profile', authenticateToken, async (req, res) => {
+router.put('/profile', authenticateToken, blockImpersonation, async (req, res) => {
   try {
     const { businessName, email } = req.body;
 
@@ -121,7 +126,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
 });
 
 // PUT - Change password
-router.put('/password', authenticateToken, async (req, res) => {
+router.put('/password', authenticateToken, blockImpersonation, async (req, res) => {
   const bcrypt = require('bcrypt');
 
   try {
@@ -167,7 +172,7 @@ router.put('/password', authenticateToken, async (req, res) => {
 });
 
 // DELETE - Delete user account (requires confirmation token)
-router.delete('/account', authenticateToken, async (req, res) => {
+router.delete('/account', authenticateToken, blockImpersonation, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { confirmPhrase } = req.body;

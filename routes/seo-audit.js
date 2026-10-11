@@ -77,16 +77,12 @@ router.post('/run', authenticateToken, async (req, res) => {
   // ── Fetch website HTML ───────────────────────────────────────
   let htmlContent = '';
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    const fetchRes = await fetch(url, {
-      signal: controller.signal,
+    // Public addresses only, every redirect hop included (see utils/urlGuard).
+    const fetched = await require('../utils/urlGuard').guardedFetch(url, {
+      signal: AbortSignal.timeout(10000),
       headers: { 'User-Agent': 'SEO-Audit-Bot/1.0' },
-      redirect: 'follow',
-    });
-    clearTimeout(timeout);
-    const text = await fetchRes.text();
-    htmlContent = text.slice(0, 50000);
+    }, { maxBytes: 200000 });
+    htmlContent = fetched.text.slice(0, 50000);
   } catch (err) {
     console.error('[seo-audit] Fetch error:', err.message);
     // Continue with empty HTML — Claude can still analyze the URL
@@ -821,15 +817,12 @@ router.post('/verify-llms', authenticateToken, async (req, res) => {
 
   for (const url of candidateUrls) {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      const resp = await fetch(url, {
-        signal: controller.signal,
+      const resp = await require('../utils/urlGuard').guardedFetch(url, {
+        signal: AbortSignal.timeout(8000),
         headers: { 'User-Agent': 'SORCE-SEO-Verifier/1.0' },
-      });
-      clearTimeout(timeout);
+      }, { maxBytes: 200000 });
       if (resp.ok) {
-        const text = await resp.text();
+        const text = resp.text;
 
         // Detect JS-rendered platforms by checking raw HTML for platform markers
         const lowerText = text.toLowerCase();

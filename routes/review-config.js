@@ -60,6 +60,10 @@ router.post('/', authenticateToken, async (req, res) => {
     const linkBase = (reviewLinkBase != null && String(reviewLinkBase).trim())
       ? String(reviewLinkBase).trim().replace(/\/+$/, '').slice(0, 255)
       : null;
+    // Texted to customers under the business's name: it must be a plain https address.
+    if (linkBase && !/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s<>"]*)?$/i.test(linkBase)) {
+      return res.status(400).json({ success: false, error: 'Branded review link must be a valid https address' });
+    }
 
     // Rate the incentive (1-10) so the owner sees how compelling it is. Non-fatal.
     let score = null, tip = '';

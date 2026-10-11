@@ -12,6 +12,12 @@ const { convertGeminiTemplate } = require('../utils/convertGeminiTemplate');
 // POST /api/templates/register
 // Body: the raw JSON object that Gemini outputs (per the template spec)
 router.post('/register', authenticateToken, async (req, res) => {
+  // Registering a template writes a module that every tenant's generated site can then
+  // render, so it is a platform-admin operation, off unless explicitly enabled. It used to
+  // be open to any logged-in user.
+  if (process.env.ALLOW_TEMPLATE_REGISTRATION !== 'true') {
+    return res.status(403).json({ error: 'Template registration is disabled' });
+  }
   try {
     const geminiJson = req.body;
 

@@ -19,8 +19,15 @@ router.post('/import-google', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Google Business URL is required' });
     }
 
-    // Validate it's a Google Maps URL
-    if (!googleUrl.includes('google.com/maps') && !googleUrl.includes('maps.google.com')) {
+    // Validate it's really a Google Maps URL — by parsing it, not by searching the text
+    // ("http://169.254.169.254/?google.com/maps" contains the substring and is not Google).
+    let parsedGoogle = null;
+    try { parsedGoogle = new URL(googleUrl); } catch { /* handled below */ }
+    const gHost = parsedGoogle ? parsedGoogle.hostname.toLowerCase() : '';
+    const okGoogle = !!parsedGoogle && parsedGoogle.protocol === 'https:' && (
+      /^(www\.)?google\.[a-z.]+$/.test(gHost) && parsedGoogle.pathname.startsWith('/maps')
+      || gHost === 'maps.google.com' || gHost === 'maps.app.goo.gl' || gHost === 'goo.gl');
+    if (!okGoogle) {
       return res.status(400).json({
         error: 'Please provide a valid Google Maps URL'
       });
@@ -38,6 +45,8 @@ router.post('/import-google', authenticateToken, async (req, res) => {
     });
 
     const page = await browser.newPage();
+    // Any redirect or subresource must still resolve to a public address.
+    await require('../utils/urlGuard').guardPuppeteerPage(page);
 
     // Set user agent to avoid detection
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
@@ -639,6 +648,9 @@ router.get('/raffles', authenticateToken, async (req, res) => {
 router.get('/raffle/pool', authenticateToken, async (req, res) => {
   try {
     const period = req.query.period || reviewRaffle.periodOf();
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(period))) {
+      return res.status(400).json({ success: false, error: 'period must look like 2026-09' });
+    }
     const pool_ = await reviewRaffle.previewPool(req.user.userId, period);
     res.json({
       success: true,
@@ -658,6 +670,9 @@ router.get('/raffle/pool', authenticateToken, async (req, res) => {
 router.post('/raffle/run', authenticateToken, async (req, res) => {
   try {
     const period = req.body.period || reviewRaffle.previousPeriod();
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(period))) {
+      return res.status(400).json({ success: false, error: 'period must look like 2026-09' });
+    }
     const dryRun = !!req.body.dryRun;
     const result = await reviewRaffle.runRaffleForUser(req.user.userId, period, { dryRun });
     res.json({ success: true, result });

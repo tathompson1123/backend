@@ -246,13 +246,17 @@ const anthropic = new Anthropic({
 // Start a new conversation
 router.post('/start', async (req, res) => {
   try {
-    const { userId, source } = req.body;
+    const { source } = req.body;
+    const userId = Number(req.body.userId);
+    if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ error: 'Invalid business' });
+    const biz = await pool.query('SELECT 1 FROM users WHERE id = $1', [userId]);
+    if (biz.rows.length === 0) return res.status(404).json({ error: 'Business not found' });
 
     const result = await pool.query(
       `INSERT INTO chat_conversations (user_id, source, created_at, updated_at)
        VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        RETURNING id`,
-      [userId, source || 'website']
+      [userId, String(source || 'website').slice(0, 40)]
     );
 
     res.json({ conversationId: result.rows[0].id });
@@ -527,7 +531,25 @@ async function createBookingFromChat(userId, bookingData, { skipConfirmationEmai
 // Send a message
 router.post('/message', async (req, res) => {
   try {
-    const { userId, conversationId, message } = req.body;
+    const { conversationId } = req.body;
+    const userId = Number(req.body.userId);
+    const message = typeof req.body.message === 'string' ? req.body.message.trim() : '';
+
+    // This endpoint is anonymous and every call spends Claude tokens, so pin the conversation
+    // to the business it was started for (the ids are sequential, and the AI reads the whole
+    // history back — an unchecked id lets anyone make it recite another visitor's details),
+    // and bound the size of the exchange.
+    if (!Number.isInteger(userId) || userId <= 0 || !message || message.length > 2000) {
+      return res.status(400).json({ error: 'Invalid message' });
+    }
+    const convoRow = await pool.query('SELECT user_id FROM chat_conversations WHERE id = $1', [Number(conversationId)]);
+    if (!convoRow.rows[0] || Number(convoRow.rows[0].user_id) !== userId) {
+      return res.status(403).json({ error: 'Conversation does not belong to this business' });
+    }
+    const msgCount = await pool.query("SELECT COUNT(*)::int AS n FROM chat_messages WHERE conversation_id = $1 AND role = 'user'", [Number(conversationId)]);
+    if (msgCount.rows[0].n >= 60) {
+      return res.json({ silent: true, reply: "Thanks for chatting — please contact us directly and we'll take it from here." });
+    }
 
     // Save user message
     await pool.query(

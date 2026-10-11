@@ -6,7 +6,9 @@ const sgMail = require('@sendgrid/mail');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-const ANALYTICS_PASSWORD = process.env.ANALYTICS_PASSWORD || 'sorce-internal-2025';
+// No built-in fallback: a default password in source is a password everyone with repo access
+// knows. Unset means the shared-password login is simply off (team-member logins still work).
+const ANALYTICS_PASSWORD = process.env.ANALYTICS_PASSWORD || null;
 const DASHBOARD_URL = process.env.FRONTEND_URL || 'https://sorceintegrations.com';
 
 // Per-plan monthly revenue. basic/expert are legacy and priced at what they were
@@ -18,26 +20,8 @@ const CHAT_COST     = 0.04;   // per chat conversation (Claude Sonnet 4 estimate
 const AI_SMS_COST   = 0.003;  // per AI-generated SMS response
 
 // Middleware: verify analytics JWT
-const requireAnalytics = (req, res, next) => {
-  const token = (req.headers.authorization || '').replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded.analytics) return res.status(403).json({ error: 'Forbidden' });
-    req.analytics = decoded;
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-};
+const { requireAnalytics, requireAdmin, safeEqual } = require('../config/analyticsAuth');
 
-// Revenue, billing and team management are admin-only. Invited members get the
-// discovery call calendar and nothing else. A master-password session has no `tm`
-// and is treated as admin.
-const requireAdmin = (req, res, next) => {
-  if (!req.analytics?.tm || req.analytics.role === 'admin') return next();
-  return res.status(403).json({ error: 'Admin access required' });
-};
 
 // ── POST /api/analytics/login ─────────────────────────────────
 // Two ways in: an invited team member's own email + password, or the legacy shared
@@ -73,7 +57,7 @@ router.post('/login', async (req, res) => {
     }
   }
 
-  if (password !== ANALYTICS_PASSWORD) {
+  if (!ANALYTICS_PASSWORD || !safeEqual(password, ANALYTICS_PASSWORD)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
   const token = jwt.sign({ analytics: true, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '12h' });

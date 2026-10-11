@@ -48,6 +48,8 @@ function formatWhen(scheduledAt, timezone = 'America/New_York') {
 async function sendDiscoverySMS(to, body) {
   const phone = toE164(to);
   if (!phone) throw new Error('No valid phone number');
+  // SORCE's own number: same destination and per-number limits as customer texts.
+  await require('./smsGuard').assertSendAllowed({ to: phone, userId: null });
   const client = getClient();
   // This path calls Twilio directly rather than going through sendSMS, so it needs the
   // same GSM-7 normalisation — otherwise a stray em-dash costs an extra segment on
@@ -184,7 +186,10 @@ async function checkDiscoverySmsSetup() {
   }
 }
 
-const firstNameOf = (name) => String(name || 'there').trim().split(/\s+/)[0];
+// The name comes from a public form and is pasted into texts and emails, so only letters
+// and name punctuation survive: no URLs, markup or digits riding along in a "first name".
+const firstNameOf = (name) =>
+  String(name || 'there').trim().split(/\s+/)[0].replace(/[^\p{L}'’.-]/gu, '').slice(0, 30) || 'there';
 
 // Text is the primary channel for the Zoom link on purpose: it can't land in a spam
 // folder, and it's the one they'll actually have open on the day. The email repeats it.
@@ -242,10 +247,13 @@ function reminder2hSMS(call, rep) {
 // actually landed. If the intro video is ever recorded it goes in as a plain link — a
 // thumbnail would put a remote image back and undo the fix.
 function confirmationEmailHtml(call, rep) {
-  const when = formatWhen(call.scheduled_at, call.timezone);
-  const repName = rep?.name || 'your SORCE specialist';
-  const repTitle = rep?.title || '';
-  const repBio = rep?.bio || '';
+  // Everything interpolated below is escaped: the prospect's name, phone and notes come
+  // straight from a public form, and the rep's profile is editable by the rep.
+  const { escapeHtml: esc } = require('./escapeHtml');
+  const when = esc(formatWhen(call.scheduled_at, call.timezone));
+  const repName = esc(rep?.name || 'your SORCE specialist');
+  const repTitle = esc(rep?.title || '');
+  const repBio = esc(rep?.bio || '');
   const mins = call.duration_minutes || 30;
 
   // The passcode gets its own paragraph rather than trailing the link. htmlToText expands
@@ -254,9 +262,9 @@ function confirmationEmailHtml(call, rep) {
   // the HTML into the text/plain part, where filters read it just as easily. Zoom's join
   // URL already carries ?pwd=, so this line only matters to someone typing the meeting ID.
   const where = call.zoom_join_url
-    ? `<p style="margin:0 0 16px;">It's on Zoom &mdash; <a href="${call.zoom_join_url}" style="color:#1d4ed8;">join here</a>. We've texted you the link as well.</p>`
-      + (call.zoom_passcode ? `<p style="margin:0 0 16px;">If it asks for a passcode, it's ${call.zoom_passcode}.</p>` : '')
-    : `<p style="margin:0 0 16px;">We'll call you at ${call.phone || 'the number you gave us'}.</p>`;
+    ? `<p style="margin:0 0 16px;">It's on Zoom &mdash; <a href="${esc(call.zoom_join_url)}" style="color:#1d4ed8;">join here</a>. We've texted you the link as well.</p>`
+      + (call.zoom_passcode ? `<p style="margin:0 0 16px;">If it asks for a passcode, it's ${esc(call.zoom_passcode)}.</p>` : '')
+    : `<p style="margin:0 0 16px;">We'll call you at ${esc(call.phone || 'the number you gave us')}.</p>`;
 
   const who = [repName, repTitle].filter(Boolean).join(', ');
   const video = VIDEO_URL
@@ -266,7 +274,7 @@ function confirmationEmailHtml(call, rep) {
   return `<!DOCTYPE html>
 <html><body style="margin:0;padding:0;">
   <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1f2937;font-size:15px;line-height:1.55;">
-    <p style="margin:0 0 16px;">Hi ${firstNameOf(call.name)},</p>
+    <p style="margin:0 0 16px;">Hi ${esc(firstNameOf(call.name))},</p>
     <p style="margin:0 0 16px;">Your discovery call is confirmed for <strong>${when}</strong>, and should take about ${mins} minutes.</p>
     ${where}
     <p style="margin:0 0 16px;">You'll be speaking with ${who}.${repBio ? ` ${repBio}` : ''}</p>

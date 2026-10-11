@@ -352,6 +352,8 @@ Return ONLY the SMS text — no quotes, no preamble, no explanation.`;
   }
 });
 
+const testSendCounts = new Map();
+
 // POST /api/sms-campaigns/test-send — text the owner's own Twilio number's... self.
 // Sends to a phone supplied by the owner so they can preview the real message.
 router.post('/test-send', authenticateToken, async (req, res) => {
@@ -359,6 +361,15 @@ router.post('/test-send', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     const { message, toPhone } = req.body || {};
     if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
+    if (message.length > SMS_MAX_LENGTH) return res.status(400).json({ error: `Message must be ${SMS_MAX_LENGTH} characters or fewer` });
+
+    // A preview text, not a way to message strangers: five a day per account.
+    const day = new Date().toISOString().slice(0, 10);
+    const key = `${userId}:${day}`;
+    const used = testSendCounts.get(key) || 0;
+    if (used >= 5) return res.status(429).json({ error: 'Test text limit reached for today (5).' });
+    testSendCounts.set(key, used + 1);
+    if (testSendCounts.size > 5000) testSendCounts.clear();
 
     const phone = normalizePhone(toPhone);
     if (!phone) return res.status(400).json({ error: 'Enter a valid 10-digit phone number to send the test to' });
@@ -382,6 +393,9 @@ router.post('/send-now', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     const { message, certified } = req.body || {};
     if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
+    if (message.length > SMS_MAX_LENGTH) {
+      return res.status(400).json({ error: `Message must be ${SMS_MAX_LENGTH} characters or fewer` });
+    }
 
     // Gate the blast on the owner attesting their audience is opted in. This is an
     // affirmative certification (must be exactly true), recorded on the campaign row.
@@ -391,7 +405,7 @@ router.post('/send-now', authenticateToken, async (req, res) => {
       });
     }
 
-    const userRow = await pool.query('SELECT twilio_phone_number, plan, email, is_demo FROM users WHERE id = $1', [userId]);
+    const userRow = await pool.query('SELECT twilio_phone_number, plan, email, is_demo, stripe_customer_id, email_verified FROM users WHERE id = $1', [userId]);
     if (!userRow.rows[0]?.twilio_phone_number) {
       return res.status(400).json({ error: 'No SMS number is provisioned for your account yet' });
     }
@@ -414,6 +428,29 @@ router.post('/send-now', authenticateToken, async (req, res) => {
       }
       sendCap = SMS_SEND_LIMIT;
     }
+    // Campaign texts are billed per text afterwards, so there has to be someone to bill.
+    // Without this, a free signup could send thousands of texts that nobody ever pays for.
+    if (!unlimited && userRow.rows[0]?.is_demo !== true && !userRow.rows[0]?.stripe_customer_id) {
+      return res.status(402).json({ error: 'Add a payment method in Billing before sending a text campaign.' });
+    }
+    if (!unlimited && !userRow.rows[0]?.email_verified) {
+      return res.status(403).json({ error: 'Please verify your email before sending a text campaign.' });
+    }
+
+    // One blast at a time, and no more than 3 a day: parallel clicks used to run the whole
+    // list again each time.
+    const busy = await pool.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE status IN ('pending', 'sending') AND created_at > NOW() - INTERVAL '6 hours')::int AS running,
+         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours')::int AS today
+       FROM sms_campaigns WHERE user_id = $1`, [userId]);
+    if (!unlimited && busy.rows[0].running > 0) {
+      return res.status(409).json({ error: 'A campaign is already sending. Wait for it to finish.' });
+    }
+    if (!unlimited && busy.rows[0].today >= 3) {
+      return res.status(429).json({ error: 'Daily campaign limit reached (3). Try again tomorrow.' });
+    }
+
     // Demo accounts (opened on a sales call) can only text a handful of people.
     if (userRow.rows[0]?.is_demo === true) sendCap = Math.min(sendCap, DEMO_SEND_CAP);
 

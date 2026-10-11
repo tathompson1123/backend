@@ -637,7 +637,7 @@ router.post('/lead-form/deploy', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     // Check if already has a number
     const userCheck = await pool.query(
-      `SELECT u.twilio_phone_number, u.plan, bi.zip_code
+      `SELECT u.twilio_phone_number, u.plan, u.email_verified, bi.zip_code
        FROM users u
        LEFT JOIN business_information bi ON bi.user_id = u.id
        WHERE u.id = $1`,
@@ -646,6 +646,12 @@ router.post('/lead-form/deploy', authenticateToken, async (req, res) => {
 
     const userData = userCheck.rows[0];
     let phoneNumber = userData?.twilio_phone_number;
+
+    // Buying a number (or getting on the shared one) costs money; unverified signups can't
+    // start sending texts.
+    if (!phoneNumber && !userData?.email_verified) {
+      return res.status(403).json({ error: 'Please verify your email before deploying the SMS agent.' });
+    }
 
     // Auto-provision phone number if they don't have one
     if (!phoneNumber) {
