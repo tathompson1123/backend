@@ -139,6 +139,23 @@ function emailBlocksToHtml(blocks) {
           ? `  <div style="background:#2b2b2b;padding:40px 30px 10px;text-align:left"><h2 style="margin:0 0 12px;font-size:36px;font-weight:800;color:#ffffff;line-height:1.1;text-transform:uppercase;letter-spacing:-0.5px">${esc(c.title||'')}</h2>${c.subtitle ? `<p style="margin:0;font-size:16px;font-weight:700;color:${esc(accent)};line-height:1.4">${esc(c.subtitle)}</p>` : ''}</div>`
           : `  <div style="padding:36px 28px 8px;text-align:center"><h2 style="margin:0 0 10px;font-size:30px;font-weight:800;color:#111827;line-height:1.2">${esc(c.title||'')}</h2>${c.subtitle ? `<p style="margin:0;font-size:16px;font-weight:600;color:#b45309;line-height:1.4">${esc(c.subtitle)}</p>` : ''}</div>`;
       }
+      case 'value_stack': {
+        const accent = esc(c.accent || '#f97316');
+        const money = (n) => { const v = Number(n); return '$' + (Number.isInteger(v) ? v.toLocaleString('en-US') : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })); };
+        const rows = (c.items||[]).map(i => `
+      <div style="padding:16px 0;border-bottom:1px solid #444444">
+        <p style="margin:0 0 5px;font-size:17px;font-weight:800;color:#ffffff;line-height:1.3"><span style="color:${accent};margin-right:8px">&#10003;</span>${esc(i.lead||'')}</p>
+        ${i.detail ? `<p style="margin:0 0 6px;font-size:15px;color:#d4d4d4;line-height:1.55">${esc(i.detail)}</p>` : ''}
+        ${i.value ? `<p style="margin:0;font-size:13px;font-weight:700;color:${i.free ? accent : '#a3a3a3'}">Normally ${money(i.value)}${i.free ? ' &mdash; yours free' : ''}</p>` : ''}
+      </div>`).join('');
+        const totals = c.price ? `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px">
+        <tr><td style="padding:4px 0;font-size:15px;color:#d4d4d4">Total value</td><td align="right" style="padding:4px 0;font-size:15px;color:#a3a3a3;text-decoration:line-through">${money(c.totalValue)}</td></tr>
+        <tr><td style="padding:4px 0;font-size:15px;font-weight:700;color:#ffffff">You save</td><td align="right" style="padding:4px 0;font-size:15px;font-weight:800;color:${accent}">${money(c.savings)}</td></tr>
+      </table>
+      <div style="margin-top:14px;padding:18px;background:${accent};text-align:center"><p style="margin:0 0 2px;font-size:12px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:#ffffff">All of it for just</p><p style="margin:0;font-size:40px;font-weight:900;color:#ffffff;line-height:1.1">${money(c.price)}</p></div>` : '';
+        return `  <div style="background:#2b2b2b;padding:8px 24px 28px"><div style="background:#333333;border:1px solid #444444;padding:22px 22px 24px"><p style="margin:0 0 4px;font-size:12px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:${accent}">${esc(c.heading||"What you're getting")}</p>${rows}${totals}</div></div>`;
+      }
       case 'intro_text':
         return `  <div style="background:#2b2b2b;padding:14px 30px 26px"><p style="margin:0;font-size:16px;color:#e5e5e5;line-height:1.6">${esc(c.text||'')}</p></div>`;
       case 'offer_cards': {
@@ -205,10 +222,15 @@ async function getBusinessContext(userId) {
   }
 
   const servicesRow = await pool.query(
-    'SELECT name FROM services WHERE user_id = $1 AND active = true LIMIT 10',
+    'SELECT id, name, description, price FROM services WHERE user_id = $1 AND active = true ORDER BY sort_order ASC NULLS LAST, name LIMIT 25',
     [userId]
   );
   const services = servicesRow.rows.map(r => r.name);
+  // Real names, descriptions and prices: the value stack in the email is built from these.
+  const catalog = servicesRow.rows.map(r => ({
+    id: Number(r.id), name: r.name, description: String(r.description || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+    price: Number(r.price) > 0 ? Number(r.price) : 0,
+  }));
 
   // Address and phone feed the email footer and the "Call" button.
   let address = '', phone = '';
@@ -228,6 +250,7 @@ async function getBusinessContext(userId) {
     city: '',
     state: '',
     services,
+    catalog,
     address,
     phone,
   };
@@ -264,8 +287,37 @@ async function getNextFocus(userId, currentFocus) {
   return FOCUS_ROTATION[(idx + 1) % FOCUS_ROTATION.length];
 }
 
+// Whole dollars when it's a whole number ("$749"), cents otherwise.
+function fmtMoney(n) {
+  const v = Number(n);
+  return `$${Number.isInteger(v) ? v.toLocaleString('en-US') : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// The offer's money is worked out here from the business's real service prices, never by
+// the model: it picks which services go in the bundle and writes the copy, and this decides
+// what they add up to, what the price is and what the customer saves.
+function priceBundle(items, { ownerPrice, ownerPercent }) {
+  const priced = items.filter(i => i.value > 0);
+  if (priced.length === 0) return null;
+  const totalValue = priced.reduce((s, i) => s + i.value, 0);
+  const payableValue = priced.filter(i => !i.free).reduce((s, i) => s + i.value, 0);
+
+  let price = null;
+  if (ownerPrice) price = ownerPrice;
+  else if (ownerPercent) price = payableValue * (1 - ownerPercent / 100);
+  else if (priced.some(i => i.free)) price = payableValue;
+  else price = payableValue * 0.8; // nothing specified: a clean 20% off the bundle
+
+  // Marketing-style price ending in 9 (e.g. $749) unless the owner gave an exact figure
+  // or the offer is simply "these items are free".
+  const exact = !!ownerPrice || (priced.some(i => i.free) && !ownerPercent);
+  price = exact ? Math.round(price * 100) / 100 : Math.max(1, Math.round(price / 10) * 10 - 1);
+  if (!(price > 0) || price >= totalValue) return null; // can't honestly claim a saving
+  return { totalValue, price, savings: Math.round((totalValue - price) * 100) / 100 };
+}
+
 async function generateCampaign(userId, config, offerDetails, autoRotate = false) {
-  const { businessName, industry, city, services, address, phone } = await getBusinessContext(userId);
+  const { businessName, industry, city, catalog, address, phone } = await getBusinessContext(userId);
   const recentSubjects = await getRecentSubjects(userId);
   const month = new Date().toLocaleString('default', { month: 'long' });
   const tone = config?.tone || 'friendly';
@@ -297,50 +349,58 @@ async function generateCampaign(userId, config, offerDetails, autoRotate = false
   const typedOffer = String(offerDetails?.offer || '').trim().slice(0, 600);
   const ctaLink = offerDetails?.ctaLink || config?.cta_link || '#';
 
-  const offerInstruction = typedOffer
-    ? `THE OFFER (written by the business owner — use it exactly, do not change the discount, price, or terms, and do not invent any): "${typedOffer}"`
-    : `No offer was specified, so propose ${focusInstructions[focus] || focusInstructions.seasonal}. Keep it believable for this business and do not quote prices you cannot know — use a percentage, a free add-on, or limited availability.`;
+  const catalogText = catalog.length
+    ? catalog.map(s => `${s.id} | ${s.name} | ${s.price > 0 ? fmtMoney(s.price) : 'no price'} | ${s.description || 'no description'}`).join('\n')
+    : '(no services have been set up yet)';
 
-  const prompt = `You write short, direct promotional emails for local service businesses.
+  const offerInstruction = typedOffer
+    ? `THE OWNER'S OFFER (honor any price or discount they state exactly; never change their terms): "${typedOffer}"
+If they were vague, build the best bundle you can from the catalog around what they described.`
+    : `The owner gave no offer, so propose ${focusInstructions[focus] || focusInstructions.seasonal} as a bundle built from the catalog.`;
+
+  const prompt = `You write short, high-converting promotional emails for local service businesses. The centerpiece is a VALUE STACK: the exact things the customer gets, what each is normally worth, and one bundle price.
 
 Business: ${businessName} (${industry}${city ? `, ${city}` : ''})
-Services: ${services.length ? services.join(', ') : 'various services'}
 Tone: ${tone}
 Offer ends: ${expiryStr}
 ${offerInstruction}
 ${recentSubjects.length ? `Recent subjects (do not repeat): ${recentSubjects.join(' | ')}` : ''}
 
-The email has exactly these parts, in this order, and nothing else:
-1. THE OFFER as a bold headline at the very top.
-2. A very short intro (one or two sentences).
-3. EXACTLY WHAT THEY GET: three cards, each a name plus one short line.
-4. ONE CALL TO ACTION.
+SERVICE CATALOG (id | name | normal price | description). These are the ONLY real services and prices:
+${catalogText}
 
-Brief and straight to the point. No story, no problem/solution setup, no filler, no "we hope this finds you well".
+Your job:
+1. Choose 2 to 4 services from the catalog (by id) that make a compelling bundle. Prefer services that go together (e.g. interior + exterior + an add-on). Never invent a service or a price. If the catalog is empty, return items with serviceId null.
+2. For each, write a vivid "lead" (3-7 words, the result the customer gets) and a "detail" (one sentence, 28 words or fewer) describing what is actually done, in concrete, sensory terms — what a customer of that service would expect. Stay general enough not to promise anything specific that the service name and description don't support.
+3. If the owner's offer makes one item free (a bonus), set "free": true on it.
+4. If, and only if, the owner's text states a total price (e.g. "$749") return it as ownerPrice; if it states a percentage off (e.g. "20% off") return it as ownerPercent. Otherwise null. Do not calculate or guess any dollar amounts yourself.
+5. Write three short proof cards that back up the bundle: a title (2-4 words) and one short line (10 words or fewer), each tied to something in the bundle.
+
+Brief and straight to the point. No story, no filler. Do not put dollar amounts in headline, previewText, subjectPlain, or any card.
 
 Return ONLY valid JSON (no markdown, no code fences):
 {
-  "subject": "under 50 characters, states the offer itself",
-  "previewText": "under 90 characters, adds the deadline or the key detail",
-  "headline": "the offer in 8 words or fewer, e.g. 'Big Shine. Small Price.' or '20% Off Any Full Detail'",
-  "subheadline": "one short line with the deadline, 12 words or fewer, e.g. 'This week only — ends ${expiryStr}'",
-  "intro": "one or two plain sentences, 30 words or fewer in total, saying what the offer is and who it's for",
-  "cards": [
-    { "title": "2-4 word name of one thing they get", "line": "one short line, 10 words or fewer" },
-    { "title": "...", "line": "..." },
-    { "title": "...", "line": "..." }
-  ],
+  "subject": "under 55 chars; may use the tokens {price} (bundle price) and {value} (total normal value), e.g. 'Full detail package for {price} (worth {value})'",
+  "subjectPlain": "under 50 chars, a version with no numbers and no tokens",
+  "previewText": "under 90 chars, adds the deadline, no dollar amounts",
+  "headline": "the offer in 8 words or fewer, no dollar amounts, e.g. 'Big Shine. Small Price.'",
+  "subheadline": "one short line with the deadline, e.g. 'This week only — ends ${expiryStr}'",
+  "items": [ { "serviceId": 12, "lead": "...", "detail": "...", "free": false } ],
+  "ownerPrice": null,
+  "ownerPercent": null,
+  "cards": [ { "title": "...", "line": "..." }, { "title": "...", "line": "..." }, { "title": "...", "line": "..." } ],
   "ctaText": "2-4 words, starts with a verb, e.g. 'Book Your Spot'",
   "annotations": [
     { "blockType": "offer_headline", "label": "2-4 words", "note": "One plain sentence on why leading with the offer works" },
-    { "blockType": "offer_cards", "label": "2-4 words", "note": "One plain sentence on why spelling out what they get works" },
+    { "blockType": "value_stack", "label": "2-4 words", "note": "One plain sentence on why itemizing the value works" },
+    { "blockType": "offer_cards", "label": "2-4 words", "note": "One plain sentence on why proof under the offer works" },
     { "blockType": "cta_buttons", "label": "2-4 words", "note": "One plain sentence on why a clear next step works" }
   ]
 }`;
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1200,
+    max_tokens: 1800,
     messages: [{ role: 'user', content: prompt }],
   });
   logClaudeUsage(userId, 'claude-haiku-4-5-20251001', response.usage, 'email_campaign');
@@ -351,13 +411,44 @@ Return ONLY valid JSON (no markdown, no code fences):
   const parsed = JSON.parse(jsonMatch[0]);
 
   const clip = (v, n) => String(v || '').trim().slice(0, n);
-  const subject = clip(parsed.subject, 80);
   const headline = clip(parsed.headline, 90);
-  const rawCards = (Array.isArray(parsed.cards) ? parsed.cards : [])
-    .map(c => ({ title: clip(c?.title, 50), line: clip(c?.line, 120) }))
-    .filter(c => c.title)
-    .slice(0, 3);
-  if (!subject || !headline || rawCards.length === 0) throw new Error('AI response was missing the offer or what they get');
+
+  // ── Build the value stack from REAL catalog prices ─────────────────────────────────
+  const byId = new Map(catalog.map(s => [Number(s.id), s]));
+  const seen = new Set();
+  let items = [];
+  for (const it of (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 6)) {
+    const svc = byId.get(Number(it?.serviceId));
+    if (svc && seen.has(svc.id)) continue;
+    if (!svc && catalog.length) continue; // a service the business doesn't offer: drop it
+    if (svc) seen.add(svc.id);
+    const lead = clip(it?.lead, 80) || (svc ? svc.name : '');
+    if (!lead) continue;
+    items.push({ lead, detail: clip(it?.detail, 220), value: svc && svc.price > 0 ? Number(svc.price) : 0, // A bonus is only free if the owner said so; the model doesn't get to give things away.
+    free: it?.free === true && /\b(free|complimentary|on us|no charge)\b/i.test(typedOffer) });
+  }
+  // Mixing priced and unpriced items would make the totals understate the bundle: keep priced only.
+  if (items.some(i => i.value > 0)) items = items.filter(i => i.value > 0);
+  items = items.slice(0, 4);
+  if (!clip(parsed.subject, 80) || !headline || items.length === 0) {
+    throw new Error('AI response was missing the offer or what they get');
+  }
+
+  // Numbers the owner "stated" must really appear in what they typed — the model can't
+  // conjure a price out of thin air.
+  const typedDigits = typedOffer.replace(/,/g, '');
+  const claimedPrice = Number(parsed.ownerPrice);
+  const claimedPct = Number(parsed.ownerPercent);
+  const ownerPrice = claimedPrice > 0 && new RegExp(`(^|[^\\d.])${String(claimedPrice).replace('.', '\\.')}([^\\d]|$)`).test(typedDigits) ? claimedPrice : null;
+  const ownerPercent = !ownerPrice && claimedPct >= 1 && claimedPct <= 90 && new RegExp(`(^|[^\\d])${Math.round(claimedPct)}\\s*%`).test(typedDigits) ? claimedPct : null;
+
+  const bundle = priceBundle(items, { ownerPrice, ownerPercent });
+
+  const withNumbers = bundle
+    ? String(parsed.subject || '').split('{price}').join(fmtMoney(bundle.price)).split('{value}').join(fmtMoney(bundle.totalValue))
+    : '';
+  const plainSubject = parsed.subjectPlain || String(parsed.subject || '').replace(/\{[^}]*\}/g, '').replace(/\s{2,}/g, ' ');
+  const subject = clip(withNumbers && !/[{}]/.test(withNumbers) ? withNumbers : plainSubject, 80);
 
   // One photo per card, from the business's own industry. No photo is fine: the card just
   // renders without one.
@@ -367,24 +458,27 @@ Return ONLY valid JSON (no markdown, no code fences):
     const { hero } = await fetchPexelsImages(pexelsQuery, null);
     photos = hero || [];
   } catch (e) { photos = []; }
-  const cards = rawCards.map((c, i) => ({ ...c, image: photos[i] || '' }));
+  const cards = (Array.isArray(parsed.cards) ? parsed.cards : [])
+    .map(c => ({ title: clip(c?.title, 50), line: clip(c?.line, 120) }))
+    .filter(c => c.title).slice(0, 3)
+    .map((c, i) => ({ ...c, image: photos[i] || '' }));
 
   const accent = '#f97316';
-  const cardsPlain = cards.map(c => `- ${c.title}: ${c.line}`);
-
-  // The layout is built here, not by the model: the structure is fixed (offer, intro, what
-  // you get, one action) so it can't drift into the long, confusing emails this replaces.
   const { randomUUID } = require('crypto');
   const blocks = [
     { type: 'header', content: { title: businessName, bgColor: '#1f1f1f', textColor: '#ffffff' } },
     { type: 'offer_headline', content: { title: headline, subtitle: clip(parsed.subheadline, 120), theme: 'dark', accent } },
-    clip(parsed.intro, 260) ? { type: 'intro_text', content: { text: clip(parsed.intro, 260) } } : null,
-    { type: 'offer_cards', content: { cards, alt: businessName } },
+    { type: 'value_stack', content: {
+      heading: "What you're getting", items,
+      totalValue: bundle ? bundle.totalValue : null, price: bundle ? bundle.price : null, savings: bundle ? bundle.savings : null,
+      accent,
+    } },
+    cards.length ? { type: 'offer_cards', content: { cards, alt: businessName } } : null,
     { type: 'cta_buttons', content: {
       text: clip(parsed.ctaText, 40) || 'Book Now', link: ctaLink, accent,
       secondaryText: phone ? `Call ${phone}` : '', secondaryLink: phone ? `tel:${String(phone).replace(/[^\d+]/g, '')}` : '',
     } },
-    { type: 'fine_print', content: { text: `Offer ends ${expiryStr}.` } },
+    { type: 'fine_print', content: { text: `Offer ends ${expiryStr}.${bundle ? ' Savings are based on our regular prices.' : ''}` } },
     { type: 'brand_footer', content: {
       name: businessName, address, contactEmail: config?.from_email || '', unsubscribeText: 'Unsubscribe',
     } },
@@ -394,16 +488,16 @@ Return ONLY valid JSON (no markdown, no code fences):
     headline,
     clip(parsed.subheadline, 120),
     '',
-    clip(parsed.intro, 260),
-    '',
-    ...cardsPlain,
+    "What you're getting:",
+    ...items.map(i => `- ${i.lead}${i.detail ? `: ${i.detail}` : ''}${i.value ? ` (normally ${fmtMoney(i.value)}${i.free ? ', included free' : ''})` : ''}`),
+    ...(bundle ? ['', `Total value: ${fmtMoney(bundle.totalValue)}`, `You save: ${fmtMoney(bundle.savings)}`, `Your price: ${fmtMoney(bundle.price)}`] : []),
     '',
     `${clip(parsed.ctaText, 40) || 'Book Now'}: ${ctaLink}`,
     phone ? `Or call ${phone}` : '',
     `Offer ends ${expiryStr}.`,
   ].filter((l, i, a) => !(l === '' && (i === 0 || a[i - 1] === ''))).join('\n');
 
-  const allowedAnnotations = new Set(['offer_headline', 'offer_cards', 'cta_buttons']);
+  const allowedAnnotations = new Set(['offer_headline', 'value_stack', 'offer_cards', 'cta_buttons']);
   const annotations = (Array.isArray(parsed.annotations) ? parsed.annotations : [])
     .filter(a => a && allowedAnnotations.has(a.blockType))
     .map(a => ({ blockType: a.blockType, label: clip(a.label, 40), note: clip(a.note, 200) }));
@@ -415,7 +509,7 @@ Return ONLY valid JSON (no markdown, no code fences):
     blocks,
     bodyHtml: emailBlocksToHtml(blocks),
     annotations,
-    meta: { framework: 'direct', focus },
+    meta: { framework: 'value-stack', focus },
   };
 }
 
