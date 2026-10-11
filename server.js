@@ -2603,9 +2603,9 @@ cron.schedule('0 * * * *', async () => {
         } else {
           // Manual approval mode — save as draft only, owner approves via dashboard
           await pool.query(
-            `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, status, scheduled_for, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, 'draft', NOW(), NOW())`,
-            [config.user_id, generated.subject, generated.previewText, generated.bodyHtml, generated.bodyText, JSON.stringify(generated.blocks || [])]
+            `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, annotations, status, scheduled_for, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', NOW(), NOW())`,
+            [config.user_id, generated.subject, generated.previewText, generated.bodyHtml, generated.bodyText, JSON.stringify(generated.blocks || []), JSON.stringify(generated.annotations || [])]
           );
           console.log(`📝 Draft ready for approval: user ${config.user_id} — "${generated.subject}"`);
         }

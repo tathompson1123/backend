@@ -131,6 +131,12 @@ function emailBlocksToHtml(blocks) {
       }
       case 'offer_box':
         return `  <div style="margin:0 28px 24px;background:${c.bgColor||'#f0fdf4'};border-left:4px solid ${c.borderColor||'#22c55e'};padding:16px 20px;border-radius:8px"><p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#111827">${esc(c.title||'Exclusive Offer')}</p><p style="margin:0;font-size:14px;color:#374151;line-height:1.55">${esc(c.description||'')}</p></div>`;
+      case 'offer_headline':
+        return `  <div style="padding:36px 28px 8px;text-align:center"><h2 style="margin:0 0 10px;font-size:30px;font-weight:800;color:#111827;line-height:1.2">${esc(c.title||'')}</h2>${c.subtitle ? `<p style="margin:0;font-size:16px;font-weight:600;color:#b45309;line-height:1.4">${esc(c.subtitle)}</p>` : ''}</div>`;
+      case 'offer_list': {
+        const rows = (c.items||[]).map(i => `<div style="padding:7px 0;font-size:16px;color:#1f2937;line-height:1.5"><span style="color:#16a34a;font-weight:700;margin-right:10px">&#10003;</span>${esc(i)}</div>`).join('');
+        return `  <div style="padding:20px 36px 8px"><p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280">${esc(c.heading||'What you get')}</p>${rows}</div>`;
+      }
       case 'cta_button':
         return `  <div style="padding:8px 28px 32px;text-align:center"><a href="${esc(c.link||'#')}" style="display:inline-block;background:${c.bgColor||'#111827'};color:${c.textColor||'#ffffff'};padding:14px 36px;border-radius:${c.borderRadius||'8px'};text-decoration:none;font-weight:700;font-size:16px">${esc(c.text||'Book Now')}</a></div>`;
       case 'divider':
@@ -227,119 +233,110 @@ async function generateCampaign(userId, config, offerDetails, autoRotate = false
     );
   }
 
-  // Pick framework by week number so it rotates automatically
-  const weekOfYear = Math.ceil((new Date() - new Date(new Date().getFullYear(), 0, 1)) / 604800000);
-  const framework = FRAMEWORKS[weekOfYear % FRAMEWORKS.length];
-  const frameworkInstruction = FRAMEWORK_INSTRUCTIONS[framework];
-
   const focusInstructions = {
-    seasonal: `Create a time-sensitive seasonal promotion tied to ${month}. Reference the season, weather, or upcoming holidays to make it feel urgent and relevant.`,
-    upsell: 'Create an irresistible add-on or bundle offer that upgrades customers to a higher-value service. Show the before/after value clearly.',
-    referral: 'Create a referral bonus offer — reward the customer for sending a friend. Make it feel like an exclusive thank-you for being a loyal customer.',
-    winback: 'Create a "we miss you" win-back offer for customers who haven\'t booked in a while. Give them a compelling reason to come back now.',
+    seasonal: `a time-sensitive seasonal promotion tied to ${month}`,
+    upsell: 'an add-on or bundle that upgrades a customer to a higher-value service',
+    referral: 'a referral bonus: a reward for sending a friend',
+    winback: 'a "come back" offer for customers who have not booked in a while',
   };
 
-  // Fetch a real Pexels hero image for this industry.
-  // If industry is still generic, fall back to the business name (e.g. "Thompson's Auto Detailing"
-  // contains "detail" → KEYWORD_MAP matches autoDetailing queries).
-  let heroImageUrl = '';
-  try {
-    const pexelsQuery = (industry && industry !== 'service business')
-      ? industry
-      : businessName;
-    const { hero } = await fetchPexelsImages(pexelsQuery, null);
-    // Pick a random hero from the candidates so the same photo doesn't show up
-    // in every campaign. The fetcher returns 3 hero options, all from the user's
-    // industry — any of them is a fine match.
-    heroImageUrl = hero.length > 0 ? hero[Math.floor(Math.random() * hero.length)] : '';
-  } catch (e) {
-    heroImageUrl = '';
-  }
-
-  // Expiry date: end of this week (Sunday)
+  // Offer ends this coming Sunday.
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + (7 - expiryDate.getDay()));
   const expiryStr = expiryDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
-  const offerSection = offerDetails ? [
-    offerDetails.offer    ? `Specific offer: ${offerDetails.offer}` : '',
-    offerDetails.message  ? `Message angle: ${offerDetails.message}` : '',
-    offerDetails.emotion  ? `Emotion to elicit: ${offerDetails.emotion}` : '',
-    offerDetails.ctaLink  ? `CTA link URL: ${offerDetails.ctaLink}` : '',
-  ].filter(Boolean).join('\n') : '';
+  // What the owner typed in the "describe your offer" box wins over anything we'd invent.
+  const typedOffer = String(offerDetails?.offer || '').trim().slice(0, 600);
+  const ctaLink = offerDetails?.ctaLink || config?.cta_link || '#';
 
-  const prompt = `You are a top-tier email marketer writing a weekly promotional email for ${businessName}, a ${industry} business${city ? ` in ${city}` : ''}.
+  const offerInstruction = typedOffer
+    ? `THE OFFER (written by the business owner — use it exactly, do not change the discount, price, or terms, and do not invent any): "${typedOffer}"`
+    : `No offer was specified, so propose ${focusInstructions[focus] || focusInstructions.seasonal}. Keep it believable for this business and do not quote prices you cannot know — use a percentage, a free add-on, or limited availability.`;
 
-Month: ${month}
-Services offered: ${services.length ? services.join(', ') : 'various services'}
+  const prompt = `You write short, direct promotional emails for local service businesses.
+
+Business: ${businessName} (${industry}${city ? `, ${city}` : ''})
+Services: ${services.length ? services.join(', ') : 'various services'}
 Tone: ${tone}
-Campaign focus: ${focusInstructions[focus] || focusInstructions.seasonal}
-Copywriting framework: ${frameworkInstruction}
-Offer expires: ${expiryStr}
-${offerSection ? offerSection + '\n' : ''}${recentSubjects.length ? `Recent subjects used (DO NOT repeat these concepts): ${recentSubjects.join(' | ')}` : ''}
+Offer ends: ${expiryStr}
+${offerInstruction}
+${recentSubjects.length ? `Recent subjects (do not repeat): ${recentSubjects.join(' | ')}` : ''}
 
-Write ONE high-converting weekly email. Apply the copywriting framework strictly — it should shape the flow of the entire body copy.
+The email has exactly three parts, in this order, and nothing else:
+1. THE OFFER, stated plainly at the very top.
+2. EXACTLY WHAT THEY GET: a short list of concrete things included.
+3. ONE CALL TO ACTION.
 
-SUBJECT LINE: Under 55 chars. Use a curiosity gap or open loop. No generic words like "newsletter".
-PREVIEW TEXT: 80-100 chars. Continue the curiosity hook, tease without revealing the offer fully.
+Write it brief and straight to the point. No story, no problem/solution setup, no filler, no "we hope this finds you well".
 
-Return ONLY valid JSON (no markdown, no code blocks) with this structure:
+Return ONLY valid JSON (no markdown, no code fences):
 {
-  "subject": "...",
-  "previewText": "...",
-  "bodyText": "plain text version of the full email",
+  "subject": "under 50 characters, states the offer itself",
+  "previewText": "under 90 characters, adds the deadline or the key detail",
+  "headline": "the offer in 8 words or fewer, e.g. '20% Off Any Full Detail'",
+  "subheadline": "one short line with the deadline, 12 words or fewer, e.g. 'This week only — ends ${expiryStr}'",
+  "getHeading": "2-4 words introducing the list, e.g. 'What you get'",
+  "items": ["3 or 4 concrete items, each 10 words or fewer — what's included, the saving, any bonus"],
+  "ctaText": "2-4 words, starts with a verb, e.g. 'Book Your Spot'",
   "annotations": [
-    { "blockType": "urgency_bar", "label": "Tension builder", "note": "One sentence explaining the psychological tactic used here" },
-    { "blockType": "body", "label": "Hook", "note": "One sentence on why the opening works" },
-    { "blockType": "offer_box", "label": "Anchor offer", "note": "One sentence on why this offer structure drives action" },
-    { "blockType": "cta_button", "label": "Call to action", "note": "One sentence on the action psychology used" }
-  ],
-  "blocks": [
-    { "type": "header", "content": { "title": "${businessName}", "bgColor": "#111827", "textColor": "#ffffff" } },
-    { "type": "hero_image", "content": { "src": "${heroImageUrl}", "alt": "${businessName} offer" } },
-    { "type": "urgency_bar", "content": { "text": "⏰ This offer expires ${expiryStr} — don't miss it", "bgColor": "#fef3c7", "textColor": "#92400e" } },
-    { "type": "body", "content": { "heading": "[HOOK HEADING - punchy, 1 line]", "paragraphs": ["[paragraph 1: pain point / problem]", "[paragraph 2: solution / desire]"] } },
-    { "type": "offer_box", "content": { "title": "[SPECIFIC OFFER TITLE]", "description": "[offer details, expiry, what they get]", "bgColor": "#f0fdf4", "borderColor": "#22c55e" } },
-    { "type": "cta_button", "content": { "text": "[ACTION VERB + short phrase]", "link": "${offerDetails?.ctaLink || '#'}", "bgColor": "#111827", "textColor": "#ffffff", "borderRadius": "8px" } },
-    { "type": "signoff", "content": { "text": "The ${businessName} team" } },
-    { "type": "footer", "content": { "text": "You're receiving this because you've used ${businessName} before.", "unsubscribeText": "Unsubscribe" } }
+    { "blockType": "offer_headline", "label": "2-4 words", "note": "One plain sentence on why leading with the offer works" },
+    { "blockType": "offer_list", "label": "2-4 words", "note": "One plain sentence on why spelling out what they get works" },
+    { "blockType": "cta_button", "label": "2-4 words", "note": "One plain sentence on why a single clear action works" }
   ]
-}
-
-Rules:
-- Make the body content emotionally engaging and specific to the campaign focus
-- The offer_box should include a SPECIFIC discount, free add-on, or limited availability
-- CTA button text should be action-driven (e.g. "Claim Your Spot", "Book Before ${expiryStr}", "Get 20% Off Now")
-- Keep paragraphs short (2-3 sentences max)
-- Replace ALL placeholders in brackets with real, compelling copy
-- Annotations: write short, punchy labels (2-4 words) and plain-English notes (1 sentence) that explain the copywriting tactic — no jargon`;
+}`;
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 4000,
+    max_tokens: 1200,
     messages: [{ role: 'user', content: prompt }],
   });
   logClaudeUsage(userId, 'claude-haiku-4-5-20251001', response.usage, 'email_campaign');
 
   const text = response.content[0].text.trim();
-  let json = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
-  const jsonMatch = json.match(/\{[\s\S]*\}/);
+  const jsonMatch = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim().match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON found in AI response');
   const parsed = JSON.parse(jsonMatch[0]);
 
-  // Assign unique IDs to blocks and compute bodyHtml
+  const clip = (v, n) => String(v || '').trim().slice(0, n);
+  const subject = clip(parsed.subject, 80);
+  const headline = clip(parsed.headline, 90);
+  const items = (Array.isArray(parsed.items) ? parsed.items : []).map(i => clip(i, 120)).filter(Boolean).slice(0, 4);
+  if (!subject || !headline || items.length === 0) throw new Error('AI response was missing the offer or what they get');
+
+  // The layout is built here, not by the model: the structure is fixed (offer, what you
+  // get, one button) so it can't drift into the long, confusing emails this replaces.
   const { randomUUID } = require('crypto');
-  const blocks = (parsed.blocks || []).map(b => ({ ...b, id: randomUUID().slice(0, 8) }));
-  const bodyHtml = emailBlocksToHtml(blocks);
+  const blocks = [
+    { type: 'header', content: { title: businessName, bgColor: '#111827', textColor: '#ffffff' } },
+    { type: 'offer_headline', content: { title: headline, subtitle: clip(parsed.subheadline, 120) } },
+    { type: 'offer_list', content: { heading: clip(parsed.getHeading, 40) || 'What you get', items } },
+    { type: 'cta_button', content: { text: clip(parsed.ctaText, 40) || 'Book Now', link: ctaLink, bgColor: '#111827', textColor: '#ffffff', borderRadius: '8px' } },
+    { type: 'footer', content: { text: `You're receiving this because you've used ${businessName} before.`, unsubscribeText: 'Unsubscribe' } },
+  ].map(b => ({ ...b, id: randomUUID().slice(0, 8) }));
+
+  const bodyText = [
+    headline,
+    clip(parsed.subheadline, 120),
+    '',
+    `${clip(parsed.getHeading, 40) || 'What you get'}:`,
+    ...items.map(i => `- ${i}`),
+    '',
+    `${clip(parsed.ctaText, 40) || 'Book Now'}: ${ctaLink}`,
+  ].filter((l, i, a) => l !== undefined && !(l === '' && a[i - 1] === '')).join('\n');
+
+  const allowedAnnotations = new Set(['offer_headline', 'offer_list', 'cta_button']);
+  const annotations = (Array.isArray(parsed.annotations) ? parsed.annotations : [])
+    .filter(a => a && allowedAnnotations.has(a.blockType))
+    .map(a => ({ blockType: a.blockType, label: clip(a.label, 40), note: clip(a.note, 200) }));
 
   return {
-    subject: parsed.subject,
-    previewText: parsed.previewText,
-    bodyText: parsed.bodyText,
+    subject,
+    previewText: clip(parsed.previewText, 120),
+    bodyText,
     blocks,
-    bodyHtml,
-    annotations: parsed.annotations || [],
-    meta: { framework, focus },
+    bodyHtml: emailBlocksToHtml(blocks),
+    annotations,
+    meta: { framework: 'direct', focus },
   };
 }
 
@@ -619,6 +616,25 @@ router.put('/config', authenticateToken, async (req, res) => {
   }
 });
 
+// PATCH /api/email-campaigns/auto-generate — the on/off switch at the top of the page.
+// Touches only `enabled`, so flipping it can't blank the sender name, reply-to or schedule
+// the way a full PUT of a half-loaded config could.
+router.patch('/auto-generate', authenticateToken, async (req, res) => {
+  try {
+    if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be true or false' });
+    const r = await pool.query(
+      `INSERT INTO email_campaign_configs (user_id, enabled, updated_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET enabled = $2, updated_at = NOW()
+       RETURNING enabled, auto_send`,
+      [req.user.userId, req.body.enabled]
+    );
+    res.json({ success: true, enabled: r.rows[0].enabled, auto_send: r.rows[0].auto_send });
+  } catch (e) {
+    console.error('auto-generate toggle error:', e.message);
+    res.status(500).json({ error: 'Could not update the setting' });
+  }
+});
+
 // GET /api/email-campaigns/history
 //
 // Click counts ride along so the list can show engagement without a request per row.
@@ -767,6 +783,14 @@ router.get('/current-draft', authenticateToken, async (req, res) => {
       [userId]
     );
     const config = configResult.rows[0] || {};
+
+    // Auto-generate is the owner's switch. When it's off nothing is drafted behind their
+    // back: they describe an offer and press Generate. (No config row yet counts as on, so
+    // a first visit still produces a draft.)
+    if (config.enabled === false) {
+      return res.json({ campaign: null, generated: false, autoGenerate: false });
+    }
+
     // Pass saved CTA link as offerDetails so it applies to the button
     const offerDetails = config.cta_link ? { ctaLink: config.cta_link } : null;
 
@@ -964,14 +988,21 @@ router.post('/preview', authenticateToken, async (req, res) => {
       [req.user.userId]
     );
     const config = configResult.rows[0] || {};
-    const { offerDetails } = req.body;
+    const rawOffer = req.body?.offerDetails || {};
+    const offerDetails = {
+      offer: typeof rawOffer.offer === 'string' ? rawOffer.offer.trim().slice(0, 600) : '',
+      ctaLink: typeof rawOffer.ctaLink === 'string' && /^https?:\/\//i.test(rawOffer.ctaLink.trim()) ? rawOffer.ctaLink.trim() : (config.cta_link || ''),
+    };
     const campaign = await generateCampaign(req.user.userId, config, offerDetails);
 
-    // Auto-save as draft
+    // Whatever draft was showing is superseded by this one.
+    await pool.query("UPDATE email_campaigns SET status = 'replaced' WHERE user_id = $1 AND status = 'draft'", [req.user.userId]);
+
+    // Auto-save as draft (annotations included, or the dashboard would discard it on reload)
     const saved = await pool.query(
-      `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, status, scheduled_for, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'draft', NOW(), NOW()) RETURNING id`,
-      [req.user.userId, campaign.subject, campaign.previewText, campaign.bodyHtml, campaign.bodyText, JSON.stringify(campaign.blocks)]
+      `INSERT INTO email_campaigns (user_id, subject, preview_text, body_html, body_text, blocks, annotations, status, scheduled_for, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', NOW(), NOW()) RETURNING id`,
+      [req.user.userId, campaign.subject, campaign.previewText, campaign.bodyHtml, campaign.bodyText, JSON.stringify(campaign.blocks), JSON.stringify(campaign.annotations || [])]
     );
 
     res.json({ success: true, campaign, draftId: saved.rows[0].id });
