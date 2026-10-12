@@ -19,6 +19,9 @@ if (process.env.SENDGRID_API_KEY) {
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 const FROM_EMAIL = { name: 'SORCE', email: TRANSACTIONAL_EMAIL };
 
+pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_sent_at TIMESTAMPTZ')
+  .catch(e => console.error('email_verification_sent_at migration error:', e.message));
+
 // POST - Signup
 router.post('/signup', async (req, res) => {
   try {
@@ -70,7 +73,7 @@ const result = await pool.query(
     const verificationCode = String(require('crypto').randomInt(100000, 1000000));
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 15 minutes
     await pool.query(
-      `UPDATE users SET email_verification_code = $1, email_verification_expires_at = $2 WHERE id = $3`,
+      `UPDATE users SET email_verification_code = $1, email_verification_expires_at = $2, email_verification_sent_at = NOW() WHERE id = $3`,
       [verificationCode, expiresAt, user.id]
     );
 
@@ -399,22 +402,47 @@ router.post('/resend-verification', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    const result = await pool.query(`SELECT email, email_verified FROM users WHERE id = $1`, [userId]);
+    // The verify page calls this on load with { auto: true }. Signup has already sent a
+    // code, so that call must not send another: exactly one email per signup, and another
+    // only when the person presses "send again".
+    const auto = req.body && req.body.auto === true;
+    const result = await pool.query(
+      `SELECT email, email_verified, email_verification_code, email_verification_expires_at, email_verification_sent_at
+         FROM users WHERE id = $1`, [userId]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     if (result.rows[0].email_verified) {
       console.log(`ℹ️ Resend-verification skipped for user ${userId} — already verified in DB`);
       return res.json({ success: true, already_verified: true });
     }
-    console.log(`📧 Sending verification email to user ${userId} (${result.rows[0].email})`);
+    const row = result.rows[0];
+    const stillValid = !!row.email_verification_code && row.email_verification_expires_at
+      && new Date(row.email_verification_expires_at) > new Date();
 
+    // Automatic call: only send if there is no usable code yet (e.g. an older account that
+    // never got one). Otherwise the one from signup is already on its way.
+    if (auto && stillValid) {
+      return res.json({ success: true, already_sent: true });
+    }
 
-    const email = result.rows[0].email;
+    // Manual "send again": allowed, but not faster than every 30 seconds, so a double-click
+    // or a stuck button can't fire a burst of emails.
+    const sentAt = row.email_verification_sent_at ? new Date(row.email_verification_sent_at).getTime() : 0;
+    const waitMs = 30000 - (Date.now() - sentAt);
+    if (!auto && waitMs > 0) {
+      return res.json({ success: true, throttled: true, retryAfter: Math.ceil(waitMs / 1000) });
+    }
+    console.log(`📧 Sending verification email to user ${userId} (${row.email})`);
+
+    const email = row.email;
     verifyAttempts.delete(userId);
-    const code = String(require('crypto').randomInt(100000, 1000000));
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    // Re-send the same code while it still has a good while left, so an earlier email that
+    // was slow to arrive still works; mint a new one only when it's near or past expiry.
+    const reuse = stillValid && new Date(row.email_verification_expires_at).getTime() - Date.now() > 10 * 60 * 1000;
+    const code = reuse ? row.email_verification_code : String(require('crypto').randomInt(100000, 1000000));
+    const expiresAt = reuse ? new Date(row.email_verification_expires_at) : new Date(Date.now() + 60 * 60 * 1000);
 
     await pool.query(
-      `UPDATE users SET email_verification_code = $1, email_verification_expires_at = $2 WHERE id = $3`,
+      `UPDATE users SET email_verification_code = $1, email_verification_expires_at = $2, email_verification_sent_at = NOW() WHERE id = $3`,
       [code, expiresAt, userId]
     );
 
@@ -436,7 +464,7 @@ router.post('/resend-verification', authenticateToken, async (req, res) => {
     }).then(() => console.log(`✅ Verification code resent to ${email}`))
       .catch(emailErr => console.error('⚠️ Resend email failed:', emailErr.message, emailErr.response?.body?.errors || ''));
 
-    res.json({ success: true });
+    res.json({ success: true, sent: true, retryAfter: 30 });
   } catch (error) {
     console.error('Error resending verification:', error.message);
     res.status(500).json({ error: 'Failed to resend code' });

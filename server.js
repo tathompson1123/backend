@@ -143,6 +143,10 @@ app.use('/api/backlinks', backlinksRoutes);
 const sorceAssistantRoutes = require('./routes/sorce-assistant');
 app.use('/api/sorce-assistant', sorceAssistantRoutes);
 
+// First-party analytics for the /learnmore marketing page (public event intake + admin summary)
+const landingRoutes = require('./routes/landing-analytics');
+app.use('/api/landing', embedCors, landingRoutes);
+
 const trackRoutes = require('./routes/track');
 app.use('/api/track', embedCors, trackRoutes);
 

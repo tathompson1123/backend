@@ -81,6 +81,7 @@ const analyticsLoginLimiter = makeLimiter(15 * 60 * 1000, 10, 'Too many login at
 const chatLimiter = makeLimiter(60 * 1000, 20, 'You are sending messages too quickly. Please slow down.');
 const publicBookingLimiter = makeLimiter(60 * 60 * 1000, 6, 'Too many booking attempts from this network. Please try again later.');
 const publicPaymentLimiter = makeLimiter(15 * 60 * 1000, 10, 'Too many payment attempts. Please try again later.');
+const landingEventLimiter = makeLimiter(60 * 1000, 60, 'Too many events');
 const adminSecretLimiter = makeLimiter(15 * 60 * 1000, 10, 'Too many attempts');
 
 // Per-USER limiter for endpoints that call Claude. The IP limiter doesn't help here: Pro
@@ -209,6 +210,9 @@ function setupMiddleware(app) {
   app.use('/api/discovery/team/accept-invite', analyticsLoginLimiter);
   app.use('/api/auth/admin', adminSecretLimiter);
   app.use('/api/voice/sync-webhooks', adminSecretLimiter);
+
+  // Landing-page analytics intake: generous for a real visitor, tight for a script
+  app.use('/api/landing/event', landingEventLimiter);
 
   // Anonymous endpoints that spend money
   app.use('/api/chat/message', chatLimiter);
