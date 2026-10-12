@@ -265,9 +265,9 @@ router.post('/create', authenticateToken, async (req, res) => {
         subtotal, tax_rate, tax_amount, total_amount, fee_total, fees,
         customer_name, customer_email,
         customer_phone, customer_notes, status, employee_id, group_id,
-        source, referral_source
+        source, referral_source, customer_address
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
       RETURNING *`,
       [
         userId, customerIdToUse, bookingNumber, bookingDate, startTime, endTime,
@@ -275,7 +275,10 @@ router.post('/create', authenticateToken, async (req, res) => {
         totals.feeTotal, totals.feeLines.length > 0 ? JSON.stringify(totals.feeLines) : null,
         contact.name, contact.email,
         contact.phone, customerNotes || null, 'confirmed', assignedEmployeeId, groupId || null,
-        'manual', (referralSource && String(referralSource).trim()) || null
+        'manual', (referralSource && String(referralSource).trim()) || null,
+        // The job/customer address typed on the form. It was never written on create, so a
+        // booking made with a non-default address came back without it.
+        (typeof customerInfo?.address === 'string' && customerInfo.address.trim()) || null
       ]
     );
 
