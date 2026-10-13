@@ -5,7 +5,7 @@ const { sendBookingEmails } = require('../utils/bookingEmail');
 const { sendPushToOwner } = require('../utils/pushNotifications');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
 const { getSquareClient, findOrCreateSquareCustomer, saveCardOnFile } = require('../utils/squareCardOnFile');
-const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { TRANSACTIONAL_EMAIL, SUPPORT_EMAIL } = require('../utils/emailFrom');
 const { escapeHtml: esc } = require('../utils/escapeHtml');
 const { queueAutoDraftInvoice } = require('../utils/autoDraftInvoice');
 const { plainEmail } = require('../utils/emailLayout');
@@ -1383,6 +1383,26 @@ router.post('/discovery/lead', async (req, res) => {
        VALUES ($1, $2, $3, $6, $4, 'learnmore_quiz', 'new', $5)`,
       [name.trim(), email?.trim() ? email.trim().toLowerCase() : null, phone.trim(), businessType || null, notes, company?.trim() ? company.trim().slice(0, 160) : null]
     );
+
+    // Tell the team a new prospect came in (non-blocking; the visitor never waits on it).
+    if (process.env.SENDGRID_API_KEY) {
+      const sgMail = require('@sendgrid/mail');
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      sgMail.send({
+        to: SUPPORT_EMAIL,
+        from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
+        subject: `New lead: ${name.trim()}${company?.trim() ? ` (${company.trim()})` : ''}`,
+        html: plainEmail({
+          paragraphs: [
+            'Someone just submitted their information on the /learnmore page and is now watching the video.',
+            `<strong>Name:</strong> ${esc(name.trim())}`,
+            `<strong>Business:</strong> ${esc(company?.trim() || '—')}`,
+            `<strong>Phone:</strong> ${esc(phone.trim())}`,
+            ...(notes ? [esc(notes).split('\n').join('<br>')] : []),
+          ],
+        }),
+      }).catch(e => console.error('New lead notification error:', e.message));
+    }
 
     res.json({ success: true });
   } catch (err) {
