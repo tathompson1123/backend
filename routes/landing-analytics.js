@@ -9,10 +9,10 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { requireAnalytics, requireAdmin } = require('../config/analyticsAuth');
 
-const PAGES = new Set(['learnmore']);
+const PAGES = new Set(['learnmore', 'book-a-call']);
 const EVENTS = new Set([
   'pageview', 'click', 'scroll', 'video_play', 'video_progress', 'video_complete',
-  'quiz_open', 'quiz_step', 'quiz_submit', 'call_booked',
+  'quiz_open', 'quiz_step', 'quiz_abandon', 'book_day', 'book_slot', 'book_form_start', 'quiz_submit', 'call_booked',
 ]);
 const BOT_UA = /bot|crawl|spider|slurp|preview|facebookexternalhit|headless|lighthouse|pingdom|uptime|monitor|curl|wget|python-requests|node-fetch|go-http/i;
 const MAX_EVENTS_PER_REQUEST = 20;
@@ -102,7 +102,7 @@ router.get('/summary', requireAnalytics, requireAdmin, async (req, res) => {
     const since = `NOW() - INTERVAL '${days} days'`; // days is whitelisted above
     const base = `FROM landing_events WHERE page = $1 AND created_at > ${since}`;
 
-    const [totals, funnel, clicks, scroll, sources, campaigns, daily, devices, video] = await Promise.all([
+    const [totals, funnel, clicks, scroll, sources, campaigns, daily, devices, video, quizReached, quizAbandon] = await Promise.all([
       pool.query(
         `SELECT COUNT(DISTINCT visitor_id) FILTER (WHERE event = 'pageview')::int AS visitors,
                 COUNT(*) FILTER (WHERE event = 'pageview')::int AS pageviews,
@@ -115,7 +115,10 @@ router.get('/summary', requireAnalytics, requireAdmin, async (req, res) => {
                 COUNT(DISTINCT visitor_id) FILTER (WHERE event = 'click')::int AS clicked,
                 COUNT(DISTINCT visitor_id) FILTER (WHERE event = 'quiz_open')::int AS quiz_started,
                 COUNT(DISTINCT visitor_id) FILTER (WHERE event = 'quiz_submit')::int AS quiz_done,
-                COUNT(DISTINCT visitor_id) FILTER (WHERE event = 'call_booked')::int AS booked
+                COUNT(DISTINCT visitor_id) FILTER (WHERE event = 'call_booked')::int AS booked,
+                COUNT(DISTINCT visitor_id) FILTER (WHERE event = 'book_day')::int AS day_picked,
+                COUNT(DISTINCT visitor_id) FILTER (WHERE event = 'book_slot')::int AS slot_picked,
+                COUNT(DISTINCT visitor_id) FILTER (WHERE event = 'book_form_start')::int AS form_started
            ${base}`, [page]),
       pool.query(
         `SELECT target, COUNT(*)::int AS clicks, COUNT(DISTINCT visitor_id)::int AS people
@@ -149,13 +152,34 @@ router.get('/summary', requireAnalytics, requireAdmin, async (req, res) => {
       pool.query(
         `SELECT target, COUNT(DISTINCT visitor_id)::int AS people
            ${base} AND event = 'video_progress' GROUP BY target`, [page]),
+      // Quiz steps people reached (quiz_step target is the step number, 1-4).
+      pool.query(
+        `SELECT target, COUNT(DISTINCT visitor_id)::int AS people
+           ${base} AND event = 'quiz_step' GROUP BY target ORDER BY target`, [page]),
+      // Where people left the quiz / calendar without booking. Anyone who went on to book
+      // a call in the same period is not counted as having left.
+      pool.query(
+        `SELECT a.target, COUNT(DISTINCT a.visitor_id)::int AS people
+           FROM landing_events a
+          WHERE a.page = $1 AND a.created_at > ${since} AND a.event = 'quiz_abandon' AND a.target IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM landing_events b
+               WHERE b.visitor_id = a.visitor_id AND b.page = a.page
+                 AND b.event = 'call_booked' AND b.created_at > ${since})
+          GROUP BY a.target ORDER BY people DESC`, [page]),
     ]);
 
     const f = funnel.rows[0];
     res.json({
       success: true, page, days,
       totals: totals.rows[0],
-      funnel: [
+      funnel: page === 'book-a-call' ? [
+        { key: 'visited', label: 'Visited the page', people: f.visited },
+        { key: 'day_picked', label: 'Picked a day', people: f.day_picked },
+        { key: 'slot_picked', label: 'Picked a time', people: f.slot_picked },
+        { key: 'form_started', label: 'Started the details form', people: f.form_started },
+        { key: 'booked', label: 'Booked a call', people: f.booked },
+      ] : [
         { key: 'visited', label: 'Visited the page', people: f.visited },
         { key: 'scrolled', label: 'Scrolled halfway', people: f.scrolled },
         { key: 'played', label: 'Played the video', people: f.played },
@@ -167,6 +191,8 @@ router.get('/summary', requireAnalytics, requireAdmin, async (req, res) => {
       clicks: clicks.rows,
       scroll: scroll.rows,
       video: video.rows,
+      quizReached: quizReached.rows,
+      quizAbandon: quizAbandon.rows,
       sources: sources.rows,
       campaigns: campaigns.rows,
       daily: daily.rows,
