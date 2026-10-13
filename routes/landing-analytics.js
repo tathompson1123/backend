@@ -9,7 +9,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { requireAnalytics, requireAdmin } = require('../config/analyticsAuth');
 
-const PAGES = new Set(['learnmore', 'book-a-call']);
+const PAGES = new Set(['learnmore', 'book-a-call', 'watch']);
 const EVENTS = new Set([
   'pageview', 'click', 'scroll', 'video_play', 'video_progress', 'video_complete',
   'quiz_open', 'quiz_step', 'quiz_abandon', 'book_day', 'book_slot', 'book_form_start', 'quiz_submit', 'call_booked',

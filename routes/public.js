@@ -1370,7 +1370,6 @@ router.post('/discovery/lead', async (req, res) => {
   try {
     const { name, email, phone, businessType, struggle, revenue } = req.body;
     if (!name?.trim())  return res.status(400).json({ error: 'Please enter your name' });
-    if (!email?.trim()) return res.status(400).json({ error: 'Please enter your email' });
     if (!phone?.trim()) return res.status(400).json({ error: 'Please enter your phone number' });
 
     const notes = [
@@ -1382,7 +1381,7 @@ router.post('/discovery/lead', async (req, res) => {
     await pool.query(
       `INSERT INTO sorce_leads (name, email, phone, company, industry, source, status, notes)
        VALUES ($1, $2, $3, NULL, $4, 'learnmore_quiz', 'new', $5)`,
-      [name.trim(), email.trim().toLowerCase(), phone.trim(), businessType || null, notes]
+      [name.trim(), email?.trim() ? email.trim().toLowerCase() : null, phone.trim(), businessType || null, notes]
     );
 
     res.json({ success: true });
