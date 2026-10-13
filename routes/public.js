@@ -1368,7 +1368,7 @@ router.post('/discovery/book', async (req, res) => {
 // the team can follow up and get one booked.
 router.post('/discovery/lead', async (req, res) => {
   try {
-    const { name, email, phone, businessType, struggle, revenue } = req.body;
+    const { name, email, phone, company, businessType, struggle, revenue } = req.body;
     if (!name?.trim())  return res.status(400).json({ error: 'Please enter your name' });
     if (!phone?.trim()) return res.status(400).json({ error: 'Please enter your phone number' });
 
@@ -1380,8 +1380,8 @@ router.post('/discovery/lead', async (req, res) => {
 
     await pool.query(
       `INSERT INTO sorce_leads (name, email, phone, company, industry, source, status, notes)
-       VALUES ($1, $2, $3, NULL, $4, 'learnmore_quiz', 'new', $5)`,
-      [name.trim(), email?.trim() ? email.trim().toLowerCase() : null, phone.trim(), businessType || null, notes]
+       VALUES ($1, $2, $3, $6, $4, 'learnmore_quiz', 'new', $5)`,
+      [name.trim(), email?.trim() ? email.trim().toLowerCase() : null, phone.trim(), businessType || null, notes, company?.trim() ? company.trim().slice(0, 160) : null]
     );
 
     res.json({ success: true });
