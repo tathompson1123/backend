@@ -20,7 +20,7 @@ const PLAN_ORDER = { basic: 1, pro: 2, scale: 3 };
 // The amount below is only a fallback for a Scale sub created without a quote, and
 // nothing self-serve charges it — see SELF_SERVE_PLANS.
 const PLAN_AMOUNTS = {
-  pro:   parseInt(process.env.PLAN_AMOUNT_PRO   || '25000', 10),
+  pro:   parseInt(process.env.PLAN_AMOUNT_PRO   || '19900', 10),
   scale: parseInt(process.env.PLAN_AMOUNT_SCALE || '17595', 10),
 };
 
@@ -40,7 +40,7 @@ function planFromAmount(amount) {
     [PLAN_AMOUNTS.scale]: 'scale',
     9900: 'pro', 9995: 'pro',   // legacy Pro pricing, before $195
     19500: 'pro',   // Pro before the $250 move — still resolves until migrated
-    25000: 'pro',
+    25000: 'pro',   // Pro at $250, before the move to $199
     17500: 'scale', 17595: 'scale',
     2995: 'basic',  // legacy only — no longer sold
   };
@@ -654,7 +654,7 @@ router.get('/usage', authenticateToken, async (req, res) => {
     // Chat comp can also be granted per-account via the ai_chat_unlimited DB flag
     // (mirrors the enforcement in routes/chat.js so the dashboard matches reality).
     const chatUnlimited = unlimited || userRow.rows[0]?.ai_chat_unlimited === true;
-    const SMS_LIMITS = { free: 0, basic: 100, pro: 100, scale: 500, expert: 200 };
+    const SMS_LIMITS = { free: 0, basic: 100, pro: 500, scale: 500, expert: 200 };
     const CHAT_LIMITS = { free: 0, basic: 200, pro: 99999, scale: 99999, expert: 500 };
     // Monthly AI chat API cost limits by plan (in USD)
     const CHAT_COST_LIMITS = { free: 0, basic: 0, pro: null, scale: null, expert: 6.00 };

@@ -2051,7 +2051,7 @@ cron.schedule('*/30 * * * * *', async () => {
         const userPlan = planRow.rows[0]?.plan;
         const unlimited = smsCampaignRoutes.isUnlimitedSms(planRow.rows[0]?.email);
         if (!unlimited) {
-          const SMS_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
+          const SMS_LIMITS = { scale: 500, pro: 500, expert: 200, basic: 100 };
           const smsLimit = SMS_LIMITS[userPlan] || 0;
           if (smsLimit === 0) {
             // Free plan — no SMS
@@ -2202,7 +2202,7 @@ cron.schedule('*/60 * * * * *', async () => {
         const userPlan = planRow.rows[0]?.plan;
         const unlimited = smsCampaignRoutes.isUnlimitedSms(planRow.rows[0]?.email);
         if (!unlimited) {
-          const SMS_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
+          const SMS_LIMITS = { scale: 500, pro: 500, expert: 200, basic: 100 };
           const smsLimit = SMS_LIMITS[userPlan] || 0;
           if (smsLimit === 0) {
             await pool.query("UPDATE review_requests SET status = 'skipped' WHERE id = $1", [req.id]);
@@ -2381,7 +2381,7 @@ cron.schedule('*/10 * * * *', async () => {
             // the thing that pushes an account over its plan limit.
             const unlimited = smsCampaignRoutes.isUnlimitedSms(req.owner_email);
             if (!unlimited) {
-              const SMS_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
+              const SMS_LIMITS = { scale: 500, pro: 500, expert: 200, basic: 100 };
               const smsLimit = SMS_LIMITS[req.plan] || 0;
               const used = parseInt((await pool.query(
                 `SELECT COUNT(*) FROM sms_messages

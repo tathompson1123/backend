@@ -20,7 +20,7 @@ const SMS_MAX_LENGTH = 320;
 
 // Monthly SMS allowance per plan (mirrors the lead-agent enforcement in server.js).
 // Campaign sends count against the same monthly pool as agent texts.
-const SMS_PLAN_LIMITS = { scale: 500, pro: 100, expert: 200, basic: 100 };
+const SMS_PLAN_LIMITS = { scale: 500, pro: 500, expert: 200, basic: 100 };
 
 // Accounts exempt from the monthly SMS cap and the per-blast cap — shared with the chat
 // and email exemptions (single source of truth in utils/unlimitedAccounts).

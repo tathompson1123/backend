@@ -1,18 +1,19 @@
-// Moves every active Pro subscription from the old price to $250/mo.
+// Moves every active Pro subscription from the old price to the current Pro price
+// (PLAN_AMOUNT_PRO, $199/mo by default; the filename is from the earlier $250 move).
 //
 //   node scripts/migrate-pro-to-250.js           # DRY RUN: lists what would change
 //   node scripts/migrate-pro-to-250.js --apply   # actually updates Stripe
 //
 // This changes what real customers are charged, so it never runs on its own and
 // defaults to a dry run. Prorations are off: the new price applies from the next
-// renewal, not mid-cycle. Trialing subs are updated too, so they convert at $250.
+// renewal, not mid-cycle. Trialing subs are updated too, so they convert at the new price.
 // Scale (custom-quoted) subscriptions are skipped by design.
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { Pool } = require('pg');
 
-const NEW_AMOUNT = parseInt(process.env.PLAN_AMOUNT_PRO || '25000', 10);
+const NEW_AMOUNT = parseInt(process.env.PLAN_AMOUNT_PRO || '19900', 10);
 const APPLY = process.argv.includes('--apply');
 
 const pool = new Pool({
