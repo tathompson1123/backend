@@ -837,6 +837,17 @@ async function processInboundSms({ From, To, Body, MessageSid, NumMedia, MediaUr
 
   setTimeout(async () => {
     try {
+      // The reply waits 15-45s to look human. If the lead agent was switched off in that
+      // window, it stays quiet. (This only governs lead replies — review texts go through
+      // their own path and don't depend on this setting.)
+      const stillOn = await pool.query(
+        'SELECT config FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
+        [user.id, 'lead_form']
+      );
+      if (stillOn.rows[0]?.config?.enabled === false) {
+        console.log(`🤫 Lead agent turned off before the queued reply to ${From} — not sending`);
+        return;
+      }
       await sendSMS(From, outgoingMessage, user.id);
       await pool.query(
         `INSERT INTO sms_messages

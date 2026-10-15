@@ -932,11 +932,15 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 router.post('/:leadId/send-sms', authenticateToken, requirePlan('pro'), async (req, res) => {
   try {
     const { leadId } = req.params;
-    const { message } = req.body;
     const userId = req.user.userId;
-    
+    // The text goes out exactly as typed (trimmed) — no AI rewrite on a manual reply.
+    const message = typeof req.body.message === 'string' ? req.body.message.trim() : '';
+
     if (!message) {
       return res.status(400).json({ error: 'Message required' });
+    }
+    if (message.length > 1600) {
+      return res.status(400).json({ error: 'Message must be under 1600 characters' });
     }
     
     const leadResult = await pool.query(
@@ -970,13 +974,20 @@ router.post('/:leadId/send-sms', authenticateToken, requirePlan('pro'), async (r
     // Store outgoing message
     await pool.query(
       `INSERT INTO sms_messages 
-       (lead_id, user_id, direction, to_number, message, twilio_message_sid, created_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+       (lead_id, user_id, direction, to_number, message, twilio_message_sid, status, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, 'sent', CURRENT_TIMESTAMP)`,
       [leadId, userId, 'outgoing', lead.phone, message, smsResult.messageSid]
     );
     
+    // A reply moves a lead that was still waiting on the first text to "contacted" (which
+    // also stops the automatic opener from going out on top of it). A lead that's further
+    // along — booked, won, anything else — keeps the status it has.
     await pool.query(
-      `UPDATE leads SET status = 'contacted_sms', last_contact_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      `UPDATE leads
+          SET status = CASE WHEN status IN ('new', 'sms_pending', 'sms_failed', 'sms_limit_reached')
+                            THEN 'contacted_sms' ELSE status END,
+              last_contact_at = CURRENT_TIMESTAMP
+        WHERE id = $1`,
       [leadId]
     );
     
