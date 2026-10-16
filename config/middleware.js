@@ -79,6 +79,10 @@ const makeLimiter = (windowMs, max, error) => rateLimit({
 });
 const analyticsLoginLimiter = makeLimiter(15 * 60 * 1000, 10, 'Too many login attempts, please try again later');
 const chatLimiter = makeLimiter(60 * 1000, 20, 'You are sending messages too quickly. Please slow down.');
+// Hourly ceilings on top of the per-minute one above. The per-minute limit alone still lets
+// one address chat around the clock, and a fresh conversation resets the per-conversation cap.
+const chatMessageHourLimiter = makeLimiter(60 * 60 * 1000, 100, 'You have sent a lot of messages. Please contact the business directly.');
+const chatStartHourLimiter = makeLimiter(60 * 60 * 1000, 10, 'Too many chats started from this network. Please contact the business directly.');
 const publicBookingLimiter = makeLimiter(60 * 60 * 1000, 6, 'Too many booking attempts from this network. Please try again later.');
 const publicPaymentLimiter = makeLimiter(15 * 60 * 1000, 10, 'Too many payment attempts. Please try again later.');
 const landingEventLimiter = makeLimiter(60 * 1000, 60, 'Too many events');
@@ -215,8 +219,8 @@ function setupMiddleware(app) {
   app.use('/api/landing/event', landingEventLimiter);
 
   // Anonymous endpoints that spend money
-  app.use('/api/chat/message', chatLimiter);
-  app.use('/api/chat/start', chatLimiter);
+  app.use('/api/chat/message', chatLimiter, chatMessageHourLimiter);
+  app.use('/api/chat/start', chatLimiter, chatStartHourLimiter);
   app.use('/api/public/discovery/book', publicBookingLimiter);
   app.use('/api/public/discovery/lead', publicBookingLimiter);
   app.use('/api/public/bookings/payment-setup', publicPaymentLimiter);

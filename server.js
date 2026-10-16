@@ -795,6 +795,12 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS outcome VARCHAR(20) DEFAULT 'no_booking'`);
     await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS customer_name VARCHAR(200)`);
     await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL`);
+    // Abuse controls on the public chat: strikes per conversation, when one was cut off,
+    // and when the owner was last told the daily AI-cost ceiling was hit.
+    await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS abuse_strikes INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS abuse_reasons TEXT`);
+    await pool.query(`ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS abuse_blocked_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_daily_limit_notified_at TIMESTAMPTZ`);
     console.log('✅ chat_conversations.outcome + customer_name + last_booking_id columns verified');
   } catch (e) {
     console.warn('⚠️ Could not add chat_conversations columns:', e.message);

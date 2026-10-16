@@ -8,7 +8,8 @@ const { sendPushToOwner } = require('../utils/pushNotifications');
 const { logClaudeUsage } = require('../utils/claudeUsage');
 const { isUnlimitedAccount } = require('../utils/unlimitedAccounts');
 const sgMail = require('@sendgrid/mail');
-const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { TRANSACTIONAL_EMAIL, SUPPORT_EMAIL } = require('../utils/emailFrom');
+const { assessMessage, MAX_USER_MESSAGES_PER_CONVERSATION, BLOCK_AT, BURST_WINDOW_S } = require('../utils/chatAbuse');
 const { fetchDefaultDescriptions } = require('../utils/bookingServices');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
@@ -542,13 +543,70 @@ router.post('/message', async (req, res) => {
     if (!Number.isInteger(userId) || userId <= 0 || !message || message.length > 2000) {
       return res.status(400).json({ error: 'Invalid message' });
     }
-    const convoRow = await pool.query('SELECT user_id FROM chat_conversations WHERE id = $1', [Number(conversationId)]);
+    const convoRow = await pool.query(
+      'SELECT user_id, abuse_strikes, abuse_blocked_at FROM chat_conversations WHERE id = $1',
+      [Number(conversationId)]
+    );
     if (!convoRow.rows[0] || Number(convoRow.rows[0].user_id) !== userId) {
       return res.status(403).json({ error: 'Conversation does not belong to this business' });
     }
+    const convo = convoRow.rows[0];
+    // Cut off: a conversation that's hit the message cap, or that was stopped for abuse,
+    // gets no more AI replies and is pointed at the business's own contact details.
+    const CUT_OFF = { silent: true, reply: "Thanks for chatting — please contact us directly and we'll take it from here." };
+    if (convo.abuse_blocked_at) return res.json(CUT_OFF);
     const msgCount = await pool.query("SELECT COUNT(*)::int AS n FROM chat_messages WHERE conversation_id = $1 AND role = 'user'", [Number(conversationId)]);
-    if (msgCount.rows[0].n >= 60) {
-      return res.json({ silent: true, reply: "Thanks for chatting — please contact us directly and we'll take it from here." });
+    if (msgCount.rows[0].n >= MAX_USER_MESSAGES_PER_CONVERSATION) {
+      return res.json(CUT_OFF);
+    }
+
+    // Abuse check: scores this message against what the visitor already sent in this
+    // conversation. Strikes add up; at BLOCK_AT the conversation is stopped for good.
+    const prior = await pool.query(
+      `SELECT content, created_at FROM chat_messages
+        WHERE conversation_id = $1 AND role = 'user' ORDER BY created_at DESC LIMIT 10`,
+      [Number(conversationId)]
+    );
+    const burstCutoff = Date.now() - BURST_WINDOW_S * 1000;
+    const verdict = assessMessage(
+      message,
+      prior.rows.map(r => r.content),
+      prior.rows.filter(r => new Date(r.created_at).getTime() > burstCutoff).length
+    );
+    if (verdict.strikes > 0) {
+      const strikes = (convo.abuse_strikes || 0) + verdict.strikes;
+      const blocked = strikes >= BLOCK_AT;
+      await pool.query(
+        `UPDATE chat_conversations
+            SET abuse_strikes = $1,
+                abuse_reasons = LEFT(COALESCE(abuse_reasons || ', ', '') || $2, 500),
+                abuse_blocked_at = CASE WHEN $3 THEN NOW() ELSE abuse_blocked_at END
+          WHERE id = $4`,
+        [strikes, verdict.reasons.join(', '), blocked, Number(conversationId)]
+      );
+      console.warn(`🚩 Chat abuse: convo ${conversationId} (business ${userId}) strikes=${strikes} [${verdict.reasons.join(', ')}]${blocked ? ' — BLOCKED' : ''}`);
+      // Keep the message for the transcript, but a prompt-injection attempt never reaches the model.
+      const deflect = verdict.reasons.includes('prompt_injection');
+      if (blocked || deflect) {
+        await pool.query(
+          `INSERT INTO chat_messages (conversation_id, role, content, created_at) VALUES ($1, 'user', $2, CURRENT_TIMESTAMP)`,
+          [conversationId, message]
+        );
+        if (blocked) {
+          if (process.env.SENDGRID_API_KEY) {
+            sgMail.send({
+              to: SUPPORT_EMAIL,
+              from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
+              subject: `Chat blocked for abuse — business ${userId}, conversation ${conversationId}`,
+              text: `A website chat conversation was cut off after ${strikes} strikes (${verdict.reasons.join(', ')}).
+Business: ${userId}
+Conversation: ${conversationId}`,
+            }).catch(e => console.error('Chat abuse email error:', e.message));
+          }
+          return res.json(CUT_OFF);
+        }
+        return res.json({ reply: "I can only help with questions about our services, pricing and booking. What can I help you with?" });
+      }
     }
 
     // Save user message
@@ -623,6 +681,41 @@ router.post('/message', async (req, res) => {
         }
         // silent: true tells new widgets to render nothing; reply is a graceful
         // fallback for old widgets still baked into already-deployed sites.
+        return res.json({
+          silent: true,
+          limitReached: true,
+          reply: "Thanks for reaching out — please contact us directly and we'll get right back to you.",
+        });
+      }
+    }
+
+    // Daily AI-spend ceiling per business, for every plan: "unlimited" chat still shouldn't mean
+    // a bot (or a runaway loop) can run up the bill. Rolling 24h of this business's chat usage.
+    const DAILY_CHAT_COST_LIMIT = parseFloat(process.env.CHAT_DAILY_COST_LIMIT_USD || '5');
+    if (DAILY_CHAT_COST_LIMIT > 0) {
+      const dayCost = await pool.query(
+        `SELECT COALESCE(SUM(cost_usd), 0) AS total FROM claude_usage
+          WHERE user_id = $1 AND endpoint = 'chat' AND created_at > NOW() - INTERVAL '24 hours'`,
+        [userId]
+      );
+      if (parseFloat(dayCost.rows[0].total) >= DAILY_CHAT_COST_LIMIT) {
+        const dayNotified = await pool.query(
+          `UPDATE users SET chat_daily_limit_notified_at = NOW()
+            WHERE id = $1 AND (chat_daily_limit_notified_at IS NULL OR chat_daily_limit_notified_at < NOW() - INTERVAL '24 hours')
+            RETURNING email, business_name`,
+          [userId]
+        );
+        if (dayNotified.rows[0] && process.env.SENDGRID_API_KEY) {
+          const o = dayNotified.rows[0];
+          const body = `The AI chat on ${o.business_name || 'your website'} has paused for today after reaching its daily usage limit ($${DAILY_CHAT_COST_LIMIT.toFixed(2)}). This protects against abuse and unusually heavy traffic, and it resumes on its own within 24 hours. If this looks like normal visitors, reply and we'll raise the limit.`;
+          sgMail.send({
+            to: o.email || SUPPORT_EMAIL,
+            ...(o.email ? { bcc: SUPPORT_EMAIL } : {}),
+            from: { name: 'SORCE', email: TRANSACTIONAL_EMAIL },
+            subject: 'Your AI chat paused for today (daily limit reached)',
+            text: body,
+          }).catch(e => console.error('Chat daily limit email error:', e.message));
+        }
         return res.json({
           silent: true,
           limitReached: true,
