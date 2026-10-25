@@ -100,11 +100,12 @@ async function createRecurringPlan(userId, input) {
 
   let cardLinkSent = false;
   let cardLinkError = null;
+  let usesSavedCard = false;
   if (servicePlan) {
-    try { await planBilling.sendPlanCardLink(planId); cardLinkSent = true; }
+    try { usesSavedCard = (await planBilling.sendPlanCardLink(planId)).usesSavedCard; cardLinkSent = true; }
     catch (e) { cardLinkError = e.message; console.error('[recurring] card link failed:', e.message); }
   }
-  return { planId, bookingsCreated, located: !!geo, cardLinkSent, cardLinkError, billed: !!servicePlan };
+  return { planId, bookingsCreated, located: !!geo, cardLinkSent, cardLinkError, usesSavedCard, billed: !!servicePlan };
 }
 
 /**

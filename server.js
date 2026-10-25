@@ -3037,6 +3037,9 @@ const { topUpAllPlans } = require('./utils/recurringBookings');
 cron.schedule('30 3 * * *', () => {
   topUpAllPlans().catch(e => console.error('Recurring top-up cron error:', e.message));
 });
+// Also once shortly after boot, so a plan whose visits failed to generate (or a deploy that
+// fixed a generation bug) catches up now instead of at 3:30am. Idempotent.
+setTimeout(() => topUpAllPlans().catch(e => console.error('Recurring startup top-up error:', e.message)), 30000);
 
 // Start server
 app.listen(PORT, () => {

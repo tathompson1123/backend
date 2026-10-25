@@ -15,7 +15,7 @@
 const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { getSquareClient } = require('./squareCardOnFile');
-const { FREQUENCIES } = require('./recurringBookings');
+const { FREQUENCIES, toYmd } = require('./recurringBookings');
 const { getTimezoneForBusiness } = require('./zipToTimezone');
 const { TRANSACTIONAL_EMAIL } = require('./emailFrom');
 const { escapeHtml: esc } = require('./escapeHtml');
@@ -141,7 +141,7 @@ async function startSubscription(recurringPlanId) {
 
   const { client, locationId } = await getSquareClient(rp.user_id);
   const { today, tz } = await businessToday(rp.user_id);
-  const first = String(rp.start_date).slice(0, 10);
+  const first = toYmd(rp.start_date);
   const startDate = first > today ? first : today;
 
   try {
@@ -230,8 +230,46 @@ function termsFor(rp, sp) {
     priceText: `$${(cents(sp.price) / 100).toFixed(2)}`,
     per,
     frequencyLabel: f.label,
-    firstChargeDate: String(rp.start_date).slice(0, 10),
+    firstChargeDate: toYmd(rp.start_date),
   };
+}
+
+/**
+ * A card this customer already saved with the business, if Square still has it enabled.
+ * Matched by email/phone across ALL the owner's customer rows (booking creation can leave
+ * several rows per person), newest first. Never throws: no card, or Square unreachable,
+ * just means "ask for a new card".
+ * @returns {Promise<{cardId, squareCustomerId, brand, last4}|null>}
+ */
+async function findSavedCard(userId, { email, phone }) {
+  try {
+    const r = await pool.query(
+      `SELECT square_customer_id, square_card_id,
+              COALESCE(square_card_brand, card_brand) AS brand,
+              COALESCE(square_card_last_four, card_last_four) AS last4
+       FROM customers
+       WHERE user_id = $1 AND square_card_id IS NOT NULL AND square_customer_id IS NOT NULL
+         AND ((email IS NOT NULL AND email <> '' AND LOWER(email) = LOWER($2))
+           OR (phone IS NOT NULL AND phone <> '' AND phone = $3))
+       ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`,
+      [userId, email || '', phone || '']
+    );
+    const row = r.rows[0];
+    if (!row) return null;
+    const { client } = await getSquareClient(userId);
+    const resp = await client.cardsApi.retrieveCard(row.square_card_id);
+    const card = resp.result.card;
+    if (!card || card.enabled === false || card.customerId !== row.square_customer_id) return null;
+    return {
+      cardId: card.id,
+      squareCustomerId: row.square_customer_id,
+      brand: card.cardBrand || row.brand || 'Card',
+      last4: card.last4 || row.last4 || '',
+    };
+  } catch (e) {
+    console.warn('[plan-billing] saved card check skipped:', e.message);
+    return null;
+  }
 }
 
 /** Create a card link for a plan and email it. Returns the link. */
@@ -256,6 +294,9 @@ async function sendPlanCardLink(recurringPlanId) {
   );
   const link = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/card-on-file/${tok.rows[0].token}`;
   const t = termsFor(rp, sp);
+  // Already has a card with this business: no card entry, but still an explicit yes to the
+  // recurring charge — that older card was saved on "we won't charge it" terms.
+  const saved = await findSavedCard(rp.user_id, { email: rp.customer_email, phone: rp.customer_phone });
 
   if (process.env.SENDGRID_API_KEY) {
     const sgMail = require('@sendgrid/mail');
@@ -264,24 +305,28 @@ async function sendPlanCardLink(recurringPlanId) {
       to: rp.customer_email,
       from: { name: rp.business_name || 'Your Service Provider', email: TRANSACTIONAL_EMAIL },
       replyTo: rp.owner_email ? { email: rp.owner_email } : undefined,
-      subject: `Finish setting up your ${t.planName} plan — ${rp.business_name || 'us'}`,
+      subject: saved
+        ? `Please confirm your ${t.planName} plan — ${rp.business_name || 'us'}`
+        : `Finish setting up your ${t.planName} plan — ${rp.business_name || 'us'}`,
       html: plainEmail({
         greeting: `Hi ${esc(rp.customer_name)},`,
         paragraphs: [
           `You're set up for the <strong>${esc(t.planName)}</strong> plan with <strong>${esc(rp.business_name || 'us')}</strong> (${esc(t.frequencyLabel)}), starting ${esc(fmtLong(t.firstChargeDate))}.`,
-          `To start it, please save a card. <strong>This card will be charged ${esc(t.priceText)} per ${t.per}</strong>, beginning ${esc(fmtLong(t.firstChargeDate))} and then once every ${t.per} until you cancel. That one ${t.per}ly charge covers every visit on the plan — you are never charged per visit.`,
+          saved
+            ? `We have your ${esc(saved.brand)} card ending in ${esc(saved.last4)} on file, so there's nothing to enter again. Please confirm to start the plan: <strong>that card will be charged ${esc(t.priceText)} per ${t.per}</strong>, beginning ${esc(fmtLong(t.firstChargeDate))} and then once every ${t.per} until you cancel. That one ${t.per}ly charge covers every visit on the plan — you are never charged per visit.`
+            : `To start it, please save a card. <strong>This card will be charged ${esc(t.priceText)} per ${t.per}</strong>, beginning ${esc(fmtLong(t.firstChargeDate))} and then once every ${t.per} until you cancel. That one ${t.per}ly charge covers every visit on the plan — you are never charged per visit.`,
         ],
-        action: { label: 'Save a card and start my plan', url: link },
+        action: { label: saved ? 'Confirm and start my plan' : 'Save a card and start my plan', url: link },
         after: [`That link expires in 7 days. To pause or cancel at any time, just contact ${esc(rp.business_name || 'us')}.`],
         signature: esc(rp.business_name || ''),
       }),
     });
   }
   await pool.query("UPDATE recurring_plans SET billing_status = 'awaiting_card' WHERE id = $1 AND billing_status IN ('none','awaiting_card','failed')", [rp.id]);
-  return { link };
+  return { link, usesSavedCard: !!saved };
 }
 
 module.exports = {
   squareError, ensureSquareVariation, startSubscription, changeSubscription,
-  syncBillingStatuses, sendPlanCardLink, termsFor, cents,
+  syncBillingStatuses, sendPlanCardLink, termsFor, cents, findSavedCard,
 };

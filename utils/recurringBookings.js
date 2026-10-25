@@ -36,8 +36,20 @@ const HORIZON_DAYS = 90;
 const MAX_OCCURRENCES_PER_RUN = 60;
 
 // ── Date math on 'YYYY-MM-DD' strings, in UTC so server timezone can't shift a day ──
+/**
+ * 'YYYY-MM-DD' from whatever the database handed back. node-postgres returns DATE columns
+ * as a Date at LOCAL midnight, so read it with local getters; strings pass straight through.
+ * (toYmd(date) yields "Mon Nov 02" — never do that.)
+ */
+function toYmd(v) {
+  if (v instanceof Date) {
+    return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;
+  }
+  return String(v).slice(0, 10);
+}
+
 function parseYmd(s) {
-  const [y, m, d] = String(s).slice(0, 10).split('-').map(Number);
+  const [y, m, d] = toYmd(s).split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d));
 }
 function fmtYmd(dt) {
@@ -53,7 +65,7 @@ function addDays(ymd, n) {
 function occurrenceDate(anchorYmd, frequency, n) {
   const f = FREQUENCIES[frequency];
   if (!f) throw new Error(`Unknown frequency: ${frequency}`);
-  if (n === 0) return String(anchorYmd).slice(0, 10);
+  if (n === 0) return toYmd(anchorYmd);
   if (f.days) return addDays(anchorYmd, f.days * n);
 
   const anchor = parseYmd(anchorYmd);
@@ -74,7 +86,7 @@ function occurrenceDate(anchorYmd, frequency, n) {
       for (const k of pair) {
         const d = nthWeekday(year, month, weekday, k);
         // n=0 is the anchor itself (handled above), so count only slots after it.
-        if (d <= String(anchorYmd).slice(0, 10)) continue;
+        if (d <= toYmd(anchorYmd)) continue;
         seen++;
         if (seen === n) return d;
       }
@@ -273,9 +285,9 @@ async function generateForPlan(planId, { todayOverride } = {}) {
   const taxRes = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [plan.user_id]);
   const ctx = { taxRate: parseFloat(taxRes.rows[0]?.default_tax_rate || 0) };
 
-  const anchor = String(plan.start_date).slice(0, 10);
-  const endDate = plan.end_date ? String(plan.end_date).slice(0, 10) : null;
-  const skipped = new Set((plan.skipped_dates || []).map(d => String(d).slice(0, 10)));
+  const anchor = toYmd(plan.start_date);
+  const endDate = plan.end_date ? toYmd(plan.end_date) : null;
+  const skipped = new Set((plan.skipped_dates || []).map(d => toYmd(d)));
 
   let created = 0;
   let futureSeen = 0;
@@ -330,7 +342,7 @@ async function clearUpcoming(planId, userId, fromYmd) {
 }
 
 module.exports = {
-  FREQUENCIES, HORIZON_DAYS,
+  FREQUENCIES, HORIZON_DAYS, toYmd,
   occurrenceDate, todayInTz, addDays,
   geocodeAddress, findOrCreateCustomer,
   generateForPlan, topUpAllPlans, clearUpcoming, pickEmployee,

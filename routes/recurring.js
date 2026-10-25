@@ -5,7 +5,7 @@ const { authenticateToken } = require('../config/middleware');
 const { validateCustomerContact } = require('../utils/customerContact');
 const { normalizeServiceList, resolveBookingServices } = require('../utils/bookingServices');
 const {
-  FREQUENCIES, occurrenceDate, todayInTz, geocodeAddress, findOrCreateCustomer,
+  FREQUENCIES, occurrenceDate, todayInTz, geocodeAddress, findOrCreateCustomer, toYmd,
   generateForPlan, clearUpcoming,
 } = require('../utils/recurringBookings');
 const planBilling = require('../utils/planBilling');
@@ -68,7 +68,7 @@ router.get('/', authenticateToken, async (req, res) => {
         serviceNames = resolved.map(s => s.name);
         perVisit = resolved.reduce((sum, s) => sum + s.price, 0);
       } catch { /* a deleted service shouldn't break the whole list */ }
-      const startDow = new Date(`${String(p.start_date).slice(0, 10)}T00:00:00Z`).getUTCDay();
+      const startDow = new Date(`${toYmd(p.start_date)}T00:00:00Z`).getUTCDay();
       out.push({
         id: p.id,
         customer_id: p.customer_id,
@@ -82,8 +82,8 @@ router.get('/', authenticateToken, async (req, res) => {
         frequency_label: FREQUENCIES[p.frequency]?.label || p.frequency,
         weekday: startDow,
         start_time: p.start_time,
-        start_date: String(p.start_date).slice(0, 10),
-        end_date: p.end_date ? String(p.end_date).slice(0, 10) : null,
+        start_date: toYmd(p.start_date),
+        end_date: p.end_date ? toYmd(p.end_date) : null,
         status: p.status,
         notes: p.notes,
         employee_id: p.employee_id,
@@ -151,7 +151,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     // Re-anchor on the next real visit when the cadence changes, so "monthly" -> "every
     // 2 months" counts from the upcoming visit and not from a first visit long ago.
-    let startDate = String(plan.start_date).slice(0, 10);
+    let startDate = toYmd(plan.start_date);
     if (b.startDate) {
       if (b.startDate < today) return res.status(400).json({ error: 'Next visit cannot be in the past' });
       startDate = b.startDate;

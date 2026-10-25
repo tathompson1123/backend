@@ -1189,7 +1189,10 @@ router.get('/card-on-file/:token', async (req, res) => {
       }
       const sp = (await pool.query('SELECT * FROM service_plans WHERE id = $1', [pt.service_plan_id])).rows[0];
       const planBilling = require('../utils/planBilling');
+      const planRec = (await pool.query('SELECT customer_email, customer_phone, user_id FROM recurring_plans WHERE id = $1', [pt.rp_id])).rows[0];
+      const savedCard = await planBilling.findSavedCard(planRec.user_id, { email: planRec.customer_email, phone: planRec.customer_phone });
       return res.json({
+        savedCard: savedCard ? { brand: savedCard.brand, last4: savedCard.last4 } : null,
         squareAppId: process.env.SQUARE_APPLICATION_ID,
         squareEnvironment: process.env.SQUARE_ENVIRONMENT || 'production',
         businessName: pt.business_name,
@@ -1238,8 +1241,8 @@ router.get('/card-on-file/:token', async (req, res) => {
 router.post('/card-on-file/:token/save', async (req, res) => {
   try {
     const { token } = req.params;
-    const { sourceId } = req.body;
-    if (!sourceId) return res.status(400).json({ error: 'sourceId required' });
+    const { sourceId, useSavedCard } = req.body;
+    if (!sourceId && !useSavedCard) return res.status(400).json({ error: 'sourceId required' });
 
     // Membership plan: save the card, then start the Square subscription with it.
     const planRow = await pool.query(
@@ -1254,14 +1257,24 @@ router.post('/card-on-file/:token/save', async (req, res) => {
       const planBilling = require('../utils/planBilling');
       if (rp.square_subscription_id) return res.status(410).json({ error: 'Your plan is already set up.' });
 
-      const { client, locationId } = await getSquareClient(rp.user_id);
-      const squareCustomerId = await findOrCreateSquareCustomer(client, {
-        name: rp.customer_name, email: rp.customer_email, phone: rp.customer_phone,
-      });
-      const { cardId, cardBrand, lastFour } = await saveCardOnFile(client, { sourceId, squareCustomerId, locationId });
+      let squareCustomerId, cardId, cardBrand, lastFour;
+      if (useSavedCard) {
+        // They confirmed the card already on file (shown to them by brand + last 4).
+        const saved = await planBilling.findSavedCard(rp.user_id, { email: rp.customer_email, phone: rp.customer_phone });
+        if (!saved) return res.status(409).json({ error: 'We could not find your saved card. Please enter a card instead.' });
+        ({ squareCustomerId, cardId } = saved);
+        cardBrand = saved.brand;
+        lastFour = saved.last4;
+      } else {
+        const { client, locationId } = await getSquareClient(rp.user_id);
+        squareCustomerId = await findOrCreateSquareCustomer(client, {
+          name: rp.customer_name, email: rp.customer_email, phone: rp.customer_phone,
+        });
+        ({ cardId, cardBrand, lastFour } = await saveCardOnFile(client, { sourceId, squareCustomerId, locationId }));
+      }
 
       await pool.query('UPDATE recurring_plans SET square_customer_id = $1, square_card_id = $2 WHERE id = $3', [squareCustomerId, cardId, rp.id]);
-      if (rp.customer_id) {
+      if (rp.customer_id && !useSavedCard) {
         await pool.query(
           `UPDATE customers SET square_customer_id = $1, square_card_id = $2,
            square_card_brand = $3, square_card_last_four = $4, updated_at = NOW() WHERE id = $5`,
