@@ -339,13 +339,14 @@ router.post('/public/:publicId/submit', async (req, res) => {
     // Owner notification (non-blocking). Everything below came from an anonymous visitor.
     const { escapeHtml: esc } = require('../utils/escapeHtml');
     const textSafe = require('../utils/textSafe');
+    const { phoneActionsHtml } = require('../utils/leadContactLinks');
     if (process.env.SENDGRID_API_KEY) {
       pool.query('SELECT email, business_name FROM users WHERE id = $1', [form.user_id])
         .then(o => {
           const owner = o.rows[0];
           if (!owner?.email) return;
           const rows = [`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;width:120px;">Name</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(name)}</td></tr>`];
-          if (phone) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Phone</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(phone)}</td></tr>`);
+          if (phone) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Phone</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(phone)}${phoneActionsHtml(phone)}</td></tr>`);
           if (email) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Email</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(email)}</td></tr>`);
           if (service) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;">Service</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(service)}</td></tr>`);
           if (message) rows.push(`<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;vertical-align:top;">Message</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(message)}</td></tr>`);

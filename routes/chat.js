@@ -179,6 +179,7 @@ async function getAvailableSlotsForDate(userId, serviceId, bookingDate, duration
 
 const { escapeHtml } = require('../utils/escapeHtml');
 const { plainEmail } = require('../utils/emailLayout');
+const { phoneActionsHtml } = require('../utils/leadContactLinks');
 
 async function sendAttentionEmail({ userId, customerName, customerPhone, conversationId }) {
   if (!process.env.SENDGRID_API_KEY) return;
@@ -225,7 +226,7 @@ async function sendAttentionEmail({ userId, customerName, customerPhone, convers
         ],
         details: [
           { label: 'Name', value: escapeHtml(customerName) },
-          { label: 'Phone', value: escapeHtml(customerPhone) },
+          { label: 'Phone', value: `${escapeHtml(customerPhone)}${customerPhone ? ` &mdash; ${phoneActionsHtml(customerPhone, { style: 'inline' })}` : ''}` },
         ],
         after: [
           transcriptHtml ? `<strong>Conversation transcript</strong>${transcriptHtml}` : '',

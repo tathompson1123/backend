@@ -11,6 +11,7 @@ const { queueAutoDraftInvoice } = require('../utils/autoDraftInvoice');
 const { plainEmail } = require('../utils/emailLayout');
 const { fetchDefaultDescriptions } = require('../utils/bookingServices');
 const rateLimit = require('express-rate-limit');
+const { phoneActionsHtml } = require('../utils/leadContactLinks');
 const { FREQUENCIES } = require('../utils/recurringBookings');
 
 // All routes are public (no auth). businessId = user_id.
@@ -1607,9 +1608,6 @@ router.post('/discovery/lead', async (req, res) => {
     if (process.env.SENDGRID_API_KEY) {
       const sgMail = require('@sendgrid/mail');
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-      // Tap-to-text / tap-to-call: href rebuilt from digits only, never the raw input.
-      const phoneDigits = phone.replace(/D/g, '');
-      const phoneHref = phoneDigits.length === 10 ? `+1${phoneDigits}` : `+${phoneDigits}`;
       sgMail.send({
         to: SUPPORT_EMAIL,
         from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
@@ -1619,7 +1617,7 @@ router.post('/discovery/lead', async (req, res) => {
             'Someone just submitted their information on the /learnmore page and is now watching the video.',
             `<strong>Name:</strong> ${esc(name.trim())}`,
             `<strong>Business:</strong> ${esc(company?.trim() || '—')}`,
-            `<strong>Phone:</strong> ${esc(phone.trim())}<br><a href="sms:${phoneHref}" style="display:inline-block;margin-top:8px;margin-right:8px;padding:6px 14px;border-radius:6px;background:#1d4ed8;color:#ffffff;font-weight:600;text-decoration:none;">💬 Text</a><a href="tel:${phoneHref}" style="display:inline-block;margin-top:8px;padding:6px 14px;border-radius:6px;background:#16a34a;color:#ffffff;font-weight:600;text-decoration:none;">📞 Call</a>`,
+            `<strong>Phone:</strong> ${esc(phone.trim())}<br>${phoneActionsHtml(phone.trim(), { style: 'inline' })}`,
             ...(notes ? [esc(notes).split('\n').join('<br>')] : []),
           ],
         }),

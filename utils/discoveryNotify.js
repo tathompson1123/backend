@@ -305,6 +305,7 @@ async function sendRepBookingEmail(call, rep) {
   if (!rep?.email) throw new Error('No rep email to notify');
   const { escapeHtml: esc } = require('./escapeHtml');
   const { plainEmail } = require('./emailLayout');
+const { phoneActionsHtml } = require('./leadContactLinks');
   const { ownerAlertReplyTo } = require('./emailFrom');
 
   // The rep reads this in their own zone, which is the business zone; the prospect's
@@ -315,7 +316,7 @@ async function sendRepBookingEmail(call, rep) {
 
   const details = [
     { label: 'Name', value: esc(call.name) },
-    { label: 'Phone', value: esc(call.phone) },
+    { label: 'Phone', value: `${esc(call.phone)}${call.phone ? ` &mdash; ${phoneActionsHtml(call.phone, { style: 'inline' })}` : ''}` },
     { label: 'Email', value: esc(call.email) },
     call.company ? { label: 'Company', value: esc(call.company) } : null,
     { label: 'When', value: esc(repWhen) },

@@ -208,24 +208,13 @@ router.post('/public/:userId', async (req, res) => {
     // is an anonymous form, and the same text lands in the owner's inbox as HTML.
     const { escapeHtml: esc } = require('../utils/escapeHtml');
     const textSafe = require('../utils/textSafe');
+    const { phoneActionsHtml } = require('../utils/leadContactLinks');
     if (process.env.SENDGRID_API_KEY) {
       pool.query('SELECT email, business_name FROM users WHERE id = $1', [userId])
         .then(async ownerRes => {
           const owner = ownerRes.rows[0];
           if (!owner?.email) return;
-          // Tap-to-call / tap-to-text. The number is whatever a stranger typed, so the href is
-          // rebuilt from digits only (never the raw string) and the shown text stays escaped.
-          const phoneDigits = String(cPhone).replace(/D/g, '');
-          const phoneHref = phoneDigits.length === 10 ? `+1${phoneDigits}`
-            : phoneDigits.length === 11 && phoneDigits[0] === '1' ? `+${phoneDigits}`
-            : phoneDigits ? `+${phoneDigits}` : '';
-          const btn = 'display:inline-block;padding:6px 14px;border-radius:6px;font-weight:600;font-size:0.85rem;text-decoration:none;margin-right:8px;';
-          const phoneCell = phoneHref
-            ? `${esc(cPhone)}<div style="margin-top:8px;">
-                 <a href="sms:${phoneHref}" style="${btn}background:#1d4ed8;color:#ffffff;">💬 Text</a>
-                 <a href="tel:${phoneHref}" style="${btn}background:#16a34a;color:#ffffff;">📞 Call</a>
-               </div>`
-            : esc(cPhone);
+          const phoneCell = `${esc(cPhone)}${phoneActionsHtml(cPhone)}`;
           const row = (label, value, extra = '') =>
             `<tr><td style="padding:8px 12px;background:#f8f9fa;font-weight:600;width:120px;${extra}">${label}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${value}</td></tr>`;
           await sgMail.send({
