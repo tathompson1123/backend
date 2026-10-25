@@ -31,6 +31,9 @@ const DEFAULT_CONFIG = {
   showPrices: true,
   showDurations: true,
   accentColor: null,
+  // Offer one-time (main) services online / offer membership plans online.
+  showMainServices: true,
+  showPlans: true,
   // Legacy compat
   requirePayment: false,
   depositPercent: null

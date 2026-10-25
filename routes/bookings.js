@@ -739,6 +739,16 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
 
     // Null out FK references before deleting
+    // Deleting one visit of a recurring plan means "skip this one", not "regenerate it
+    // tomorrow night" — remember the slot so the plan's top-up leaves it alone.
+    await pool.query(
+      `UPDATE recurring_plans p
+       SET skipped_dates = array_append(p.skipped_dates, b.recurring_occurrence_date)
+       FROM bookings b
+       WHERE b.id = $1 AND b.user_id = $2 AND b.recurring_plan_id = p.id
+         AND b.recurring_occurrence_date IS NOT NULL`,
+      [id, userId]
+    );
     await pool.query('DELETE FROM booking_items WHERE booking_id = $1', [id]);
     await pool.query('UPDATE sms_messages SET booking_id = NULL WHERE booking_id = $1', [id]);
 

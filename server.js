@@ -82,6 +82,8 @@ const analyticsRoutes = require('./routes/analytics');
 const { router: discoveryRoutes } = require('./routes/discovery');
 const internalBillingRoutes = require('./routes/internal-billing');
 const bookingRoutes = require('./routes/bookings');
+const recurringRoutes = require('./routes/recurring');
+const servicePlanRoutes = require('./routes/service-plans');
 const customerRoutes = require('./routes/customers');
 const leadRoutes = require('./routes/leads');
 const serviceRoutes = require('./routes/services');
@@ -106,6 +108,8 @@ const publicRoutes = require('./routes/public');
 // Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/recurring', recurringRoutes);
+app.use('/api/service-plans', servicePlanRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/public', embedCors, publicRoutes);
 app.use('/api/leads/public', embedCors); // CORS for embed form submissions
@@ -1993,6 +1997,70 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
   } catch (e) {
     console.warn('⚠️ Could not verify card on file schema:', e.message);
   }
+
+  // Recurring bookings: plans + the link from each generated booking back to its plan.
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS recurring_plans (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+      customer_name TEXT NOT NULL,
+      customer_email TEXT,
+      customer_phone TEXT,
+      customer_address TEXT,
+      lat NUMERIC,
+      lng NUMERIC,
+      frequency VARCHAR(20) NOT NULL,
+      start_date DATE NOT NULL,
+      end_date DATE,
+      start_time VARCHAR(5) NOT NULL,
+      employee_id INTEGER,
+      group_id INTEGER,
+      services JSONB NOT NULL,
+      notes TEXT,
+      status VARCHAR(20) NOT NULL DEFAULT 'active',
+      skipped_dates DATE[] NOT NULL DEFAULT ARRAY[]::date[],
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_recurring_plans_user ON recurring_plans(user_id, status)');
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS recurring_plan_id INTEGER REFERENCES recurring_plans(id) ON DELETE SET NULL');
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS recurring_occurrence_date DATE');
+    await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_bookings_recurring_slot ON bookings(recurring_plan_id, recurring_occurrence_date) WHERE recurring_plan_id IS NOT NULL');
+    // Membership plans (the catalog) + billing state on each customer's plan.
+    await pool.query(`CREATE TABLE IF NOT EXISTS service_plans (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT,
+      frequency VARCHAR(20) NOT NULL,
+      price NUMERIC(10,2) NOT NULL,
+      services JSONB NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT true,
+      show_online BOOLEAN NOT NULL DEFAULT true,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      square_plan_id TEXT,
+      square_plan_variation_id TEXT,
+      square_price_cents INTEGER,
+      square_cadence TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_service_plans_user ON service_plans(user_id, active)');
+    await pool.query('ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS service_plan_id INTEGER REFERENCES service_plans(id) ON DELETE SET NULL');
+    await pool.query('ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS price_cents INTEGER');
+    await pool.query("ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS billing_status VARCHAR(20) NOT NULL DEFAULT 'none'");
+    await pool.query('ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS billing_error TEXT');
+    await pool.query('ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS billing_start_date DATE');
+    await pool.query('ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS square_customer_id TEXT');
+    await pool.query('ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS square_card_id TEXT');
+    await pool.query('ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS square_subscription_id TEXT');
+    await pool.query('ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS square_plan_variation_id TEXT');
+    await pool.query('ALTER TABLE card_on_file_tokens ADD COLUMN IF NOT EXISTS recurring_plan_id INTEGER REFERENCES recurring_plans(id) ON DELETE CASCADE');
+    console.log('✅ Recurring bookings schema verified');
+  } catch (e) {
+    console.warn('⚠️ Could not verify recurring bookings schema:', e.message);
+  }
 })();
 
 // ── SMS processing cron job ──────────────────────────────
@@ -2960,6 +3028,12 @@ cron.schedule('0 3 * * *', async () => {
   } catch (e) {
     console.error('Ad spend sync cron error:', e.message);
   }
+});
+
+// ── Recurring bookings — keep ~90 days of visits on the schedule ──────────────
+const { topUpAllPlans } = require('./utils/recurringBookings');
+cron.schedule('30 3 * * *', () => {
+  topUpAllPlans().catch(e => console.error('Recurring top-up cron error:', e.message));
 });
 
 // Start server

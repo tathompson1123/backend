@@ -10,6 +10,8 @@ const { escapeHtml: esc } = require('../utils/escapeHtml');
 const { queueAutoDraftInvoice } = require('../utils/autoDraftInvoice');
 const { plainEmail } = require('../utils/emailLayout');
 const { fetchDefaultDescriptions } = require('../utils/bookingServices');
+const rateLimit = require('express-rate-limit');
+const { FREQUENCIES } = require('../utils/recurringBookings');
 
 // All routes are public (no auth). businessId = user_id.
 
@@ -195,7 +197,9 @@ router.get('/booking-widget-config', async (req, res) => {
         payment: { title: 'Confirm & Pay', subtitle: '' },
         confirmation: { title: 'Booking Confirmed!', subtitle: '' }
       },
-      requirePayment: false, depositPercent: null, showPrices: true, showDurations: true, accentColor: null
+      requirePayment: false, depositPercent: null, showPrices: true, showDurations: true, accentColor: null,
+      // One-time (main) services and membership plans can each be hidden from online booking.
+      showMainServices: true, showPlans: true
     };
 
     const savedConfig = configResult.rows.length > 0 ? configResult.rows[0].config : {};
@@ -277,6 +281,110 @@ router.get('/business-info', async (req, res) => {
 });
 
 // GET /api/public/availability?businessId=...&serviceIds=...&date=...
+// GET /api/public/plans?businessId=... — membership plans offered online.
+router.get('/plans', async (req, res) => {
+  try {
+    const { businessId } = req.query;
+    if (!businessId) return res.status(400).json({ error: 'businessId required' });
+    const r = await pool.query(
+      `SELECT id, name, description, frequency, price, services FROM service_plans
+       WHERE user_id = $1 AND active = true AND show_online = true ORDER BY sort_order, created_at`,
+      [businessId]
+    );
+    const svcIds = [...new Set(r.rows.flatMap(p => [...(p.services?.mains || []), ...(p.services?.addons || [])].map(x => x.id)))];
+    const names = svcIds.length
+      ? (await pool.query('SELECT id, name, duration_hours FROM services WHERE id = ANY($1::int[]) AND user_id = $2', [svcIds, businessId])).rows
+      : [];
+    const byId = new Map(names.map(n => [n.id, n]));
+    res.json({
+      plans: r.rows.map(p => {
+        const f = FREQUENCIES[p.frequency];
+        const mains = (p.services?.mains || []).map(x => byId.get(x.id)).filter(Boolean);
+        const addons = (p.services?.addons || []).map(x => byId.get(x.id)).filter(Boolean);
+        return {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          frequency_label: f?.label || p.frequency,
+          price: Number(p.price),
+          billing_period: f?.cadence === 'ANNUAL' ? 'year' : f?.cadence === 'QUARTERLY' ? 'quarter' : 'month',
+          service_ids: mains.map(m => m.id),
+          addon_ids: addons.map(a => a.id),
+          service_names: [...mains, ...addons].map(s => s.name),
+          duration_hours: [...mains, ...addons].reduce((sum, s) => sum + (parseFloat(s.duration_hours) || 0), 0),
+        };
+      }),
+    });
+  } catch (e) {
+    console.error('Public plans error:', e.message);
+    res.json({ plans: [] });
+  }
+});
+
+// POST /api/public/plans/signup — a customer picks a membership online. Nothing is charged
+// here: it books the first visit, puts the recurring visits on the schedule, and emails a
+// card link. The Square subscription only starts once they save a card from that link.
+const planSignupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 6, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many sign-up attempts. Please try again later.' },
+});
+router.post('/plans/signup', planSignupLimiter, async (req, res) => {
+  try {
+    const { businessId, servicePlanId, startDate, startTime, customerInfo, customerNotes, employeeId, groupId } = req.body;
+    if (!businessId || !servicePlanId || !startDate || !startTime || !customerInfo?.name || !customerInfo?.email) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    const planCreator = require('../utils/createRecurringPlan');
+
+    const cfgRow = await pool.query('SELECT config FROM booking_widget_configs WHERE user_id = $1', [businessId]);
+    if (cfgRow.rows[0]?.config?.showPlans === false) {
+      return res.status(403).json({ error: 'Membership plans are not available online.' });
+    }
+    const sp = (await pool.query(
+      'SELECT * FROM service_plans WHERE id = $1 AND user_id = $2 AND active = true AND show_online = true',
+      [servicePlanId, businessId]
+    )).rows[0];
+    if (!sp) return res.status(404).json({ error: 'That plan is no longer available' });
+
+    // One pending sign-up per person per plan: this form emails whatever address it is given.
+    const dup = await pool.query(
+      `SELECT 1 FROM recurring_plans WHERE user_id = $1 AND service_plan_id = $2
+         AND LOWER(customer_email) = LOWER($3) AND status = 'active'
+         AND billing_status IN ('awaiting_card','active') LIMIT 1`,
+      [businessId, sp.id, customerInfo.email]
+    );
+    if (dup.rows.length) {
+      return res.status(409).json({ error: 'You already have this plan. Check your email for the card link, or contact us.' });
+    }
+
+    await planCreator.assertFirstVisitAvailable(Number(businessId), sp, startDate, startTime);
+    const result = await planCreator.createRecurringPlan(Number(businessId), {
+      servicePlanId: sp.id, startDate, startTime, notes: customerNotes,
+      employeeId: employeeId || null, groupId: groupId || null,
+      customerInfo: {
+        name: customerInfo.name, email: customerInfo.email, phone: customerInfo.phone, address: customerInfo.address,
+      },
+    });
+    const planBilling = require('../utils/planBilling');
+    res.json({
+      success: true,
+      cardLinkSent: result.cardLinkSent,
+      plan: planBilling.termsFor({ start_date: startDate }, sp),
+    });
+  } catch (e) {
+    if (e.name === 'Error' && e.status === undefined) {
+      console.error('Public plan signup error:', e.message);
+      return res.status(500).json({ error: 'Something went wrong. Please try again.' });
+    }
+    // Owner-facing detail (like "reconnect Square") is not for a customer's screen.
+    if (e.code === 'SQUARE_RECONNECT' || e.code === 'SQUARE_ERROR') {
+      console.error('Public plan signup blocked by Square setup:', e.message);
+      return res.status(503).json({ error: 'Online plan sign-up is temporarily unavailable. Please contact us to get started.' });
+    }
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
 router.get('/availability', async (req, res) => {
   try {
     const { businessId, serviceIds, date, variantId } = req.query;
@@ -513,6 +621,14 @@ router.post('/bookings/create', async (req, res) => {
 
     if (!businessId || !serviceId || !bookingDate || !startTime || !customerInfo?.name || !customerInfo?.email) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // The owner can turn off one-time (main service) booking online, e.g. plans-only.
+    {
+      const cfg = await pool.query('SELECT config FROM booking_widget_configs WHERE user_id = $1', [businessId]);
+      if (cfg.rows[0]?.config?.showMainServices === false) {
+        return res.status(403).json({ error: 'One-time booking is not available online. Please contact us.' });
+      }
     }
 
     // Get all selected services
@@ -1048,6 +1164,33 @@ router.post('/bookings/payment-setup', async (req, res) => {
 router.get('/card-on-file/:token', async (req, res) => {
   try {
     const { token } = req.params;
+
+    // Membership-plan link: no booking behind it, and unlike the booking flavour this card
+    // WILL be charged — so the page has to state the recurring terms, not "we won't charge".
+    const planTok = await pool.query(
+      `SELECT t.used_at, t.customer_name, rp.id AS rp_id, rp.start_date, rp.price_cents,
+              rp.square_subscription_id, rp.service_plan_id, u.business_name
+       FROM card_on_file_tokens t
+       JOIN recurring_plans rp ON rp.id = t.recurring_plan_id
+       JOIN users u ON u.id = t.user_id
+       WHERE t.token = $1 AND t.expires_at > NOW()`,
+      [token]
+    );
+    if (planTok.rows.length) {
+      const pt = planTok.rows[0];
+      if (pt.used_at || pt.square_subscription_id) {
+        return res.status(410).json({ error: 'Your plan is already set up — you are all set!' });
+      }
+      const sp = (await pool.query('SELECT * FROM service_plans WHERE id = $1', [pt.service_plan_id])).rows[0];
+      const planBilling = require('../utils/planBilling');
+      return res.json({
+        squareAppId: process.env.SQUARE_APPLICATION_ID,
+        squareEnvironment: process.env.SQUARE_ENVIRONMENT || 'production',
+        businessName: pt.business_name,
+        customerName: pt.customer_name,
+        plan: planBilling.termsFor(pt, { ...sp, price: (pt.price_cents || Math.round(sp.price * 100)) / 100 }),
+      });
+    }
     const result = await pool.query(
       `SELECT t.*, b.booking_number, b.booking_date, b.start_time, b.card_on_file_status,
               bi.service_name, u.business_name
@@ -1091,6 +1234,63 @@ router.post('/card-on-file/:token/save', async (req, res) => {
     const { token } = req.params;
     const { sourceId } = req.body;
     if (!sourceId) return res.status(400).json({ error: 'sourceId required' });
+
+    // Membership plan: save the card, then start the Square subscription with it.
+    const planRow = await pool.query(
+      `SELECT t.token, rp.*, u.email AS owner_email FROM card_on_file_tokens t
+       JOIN recurring_plans rp ON rp.id = t.recurring_plan_id
+       JOIN users u ON u.id = t.user_id
+       WHERE t.token = $1 AND t.expires_at > NOW() AND t.used_at IS NULL`,
+      [token]
+    );
+    if (planRow.rows.length) {
+      const rp = planRow.rows[0];
+      const planBilling = require('../utils/planBilling');
+      if (rp.square_subscription_id) return res.status(410).json({ error: 'Your plan is already set up.' });
+
+      const { client, locationId } = await getSquareClient(rp.user_id);
+      const squareCustomerId = await findOrCreateSquareCustomer(client, {
+        name: rp.customer_name, email: rp.customer_email, phone: rp.customer_phone,
+      });
+      const { cardId, cardBrand, lastFour } = await saveCardOnFile(client, { sourceId, squareCustomerId, locationId });
+
+      await pool.query('UPDATE recurring_plans SET square_customer_id = $1, square_card_id = $2 WHERE id = $3', [squareCustomerId, cardId, rp.id]);
+      if (rp.customer_id) {
+        await pool.query(
+          `UPDATE customers SET square_customer_id = $1, square_card_id = $2,
+           square_card_brand = $3, square_card_last_four = $4, updated_at = NOW() WHERE id = $5`,
+          [squareCustomerId, cardId, cardBrand, lastFour, rp.customer_id]
+        );
+      }
+
+      let started;
+      try {
+        started = await planBilling.startSubscription(rp.id);
+      } catch (e) {
+        console.error(`Plan ${rp.id} card saved but subscription failed:`, e.message);
+        // The link stays usable and the owner can retry from the dashboard; the customer
+        // is not told anything alarming about money.
+        return res.status(500).json({ error: 'Your card was saved, but we couldn\'t finish starting your plan. The business has been notified and will follow up.' });
+      }
+      await pool.query('UPDATE card_on_file_tokens SET used_at = NOW() WHERE token = $1', [token]);
+
+      if (process.env.SENDGRID_API_KEY && rp.owner_email) {
+        const sgMail = require('@sendgrid/mail');
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        sgMail.send({
+          to: rp.owner_email,
+          from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
+          subject: `Plan started — ${rp.customer_name}`,
+          html: plainEmail({
+            paragraphs: [
+              `<strong>${esc(rp.customer_name)}</strong> saved a ${esc(cardBrand)} card ending in ${esc(lastFour)} and their plan is now billing in Square.`,
+              `First charge: ${esc(started.startDate || '')}. Their visits are already on your schedule.`,
+            ],
+          }),
+        }).catch(e => console.error('Plan started notification error:', e.message));
+      }
+      return res.json({ success: true, cardBrand, lastFour, firstChargeDate: started.startDate || null });
+    }
 
     const result = await pool.query(
       `SELECT t.*, b.customer_id, b.customer_name, b.customer_email, b.customer_phone,
@@ -1388,6 +1588,9 @@ router.post('/discovery/lead', async (req, res) => {
     if (process.env.SENDGRID_API_KEY) {
       const sgMail = require('@sendgrid/mail');
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      // Tap-to-text / tap-to-call: href rebuilt from digits only, never the raw input.
+      const phoneDigits = phone.replace(/D/g, '');
+      const phoneHref = phoneDigits.length === 10 ? `+1${phoneDigits}` : `+${phoneDigits}`;
       sgMail.send({
         to: SUPPORT_EMAIL,
         from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
@@ -1397,7 +1600,7 @@ router.post('/discovery/lead', async (req, res) => {
             'Someone just submitted their information on the /learnmore page and is now watching the video.',
             `<strong>Name:</strong> ${esc(name.trim())}`,
             `<strong>Business:</strong> ${esc(company?.trim() || '—')}`,
-            `<strong>Phone:</strong> ${esc(phone.trim())}`,
+            `<strong>Phone:</strong> ${esc(phone.trim())}<br><a href="sms:${phoneHref}" style="display:inline-block;margin-top:8px;margin-right:8px;padding:6px 14px;border-radius:6px;background:#1d4ed8;color:#ffffff;font-weight:600;text-decoration:none;">💬 Text</a><a href="tel:${phoneHref}" style="display:inline-block;margin-top:8px;padding:6px 14px;border-radius:6px;background:#16a34a;color:#ffffff;font-weight:600;text-decoration:none;">📞 Call</a>`,
             ...(notes ? [esc(notes).split('\n').join('<br>')] : []),
           ],
         }),
