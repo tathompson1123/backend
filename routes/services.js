@@ -24,17 +24,17 @@ router.get('/', authenticateToken, async (req, res) => {
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { name, description, durationHours, price, categoryId, imageUrl, bufferMinutes, sortOrder, isAddon, locationType, customAddress } = req.body;
+    const { name, description, durationHours, price, categoryId, imageUrl, bufferMinutes, sortOrder, isAddon, locationType, customAddress, showOnline } = req.body;
 
     if (!name || durationHours === undefined || durationHours === null || durationHours === '' || (price === undefined || price === null || price === '')) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
     const result = await pool.query(
-      `INSERT INTO services (user_id, name, description, duration_hours, price, category_id, image_url, buffer_minutes, sort_order, is_addon, location_type, custom_address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO services (user_id, name, description, duration_hours, price, category_id, image_url, buffer_minutes, sort_order, is_addon, location_type, custom_address, show_online)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [userId, name, description, durationHours, price, categoryId || null, imageUrl || '', bufferMinutes || 0, sortOrder || 0, isAddon || false, locationType || 'business_address', customAddress || null]
+      [userId, name, description, durationHours, price, categoryId || null, imageUrl || '', bufferMinutes || 0, sortOrder || 0, isAddon || false, locationType || 'business_address', customAddress || null, showOnline !== false]
     );
 
     res.json({ service: result.rows[0] });
@@ -49,7 +49,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const { name, description, durationHours, price, active, categoryId, imageUrl, bufferMinutes, sortOrder, isAddon, locationType, customAddress } = req.body;
+    const { name, description, durationHours, price, active, categoryId, imageUrl, bufferMinutes, sortOrder, isAddon, locationType, customAddress, showOnline } = req.body;
 
     const result = await pool.query(
       `UPDATE services
@@ -64,10 +64,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
            sort_order = COALESCE($9, sort_order),
            is_addon = COALESCE($10, is_addon),
            location_type = COALESCE($13, location_type),
-           custom_address = COALESCE($14, custom_address)
+           custom_address = COALESCE($14, custom_address),
+           show_online = COALESCE($15, show_online)
        WHERE id = $11 AND user_id = $12
        RETURNING *`,
-      [name, description, durationHours, price, active, categoryId, imageUrl, bufferMinutes, sortOrder, isAddon, id, userId, locationType || null, customAddress !== undefined ? customAddress : null]
+      [name, description, durationHours, price, active, categoryId, imageUrl, bufferMinutes, sortOrder, isAddon, id, userId, locationType || null, customAddress !== undefined ? customAddress : null, typeof showOnline === 'boolean' ? showOnline : null]
     );
 
     if (result.rows.length === 0) {

@@ -80,7 +80,7 @@ router.get('/services/:siteKey', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'Invalid site key' });
 
     const result = await pool.query(
-      'SELECT id, name, description, price, duration_hours FROM services WHERE user_id = $1 AND active = true ORDER BY name',
+      'SELECT id, name, description, price, duration_hours FROM services WHERE user_id = $1 AND active = true AND show_online = true ORDER BY name',
       [user.id]
     );
 
@@ -180,7 +180,7 @@ router.post('/book/:siteKey', async (req, res) => {
 
     // Get service info
     const serviceResult = await pool.query(
-      'SELECT id, name, price, duration_hours FROM services WHERE id = $1 AND user_id = $2 AND active = true',
+      'SELECT id, name, price, duration_hours FROM services WHERE id = $1 AND user_id = $2 AND active = true AND show_online = true',
       [serviceId, user.id]
     );
     if (serviceResult.rows.length === 0) {

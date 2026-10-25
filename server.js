@@ -2057,6 +2057,8 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     await pool.query('ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS square_subscription_id TEXT');
     await pool.query('ALTER TABLE recurring_plans ADD COLUMN IF NOT EXISTS square_plan_variation_id TEXT');
     await pool.query('ALTER TABLE card_on_file_tokens ADD COLUMN IF NOT EXISTS recurring_plan_id INTEGER REFERENCES recurring_plans(id) ON DELETE CASCADE');
+    // Per-service switch: hide a main service or add-on from online booking (still bookable by staff).
+    await pool.query('ALTER TABLE services ADD COLUMN IF NOT EXISTS show_online BOOLEAN NOT NULL DEFAULT true');
     console.log('✅ Recurring bookings schema verified');
   } catch (e) {
     console.warn('⚠️ Could not verify recurring bookings schema:', e.message);

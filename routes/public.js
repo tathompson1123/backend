@@ -24,7 +24,7 @@ router.get('/services', async (req, res) => {
     // Get all active services with category info
     const result = await pool.query(
       `SELECT s.id, s.name, s.description, s.price, s.duration_hours, s.image_url, s.buffer_minutes, s.is_addon, s.sort_order, s.category_id
-       FROM services s WHERE s.user_id = $1 AND s.active = true ORDER BY s.sort_order ASC NULLS LAST, s.name`,
+       FROM services s WHERE s.user_id = $1 AND s.active = true AND s.show_online = true ORDER BY s.sort_order ASC NULLS LAST, s.name`,
       [businessId]
     );
 
@@ -293,10 +293,12 @@ router.get('/plans', async (req, res) => {
     );
     const svcIds = [...new Set(r.rows.flatMap(p => [...(p.services?.mains || []), ...(p.services?.addons || [])].map(x => x.id)))];
     const names = svcIds.length
-      ? (await pool.query('SELECT id, name, duration_hours FROM services WHERE id = ANY($1::int[]) AND user_id = $2', [svcIds, businessId])).rows
+      ? (await pool.query('SELECT id, name, description, price, duration_hours, buffer_minutes, is_addon FROM services WHERE id = ANY($1::int[]) AND user_id = $2', [svcIds, businessId])).rows
       : [];
     const byId = new Map(names.map(n => [n.id, n]));
     res.json({
+      // A plan's services may be hidden from one-time booking; the booking page still needs them.
+      service_details: names,
       plans: r.rows.map(p => {
         const f = FREQUENCIES[p.frequency];
         const mains = (p.services?.mains || []).map(x => byId.get(x.id)).filter(Boolean);
@@ -634,12 +636,16 @@ router.post('/bookings/create', async (req, res) => {
     // Get all selected services
     const allServiceIds = [serviceId, ...additionalServiceIds].filter(Boolean);
     const servicesResult = await pool.query(
-      'SELECT id, name, price, duration_hours FROM services WHERE id = ANY($1) AND user_id = $2 AND active = true',
+      'SELECT id, name, price, duration_hours, show_online FROM services WHERE id = ANY($1) AND user_id = $2 AND active = true',
       [allServiceIds.map(Number), businessId]
     );
 
     if (servicesResult.rows.length === 0) {
       return res.status(404).json({ error: 'Service not found' });
+    }
+    // Hidden from online booking by the owner (staff can still book them on the dashboard).
+    if (servicesResult.rows.some(s => s.show_online === false)) {
+      return res.status(403).json({ error: 'That service is not available to book online. Please contact us.' });
     }
 
     // Resolve variant price/duration for the main service
