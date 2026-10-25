@@ -361,7 +361,7 @@ router.post('/plans/signup', planSignupLimiter, async (req, res) => {
 
     await planCreator.assertFirstVisitAvailable(Number(businessId), sp, startDate, startTime);
     const result = await planCreator.createRecurringPlan(Number(businessId), {
-      servicePlanId: sp.id, startDate, startTime, notes: customerNotes,
+      servicePlanId: sp.id, startDate, startTime, notes: customerNotes, source: 'online',
       employeeId: employeeId || null, groupId: groupId || null,
       customerInfo: {
         name: customerInfo.name, email: customerInfo.email, phone: customerInfo.phone, address: customerInfo.address,

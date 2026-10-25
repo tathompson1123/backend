@@ -11,6 +11,85 @@ const {
   FREQUENCIES, todayInTz, geocodeAddress, findOrCreateCustomer, generateForPlan, pickEmployee,
 } = require('./recurringBookings');
 const planBilling = require('./planBilling');
+const { TRANSACTIONAL_EMAIL, ownerAlertReplyTo } = require('./emailFrom');
+const { escapeHtml: esc } = require('./escapeHtml');
+const { plainEmail } = require('./emailLayout');
+const { sendPushToOwner } = require('./pushNotifications');
+const { sendBookingEmails } = require('./bookingEmail');
+
+const fmtLong = (ymd) => new Date(`${ymd}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+const fmtTime = (hm) => { const [h, m] = hm.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
+
+/**
+ * Same confirmations a normal booking sends — the customer's confirmation and the owner's
+ * new-booking email (utils/bookingEmail) plus the owner push — for the plan's FIRST visit,
+ * with the next few dates in the notes so the customer sees what is coming. Later visits
+ * need nothing here: they are ordinary bookings, so the reminder crons (email + SMS) and
+ * review requests pick them up on their own.
+ * Never throws: a notification failure must not undo a created plan.
+ */
+async function notifyNewPlan({ userId, planId, contact, address, servicePlan, freq, startTime, bookingsCreated, usesSavedCard, cardLinkSent, cardLinkError, source }) {
+  try {
+    const visits = (await pool.query(
+      `SELECT b.booking_number, to_char(b.booking_date, 'YYYY-MM-DD') AS d, b.start_time, b.end_time,
+              (SELECT string_agg(bi.service_name, ' + ' ORDER BY bi.is_addon NULLS FIRST, bi.id)
+                 FROM booking_items bi WHERE bi.booking_id = b.id) AS services
+       FROM bookings b WHERE b.recurring_plan_id = $1 AND b.status <> 'cancelled'
+       ORDER BY b.booking_date LIMIT 4`, [planId])).rows;
+    const first = visits[0];
+    const label = FREQUENCIES[freq]?.label || freq;
+
+    if (first) {
+      const planLine = servicePlan
+        ? `Recurring plan: ${servicePlan.name} (${label}) — $${Number(servicePlan.price).toFixed(2)} per ${servicePlan.billing_period || 'month'}, one charge covers all visits.`
+        : `Recurring: ${label}.`;
+      const next = visits.slice(1).map(v => fmtLong(v.d)).join('; ');
+      await sendBookingEmails({
+        userId,
+        bookingNumber: first.booking_number,
+        customerName: contact.name,
+        customerEmail: contact.email,
+        customerPhone: contact.phone,
+        serviceName: first.services || (servicePlan ? servicePlan.name : 'Service'),
+        bookingDate: first.d,
+        startTime: String(first.start_time).slice(0, 5),
+        endTime: first.end_time ? String(first.end_time).slice(0, 5) : null,
+        subtotal: 0,
+        total: 0,
+        location: address || undefined,
+        notes: [planLine, next ? `Next visits: ${next}` : null, source === 'online' ? 'Booked online.' : null].filter(Boolean).join(' '),
+      });
+    }
+
+    // Billing needs the owner's attention only when the card link did not go out.
+    if (cardLinkError && process.env.SENDGRID_API_KEY) {
+      const owner = (await pool.query('SELECT email FROM users WHERE id = $1', [userId])).rows[0];
+      if (owner?.email) {
+        const sgMail = require('@sendgrid/mail');
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        await sgMail.send({
+          to: owner.email,
+          from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
+          replyTo: ownerAlertReplyTo(contact.email, contact.name),
+          subject: `Action needed: card link not sent to ${contact.name}`,
+          html: plainEmail({
+            paragraphs: [
+              `<strong>${esc(contact.name)}</strong>'s recurring plan was created and ${bookingsCreated} visit(s) are on your schedule, but the card link could not be sent: ${esc(cardLinkError)}`,
+              'Open the Recurring tab and use "Resend card link" once that is fixed. Nothing is being charged until they save a card.',
+            ],
+          }),
+        });
+      }
+    }
+
+    await sendPushToOwner(userId, 'New Recurring Customer',
+      `${contact.name} — ${servicePlan ? servicePlan.name : label}${first ? `, first visit ${first.d} at ${fmtTime(String(first.start_time).slice(0, 5))}` : ''}`,
+      { type: 'new_recurring_plan' }
+    );
+  } catch (e) {
+    console.error('[recurring] new-plan notifications failed:', e.message);
+  }
+}
 
 class PlanError extends Error {
   constructor(status, message, code) {
@@ -38,7 +117,7 @@ async function businessToday(userId) {
 async function createRecurringPlan(userId, input) {
   const {
     frequency, startDate, endDate, startTime, customerInfo, notes,
-    employeeId, groupId, mainServices, additionalServices, servicePlanId,
+    employeeId, groupId, mainServices, additionalServices, servicePlanId, source,
   } = input;
 
   let servicePlan = null;
@@ -105,6 +184,10 @@ async function createRecurringPlan(userId, input) {
     try { usesSavedCard = (await planBilling.sendPlanCardLink(planId)).usesSavedCard; cardLinkSent = true; }
     catch (e) { cardLinkError = e.message; console.error('[recurring] card link failed:', e.message); }
   }
+  notifyNewPlan({
+    userId, planId, contact, address, servicePlan: servicePlan ? { ...servicePlan, billing_period: FREQUENCIES[freq].cadence === 'ANNUAL' ? 'year' : FREQUENCIES[freq].cadence === 'QUARTERLY' ? 'quarter' : 'month' } : null,
+    freq, startTime, bookingsCreated, usesSavedCard, cardLinkSent, cardLinkError, source,
+  });
   return { planId, bookingsCreated, located: !!geo, cardLinkSent, cardLinkError, usesSavedCard, billed: !!servicePlan };
 }
 
