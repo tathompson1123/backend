@@ -9,6 +9,17 @@
 const LINK = 'color:#1d4ed8;';
 const BTN = 'display:inline-block;padding:6px 14px;border-radius:6px;font-weight:600;font-size:0.85rem;text-decoration:none;margin-right:8px;';
 
+/**
+ * SendGrid settings for any email carrying these links. Click tracking rewrites every link
+ * into an https redirect on SendGrid's tracking domain; a tel:/sms: link wrapped that way
+ * no longer opens the dialer or messaging app. Booking emails already turn tracking off for
+ * the same family of reasons (see utils/bookingEmail), lead notifications must too.
+ */
+const LEAD_EMAIL_TRACKING = {
+  clickTracking: { enable: false, enableText: false },
+  openTracking: { enable: false },
+};
+
 /** '+1XXXXXXXXXX' style value for sms:/tel: hrefs, or '' when there are no digits. */
 function phoneHref(phone) {
   const digits = String(phone ?? '').replace(/\D/g, '');
@@ -29,12 +40,12 @@ function phoneActionsHtml(phone, { style = 'button' } = {}) {
   const href = phoneHref(phone);
   if (!href) return '';
   if (style === 'inline') {
-    return `<a href="sms:${href}" style="${LINK}">Text</a> &middot; <a href="tel:${href}" style="${LINK}">Call</a>`;
+    return `<a clicktracking="off" href="sms:${href}" style="${LINK}">Text</a> &middot; <a clicktracking="off" href="tel:${href}" style="${LINK}">Call</a>`;
   }
   return `<div style="margin-top:8px;">`
-    + `<a href="sms:${href}" style="${BTN}background:#1d4ed8;color:#ffffff;">💬 Text</a>`
-    + `<a href="tel:${href}" style="${BTN}background:#16a34a;color:#ffffff;">📞 Call</a>`
+    + `<a clicktracking="off" href="sms:${href}" style="${BTN}background:#1d4ed8;color:#ffffff;">💬 Text</a>`
+    + `<a clicktracking="off" href="tel:${href}" style="${BTN}background:#16a34a;color:#ffffff;">📞 Call</a>`
     + `</div>`;
 }
 
-module.exports = { phoneHref, phoneActionsHtml };
+module.exports = { phoneHref, phoneActionsHtml, LEAD_EMAIL_TRACKING };

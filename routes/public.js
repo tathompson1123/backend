@@ -11,7 +11,7 @@ const { queueAutoDraftInvoice } = require('../utils/autoDraftInvoice');
 const { plainEmail } = require('../utils/emailLayout');
 const { fetchDefaultDescriptions } = require('../utils/bookingServices');
 const rateLimit = require('express-rate-limit');
-const { phoneActionsHtml } = require('../utils/leadContactLinks');
+const { phoneActionsHtml, LEAD_EMAIL_TRACKING } = require('../utils/leadContactLinks');
 const { FREQUENCIES } = require('../utils/recurringBookings');
 
 // All routes are public (no auth). businessId = user_id.
@@ -1611,6 +1611,7 @@ router.post('/discovery/lead', async (req, res) => {
       sgMail.send({
         to: SUPPORT_EMAIL,
         from: { name: 'SORCE Notifications', email: TRANSACTIONAL_EMAIL },
+        trackingSettings: LEAD_EMAIL_TRACKING,
         subject: `New lead: ${name.trim()}${company?.trim() ? ` (${company.trim()})` : ''}`,
         html: plainEmail({
           paragraphs: [

@@ -208,7 +208,7 @@ router.post('/public/:userId', async (req, res) => {
     // is an anonymous form, and the same text lands in the owner's inbox as HTML.
     const { escapeHtml: esc } = require('../utils/escapeHtml');
     const textSafe = require('../utils/textSafe');
-    const { phoneActionsHtml } = require('../utils/leadContactLinks');
+    const { phoneActionsHtml, LEAD_EMAIL_TRACKING } = require('../utils/leadContactLinks');
     if (process.env.SENDGRID_API_KEY) {
       pool.query('SELECT email, business_name FROM users WHERE id = $1', [userId])
         .then(async ownerRes => {
@@ -220,6 +220,7 @@ router.post('/public/:userId', async (req, res) => {
           await sgMail.send({
             to: owner.email,
             from: { name: 'SORCE', email: TRANSACTIONAL_EMAIL },
+            trackingSettings: LEAD_EMAIL_TRACKING,
             // Reply goes to the lead, which is what hitting reply on "you have a new lead"
             // is meant to do.
             replyTo: { name: cName, email: cEmail },

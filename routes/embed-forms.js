@@ -339,7 +339,7 @@ router.post('/public/:publicId/submit', async (req, res) => {
     // Owner notification (non-blocking). Everything below came from an anonymous visitor.
     const { escapeHtml: esc } = require('../utils/escapeHtml');
     const textSafe = require('../utils/textSafe');
-    const { phoneActionsHtml } = require('../utils/leadContactLinks');
+    const { phoneActionsHtml, LEAD_EMAIL_TRACKING } = require('../utils/leadContactLinks');
     if (process.env.SENDGRID_API_KEY) {
       pool.query('SELECT email, business_name FROM users WHERE id = $1', [form.user_id])
         .then(o => {
@@ -357,6 +357,7 @@ router.post('/public/:publicId/submit', async (req, res) => {
           return sgMail.send({
             to: owner.email,
             from: { name: 'SORCE', email: TRANSACTIONAL_EMAIL },
+            trackingSettings: LEAD_EMAIL_TRACKING,
             subject: `New lead: ${textSafe.singleLine(name)} (${textSafe.singleLine(form.name)})`,
             html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
               <div style="background:#1d4ed8;padding:1.5rem 2rem;border-radius:8px 8px 0 0;"><h1 style="color:#fff;margin:0;font-size:1.25rem;">New Lead — ${esc(form.name)}</h1></div>

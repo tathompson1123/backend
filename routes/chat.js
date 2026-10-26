@@ -179,7 +179,7 @@ async function getAvailableSlotsForDate(userId, serviceId, bookingDate, duration
 
 const { escapeHtml } = require('../utils/escapeHtml');
 const { plainEmail } = require('../utils/emailLayout');
-const { phoneActionsHtml } = require('../utils/leadContactLinks');
+const { phoneActionsHtml, LEAD_EMAIL_TRACKING } = require('../utils/leadContactLinks');
 
 async function sendAttentionEmail({ userId, customerName, customerPhone, conversationId }) {
   if (!process.env.SENDGRID_API_KEY) return;
@@ -219,6 +219,7 @@ async function sendAttentionEmail({ userId, customerName, customerPhone, convers
     await sgMail.send({
       to: ownerEmail,
       from: { name: 'SORCE Chat Alerts', email: TRANSACTIONAL_EMAIL },
+      trackingSettings: LEAD_EMAIL_TRACKING,
       subject: `Action needed: ${customerName} wants a call back`,
       html: plainEmail({
         paragraphs: [
