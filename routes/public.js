@@ -282,6 +282,32 @@ router.get('/business-info', async (req, res) => {
 });
 
 // GET /api/public/availability?businessId=...&serviceIds=...&date=...
+// GET /api/public/text/:phone — the page behind the Text button in lead emails. Email apps
+// often ignore sms: links, so the email links here (plain https) and this page opens the
+// phone's messaging app addressed to the lead. Only digits are accepted and echoed back, so
+// there is nothing here to inject into.
+router.get('/text/:phone', (req, res) => {
+  let digits = String(req.params.phone || '').replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 15) return res.status(400).send('Invalid number');
+  if (digits.length === 10) digits = `1${digits}`; // US number without its country code
+  const e164 = `+${digits}`;
+  const pretty = digits.length === 11 && digits[0] === '1'
+    ? `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+    : digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : e164;
+  res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Text ${pretty}</title></head>
+<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f3f4f6;display:flex;min-height:100vh;align-items:center;justify-content:center;">
+<div style="background:#fff;border-radius:14px;padding:32px 24px;max-width:340px;width:100%;margin:16px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1);">
+  <p style="margin:0 0 6px;color:#6b7280;font-size:14px;">Opening your messages to</p>
+  <p style="margin:0 0 24px;font-size:24px;font-weight:700;color:#111827;">${pretty}</p>
+  <a href="sms:${e164}" style="display:block;padding:14px;border-radius:10px;background:#1d4ed8;color:#fff;font-weight:700;font-size:17px;text-decoration:none;margin-bottom:12px;">💬 Text now</a>
+  <a href="tel:${e164}" style="display:block;padding:14px;border-radius:10px;background:#16a34a;color:#fff;font-weight:700;font-size:17px;text-decoration:none;">📞 Call instead</a>
+  <p style="margin:20px 0 0;color:#9ca3af;font-size:12px;">On a computer? Copy the number: ${pretty}</p>
+</div>
+<script>setTimeout(function(){location.href='sms:${e164}'},150);</script>
+</body></html>`);
+});
+
 // GET /api/public/plans?businessId=... — membership plans offered online.
 router.get('/plans', async (req, res) => {
   try {

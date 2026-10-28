@@ -28,6 +28,19 @@ function phoneHref(phone) {
   return `+${digits}`;
 }
 
+const API_BASE = () => (process.env.BACKEND_URL || process.env.VITE_API_URL || 'https://backend-production-ab50.up.railway.app').replace(/\/+$/, '');
+
+/**
+ * Why Text points at a SORCE page instead of straight at `sms:`: many email apps open
+ * tel: links but silently ignore sms: ones (Call worked while Text did nothing). An https
+ * link always opens, and from a browser page an sms: link opens the messaging app — see
+ * GET /api/public/text/:phone in routes/public.js.
+ */
+function textPageUrl(phone) {
+  const digits = phoneHref(phone).replace(/\D/g, '');
+  return digits ? `${API_BASE()}/api/public/text/${digits}` : '';
+}
+
 /**
  * Text + Call links for a phone number.
  * @param {string} phone
@@ -40,12 +53,12 @@ function phoneActionsHtml(phone, { style = 'button' } = {}) {
   const href = phoneHref(phone);
   if (!href) return '';
   if (style === 'inline') {
-    return `<a clicktracking="off" href="sms:${href}" style="${LINK}">Text</a> &middot; <a clicktracking="off" href="tel:${href}" style="${LINK}">Call</a>`;
+    return `<a clicktracking="off" href="${textPageUrl(phone)}" style="${LINK}">Text</a> &middot; <a clicktracking="off" href="tel:${href}" style="${LINK}">Call</a>`;
   }
   return `<div style="margin-top:8px;">`
-    + `<a clicktracking="off" href="sms:${href}" style="${BTN}background:#1d4ed8;color:#ffffff;">💬 Text</a>`
+    + `<a clicktracking="off" href="${textPageUrl(phone)}" style="${BTN}background:#1d4ed8;color:#ffffff;">💬 Text</a>`
     + `<a clicktracking="off" href="tel:${href}" style="${BTN}background:#16a34a;color:#ffffff;">📞 Call</a>`
     + `</div>`;
 }
 
-module.exports = { phoneHref, phoneActionsHtml, LEAD_EMAIL_TRACKING };
+module.exports = { phoneHref, phoneActionsHtml, textPageUrl, LEAD_EMAIL_TRACKING };
