@@ -12,6 +12,7 @@ const { authenticateToken } = require('../config/middleware');
 const sgMail = require('@sendgrid/mail');
 const { fireLeadEvent, clientIpFromReq } = require('../utils/metaConversions');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
+const { DEFAULT_FOLLOWUP, sanitizeFollowup, sendFollowup } = require('../utils/formFollowupEmail');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // ── Migration ────────────────────────────────────────────────
@@ -38,6 +39,11 @@ pool.query(`
 // Backfill field_color on tables created before it existed (accent for input borders).
 pool.query(`ALTER TABLE embed_forms ADD COLUMN IF NOT EXISTS field_color TEXT DEFAULT '#d1d5db'`)
   .catch(e => console.error('embed_forms field_color migration error:', e.message));
+
+// The visitor's "next steps" email (see utils/formFollowupEmail). NULL = never configured =
+// off, so forms built before this existed don't start emailing people unannounced.
+pool.query(`ALTER TABLE embed_forms ADD COLUMN IF NOT EXISTS followup_email JSONB`)
+  .catch(e => console.error('embed_forms followup_email migration error:', e.message));
 
 const STANDARD_KEYS = ['name', 'email', 'phone', 'service', 'message'];
 
@@ -138,8 +144,8 @@ router.post('/', authenticateToken, async (req, res) => {
     const name = String(b.name || 'Untitled Form').slice(0, 120);
     const source = slugify(b.source || name);
     const result = await pool.query(
-      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, field_color, sms_followup, fields)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, field_color, sms_followup, fields, followup_email)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [
         genPublicId(), req.user.userId, name, source,
         String(b.title || 'Get in touch').slice(0, 160),
@@ -150,6 +156,7 @@ router.post('/', authenticateToken, async (req, res) => {
         String(b.field_color || '#d1d5db').slice(0, 20),
         b.sms_followup !== false,
         JSON.stringify(sanitizeFields(b.fields)),
+        JSON.stringify(sanitizeFollowup(b.followup_email === undefined ? DEFAULT_FOLLOWUP : b.followup_email)),
       ]
     );
     res.json({ form: result.rows[0] });
@@ -167,8 +174,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `UPDATE embed_forms SET
          name=$1, source=$2, title=$3, description=$4, submit_text=$5,
-         success_message=$6, theme_color=$7, field_color=$8, sms_followup=$9, fields=$10, updated_at=NOW()
-       WHERE id=$11 AND user_id=$12 RETURNING *`,
+         success_message=$6, theme_color=$7, field_color=$8, sms_followup=$9, fields=$10,
+         followup_email=COALESCE($11::jsonb, followup_email), updated_at=NOW()
+       WHERE id=$12 AND user_id=$13 RETURNING *`,
       [
         name, source,
         String(b.title || 'Get in touch').slice(0, 160),
@@ -179,6 +187,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
         String(b.field_color || '#d1d5db').slice(0, 20),
         b.sms_followup !== false,
         JSON.stringify(sanitizeFields(b.fields)),
+        // Absent from the payload = leave the saved email alone (older clients).
+        b.followup_email === undefined ? null : JSON.stringify(sanitizeFollowup(b.followup_email)),
         req.params.id, req.user.userId,
       ]
     );
@@ -208,18 +218,45 @@ router.post('/:id/duplicate', authenticateToken, async (req, res) => {
     while (taken.has(source)) source = `${base}_${n++}`.slice(0, 40);
 
     const result = await pool.query(
-      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, field_color, sms_followup, fields)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, field_color, sms_followup, fields, followup_email)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [
         genPublicId(), req.user.userId, name, source,
         f.title, f.description, f.submit_text, f.success_message, f.theme_color, f.field_color, f.sms_followup,
         JSON.stringify(Array.isArray(f.fields) ? f.fields : []),
+        f.followup_email ? JSON.stringify(f.followup_email) : null,
       ]
     );
     res.json({ form: result.rows[0] });
   } catch (e) {
     console.error('Error duplicating embed form:', e.message);
     res.status(500).json({ error: 'Failed to duplicate form' });
+  }
+});
+
+// Send the saved (or just-edited) next-steps email to the owner so they can see exactly what
+// a visitor receives. Uses the draft in the request body when given, so it works before saving.
+router.post('/:id/followup-test', authenticateToken, async (req, res) => {
+  try {
+    if (!process.env.SENDGRID_API_KEY) return res.status(503).json({ error: 'Email is not configured' });
+    const r = await pool.query(
+      `SELECT f.name, f.followup_email, u.email AS owner_email, u.business_name
+       FROM embed_forms f JOIN users u ON u.id = f.user_id WHERE f.id = $1 AND f.user_id = $2`,
+      [req.params.id, req.user.userId]
+    );
+    const row = r.rows[0];
+    if (!row) return res.status(404).json({ error: 'Form not found' });
+    if (!row.owner_email) return res.status(400).json({ error: 'Your account has no email address' });
+    const cfg = sanitizeFollowup(req.body?.followup_email ?? row.followup_email ?? DEFAULT_FOLLOWUP);
+    const ok = await sendFollowup({
+      sgMail, cfg, lead: { name: 'Alex Sample', email: row.owner_email },
+      businessName: row.business_name, ownerEmail: row.owner_email, formName: row.name,
+    });
+    if (!ok) return res.status(502).json({ error: 'Could not send the test email' });
+    res.json({ success: true, sentTo: row.owner_email });
+  } catch (e) {
+    console.error('Embed form follow-up test error:', e.message);
+    res.status(500).json({ error: 'Failed to send test' });
   }
 });
 
@@ -368,6 +405,25 @@ router.post('/public/:publicId/submit', async (req, res) => {
           });
         })
         .catch(err => console.error('Embed form notification email error:', err.message));
+    }
+
+    // Next-steps email to the visitor (non-blocking; configured per form). One per address per
+    // form per day — this form mails whatever address it is handed.
+    const followup = form.followup_email;
+    if (email && followup && followup.enabled && process.env.SENDGRID_API_KEY) {
+      (async () => {
+        const dup = await pool.query(
+          `SELECT 1 FROM leads WHERE user_id = $1 AND source = $2 AND LOWER(email) = LOWER($3)
+             AND created_at > NOW() - INTERVAL '24 hours' AND id <> $4 LIMIT 1`,
+          [form.user_id, form.source, email, lead.id]
+        );
+        if (dup.rows.length) return;
+        const owner = (await pool.query('SELECT email, business_name FROM users WHERE id = $1', [form.user_id])).rows[0];
+        await sendFollowup({
+          sgMail, cfg: sanitizeFollowup(followup), lead: { name, email },
+          businessName: owner?.business_name, ownerEmail: owner?.email, formName: form.name,
+        });
+      })().catch(e => console.error('Embed form follow-up error:', e.message));
     }
 
     res.json({ success: true, message: form.success_message || "Thanks! We'll be in touch shortly." });
