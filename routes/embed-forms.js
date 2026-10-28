@@ -13,7 +13,7 @@ const sgMail = require('@sendgrid/mail');
 const { fireLeadEvent, clientIpFromReq } = require('../utils/metaConversions');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 const { DEFAULT_FOLLOWUP, sanitizeFollowup, sendFollowup } = require('../utils/formFollowupEmail');
-const { DEFAULT_FOLLOWUP_SMS, sanitizeFollowupSms, sendFollowupSms } = require('../utils/formFollowupSms');
+const { DEFAULT_FOLLOWUP_SMS, sanitizeFollowupSms, sendFollowupSms, renderFollowupSms } = require('../utils/formFollowupSms');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // ── Migration ────────────────────────────────────────────────
@@ -266,6 +266,43 @@ router.post('/:id/followup-test', authenticateToken, async (req, res) => {
   } catch (e) {
     console.error('Embed form follow-up test error:', e.message);
     res.status(500).json({ error: 'Failed to send test' });
+  }
+});
+
+// Text the next-steps message to a number the owner types (their own phone) so they can see exactly
+// what a visitor gets. No lead is created and no visitor consent is involved, so it is capped per
+// account to keep it from being used as a free texting tool.
+const smsTestLog = new Map(); // userId -> [timestamps]
+router.post('/:id/followup-sms-test', authenticateToken, async (req, res) => {
+  try {
+    const now = Date.now();
+    const recent = (smsTestLog.get(req.user.userId) || []).filter(t => now - t < 60 * 60 * 1000);
+    if (recent.length >= 5) return res.status(429).json({ error: 'Test limit reached (5 per hour). Try again later.' });
+
+    const phone = String(req.body?.phone || '').trim();
+    if (phone.replace(/\D/g, '').length < 10) return res.status(400).json({ error: 'Enter a valid phone number' });
+    try { require('../utils/smsGuard').assertDestinationAllowed(phone); }
+    catch (e) { return res.status(400).json({ error: e.message || 'That number cannot receive texts' }); }
+
+    const r = await pool.query(
+      `SELECT f.name, f.followup_sms, u.business_name, u.twilio_phone_number
+       FROM embed_forms f JOIN users u ON u.id = f.user_id WHERE f.id = $1 AND f.user_id = $2`,
+      [req.params.id, req.user.userId]
+    );
+    const row = r.rows[0];
+    if (!row) return res.status(404).json({ error: 'Form not found' });
+    if (!row.twilio_phone_number) return res.status(400).json({ error: 'Your account has no business text number set up yet' });
+
+    const cfg = sanitizeFollowupSms(req.body?.followup_sms ?? row.followup_sms ?? DEFAULT_FOLLOWUP_SMS);
+    const message = renderFollowupSms(cfg, { name: 'Alex Sample', businessName: row.business_name, formName: row.name });
+    const { sendSMS } = require('../utils/twilio');
+    await sendSMS(phone, message, req.user.userId);
+    recent.push(now);
+    smsTestLog.set(req.user.userId, recent);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Embed form SMS test error:', e.message);
+    res.status(500).json({ error: 'Could not send the test text' });
   }
 });
 
