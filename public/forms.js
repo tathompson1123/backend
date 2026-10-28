@@ -112,7 +112,7 @@
 
     // SMS consent (required) when the form is set to auto follow up by text.
     var consent = null;
-    if (cfg.smsFollowup) {
+    if (cfg.smsFollowup || cfg.smsConsent) {
       var clabel = el('label', { class: 'scf-check' });
       consent = el('input', { type: 'checkbox' });
       consent.required = true;

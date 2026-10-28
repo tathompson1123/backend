@@ -13,6 +13,7 @@ const sgMail = require('@sendgrid/mail');
 const { fireLeadEvent, clientIpFromReq } = require('../utils/metaConversions');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 const { DEFAULT_FOLLOWUP, sanitizeFollowup, sendFollowup } = require('../utils/formFollowupEmail');
+const { DEFAULT_FOLLOWUP_SMS, sanitizeFollowupSms, sendFollowupSms } = require('../utils/formFollowupSms');
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // ── Migration ────────────────────────────────────────────────
@@ -44,6 +45,10 @@ pool.query(`ALTER TABLE embed_forms ADD COLUMN IF NOT EXISTS field_color TEXT DE
 // off, so forms built before this existed don't start emailing people unannounced.
 pool.query(`ALTER TABLE embed_forms ADD COLUMN IF NOT EXISTS followup_email JSONB`)
   .catch(e => console.error('embed_forms followup_email migration error:', e.message));
+
+// The visitor's "next steps" text message (utils/formFollowupSms). NULL = off.
+pool.query(`ALTER TABLE embed_forms ADD COLUMN IF NOT EXISTS followup_sms JSONB`)
+  .catch(e => console.error('embed_forms followup_sms migration error:', e.message));
 
 const STANDARD_KEYS = ['name', 'email', 'phone', 'service', 'message'];
 
@@ -88,7 +93,7 @@ function corsHeaders(res) {
 
 // Mirror of leads.js triggerLeadFormAgent scheduling, minus the source gate (the per-form
 // toggle already decided this should follow up). The cron in server.js sends pending SMS.
-async function scheduleLeadSms(userId, lead) {
+async function scheduleLeadSms(userId, lead, extraDelaySeconds = 0) {
   try {
     const agentConfig = await pool.query(
       'SELECT config, sms_template FROM agent_configs WHERE user_id = $1 AND agent_type = $2',
@@ -104,7 +109,7 @@ async function scheduleLeadSms(userId, lead) {
     const smsTemplate = agentConfig.rows[0].sms_template;
     if (cfg.smsEnabled && lead.phone && lead.sms_consent && smsTemplate) {
       if (await require('./leads').recentlyAutoTexted(userId, lead.phone, lead.id)) return;
-      const delaySeconds = 45 + Math.floor(Math.random() * 30);
+      const delaySeconds = 45 + Math.floor(Math.random() * 30) + extraDelaySeconds;
       await pool.query(
         `UPDATE leads SET status = 'sms_pending', sms_scheduled_at = NOW() + ($1 * INTERVAL '1 second') WHERE id = $2`,
         [delaySeconds, lead.id]
@@ -144,8 +149,8 @@ router.post('/', authenticateToken, async (req, res) => {
     const name = String(b.name || 'Untitled Form').slice(0, 120);
     const source = slugify(b.source || name);
     const result = await pool.query(
-      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, field_color, sms_followup, fields, followup_email)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, field_color, sms_followup, fields, followup_email, followup_sms)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [
         genPublicId(), req.user.userId, name, source,
         String(b.title || 'Get in touch').slice(0, 160),
@@ -157,6 +162,7 @@ router.post('/', authenticateToken, async (req, res) => {
         b.sms_followup !== false,
         JSON.stringify(sanitizeFields(b.fields)),
         JSON.stringify(sanitizeFollowup(b.followup_email === undefined ? DEFAULT_FOLLOWUP : b.followup_email)),
+        JSON.stringify(sanitizeFollowupSms(b.followup_sms === undefined ? DEFAULT_FOLLOWUP_SMS : b.followup_sms)),
       ]
     );
     res.json({ form: result.rows[0] });
@@ -175,8 +181,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
       `UPDATE embed_forms SET
          name=$1, source=$2, title=$3, description=$4, submit_text=$5,
          success_message=$6, theme_color=$7, field_color=$8, sms_followup=$9, fields=$10,
-         followup_email=COALESCE($11::jsonb, followup_email), updated_at=NOW()
-       WHERE id=$12 AND user_id=$13 RETURNING *`,
+         followup_email=COALESCE($11::jsonb, followup_email),
+         followup_sms=COALESCE($12::jsonb, followup_sms), updated_at=NOW()
+       WHERE id=$13 AND user_id=$14 RETURNING *`,
       [
         name, source,
         String(b.title || 'Get in touch').slice(0, 160),
@@ -189,6 +196,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         JSON.stringify(sanitizeFields(b.fields)),
         // Absent from the payload = leave the saved email alone (older clients).
         b.followup_email === undefined ? null : JSON.stringify(sanitizeFollowup(b.followup_email)),
+        b.followup_sms === undefined ? null : JSON.stringify(sanitizeFollowupSms(b.followup_sms)),
         req.params.id, req.user.userId,
       ]
     );
@@ -218,13 +226,14 @@ router.post('/:id/duplicate', authenticateToken, async (req, res) => {
     while (taken.has(source)) source = `${base}_${n++}`.slice(0, 40);
 
     const result = await pool.query(
-      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, field_color, sms_followup, fields, followup_email)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      `INSERT INTO embed_forms (public_id, user_id, name, source, title, description, submit_text, success_message, theme_color, field_color, sms_followup, fields, followup_email, followup_sms)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [
         genPublicId(), req.user.userId, name, source,
         f.title, f.description, f.submit_text, f.success_message, f.theme_color, f.field_color, f.sms_followup,
         JSON.stringify(Array.isArray(f.fields) ? f.fields : []),
         f.followup_email ? JSON.stringify(f.followup_email) : null,
+        f.followup_sms ? JSON.stringify(f.followup_sms) : null,
       ]
     );
     res.json({ form: result.rows[0] });
@@ -293,6 +302,8 @@ router.get('/public/:publicId', async (req, res) => {
       themeColor: f.theme_color,
       fieldColor: f.field_color,
       smsFollowup: f.sms_followup,
+      // The consent checkbox is needed for ANY automatic text: the AI follow-up or the next-steps text.
+      smsConsent: !!(f.sms_followup || (f.followup_sms && f.followup_sms.enabled)),
       fields: f.fields || [],
       businessName: owner.rows[0]?.business_name || 'us',
     });
@@ -369,8 +380,13 @@ router.post('/public/:publicId/submit', async (req, res) => {
       client_ua: req.headers['user-agent'],
     });
 
+    const nextStepsText = form.followup_sms && form.followup_sms.enabled && phone && smsConsent;
+    if (nextStepsText) {
+      sendFollowupSms({ cfg: sanitizeFollowupSms(form.followup_sms), form, lead }).catch(() => {});
+    }
     if (form.sms_followup && phone && smsConsent) {
-      scheduleLeadSms(form.user_id, lead).catch(e => console.error('scheduleLeadSms error:', e.message));
+      // If a next-steps text goes out too, let it land first so the lead isn't hit with two at once.
+      scheduleLeadSms(form.user_id, lead, nextStepsText ? 120 : 0).catch(e => console.error('scheduleLeadSms error:', e.message));
     }
 
     // Owner notification (non-blocking). Everything below came from an anonymous visitor.
