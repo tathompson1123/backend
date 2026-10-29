@@ -123,11 +123,12 @@ function todayInTz(tz) {
 // Free and keyless, matching what BusinessInformation already uses on the client. Usage
 // policy: identify the app with a User-Agent and stay near 1 request/second — plans are
 // created one at a time by a person, so that holds.
-async function nominatim(q, bias) {
+async function nominatim(q, bias, box) {
   const params = { q, format: 'json', limit: 1, countrycodes: 'us' };
   // Prefer results near the business's other customers (a soft preference, not a filter), so a
   // partial address like "2721 leaning oak pl se olympia" lands in the right state.
   if (bias) params.viewbox = [bias.lng - 0.6, bias.lat + 0.6, bias.lng + 0.6, bias.lat - 0.6].join(',');
+  if (box) { params.viewbox = box; params.bounded = 1; } // hard limit to this area
   const r = await axios.get('https://nominatim.openstreetmap.org/search', {
     params,
     headers: { 'User-Agent': 'SORCE-CRM/1.0 (recurring-bookings map)' },
@@ -138,6 +139,14 @@ async function nominatim(q, bias) {
   const lat = parseFloat(hit.lat);
   const lng = parseFloat(hit.lon);
   return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+function milesBetween(a, b) {
+  const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 3959 * 2 * Math.asin(Math.sqrt(h));
 }
 
 // Where this business's customers are (average of their geocoded plans), else null.
@@ -165,16 +174,25 @@ async function geocodeAddress(address, userId) {
       const b = await pool.query('SELECT state FROM business_information WHERE user_id = $1', [userId]).catch(() => null);
       state = String(b?.rows?.[0]?.state || '').trim();
     }
-    const stripped = full.replace(/\s*(,\s*)?(#|apt\.?|unit|suite|ste\.?)\s*[\w-]+/i, '').trim();
+    // The geocoder reads a bare "Washington" as Washington, D.C. (the White House). For a business in
+    // Washington state — or an address that says Washington/WA — drop the state/zip words and confine
+    // the search to a Washington-state box instead.
+    const STATE_TAIL = /[,\s]+(WA|Washington)\b(?!\s*,?\s*D\.?\s*C\b)[\s,]*(\d{5}(-\d{4})?)?\s*$/i;
+    const waMode = /^(wa|washington)$/i.test(state) || (!state && STATE_TAIL.test(full));
+    const base = waMode ? full.replace(STATE_TAIL, '').trim() : full;
+    const stripped = base.replace(/\s*(,\s*)?(#|apt\.?|unit|suite|ste\.?)\s*[\w-]+/i, '').trim();
     const noNumber = stripped.replace(/^\s*\d+[\w-]*\s+/, '').trim();
     const tail = stripped.split(/[\s,]+/).filter(Boolean).slice(-1)[0];
-    const withState = (q) => (state && !/\b[A-Za-z]{2}\b\s*(\d{5})?\s*$/.test(q) ? `${q}, ${state}` : q);
-    const tries = [full, stripped, noNumber, tail && tail.length > 2 ? tail : null].filter(Boolean);
     const queries = [];
-    for (const q of tries) { for (const v of [q, withState(q)]) if (!queries.includes(v)) queries.push(v); }
+    for (const q of [base, stripped, noNumber, tail && tail.length > 2 ? tail : null]) {
+      if (q && !queries.includes(q)) queries.push(q);
+    }
+    const WA_BOX = '-124.9,49.1,-116.8,45.4'; // west,north,east,south
     for (let i = 0; i < queries.length; i++) {
-      const hit = await nominatim(queries[i], bias);
-      if (hit) return hit;
+      const hit = await nominatim(queries[i], bias, waMode ? WA_BOX : null);
+      // A hit hundreds of miles from the business's other customers is a wrong-place match,
+      // so keep looking rather than pin it there.
+      if (hit && !(bias && milesBetween(bias, hit) > 150)) return hit;
       if (i < queries.length - 1) await new Promise(r => setTimeout(r, 1100)); // Nominatim: max 1 request/second
     }
   } catch (e) {
