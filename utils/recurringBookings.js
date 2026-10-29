@@ -123,6 +123,46 @@ function todayInTz(tz) {
 // Free and keyless, matching what BusinessInformation already uses on the client. Usage
 // policy: identify the app with a User-Agent and stay near 1 request/second — plans are
 // created one at a time by a person, so that holds.
+// Google Places text search — the same lookup Google Maps uses, so a loose address like
+// "2721 leaning oak pl se olympia" resolves exactly as it does there. Used first when the key exists.
+async function googlePlace(q, bias) {
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (!key) return null;
+  try {
+    const body = { textQuery: q, regionCode: 'US', maxResultCount: 1 };
+    if (bias) body.locationBias = { circle: { center: { latitude: bias.lat, longitude: bias.lng }, radius: 50000 } };
+    const r = await axios.post('https://places.googleapis.com/v1/places:searchText', body, {
+      headers: { 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.location,places.formattedAddress' },
+      timeout: 8000,
+    });
+    const loc = r.data?.places?.[0]?.location;
+    return loc && Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)
+      ? { lat: loc.latitude, lng: loc.longitude } : null;
+  } catch (e) {
+    console.warn('[recurring] google geocode failed:', e.response?.data?.error?.message || e.message);
+    return null;
+  }
+}
+
+async function photon(q, bias, box) {
+  try {
+    const params = { q, limit: 5, lang: 'en' };
+    if (bias) { params.lat = bias.lat; params.lon = bias.lng; }
+    if (box) { const [w, n, e, so] = box.split(','); params.bbox = [w, so, e, n].join(','); }
+    const r = await axios.get('https://photon.komoot.io/api/', {
+      params, headers: { 'User-Agent': 'SORCE-CRM/1.0 (recurring-bookings map)' }, timeout: 8000,
+    });
+    const feats = (r.data?.features || []).filter(f => f.properties?.countrycode === 'US' || !f.properties?.countrycode);
+    // Only accept something with a street: a house, or at least the street itself.
+    const pick = feats.find(f => f.properties.housenumber && f.properties.street) || feats.find(f => f.properties.street);
+    const c = pick?.geometry?.coordinates;
+    return c && Number.isFinite(c[1]) && Number.isFinite(c[0]) ? { lat: c[1], lng: c[0] } : null;
+  } catch (e) {
+    console.warn('[recurring] photon failed:', e.message);
+    return null;
+  }
+}
+
 async function nominatim(q, bias, box) {
   const params = { q, format: 'json', limit: 1, countrycodes: 'us' };
   // Prefer results near the business's other customers (a soft preference, not a filter), so a
@@ -183,17 +223,34 @@ async function geocodeAddress(address, userId) {
     const stripped = base.replace(/\s*(,\s*)?(#|apt\.?|unit|suite|ste\.?)\s*[\w-]+/i, '').trim();
     const noNumber = stripped.replace(/^\s*\d+[\w-]*\s+/, '').trim();
     const tail = stripped.split(/[\s,]+/).filter(Boolean).slice(-1)[0];
-    const queries = [];
-    for (const q of [base, stripped, noNumber, tail && tail.length > 2 ? tail : null]) {
-      if (q && !queries.includes(q)) queries.push(q);
-    }
     const WA_BOX = '-124.9,49.1,-116.8,45.4'; // west,north,east,south
-    for (let i = 0; i < queries.length; i++) {
-      const hit = await nominatim(queries[i], bias, waMode ? WA_BOX : null);
-      // A hit hundreds of miles from the business's other customers is a wrong-place match,
-      // so keep looking rather than pin it there.
-      if (hit && !(bias && milesBetween(bias, hit) > 150)) return hit;
-      if (i < queries.length - 1) await new Promise(r => setTimeout(r, 1100)); // Nominatim: max 1 request/second
+    const fixedForGoogle = waMode ? base + ' WA' : base;
+    const farFromBias = (hit) => bias && milesBetween(bias, hit) > 150; // wrong-place match (e.g. D.C.)
+
+    // 0) Google (exact, handles partial addresses); free lookups below are the backup.
+    const g = await googlePlace(fixedForGoogle, bias);
+    if (g && !farFromBias(g)) return g;
+
+    // 1) Photon: fuzzy, understands "pl" vs "road", and returns the house number when it knows it.
+    for (const q of [...new Set(waMode ? [base + ' WA', stripped + ' WA', base] : [base, stripped])]) {
+      const hit = await photon(q, bias, waMode ? WA_BOX : null);
+      if (hit && !farFromBias(hit)) return hit;
+    }
+
+    // 2) Nominatim: the address as typed, then street + city without the house number.
+    const queries = [];
+    for (const q of [base, stripped, noNumber]) if (q && !queries.includes(q)) queries.push(q);
+    for (const q of queries) {
+      await new Promise(r => setTimeout(r, 1100)); // Nominatim: max 1 request/second
+      const hit = await nominatim(q, bias, waMode ? WA_BOX : null);
+      if (hit && !farFromBias(hit)) return hit;
+    }
+
+    // 3) Last resort: the city alone (approximate), never a landmark.
+    if (tail && tail.length > 2) {
+      await new Promise(r => setTimeout(r, 1100));
+      const hit = await nominatim(tail, bias, waMode ? WA_BOX : null);
+      if (hit && !farFromBias(hit)) return hit;
     }
   } catch (e) {
     console.warn('[recurring] geocode failed:', e.message);
