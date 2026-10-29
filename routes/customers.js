@@ -14,7 +14,7 @@ pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS geo_address TEXT').ca
 const MAP_ROWS_SQL = `
   SELECT c.id, c.name, c.phone, c.total_jobs, c.last_service, c.last_service_date,
          c.lat, c.lng, c.geo_address,
-         COALESCE(NULLIF(TRIM(b.customer_address), ''), NULLIF(TRIM(c.address), '')) AS addr
+         COALESCE(NULLIF(TRIM(c.address), ''), NULLIF(TRIM(b.customer_address), '')) AS addr
   FROM customers c
   LEFT JOIN LATERAL (
     SELECT customer_address FROM bookings
@@ -129,7 +129,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { name, email, phone, last_service, last_service_date, notes } = req.body;
+    const { name, email, phone, address, last_service, last_service_date, notes } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
@@ -141,10 +141,10 @@ router.post('/', authenticateToken, async (req, res) => {
       : null;
 
     const result = await pool.query(
-      `INSERT INTO customers (user_id, name, email, phone, last_service, last_service_date, notes, total_jobs, lifetime_value, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 0, CURRENT_TIMESTAMP)
+      `INSERT INTO customers (user_id, name, email, phone, address, last_service, last_service_date, notes, total_jobs, lifetime_value, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, CURRENT_TIMESTAMP)
        RETURNING *`,
-      [userId, name, email || null, phone || null, last_service || null, safeDate, notes || null]
+      [userId, name, email || null, phone || null, (typeof address === 'string' && address.trim()) || null, last_service || null, safeDate, notes || null]
     );
 
     console.log(`✅ Customer created: ${name}`);
@@ -267,7 +267,7 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
 });
 
 const ALLOWED_CUSTOMER_FIELDS = new Set([
-  'name', 'email', 'phone', 'last_service', 'last_service_date',
+  'name', 'email', 'phone', 'address', 'last_service', 'last_service_date',
   'notes', 'total_jobs', 'lifetime_value',
   // Marketing opt-out flags — let owners manually unsubscribe a contact from the dashboard
   'sms_unsubscribed', 'email_unsubscribed'
