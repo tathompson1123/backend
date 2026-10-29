@@ -165,7 +165,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     let { customer_address: address, lat, lng } = plan;
-    if (b.address !== undefined && (b.address || '').trim() !== (plan.customer_address || '')) {
+    if (b.address !== undefined && ((b.address || '').trim() !== (plan.customer_address || '') || b.regeocode)) {
       address = (b.address || '').trim() || null;
       const geo = address ? await geocodeAddress(address, userId) : null;
       lat = geo?.lat ?? null;
