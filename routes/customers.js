@@ -106,7 +106,15 @@ router.get('/', authenticateToken, async (req, res) => {
            ) AS rn
          FROM customers WHERE user_id = $1
        )
-       SELECT * FROM ranked WHERE rn = 1 ORDER BY name`,
+       SELECT ranked.* , COALESCE(NULLIF(TRIM(ranked.address), ''), lb.customer_address) AS address
+         FROM ranked
+         LEFT JOIN LATERAL (
+           SELECT customer_address FROM bookings
+           WHERE bookings.customer_id = ranked.id AND bookings.user_id = ranked.user_id
+             AND customer_address IS NOT NULL AND TRIM(customer_address) <> '' AND status <> 'cancelled'
+           ORDER BY booking_date DESC LIMIT 1
+         ) lb ON TRUE
+        WHERE rn = 1 ORDER BY name`,
       [userId]
     );
 
