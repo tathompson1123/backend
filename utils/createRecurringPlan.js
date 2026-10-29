@@ -156,7 +156,7 @@ async function createRecurringPlan(userId, input) {
 
   const address = (typeof customerInfo.address === 'string' && customerInfo.address.trim()) || null;
   const customerId = await findOrCreateCustomer(userId, contact);
-  const geo = address ? await geocodeAddress(address) : null;
+  const geo = address ? await geocodeAddress(address, userId) : null;
 
   const ins = await pool.query(
     `INSERT INTO recurring_plans (

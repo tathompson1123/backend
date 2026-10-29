@@ -123,9 +123,13 @@ function todayInTz(tz) {
 // Free and keyless, matching what BusinessInformation already uses on the client. Usage
 // policy: identify the app with a User-Agent and stay near 1 request/second — plans are
 // created one at a time by a person, so that holds.
-async function nominatim(q) {
+async function nominatim(q, bias) {
+  const params = { q, format: 'json', limit: 1, countrycodes: 'us' };
+  // Prefer results near the business's other customers (a soft preference, not a filter), so a
+  // partial address like "2721 leaning oak pl se olympia" lands in the right state.
+  if (bias) params.viewbox = [bias.lng - 0.6, bias.lat + 0.6, bias.lng + 0.6, bias.lat - 0.6].join(',');
   const r = await axios.get('https://nominatim.openstreetmap.org/search', {
-    params: { q, format: 'json', limit: 1, countrycodes: 'us' },
+    params,
     headers: { 'User-Agent': 'SORCE-CRM/1.0 (recurring-bookings map)' },
     timeout: 8000,
   });
@@ -136,15 +140,43 @@ async function nominatim(q) {
   return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
 }
 
-async function geocodeAddress(address) {
+// Where this business's customers are (average of their geocoded plans), else null.
+async function nearbyBias(userId) {
+  if (!userId) return null;
+  const r = await pool.query(
+    'SELECT AVG(lat)::float AS lat, AVG(lng)::float AS lng FROM recurring_plans WHERE user_id = $1 AND lat IS NOT NULL AND lng IS NOT NULL',
+    [userId]
+  );
+  const { lat, lng } = r.rows[0] || {};
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+// Works with partial addresses (no state/zip): tries the address as typed, then without unit
+// text, then street + city without the house number, then the city alone — each biased toward
+// the business's other customers, and with the business's state added when the address has none.
+async function geocodeAddress(address, userId) {
   const full = String(address || '').trim();
   if (!full) return null;
   try {
-    const exact = await nominatim(full);
-    if (exact) return exact;
-    // Unit/apt text routinely makes street geocoding miss; retry without it.
+    let bias = null;
+    let state = '';
+    if (userId) {
+      bias = await nearbyBias(userId).catch(() => null);
+      const b = await pool.query('SELECT state FROM business_information WHERE user_id = $1', [userId]).catch(() => null);
+      state = String(b?.rows?.[0]?.state || '').trim();
+    }
     const stripped = full.replace(/\s*(,\s*)?(#|apt\.?|unit|suite|ste\.?)\s*[\w-]+/i, '').trim();
-    if (stripped && stripped !== full) return await nominatim(stripped);
+    const noNumber = stripped.replace(/^\s*\d+[\w-]*\s+/, '').trim();
+    const tail = stripped.split(/[\s,]+/).filter(Boolean).slice(-1)[0];
+    const withState = (q) => (state && !/\b[A-Za-z]{2}\b\s*(\d{5})?\s*$/.test(q) ? `${q}, ${state}` : q);
+    const tries = [full, stripped, noNumber, tail && tail.length > 2 ? tail : null].filter(Boolean);
+    const queries = [];
+    for (const q of tries) { for (const v of [q, withState(q)]) if (!queries.includes(v)) queries.push(v); }
+    for (let i = 0; i < queries.length; i++) {
+      const hit = await nominatim(queries[i], bias);
+      if (hit) return hit;
+      if (i < queries.length - 1) await new Promise(r => setTimeout(r, 1100)); // Nominatim: max 1 request/second
+    }
   } catch (e) {
     console.warn('[recurring] geocode failed:', e.message);
   }

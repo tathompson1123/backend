@@ -167,9 +167,30 @@ router.put('/:id', authenticateToken, async (req, res) => {
     let { customer_address: address, lat, lng } = plan;
     if (b.address !== undefined && (b.address || '').trim() !== (plan.customer_address || '')) {
       address = (b.address || '').trim() || null;
-      const geo = address ? await geocodeAddress(address) : null;
+      const geo = address ? await geocodeAddress(address, userId) : null;
       lat = geo?.lat ?? null;
       lng = geo?.lng ?? null;
+    }
+
+    // Contact / address edits don't touch the schedule: update the plan and its upcoming visits
+    // in place so deleted-visit skips and other customised visits survive.
+    const scheduleKeys = ['frequency', 'startDate', 'startTime', 'endDate', 'employeeId', 'groupId', 'mainServices', 'additionalServices', 'notes'];
+    if (!scheduleKeys.some(k => b[k] !== undefined)) {
+      const name = b.name !== undefined ? String(b.name).trim().slice(0, 200) : plan.customer_name;
+      if (!name) return res.status(400).json({ error: 'Name is required' });
+      const email = b.email !== undefined ? (String(b.email).trim().slice(0, 200) || null) : plan.customer_email;
+      const phone = b.phone !== undefined ? (String(b.phone).trim().slice(0, 40) || null) : plan.customer_phone;
+      await pool.query(
+        `UPDATE recurring_plans SET customer_name = $1, customer_email = $2, customer_phone = $3,
+           customer_address = $4, lat = $5, lng = $6, updated_at = NOW() WHERE id = $7`,
+        [name, email, phone, address, lat, lng, plan.id]
+      );
+      await pool.query(
+        `UPDATE bookings SET customer_name = $1, customer_email = $2, customer_phone = $3, customer_address = $4
+         WHERE recurring_plan_id = $5 AND user_id = $6 AND status = 'confirmed' AND booking_date >= $7`,
+        [name, email, phone, address, plan.id, userId, today]
+      );
+      return res.json({ success: true, bookingsCreated: 0, located: !address || (lat != null && lng != null) });
     }
 
     let services = plan.services;
