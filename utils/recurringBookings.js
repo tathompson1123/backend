@@ -203,7 +203,7 @@ async function nearbyBias(userId) {
 // Works with partial addresses (no state/zip): tries the address as typed, then without unit
 // text, then street + city without the house number, then the city alone — each biased toward
 // the business's other customers, and with the business's state added when the address has none.
-async function geocodeAddress(address, userId) {
+async function geocodeAddress(address, userId, opts = {}) {
   const full = String(address || '').trim();
   if (!full) return null;
   try {
@@ -228,7 +228,8 @@ async function geocodeAddress(address, userId) {
     const farFromBias = (hit) => bias && milesBetween(bias, hit) > 150; // wrong-place match (e.g. D.C.)
 
     // 0) Google (exact, handles partial addresses); free lookups below are the backup.
-    const g = await googlePlace(fixedForGoogle, bias);
+    // (opts.free skips it: bulk jobs like the customer map must not run up a Google bill.)
+    const g = opts.free ? null : await googlePlace(fixedForGoogle, bias);
     if (g && !farFromBias(g)) return g;
 
     // 1) Photon: fuzzy, understands "pl" vs "road", and returns the house number when it knows it.

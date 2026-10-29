@@ -4,6 +4,83 @@ const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
 
+// Where each customer was served, for the customer map. address comes from their most recent
+// booking, else the address imported from a CSV. lat/lng are cached per address.
+pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT').catch(e => console.error('customers address migration:', e.message));
+pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION').catch(e => console.error('customers lat migration:', e.message));
+pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION').catch(e => console.error('customers lng migration:', e.message));
+pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS geo_address TEXT').catch(e => console.error('customers geo_address migration:', e.message));
+
+const MAP_ROWS_SQL = `
+  SELECT c.id, c.name, c.phone, c.total_jobs, c.last_service, c.last_service_date,
+         c.lat, c.lng, c.geo_address,
+         COALESCE(NULLIF(TRIM(b.customer_address), ''), NULLIF(TRIM(c.address), '')) AS addr
+  FROM customers c
+  LEFT JOIN LATERAL (
+    SELECT customer_address FROM bookings
+    WHERE bookings.customer_id = c.id AND bookings.user_id = c.user_id
+      AND customer_address IS NOT NULL AND TRIM(customer_address) <> '' AND status <> 'cancelled'
+    ORDER BY booking_date DESC LIMIT 1
+  ) b ON TRUE
+  WHERE c.user_id = $1`;
+
+const ymd = (v) => {
+  if (!v) return null;
+  if (v instanceof Date) {
+    return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0');
+  }
+  return String(v).slice(0, 10);
+};
+
+// GET - customers that can be placed on the map
+router.get('/map', authenticateToken, async (req, res) => {
+  try {
+    const rows = (await pool.query(MAP_ROWS_SQL, [req.user.userId])).rows;
+    const points = [];
+    let pending = 0, notFound = 0, noAddress = 0;
+    for (const r of rows) {
+      if (!r.addr) { noAddress++; continue; }
+      const cached = r.geo_address === r.addr;
+      if (cached && r.lat != null && r.lng != null) {
+        points.push({
+          id: r.id, name: r.name, phone: r.phone, address: r.addr, lat: Number(r.lat), lng: Number(r.lng),
+          total_jobs: r.total_jobs, last_service: r.last_service, last_service_date: ymd(r.last_service_date),
+        });
+      } else if (cached) notFound++;
+      else pending++;
+    }
+    res.json({ points, pending, notFound, noAddress, total: rows.length });
+  } catch (error) {
+    console.error('Error fetching customer map:', error.message);
+    res.status(500).json({ error: 'Failed to load the customer map' });
+  }
+});
+
+// POST - look up the next few unplaced addresses (free lookups only, ~1/second). The page calls
+// this repeatedly until remaining reaches 0. Failures are remembered per address so they aren't retried.
+router.post('/map/geocode', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { geocodeAddress } = require('../utils/recurringBookings');
+    const todo = (await pool.query(MAP_ROWS_SQL, [userId])).rows
+      .filter(r => r.addr && r.geo_address !== r.addr).slice(0, 6);
+    let placed = 0;
+    for (const r of todo) {
+      const geo = await geocodeAddress(r.addr, userId, { free: true });
+      await pool.query(
+        'UPDATE customers SET lat = $1, lng = $2, geo_address = $3 WHERE id = $4 AND user_id = $5',
+        [geo?.lat ?? null, geo?.lng ?? null, r.addr, r.id, userId]
+      );
+      if (geo) placed++;
+    }
+    const remaining = (await pool.query(MAP_ROWS_SQL, [userId])).rows.filter(r => r.addr && r.geo_address !== r.addr).length;
+    res.json({ processed: todo.length, placed, remaining });
+  } catch (error) {
+    console.error('Error geocoding customers:', error.message);
+    res.status(500).json({ error: 'Failed to place customers on the map' });
+  }
+});
+
 // GET - Fetch all customers (deduped: one record per unique email/name)
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -97,6 +174,7 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
       [userId]
     );
     const normPhone10 = p => p ? p.replace(/\D/g, '').slice(-10) : null;
+    const cleanAddr = a => (typeof a === 'string' ? a.replace(/\s+/g, ' ').trim().slice(0, 300) : '') || null;
     const existingEmails = new Set(existingResult.rows.map(r => r.email).filter(Boolean));
     const existingPhones = new Set(existingResult.rows.map(r => normPhone10(r.phone)).filter(e => e && e.length === 10));
 
@@ -107,6 +185,7 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
     let successCount = 0;
     let duplicateCount = 0;
     let errorCount = 0;
+    let addressesAdded = 0;
 
     const client = await pool.connect();
     try {
@@ -120,11 +199,24 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
         const normPhone = rawPhone && rawPhone.length === 10 ? rawPhone : null;
 
         // Dedup: only by email or phone (10-digit). Name collisions are not duplicates.
+        const addr = cleanAddr(c.address);
+        // Already in the CRM: skip it, but if the CSV has an address the customer is missing, fill it in.
+        const fillAddress = async () => {
+          if (!addr) return;
+          const r = await client.query(
+            `UPDATE customers SET address = $1
+             WHERE user_id = $2 AND (address IS NULL OR TRIM(address) = '')
+               AND ((LOWER(TRIM(email)) = $3 AND $3 IS NOT NULL)
+                 OR (RIGHT(regexp_replace(COALESCE(phone,''), '[^0-9]', '', 'g'), 10) = $4 AND $4 IS NOT NULL))`,
+            [addr, userId, normEmail, normPhone]
+          );
+          addressesAdded += r.rowCount;
+        };
         if (normEmail && (existingEmails.has(normEmail) || seenEmails.has(normEmail))) {
-          duplicateCount++; continue;
+          await fillAddress(); duplicateCount++; continue;
         }
         if (normPhone && (existingPhones.has(normPhone) || seenPhones.has(normPhone))) {
-          duplicateCount++; continue;
+          await fillAddress(); duplicateCount++; continue;
         }
 
         if (normEmail) seenEmails.add(normEmail);
@@ -135,10 +227,10 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
 
         try {
           await client.query(
-            `INSERT INTO customers (user_id, name, email, phone, last_service, last_service_date, notes, total_jobs, lifetime_value, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 0, CURRENT_TIMESTAMP)`,
+            `INSERT INTO customers (user_id, name, email, phone, last_service, last_service_date, notes, address, total_jobs, lifetime_value, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, CURRENT_TIMESTAMP)`,
             [userId, c.name.trim(), normEmail || null, c.phone || null,
-             c.last_service || null, safeDate, c.notes || null]
+             c.last_service || null, safeDate, c.notes || null, addr]
           );
           // Track newly inserted so subsequent rows in same batch treat it as existing
           if (normEmail) existingEmails.add(normEmail);
@@ -159,7 +251,7 @@ router.post('/bulk-import', authenticateToken, async (req, res) => {
     }
 
     console.log(`✅ Bulk import: ${successCount} added, ${duplicateCount} duplicates skipped for user ${userId}`);
-    res.json({ success: true, successCount, duplicateCount, errorCount });
+    res.json({ success: true, successCount, duplicateCount, errorCount, addressesAdded });
   } catch (error) {
     console.error('Error bulk importing customers:', error.message);
     res.status(500).json({ error: 'Failed to import customers' });
