@@ -132,7 +132,7 @@ async function businessToday(userId) {
  * repeats on that day each billing period. Idempotent per recurring plan: a second call
  * returns the existing subscription instead of billing twice.
  */
-async function startSubscription(recurringPlanId) {
+async function startSubscription(recurringPlanId, { idemSalt = '' } = {}) {
   const rp = (await pool.query(
     `SELECT rp.*, sp.name AS sp_name, sp.price AS sp_price, sp.frequency AS sp_frequency,
             sp.square_plan_id, sp.square_plan_variation_id, sp.square_price_cents, sp.square_cadence, sp.id AS sp_id
@@ -161,7 +161,7 @@ async function startSubscription(recurringPlanId) {
 
   try {
     const resp = await client.subscriptionsApi.createSubscription({
-      idempotencyKey: key('sub', rp.id, rp.square_card_id),
+      idempotencyKey: key('sub', rp.id, rp.square_card_id, idemSalt),
       locationId,
       planVariationId: variationId,
       customerId: rp.square_customer_id,
