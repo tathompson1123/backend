@@ -40,7 +40,7 @@ function squareError(e) {
 const cents = (dollars) => Math.round(Number(dollars) * 100);
 const key = (...parts) => crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 45);
 
-/** The owner's sales tax rate, in percent (same setting bookings and invoices use). */
+/** The owner's sales tax rate as a fraction, 0.098 = 9.8% (same setting bookings and invoices use). */
 async function getTaxRate(userId) {
   const r = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
   const rate = parseFloat(r.rows[0]?.default_tax_rate || 0);
@@ -49,7 +49,7 @@ async function getTaxRate(userId) {
 
 /** Plan price + sales tax, in cents. Square's flat subscription price has no tax of its own, so it is added here. */
 function withTax(priceCents, taxRate) {
-  const taxCents = Math.round(priceCents * (taxRate || 0) / 100);
+  const taxCents = Math.round(priceCents * (taxRate || 0));
   return { taxCents, totalCents: priceCents + taxCents };
 }
 

@@ -35,10 +35,10 @@ const money = (c) => `$${(c / 100).toFixed(2)}`;
   for (const rp of rows) {
     const rate = await planBilling.getTaxRate(rp.user_id);
     const baseCents = rp.price_cents || planBilling.cents(rp.sp_price);
-    const taxCents = Math.round(baseCents * rate / 100);
+    const taxCents = Math.round(baseCents * rate);
     const label = `#${rp.id} ${rp.customer_name} (${rp.sp_name}): ${money(baseCents)} -> ${money(baseCents + taxCents)}`;
     if (!taxCents) { console.log(`skip   ${label}  (no tax rate set)`); continue; }
-    if (!APPLY) { console.log(`would  ${label}  (${rate}% tax)`); changed++; continue; }
+    if (!APPLY) { console.log(`would  ${label}  (${+(rate * 100).toFixed(3)}% tax)`); changed++; continue; }
 
     try {
       const vKey = `${rp.user_id}|${rp.sp_id}|${baseCents}`;
