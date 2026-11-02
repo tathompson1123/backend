@@ -190,7 +190,19 @@ router.put('/:id', authenticateToken, async (req, res) => {
          WHERE recurring_plan_id = $5 AND user_id = $6 AND status = 'confirmed' AND booking_date >= $7`,
         [name, email, phone, address, plan.id, userId, today]
       );
-      return res.json({ success: true, bookingsCreated: 0, located: !address || (lat != null && lng != null) });
+      // A corrected email on a plan still waiting for its card means the first link went to
+      // the wrong inbox: send it again to the new address.
+      let cardLinkResent = false;
+      if (email && email.toLowerCase() !== (plan.customer_email || '').toLowerCase()
+          && plan.service_plan_id && !plan.square_subscription_id) {
+        try {
+          await planBilling.sendPlanCardLink(plan.id);
+          cardLinkResent = true;
+        } catch (e) {
+          console.error('Card link resend after email change failed:', e.message);
+        }
+      }
+      return res.json({ success: true, bookingsCreated: 0, located: !address || (lat != null && lng != null), cardLinkResent });
     }
 
     let services = plan.services;

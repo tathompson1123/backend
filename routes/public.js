@@ -398,7 +398,7 @@ router.post('/plans/signup', planSignupLimiter, async (req, res) => {
     res.json({
       success: true,
       cardLinkSent: result.cardLinkSent,
-      plan: planBilling.termsFor({ start_date: startDate }, sp),
+      plan: planBilling.termsFor({ start_date: startDate }, sp, await planBilling.getTaxRate(Number(businessId))),
     });
   } catch (e) {
     if (e.name === 'Error' && e.status === undefined) {
@@ -1224,7 +1224,7 @@ router.get('/card-on-file/:token', async (req, res) => {
         squareEnvironment: process.env.SQUARE_ENVIRONMENT || 'production',
         businessName: pt.business_name,
         customerName: pt.customer_name,
-        plan: planBilling.termsFor(pt, { ...sp, price: (pt.price_cents || Math.round(sp.price * 100)) / 100 }),
+        plan: planBilling.termsFor(pt, { ...sp, price: (pt.price_cents || Math.round(sp.price * 100)) / 100 }, await planBilling.getTaxRate(planRec.user_id)),
       });
     }
     const result = await pool.query(

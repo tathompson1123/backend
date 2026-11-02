@@ -40,15 +40,30 @@ function squareError(e) {
 const cents = (dollars) => Math.round(Number(dollars) * 100);
 const key = (...parts) => crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 45);
 
+/** The owner's sales tax rate, in percent (same setting bookings and invoices use). */
+async function getTaxRate(userId) {
+  const r = await pool.query('SELECT default_tax_rate FROM users WHERE id = $1', [userId]);
+  const rate = parseFloat(r.rows[0]?.default_tax_rate || 0);
+  return rate > 0 ? rate : 0;
+}
+
+/** Plan price + sales tax, in cents. Square's flat subscription price has no tax of its own, so it is added here. */
+function withTax(priceCents, taxRate) {
+  const taxCents = Math.round(priceCents * (taxRate || 0) / 100);
+  return { taxCents, totalCents: priceCents + taxCents };
+}
+
 /**
- * Make sure the service plan has a Square plan variation at its CURRENT price + cadence.
+ * Make sure the service plan has a Square plan variation at its CURRENT price + sales tax
+ * and cadence. The variation is priced tax-inclusive, so a tax-rate change makes a new one.
  * @returns {Promise<string>} the Square plan variation id
  */
 async function ensureSquareVariation(userId, servicePlan, { persist = true } = {}) {
-  const priceCents = cents(servicePlan.price);
+  const basePriceCents = cents(servicePlan.price);
+  const { totalCents: priceCents } = withTax(basePriceCents, await getTaxRate(userId));
   const cadence = FREQUENCIES[servicePlan.frequency]?.cadence;
   if (!cadence) throw new Error(`Plan frequency "${servicePlan.frequency}" cannot be billed`);
-  if (!(priceCents > 0)) throw new Error('Plan price must be greater than $0');
+  if (!(basePriceCents > 0)) throw new Error('Plan price must be greater than $0');
 
   if (persist && servicePlan.square_plan_variation_id
       && servicePlan.square_price_cents === priceCents
@@ -222,12 +237,15 @@ async function syncBillingStatuses(userId, plans) {
 const fmtLong = (ymd) => new Date(`${ymd}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
 /** What the customer is agreeing to, in one place so the email and the card page say the same thing. */
-function termsFor(rp, sp) {
+function termsFor(rp, sp, taxRate = 0) {
   const f = FREQUENCIES[sp.frequency];
   const per = f.cadence === 'ANNUAL' ? 'year' : f.cadence === 'QUARTERLY' ? 'quarter' : 'month';
+  const { taxCents, totalCents } = withTax(cents(sp.price), taxRate);
   return {
     planName: sp.name,
-    priceText: `$${(cents(sp.price) / 100).toFixed(2)}`,
+    // What the card is actually charged: plan price plus sales tax.
+    priceText: `$${(totalCents / 100).toFixed(2)}`,
+    taxText: taxCents > 0 ? `${`$${(cents(sp.price) / 100).toFixed(2)}`} plus $${(taxCents / 100).toFixed(2)} sales tax` : '',
     per,
     frequencyLabel: f.label,
     firstChargeDate: toYmd(rp.start_date),
@@ -293,7 +311,7 @@ async function sendPlanCardLink(recurringPlanId) {
     [rp.user_id, rp.customer_email, rp.customer_name, rp.id]
   );
   const link = `${process.env.FRONTEND_URL || 'https://sorceintegrations.com'}/card-on-file/${tok.rows[0].token}`;
-  const t = termsFor(rp, sp);
+  const t = termsFor(rp, sp, await getTaxRate(rp.user_id));
   // Already has a card with this business: no card entry, but still an explicit yes to the
   // recurring charge — that older card was saved on "we won't charge it" terms.
   const saved = await findSavedCard(rp.user_id, { email: rp.customer_email, phone: rp.customer_phone });
@@ -313,8 +331,8 @@ async function sendPlanCardLink(recurringPlanId) {
         paragraphs: [
           `You're set up for the <strong>${esc(t.planName)}</strong> plan with <strong>${esc(rp.business_name || 'us')}</strong> (${esc(t.frequencyLabel)}), starting ${esc(fmtLong(t.firstChargeDate))}.`,
           saved
-            ? `We have your ${esc(saved.brand)} card ending in ${esc(saved.last4)} on file, so there's nothing to enter again. Please confirm to start the plan: <strong>that card will be charged ${esc(t.priceText)} per ${t.per}</strong>, beginning ${esc(fmtLong(t.firstChargeDate))} and then once every ${t.per} until you cancel. That one ${t.per}ly charge covers every visit on the plan — you are never charged per visit.`
-            : `To start it, please save a card. <strong>This card will be charged ${esc(t.priceText)} per ${t.per}</strong>, beginning ${esc(fmtLong(t.firstChargeDate))} and then once every ${t.per} until you cancel. That one ${t.per}ly charge covers every visit on the plan — you are never charged per visit.`,
+            ? `We have your ${esc(saved.brand)} card ending in ${esc(saved.last4)} on file, so there's nothing to enter again. Please confirm to start the plan: <strong>that card will be charged ${esc(t.priceText)} per ${t.per}</strong>${t.taxText ? ` (${esc(t.taxText)})` : ''}, beginning ${esc(fmtLong(t.firstChargeDate))} and then once every ${t.per} until you cancel. That one ${t.per}ly charge covers every visit on the plan — you are never charged per visit.`
+            : `To start it, please save a card. <strong>This card will be charged ${esc(t.priceText)} per ${t.per}</strong>${t.taxText ? ` (${esc(t.taxText)})` : ''}, beginning ${esc(fmtLong(t.firstChargeDate))} and then once every ${t.per} until you cancel. That one ${t.per}ly charge covers every visit on the plan — you are never charged per visit.`,
         ],
         action: { label: saved ? 'Confirm and start my plan' : 'Save a card and start my plan', url: link },
         after: [`That link expires in 7 days. To pause or cancel at any time, just contact ${esc(rp.business_name || 'us')}.`],
@@ -327,6 +345,6 @@ async function sendPlanCardLink(recurringPlanId) {
 }
 
 module.exports = {
-  squareError, ensureSquareVariation, startSubscription, changeSubscription,
+  squareError, getTaxRate, ensureSquareVariation, startSubscription, changeSubscription,
   syncBillingStatuses, sendPlanCardLink, termsFor, cents, findSavedCard,
 };
