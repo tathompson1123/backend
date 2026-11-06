@@ -8,7 +8,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { setupMiddleware } = require('./config/middleware');
 const { pool } = require('./config/database');
-const { PERSON_STOPPED_SQL } = require('./utils/reviewOptOut');
+const { PERSON_STOPPED_SQL, RECURRING_SKIP_SQL } = require('./utils/reviewOptOut');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const { authenticateToken, previewGenerateLimiter } = require('./config/middleware');
@@ -1013,6 +1013,7 @@ app.post('/api/generate-preview/claim', authenticateToken, generateV2.claimPrevi
     // Manual "stop texts" switch (per customer): blocks the opener, the follow-up
     // texts/emails and the reply handling, without touching campaign opt-outs.
     await pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS review_requests_stopped BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS review_skip_recurring BOOLEAN DEFAULT TRUE`);
     console.log('✅ Review requests table verified');
   } catch (e) {
     console.warn('⚠️ Could not verify review_requests table:', e.message);
@@ -2269,6 +2270,7 @@ cron.schedule('*/60 * * * * *', async () => {
          AND (c.sms_unsubscribed IS NULL OR c.sms_unsubscribed = FALSE)
          AND COALESCE(c.review_requests_stopped, FALSE) = FALSE
          AND NOT ${PERSON_STOPPED_SQL('c')}
+         AND NOT ${RECURRING_SKIP_SQL('c', 'u')}
          AND rr.scheduled_send_time <= NOW()
          AND u.twilio_phone_number IS NOT NULL`
     );
@@ -2422,6 +2424,7 @@ cron.schedule('*/10 * * * *', async () => {
             AND COALESCE(rr.review_verified, false)  = false
             AND COALESCE(c.review_requests_stopped, FALSE) = FALSE
             AND (c.id IS NULL OR NOT ${PERSON_STOPPED_SQL('c')})
+            AND (c.id IS NULL OR NOT ${RECURRING_SKIP_SQL('c', 'u')})
             AND rr.followup_seq_started_at + ($2::int * INTERVAL '1 day') <= NOW()
           LIMIT 200`,
         [step.statuses, step.afterDays]

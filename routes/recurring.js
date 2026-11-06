@@ -25,6 +25,25 @@ async function businessToday(userId) {
 const isYmd = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const isHm = s => typeof s === 'string' && /^\d{2}:\d{2}$/.test(s);
 
+// Owner-wide switch: no review texts for customers on a recurring plan (default ON).
+router.get('/settings', authenticateToken, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT review_skip_recurring FROM users WHERE id = $1', [req.user.userId]);
+    res.json({ success: true, no_review_texts: r.rows[0]?.review_skip_recurring !== false });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to load setting' });
+  }
+});
+router.put('/settings', authenticateToken, async (req, res) => {
+  try {
+    const on = req.body?.no_review_texts !== false;
+    await pool.query('UPDATE users SET review_skip_recurring = $1 WHERE id = $2', [on, req.user.userId]);
+    res.json({ success: true, no_review_texts: on });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to save setting' });
+  }
+});
+
 // GET - every plan with its schedule, for the Recurring tab and its map.
 router.get('/', authenticateToken, async (req, res) => {
   try {

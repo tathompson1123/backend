@@ -21,6 +21,21 @@ const PERSON_STOPPED_SQL = (alias = 'c') => `
        )
   )`;
 
+// SQL predicate: the owner has "no review texts for recurring plans" on (default) and this
+// customer is on an active recurring plan. Matches by customer_id, email or phone.
+const RECURRING_SKIP_SQL = (alias = 'c', userAlias = 'u') => `
+  (COALESCE(${userAlias}.review_skip_recurring, TRUE) = TRUE AND EXISTS (
+    SELECT 1 FROM recurring_plans rp
+     WHERE rp.user_id = ${alias}.user_id AND rp.status = 'active'
+       AND (
+         rp.customer_id = ${alias}.id
+         OR (NULLIF(TRIM(${alias}.email), '') IS NOT NULL AND LOWER(rp.customer_email) = LOWER(${alias}.email))
+         OR (NULLIF(REGEXP_REPLACE(COALESCE(${alias}.phone, ''), '[^0-9]', '', 'g'), '') IS NOT NULL
+             AND RIGHT(REGEXP_REPLACE(COALESCE(rp.customer_phone, ''), '[^0-9]', '', 'g'), 10)
+               = RIGHT(REGEXP_REPLACE(${alias}.phone, '[^0-9]', '', 'g'), 10))
+       )
+  ))`;
+
 /**
  * Turn review texts off (or back on) for one person.
  * Stopping also closes any open review requests so nothing queued goes out.
@@ -55,4 +70,4 @@ async function setReviewTextsStopped(userId, { customerId, email, phone }, stopp
   return { updated: ids.length };
 }
 
-module.exports = { setReviewTextsStopped, PERSON_STOPPED_SQL };
+module.exports = { setReviewTextsStopped, PERSON_STOPPED_SQL, RECURRING_SKIP_SQL };
