@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../config/middleware');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
+const { setReviewTextsStopped } = require('../utils/reviewOptOut');
 
 // Where each customer was served, for the customer map. address comes from their most recent
 // booking, else the address imported from a CSV. lat/lng are cached per address.
@@ -308,6 +309,24 @@ router.patch('/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error updating customer:', error.message);
     res.status(500).json({ error: 'Failed to update customer' });
+  }
+});
+
+// POST - Stop (or resume) review texts for a customer, e.g. one we rebook continually.
+// Applies to the person, not just this row: every customer row sharing their email/phone.
+router.post('/:id/review-texts', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const stopped = req.body?.stopped !== false;
+    const c = (await pool.query(
+      'SELECT id, email, phone FROM customers WHERE id = $1 AND user_id = $2', [req.params.id, userId]
+    )).rows[0];
+    if (!c) return res.status(404).json({ error: 'Customer not found' });
+    await setReviewTextsStopped(userId, { customerId: c.id, email: c.email, phone: c.phone }, stopped);
+    res.json({ success: true, review_requests_stopped: stopped });
+  } catch (error) {
+    console.error('Error updating review texts setting:', error.message);
+    res.status(500).json({ error: 'Failed to update review text setting' });
   }
 });
 

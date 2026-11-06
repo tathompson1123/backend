@@ -8,6 +8,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { setupMiddleware } = require('./config/middleware');
 const { pool } = require('./config/database');
+const { PERSON_STOPPED_SQL } = require('./utils/reviewOptOut');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const { authenticateToken, previewGenerateLimiter } = require('./config/middleware');
@@ -2267,6 +2268,7 @@ cron.schedule('*/60 * * * * *', async () => {
          AND c.phone IS NOT NULL
          AND (c.sms_unsubscribed IS NULL OR c.sms_unsubscribed = FALSE)
          AND COALESCE(c.review_requests_stopped, FALSE) = FALSE
+         AND NOT ${PERSON_STOPPED_SQL('c')}
          AND rr.scheduled_send_time <= NOW()
          AND u.twilio_phone_number IS NOT NULL`
     );
@@ -2419,6 +2421,7 @@ cron.schedule('*/10 * * * *', async () => {
             AND COALESCE(rr.review_completed, false) = false
             AND COALESCE(rr.review_verified, false)  = false
             AND COALESCE(c.review_requests_stopped, FALSE) = FALSE
+            AND (c.id IS NULL OR NOT ${PERSON_STOPPED_SQL('c')})
             AND rr.followup_seq_started_at + ($2::int * INTERVAL '1 day') <= NOW()
           LIMIT 200`,
         [step.statuses, step.afterDays]

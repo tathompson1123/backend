@@ -11,6 +11,7 @@ const {
 const planBilling = require('../utils/planBilling');
 const { createRecurringPlan, PlanError } = require('../utils/createRecurringPlan');
 const { getTimezoneForBusiness } = require('../utils/zipToTimezone');
+const { setReviewTextsStopped, PERSON_STOPPED_SQL } = require('../utils/reviewOptOut');
 
 async function businessToday(userId) {
   try {
@@ -42,6 +43,8 @@ router.get('/', authenticateToken, async (req, res) => {
          ), '[]'::json) AS upcoming,
          (SELECT COUNT(*)::int FROM bookings WHERE recurring_plan_id = p.id AND status = 'completed') AS completed_count,
          e.name AS employee_name,
+         (SELECT ${PERSON_STOPPED_SQL('pc')}
+            FROM (SELECT p.user_id, p.customer_email AS email, p.customer_phone AS phone) pc) AS review_texts_stopped,
          sp.name AS plan_name, sp.price AS plan_catalog_price
        FROM recurring_plans p
        LEFT JOIN employees e ON e.id = p.employee_id
@@ -72,6 +75,7 @@ router.get('/', authenticateToken, async (req, res) => {
       out.push({
         id: p.id,
         customer_id: p.customer_id,
+        review_texts_stopped: !!p.review_texts_stopped,
         customer_name: p.customer_name,
         customer_email: p.customer_email,
         customer_phone: p.customer_phone,
@@ -283,6 +287,24 @@ router.patch('/:id/status', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error changing recurring plan status:', error.message);
     res.status(500).json({ error: 'Failed to update plan' });
+  }
+});
+
+// POST - stop (or resume) review texts for this plan's customer
+router.post('/:id/review-texts', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const stopped = req.body?.stopped !== false;
+    const p = (await pool.query(
+      'SELECT customer_id, customer_email, customer_phone FROM recurring_plans WHERE id = $1 AND user_id = $2',
+      [req.params.id, userId]
+    )).rows[0];
+    if (!p) return res.status(404).json({ error: 'Plan not found' });
+    await setReviewTextsStopped(userId, { customerId: p.customer_id, email: p.customer_email, phone: p.customer_phone }, stopped);
+    res.json({ success: true, review_texts_stopped: stopped });
+  } catch (e) {
+    console.error('Error updating plan review texts:', e.message);
+    res.status(500).json({ error: 'Failed to update review text setting' });
   }
 });
 

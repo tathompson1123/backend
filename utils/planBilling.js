@@ -316,7 +316,9 @@ async function sendPlanCardLink(recurringPlanId) {
   // recurring charge — that older card was saved on "we won't charge it" terms.
   const saved = await findSavedCard(rp.user_id, { email: rp.customer_email, phone: rp.customer_phone });
 
-  if (process.env.SENDGRID_API_KEY) {
+  // Never report success for an email that was not actually handed to SendGrid.
+  if (!process.env.SENDGRID_API_KEY) throw new Error('Email is not configured (SENDGRID_API_KEY missing), so the card link was not sent');
+  {
     const sgMail = require('@sendgrid/mail');
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
     await sgMail.send({

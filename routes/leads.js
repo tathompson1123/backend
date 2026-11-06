@@ -5,6 +5,11 @@ const { authenticateToken, requirePlan } = require('../config/middleware');
 const { sendSMS } = require('../utils/twilio');
 const { fireLeadEvent, clientIpFromReq } = require('../utils/metaConversions');
 const { THREAD_SOURCE_SQL } = require('../utils/smsThread');
+
+// The lead detail query joins customers.left_review; make sure the column exists so a
+// missing column can't turn the whole detail endpoint into a 500.
+pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS left_review TEXT')
+  .catch(e => console.error('customers left_review migration:', e.message));
 const sgMail = require('@sendgrid/mail');
 const { TRANSACTIONAL_EMAIL } = require('../utils/emailFrom');
 
